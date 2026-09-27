@@ -121,7 +121,15 @@ impl Args {
             (None, None, start, end) => Scope::Region(region(rate, start, end, layout.frames)),
         };
 
-        let mut audition = Audition::new(&self.project, capture_id).scope(scope);
+        // Track edges, so `skip` in a `--script` moves between tracks rather
+        // than by a fixed ten seconds. Read from the same open as the layout,
+        // and empty on a side nothing has been analysed from - which is the
+        // case the fixed step exists for.
+        let marks = vcw_project::track::edges_of_capture(project.conn(), capture_id)?;
+
+        let mut audition = Audition::new(&self.project, capture_id)
+            .scope(scope)
+            .marks(marks);
         audition.device = self.device.clone();
         audition.format = self.format.map(Into::into);
         audition.mode = self.mode.into();

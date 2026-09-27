@@ -4223,6 +4223,7 @@ dependencies = [
  "vcw-contract",
  "vcw-core",
  "vcw-export",
+ "vcw-metadata",
  "vcw-project",
  "vcw-signal",
  "vcw-types",

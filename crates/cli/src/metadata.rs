@@ -35,9 +35,10 @@
 //!
 //! §4.5 asks for the whole workflow to be drivable headless, and this is the part
 //! of it that talks to the world. It is also the honest demonstration of §40's
-//! offline promise: `--offline` is not a simulation, it is the same [`Offline`]
-//! transport the application defaults to, and the verb still runs, still prints,
-//! and still exits zero on the subcommands that need nobody's permission.
+//! offline promise: `--offline` is not a simulation, it is the same
+//! [`Offline`](vcw_metadata::net::Offline) transport the application defaults
+//! to, and the verb still runs, still prints, and still exits zero on the
+//! subcommands that need nobody's permission.
 //!
 //! Credentials come from the environment and nowhere else (§39):
 //! `VCW_DISCOGS_TOKEN` and, optionally, `VCW_CONTACT` for the user agent both
@@ -45,18 +46,13 @@
 //! says which are set without printing any of them.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use vcw_metadata::cache::Disk;
 use vcw_metadata::credentials::Credentials;
-use vcw_metadata::net::{Offline, Transport, user_agent};
-use vcw_metadata::policy::Retry;
-use vcw_metadata::{
-    Cancel, Candidate, Client, Criterion, Discogs, Genres, MusicBrainz, Provider, ProviderId,
-    Query, Release,
-};
+use vcw_metadata::genres::Genres;
+use vcw_metadata::net::user_agent;
+use vcw_metadata::{Cancel, Candidate, Criterion, Provider, ProviderId, Query, Release, Setup};
 
 /// Which providers to ask.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -151,65 +147,28 @@ pub(crate) fn run(args: Args) -> Result<()> {
     }
 }
 
-/// The transport for a run: the real one, or the one that refuses.
-///
-/// The `net` feature is `vcw-metadata`'s, and this crate depends on it with
-/// default features on, so `Agent` is always here. A build that wants §40's
-/// strongest form turns the feature off in the workspace and this stops
-/// compiling rather than silently reaching the network - which is the point.
-fn transport(offline: bool) -> Arc<dyn Transport> {
-    if offline {
-        Arc::new(Offline)
-    } else {
-        Arc::new(vcw_metadata::Agent::new())
-    }
-}
-
-/// A client for one provider, with the provider's own rate limit.
-fn client(
-    provider: ProviderId,
-    offline: bool,
-    cache: Option<&PathBuf>,
-    credentials: &Credentials,
-) -> Client {
-    let mut client = Client::new(provider, transport(offline))
-        // The provider's published rate, from the library rather than restated
-        // here: a limit written down twice is a limit that will disagree.
-        .with_limiter(vcw_metadata::client::default_limiter(provider))
-        .with_retry(Retry::conservative())
-        .with_timeout(TIMEOUT)
-        .with_user_agent(user_agent(credentials.contact()));
-    if let Some(directory) = cache {
-        client = client.with_cache(Arc::new(Disk::new(directory)));
-    }
-    client
-}
-
 /// The providers a run should ask, in the order it should ask them.
+///
+/// The construction itself - transport, rate limit, retry, user agent, cache,
+/// genre table - is [`vcw_metadata::Setup`]'s, because the Tauri shell needs
+/// exactly the same six decisions and a rate limit written down twice is a rate
+/// limit that will disagree. What is decided here is only what this caller
+/// legitimately differs on: [`TIMEOUT`], which is longer than the library's
+/// because a person who typed a command is waiting on purpose.
 fn providers(
     which: Which,
     offline: bool,
     cache: Option<&PathBuf>,
     credentials: &Credentials,
 ) -> Vec<Box<dyn Provider>> {
-    let genres = Genres::builtin();
-    let mut providers: Vec<Box<dyn Provider>> = Vec::new();
-    if matches!(which, Which::Both | Which::Musicbrainz) {
-        providers.push(Box::new(
-            MusicBrainz::new(transport(offline))
-                .with_client(client(ProviderId::MusicBrainz, offline, cache, credentials))
-                .with_genres(genres.clone()),
-        ));
+    let mut setup = Setup::new().online(!offline).with_timeout(TIMEOUT).only(
+        matches!(which, Which::Both | Which::Musicbrainz),
+        matches!(which, Which::Both | Which::Discogs),
+    );
+    if let Some(directory) = cache {
+        setup = setup.with_cache(directory);
     }
-    if matches!(which, Which::Both | Which::Discogs) {
-        providers.push(Box::new(
-            Discogs::new(transport(offline))
-                .with_client(client(ProviderId::Discogs, offline, cache, credentials))
-                .with_genres(genres)
-                .with_token(credentials.discogs().cloned()),
-        ));
-    }
-    providers
+    setup.providers(credentials)
 }
 
 /// Searches, and prints what came back and what did not.

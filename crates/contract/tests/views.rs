@@ -45,6 +45,7 @@
 use vcw_contract::view::{Candidate, Waveform};
 use vcw_metadata::release::{Medium, Release, TrackEntry};
 use vcw_signal::waveform::{Column, Level};
+use vcw_types::SampleRate;
 
 /// A two-disc release: one vinyl medium and one CD.
 fn release() -> Release {
@@ -134,9 +135,12 @@ fn a_waveform_crosses_as_three_arrays_and_not_a_list_of_objects() {
             },
         ],
     };
-    let view = Waveform::of(9, &drawn);
+    let view = Waveform::of(9, &drawn, SampleRate(100));
     assert_eq!(view.capture_id, 9);
     assert_eq!((view.start_frame, view.end_frame), (0, 300));
+    // The same window in seconds, so a renderer that draws in frames and seeks
+    // in seconds needs neither the rate nor a division of its own.
+    assert_eq!((view.start_seconds, view.end_seconds), (0.0, 3.0));
     assert_eq!(view.min, vec![-0.5, -1.0, 0.0]);
     assert_eq!(view.max, vec![0.5, 1.0, 0.0]);
     assert_eq!(view.rms, vec![0.25, 0.5, 0.0]);
@@ -161,6 +165,6 @@ fn an_empty_waveform_is_empty_and_not_an_error() {
         covered: 0,
         columns: Vec::new(),
     };
-    let view = Waveform::of(1, &drawn);
+    let view = Waveform::of(1, &drawn, SampleRate(44_100));
     assert!(view.min.is_empty() && view.max.is_empty() && view.rms.is_empty());
 }

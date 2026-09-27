@@ -594,6 +594,38 @@ pub fn listing(conn: &Connection) -> Result<Vec<(Side, Record)>> {
     Ok(all)
 }
 
+/// Every track edge on the sides a capture was recorded to, ascending.
+///
+/// Both ends of every track, not just the starts, because §21's `SKIP BACK` from
+/// the middle of the last track should land at its top and `SKIP FORWARD` from
+/// there should land at its end rather than run to the end of the side. Adjacent
+/// tracks share a frame - one's end is the next one's start - so the list is
+/// deduplicated, and a skip between them moves once.
+///
+/// Frames, and one flat list rather than one per side, because that is the shape
+/// `vcw_core::playback::Audition::marks` wants: a capture can hold two faces
+/// (§21) and a skip does not stop at the join between them any more than the
+/// needle does.
+///
+/// Empty for a capture nothing has been analysed from, which is the state a skip
+/// falls back to a fixed step in.
+///
+/// # Errors
+///
+/// If a query fails.
+pub fn edges_of_capture(conn: &Connection, capture_id: i64) -> Result<Vec<u64>> {
+    let mut frames = Vec::new();
+    for record in side::for_capture(conn, capture_id)? {
+        for track in tracks_of(conn, record.id)? {
+            frames.push(track.start);
+            frames.push(track.end);
+        }
+    }
+    frames.sort_unstable();
+    frames.dedup();
+    Ok(frames)
+}
+
 /// Splits a track at a frame, giving two tracks that meet there.
 ///
 /// Two new boundaries and one new track, with no gap: the first track now ends at
@@ -1605,6 +1637,49 @@ mod tests {
         assert_eq!(on_b[0].number, 1);
         // Its boundaries came with it, so side A no longer reports them.
         assert_eq!(boundaries(p.conn(), Side::A).expect("boundaries").len(), 2);
+    }
+
+    #[test]
+    fn a_captures_edges_are_both_ends_of_every_track_on_both_its_faces() {
+        // §21's skip marks. Two faces on one capture, adjacent tracks sharing a
+        // frame, and one gap - which is what a real side looks like once the
+        // run-in and the run-out are outside the tracks.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir, "edges.vcw");
+        let capture = a_capture(&mut p);
+        side::attach(&mut p, Side::A, capture).expect("A");
+        side::attach(&mut p, side_of('B'), capture).expect("B");
+        add_track(&mut p, Side::A, 100, 200).expect("A1");
+        add_track(&mut p, Side::A, 200, 300).expect("A2");
+        add_track(&mut p, side_of('B'), 400, 500).expect("B1");
+
+        assert_eq!(
+            edges_of_capture(p.conn(), capture).expect("edges"),
+            vec![100, 200, 300, 400, 500],
+            "ascending, deduplicated across the shared frame, and across the join"
+        );
+    }
+
+    #[test]
+    fn a_capture_nothing_has_been_analysed_from_has_no_edges() {
+        // Which is the state a skip falls back to a fixed step in, so it is
+        // worth being sure it is empty rather than a zero.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir, "noedges.vcw");
+        let capture = a_capture(&mut p);
+        side::attach(&mut p, Side::A, capture).expect("A");
+        assert!(
+            edges_of_capture(p.conn(), capture)
+                .expect("edges")
+                .is_empty()
+        );
+        assert!(
+            edges_of_capture(p.conn(), 4_242)
+                .expect("absent")
+                .is_empty(),
+            "and a capture that is not there is not an error here - playback \
+             refuses it at the door, with a better message than this could give"
+        );
     }
 
     #[test]

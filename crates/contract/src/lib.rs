@@ -85,9 +85,11 @@
 //! convention `docs/SCHEMA.md` uses.
 
 pub mod bindings;
+pub mod browse;
 pub mod command;
 pub mod event;
 pub mod read;
+pub mod settings;
 pub mod view;
 
 pub use command::{Audition, Failure, Marker, Playback, Region, Request, Search, Transport, Zoom};

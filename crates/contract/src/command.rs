@@ -558,6 +558,204 @@ impl Export {
     }
 }
 
+/// The helper a new project is seeded from (§34).
+///
+/// Every field optional, because that is what makes it a helper rather than a
+/// form. A person putting a record on the platter knows the artist, the title
+/// and the catalogue number off the sleeve, and typing them once here is
+/// cheaper than correcting what a provider guessed later - but a project with
+/// none of them is perfectly valid, and identification fills the gaps.
+///
+/// `name` is the file name and the other three are the release row. They are
+/// separate because they answer different questions: the file is what a person
+/// finds in a directory a year from now, and the release is what gets tagged
+/// into the exported audio. Leaving `name` null derives one, which is a
+/// decision and so is made on this side - see `vcw_contract::browse`'s sibling
+/// in the shell.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct NewProject {
+    /// File name without the extension, or `null` to derive one.
+    pub name: Option<String>,
+    /// Release artist, off the sleeve.
+    pub artist: Option<String>,
+    /// Release title.
+    pub album: Option<String>,
+    /// Catalogue number, which is what actually identifies a pressing (§32).
+    pub catalog: Option<String>,
+}
+
+/// Place a new boundary (§31).
+///
+/// Seconds, like [`Marker`], and for the same reason: this is where a person
+/// clicked. The side is named rather than inferred from the time, because two
+/// faces can share one capture and nothing about a frame number says which of
+/// them the operator was looking at - see the note on [`crate::view::Side`].
+///
+/// A boundary placed here is [`vcw_types::Provenance::User`] and locked, which
+/// is [`vcw_project::track::NewBoundary::by_user`]'s decision and not this
+/// type's: a person who put a marker somewhere did not do it so analysis could
+/// move it later.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Placement {
+    /// Which side to place it on, as [`crate::view::Side::id`] gave it.
+    pub side_id: i64,
+    /// Where, in seconds.
+    pub at: f64,
+    /// Which way the audio crosses it.
+    pub edge: crate::event::EdgeName,
+}
+
+/// Delete a boundary (§31).
+///
+/// Separate from [`Marker`] rather than a `to: null` on it, because deleting a
+/// boundary and moving one fail differently: a move is refused by a neighbour,
+/// and a delete is refused by the track that is using it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Removal {
+    /// Which boundary.
+    pub boundary_id: i64,
+}
+
+/// Lock or unlock a boundary against analysis (§24, §31).
+///
+/// The flag is explicit rather than a toggle. A toggle is a command whose
+/// effect depends on state the frontend read some time ago, which is how two
+/// clicks in quick succession end up leaving a boundary unlocked when the
+/// person meant to lock it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Lock {
+    /// Which boundary.
+    pub boundary_id: i64,
+    /// What to set it to.
+    pub locked: bool,
+}
+
+/// Change a track's metadata (§31, §32).
+///
+/// Every field is a three-state answer and the distinction matters:
+/// `null` leaves the column alone, and `""` clears it back to the release's,
+/// which is what NULL means in every one of these columns but `title`. An
+/// empty title is an untitled track rather than an inherited one, because a
+/// track has no release title to fall back to.
+///
+/// That is [`vcw_project::track::Update`]'s rule, mirrored here rather than
+/// reinterpreted - a UI that sent `""` meaning "no change" would silently wipe
+/// an artist, so the mapping is one-to-one and stated in both places.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackEdit {
+    /// Which track, as [`crate::view::Track::id`] gave it.
+    pub track_id: i64,
+    /// The title. Empty means untitled.
+    pub title: Option<String>,
+    /// The performer, where it differs from the release's.
+    pub artist: Option<String>,
+    /// The composer.
+    pub composer: Option<String>,
+    /// Free text.
+    pub comments: Option<String>,
+    /// The recording it was identified as.
+    pub musicbrainz_id: Option<String>,
+    /// Whether a person has accepted this metadata (§26).
+    pub confirmed: Option<bool>,
+}
+
+impl From<&TrackEdit> for vcw_project::track::Update {
+    fn from(edit: &TrackEdit) -> Self {
+        Self {
+            title: edit.title.clone(),
+            artist: edit.artist.clone(),
+            composer: edit.composer.clone(),
+            comments: edit.comments.clone(),
+            musicbrainz_id: edit.musicbrainz_id.clone(),
+            confirmed: edit.confirmed,
+        }
+    }
+}
+
+/// Split one track in two (§31).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Split {
+    /// Which track to cut.
+    pub track_id: i64,
+    /// Where to cut it, in seconds.
+    pub at: f64,
+}
+
+/// Join two adjacent tracks (§31).
+///
+/// Both ids rather than "this one and the next", because "the next" is a
+/// question about ordering that the frontend would have to answer from a list
+/// it read earlier. Naming both makes a stale list a refusal rather than a
+/// merge of the wrong pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Merge {
+    /// The earlier track, which survives.
+    pub left_id: i64,
+    /// The later track, which is absorbed into it.
+    pub right_id: i64,
+}
+
+/// Run track detection over a side (§22).
+///
+/// `null` means every side that has a capture, which is what the keyboard
+/// binding sends: a person who presses the detect key while looking at the
+/// whole project means the whole project.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Detect {
+    /// A side letter, or `null` for all of them.
+    pub side: Option<String>,
+    /// Whether to promote what it finds into tracks, or only record boundaries.
+    ///
+    /// Defaults to promoting, because §22's live analysis exists to give a
+    /// person tracks to correct rather than a list of candidates to approve.
+    /// A detection pass that only wrote boundaries would leave the track
+    /// editor empty on a side nobody had touched.
+    #[serde(default = "promote_by_default")]
+    pub promote: bool,
+}
+
+/// The default for [`Detect::promote`], which serde needs as a function.
+const fn promote_by_default() -> bool {
+    true
+}
+
+impl Detect {
+    /// The side this names, or `None` for every side.
+    ///
+    /// # Errors
+    ///
+    /// [`Invalid`] naming the `side` field when the text is not a single letter
+    /// in `A..=Z`.
+    pub fn side(&self) -> Result<Option<vcw_types::vinyl::Side>, Invalid> {
+        let Some(given) = self.side.as_deref() else {
+            return Ok(None);
+        };
+        let mut letters = given.chars();
+        let (Some(letter), None) = (letters.next(), letters.next()) else {
+            return Err(Invalid::new(
+                "side",
+                format!("{given:?} is not a side letter - A to Z, A being first"),
+            ));
+        };
+        vcw_types::vinyl::Side::from_letter(letter)
+            .map(Some)
+            .ok_or_else(|| {
+                Invalid::new(
+                    "side",
+                    format!("{letter:?} is not a side letter - A to Z, A being first"),
+                )
+            })
+    }
+}
+
 /// Everything a frontend can ask for, as one union.
 ///
 /// The Tauri shell does not use this - it exposes one `#[tauri::command]` per
@@ -581,10 +779,38 @@ pub enum Request {
     Seek(Seek),
     /// Move a boundary (§31).
     MoveMarker(Marker),
+    /// Place a boundary (§31).
+    PlaceMarker(Placement),
+    /// Delete a boundary (§31).
+    DeleteMarker(Removal),
+    /// Pin a boundary against analysis, or release it (§24, §31).
+    LockMarker(Lock),
+    /// Retitle or annotate a track (§31, §32).
+    EditTrack(TrackEdit),
+    /// Cut one track in two (§31).
+    SplitTrack(Split),
+    /// Join two adjacent tracks (§31).
+    MergeTracks(Merge),
+    /// Look for track boundaries in a capture (§22).
+    DetectTracks(Detect),
     /// Ask a provider about this record (§28).
     SearchMetadata(Search),
     /// Accept a candidate (§26).
     SelectRelease(Selection),
     /// Turn the project into files (§33).
     Export(Export),
+    /// Create a project, seeded from what is on the sleeve (§34).
+    NewProject(NewProject),
+    /// Write §39's settings.
+    ///
+    /// A command rather than a read because it changes something, and the
+    /// something it changes is outside every project: §39's defaults live with
+    /// the application, so a person who sets a library root once does not set
+    /// it again per record.
+    ///
+    /// Boxed, because [`crate::settings::Settings`] is five groups and 416
+    /// bytes, and an unboxed variant makes every `Request` that size - the
+    /// largest of the other eight is 128. Serde and `ts-rs` both see through a
+    /// `Box`, so nothing changes on the wire or in the generated declaration.
+    SaveSettings(Box<crate::settings::Settings>),
 }

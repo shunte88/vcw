@@ -32,7 +32,7 @@
 
 //! Project rows assembled into the view models a UI binds to (§35).
 //!
-//! Three readers, and they are here rather than in the shell for the reason the
+//! Five readers, and they are here rather than in the shell for the reason the
 //! crate exists: none of them is a single row. A track's position is §29's
 //! numbering rule applied to the side letter and the running sequence, its
 //! seconds are frames divided by the rate the side's *capture* ran at, and its
@@ -50,7 +50,7 @@
 //! handle works: a UI painting a view must not be able to write to the project
 //! that is being captured into.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
 use vcw_project::{Result, release, session, side, track};
@@ -122,6 +122,43 @@ pub fn tracks(conn: &Connection) -> Result<Vec<view::Track>> {
     Ok(out)
 }
 
+/// Every boundary in the project, in timeline order, promoted or not.
+///
+/// The track editor's list, and not the same thing as [`tracks`]: a track is a
+/// pair of boundaries that survived §24's promotion policy, and on the real
+/// side that policy kept 6 of 270. The 264 it dropped are still rows, and an
+/// editor that cannot see them cannot promote one by hand - which is the whole
+/// remedy for a policy that is deliberately blunt.
+///
+/// `promoted` is resolved from the track rows in one pass rather than a query
+/// per boundary: every track names its two, so collecting those ids first
+/// answers the question for the whole project at the cost of one read.
+pub fn boundaries(conn: &Connection) -> Result<Vec<view::Boundary>> {
+    let mut used = HashSet::new();
+    for record in track::listing(conn)? {
+        used.insert(record.1.start_boundary);
+        used.insert(record.1.end_boundary);
+    }
+
+    let mut out = Vec::new();
+    for record in side::list(conn)? {
+        // Same fallback as `tracks`, and for the same reason: a side with no
+        // capture has no rate to divide by, and no boundaries either, because a
+        // boundary is something found in audio.
+        let rate = match record.capture {
+            Some(capture) => {
+                session::load(conn, capture)?.map_or(SampleRate(44_100), |c| c.info.rate)
+            }
+            None => SampleRate(44_100),
+        };
+        for boundary in track::boundaries_of(conn, record.id)? {
+            let promoted = used.contains(&boundary.id);
+            out.push(view::Boundary::of(record.side, &boundary, rate, promoted));
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use vcw_project::Project;
@@ -176,6 +213,68 @@ mod tests {
         assert_eq!(tracks[0].end_frame, 44_100);
     }
 
+    /// The distinction this reader exists for: a detected boundary no track
+    /// uses is still listed, and says so.
+    #[test]
+    fn an_unpromoted_boundary_is_listed_and_flagged() {
+        let (_dir, mut project) = project();
+        let stray = track::add_boundary(
+            &mut project,
+            Side::A,
+            &track::NewBoundary::detected(
+                66_150,
+                vcw_types::Edge::Start,
+                0.4,
+                vcw_types::Provenance::Silence,
+            ),
+        )
+        .expect("a boundary between the two tracks");
+
+        let listed = boundaries(project.conn()).expect("boundaries");
+        // Two tracks contribute four boundaries, and the stray is the fifth.
+        assert_eq!(listed.len(), 5, "{listed:#?}");
+
+        let odd = listed
+            .iter()
+            .find(|b| b.id == stray)
+            .expect("the stray should be listed");
+        assert!(
+            !odd.promoted,
+            "a boundary no track names should not read as promoted"
+        );
+        assert_eq!(odd.side, "A");
+        assert_eq!(odd.at_frame, 66_150);
+        assert!((odd.seconds - 1.5).abs() < 1e-9, "1.5 s at 44.1 kHz");
+        assert_eq!(odd.provenance, crate::event::ProvenanceName::Silence);
+
+        assert!(
+            listed.iter().filter(|b| b.promoted).count() == 4,
+            "the four boundaries the two tracks are made of should read as promoted"
+        );
+    }
+
+    /// Agreement is its own field, and a hand-placed boundary reports none
+    /// without being weaker for it.
+    #[test]
+    fn a_hand_placed_boundary_reports_no_sources() {
+        let (_dir, mut project) = project();
+        track::add_boundary(
+            &mut project,
+            Side::A,
+            &track::NewBoundary::by_user(50_000, vcw_types::Edge::End),
+        )
+        .expect("a boundary a person placed");
+
+        let placed = boundaries(project.conn())
+            .expect("boundaries")
+            .into_iter()
+            .find(|b| b.at_frame == 50_000)
+            .expect("the placed boundary");
+        assert_eq!(placed.agreement, 0);
+        assert!(placed.sources.is_empty());
+        assert_eq!(placed.provenance, crate::event::ProvenanceName::User);
+    }
+
     #[test]
     fn a_project_with_no_release_reads_as_none() {
         let dir = tempfile::tempdir().expect("temp dir");
@@ -183,5 +282,6 @@ mod tests {
         assert!(release(project.conn()).expect("release").is_none());
         assert!(sides(project.conn()).expect("sides").is_empty());
         assert!(tracks(project.conn()).expect("tracks").is_empty());
+        assert!(boundaries(project.conn()).expect("boundaries").is_empty());
     }
 }

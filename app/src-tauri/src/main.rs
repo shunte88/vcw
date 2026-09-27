@@ -44,36 +44,35 @@
 //!
 //! - [`state`], the only mutable state in the shell;
 //! - [`pump`], one thread per bus turning core events into webview events;
-//! - [`transport`], [`library`], [`audition`], [`edit`] and [`exporter`], which
-//!   are §35's commands grouped by what they act on.
+//! - [`transport`], [`library`], [`audition`], [`edit`], [`detect`],
+//!   [`metadata`], [`config`] and [`exporter`], which are §35's commands
+//!   grouped by what they act on.
 //!
-//! Two of §35's verbs are declared in the contract and not wired here:
-//! `search_metadata` and `select_release`. They need a provider client, a disk
-//! cache, credentials and a cancellation path, which is WP-17's work, and a
-//! shell command that quietly did nothing would be worse than one that refuses.
-//! `refused` is that refusal, and the tests at the bottom of this file keep the
-//! list of what is missing honest.
+//! Every verb §35 declares is now wired, and the tests at the bottom of this
+//! file are what say so: [`WIRED`] is checked against the tags in the generated
+//! `Request` union, in both directions. Until WP-16 there was a `NOT_WIRED`
+//! list beside it and a `refused` command to answer for it, because a command a
+//! frontend can send and nothing answers is worse than one that refuses out
+//! loud. There is nothing left for it to hold, so it is gone - which makes the
+//! test a requirement rather than a reminder: a command added to the contract
+//! now fails the suite until something here honours it.
 
 // A release build should not open a console window behind the app on Windows. In
 // a debug build it should, because that is where a panic is printed.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audition;
+mod config;
+mod detect;
 mod edit;
 mod exporter;
 mod library;
+mod metadata;
 mod pump;
 mod state;
 mod transport;
 
-use state::{Error, Shell};
-
-/// Commands the contract declares and the shell does not honour yet.
-///
-/// Named here rather than left out, so that `every_command_is_wired_or_named`
-/// can assert the list against [`vcw_contract::Request`] and a new command
-/// cannot be forgotten into silence.
-pub(crate) const NOT_WIRED: [&str; 2] = ["search_metadata", "select_release"];
+use state::Shell;
 
 /// The commands in [`vcw_contract::Request`] that this shell honours.
 ///
@@ -96,20 +95,25 @@ pub(crate) const NOT_WIRED: [&str; 2] = ["search_metadata", "select_release"];
 /// this list is the assertion about it. A copy compiled into the binary would
 /// be a second answer to the same question.
 #[cfg(test)]
-pub(crate) const WIRED: [&str; 6] = ["arm", "transport", "play", "seek", "move_marker", "export"];
-
-/// Refuses a command that is declared but not wired.
-///
-/// # Errors
-///
-/// Always, with the code `not-wired`.
-#[tauri::command]
-fn refused(command: String) -> Result<(), Error> {
-    let known = NOT_WIRED.iter().find(|name| **name == command);
-    Err(Error::NotWired {
-        command: known.copied().unwrap_or("that command"),
-    })
-}
+pub(crate) const WIRED: [&str; 17] = [
+    "arm",
+    "transport",
+    "play",
+    "seek",
+    "move_marker",
+    "place_marker",
+    "delete_marker",
+    "lock_marker",
+    "edit_track",
+    "split_track",
+    "merge_tracks",
+    "detect_tracks",
+    "search_metadata",
+    "select_release",
+    "export",
+    "new_project",
+    "save_settings",
+];
 
 fn main() {
     tauri::Builder::default()
@@ -125,12 +129,28 @@ fn main() {
             library::tracks,
             library::captures,
             library::waveform,
+            library::boundaries,
+            config::settings,
+            config::save_settings,
+            config::credentials,
+            config::projects,
+            config::new_project,
+            config::library_root,
+            config::open_path,
             edit::move_marker,
+            edit::place_marker,
+            edit::delete_marker,
+            edit::lock_marker,
+            edit::edit_track,
+            edit::split_track,
+            edit::merge_tracks,
+            detect::detect_tracks,
+            metadata::search_metadata,
+            metadata::select_release,
             audition::play,
             audition::playback,
             exporter::export_plan,
             exporter::export_run,
-            refused,
         ])
         .run(tauri::generate_context!())
         .expect("the VCW window could not be created");
@@ -138,7 +158,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{NOT_WIRED, WIRED};
+    use super::WIRED;
 
     /// Every `command` tag in the generated `Request` union.
     ///
@@ -174,20 +194,14 @@ mod tests {
     }
 
     #[test]
-    fn every_command_is_wired_or_named() {
+    fn every_command_in_the_contract_is_wired() {
         for tag in tags() {
-            let wired = WIRED.contains(&tag.as_str());
-            let named = NOT_WIRED.contains(&tag.as_str());
             assert!(
-                wired || named,
-                "{tag:?} is in the contract and neither wired into \
-                 `generate_handler!` nor listed in `NOT_WIRED`. Wire it, or say \
-                 out loud that it is not wired - a command a frontend can send \
-                 and nothing answers is the one outcome worth a failing test."
-            );
-            assert!(
-                !(wired && named),
-                "{tag:?} is listed as both wired and not wired"
+                WIRED.contains(&tag.as_str()),
+                "{tag:?} is in the contract and nothing in the shell answers \
+                 it. Wire it into `generate_handler!` and name it in `WIRED` - \
+                 a command a frontend can send and nothing answers is the one \
+                 outcome worth a failing test."
             );
         }
     }
@@ -195,21 +209,11 @@ mod tests {
     #[test]
     fn nothing_claims_to_be_wired_that_the_contract_does_not_declare() {
         let tags = tags();
-        for name in WIRED.iter().chain(NOT_WIRED.iter()) {
+        for name in &WIRED {
             assert!(
                 tags.contains(&(*name).to_owned()),
                 "{name:?} is not a command in the contract - renamed, or removed?"
             );
         }
-    }
-
-    #[test]
-    fn a_refusal_says_which_command_and_why() {
-        let error = super::refused("search_metadata".to_owned()).expect_err("not wired yet");
-        assert_eq!(error.code(), "not-wired");
-        assert!(
-            error.to_string().contains("search_metadata"),
-            "{error} does not name the command"
-        );
     }
 }

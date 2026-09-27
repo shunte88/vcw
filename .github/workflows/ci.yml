@@ -131,6 +131,13 @@ jobs:
       - name: Build the frontend
         run: pnpm install --frozen-lockfile && pnpm build
         working-directory: app/ui
+      # The keyboard map's own tests. `pnpm build` runs `tsc --noEmit` and so
+      # proves the frontend compiles against the generated bindings; what it
+      # cannot prove is that every chord in the map has a handler behind it,
+      # which is WP-16's exit criterion and lives in `wiring.test.ts`.
+      - name: Test the frontend
+        run: pnpm test
+        working-directory: app/ui
       - name: fmt
         run: cargo fmt --all -- --check
         working-directory: app/src-tauri

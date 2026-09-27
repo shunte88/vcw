@@ -258,7 +258,43 @@ reason: string,
 /**
  * Files written before it stopped.
  */
-written: number, } | { "kind": "closed" };
+written: number, } | { "kind": "detection-finished",
+/**
+ * The sides examined, as letters.
+ */
+sides: Array<string>,
+/**
+ * Boundary rows written or updated.
+ */
+boundaries: number,
+/**
+ * Track rows created.
+ */
+tracks: number,
+/**
+ * Decisions the adoption policy turned down.
+ */
+rejected: number,
+/**
+ * Decisions a boundary the operator had already settled accounted for.
+ */
+alreadySettled: number,
+/**
+ * How long the pass took, in seconds.
+ */
+seconds: number, } | { "kind": "detection-failed",
+/**
+ * What went wrong, as a sentence.
+ */
+reason: string,
+/**
+ * The side it was on when it stopped, if it had got that far.
+ */
+side: string | null,
+/**
+ * Sides finished before it stopped.
+ */
+completed: number, } | { "kind": "closed" };
 
 export type PhaseName = "idle" | "armed" | "recording" | "paused" | "stopped";
 
@@ -280,7 +316,7 @@ export type Request = { "command": "arm" } & Arm | { "command": "transport",
 /**
  * Which verb.
  */
-verb: Transport, } | { "command": "play" } & Audition | { "command": "seek" } & Seek | { "command": "move_marker" } & Marker | { "command": "search_metadata" } & Search | { "command": "select_release" } & Selection | { "command": "export" } & Export;
+verb: Transport, } | { "command": "play" } & Audition | { "command": "seek" } & Seek | { "command": "move_marker" } & Marker | { "command": "place_marker" } & Placement | { "command": "delete_marker" } & Removal | { "command": "lock_marker" } & Lock | { "command": "edit_track" } & TrackEdit | { "command": "split_track" } & Split | { "command": "merge_tracks" } & Merge | { "command": "detect_tracks" } & Detect | { "command": "search_metadata" } & Search | { "command": "select_release" } & Selection | { "command": "export" } & Export | { "command": "new_project" } & NewProject | { "command": "save_settings" } & Settings;
 
 export type Failure = {
 /**
@@ -374,6 +410,101 @@ to: number,
  */
 force: boolean, };
 
+export type Placement = {
+/**
+ * Which side to place it on, as [`crate::view::Side::id`] gave it.
+ */
+sideId: number,
+/**
+ * Where, in seconds.
+ */
+at: number,
+/**
+ * Which way the audio crosses it.
+ */
+edge: EdgeName, };
+
+export type Removal = {
+/**
+ * Which boundary.
+ */
+boundaryId: number, };
+
+export type Lock = {
+/**
+ * Which boundary.
+ */
+boundaryId: number,
+/**
+ * What to set it to.
+ */
+locked: boolean, };
+
+export type TrackEdit = {
+/**
+ * Which track, as [`crate::view::Track::id`] gave it.
+ */
+trackId: number,
+/**
+ * The title. Empty means untitled.
+ */
+title: string | null,
+/**
+ * The performer, where it differs from the release's.
+ */
+artist: string | null,
+/**
+ * The composer.
+ */
+composer: string | null,
+/**
+ * Free text.
+ */
+comments: string | null,
+/**
+ * The recording it was identified as.
+ */
+musicbrainzId: string | null,
+/**
+ * Whether a person has accepted this metadata (§26).
+ */
+confirmed: boolean | null, };
+
+export type Split = {
+/**
+ * Which track to cut.
+ */
+trackId: number,
+/**
+ * Where to cut it, in seconds.
+ */
+at: number, };
+
+export type Merge = {
+/**
+ * The earlier track, which survives.
+ */
+leftId: number,
+/**
+ * The later track, which is absorbed into it.
+ */
+rightId: number, };
+
+export type Detect = {
+/**
+ * A side letter, or `null` for all of them.
+ */
+side: string | null,
+/**
+ * Whether to promote what it finds into tracks, or only record boundaries.
+ *
+ * Defaults to promoting, because §22's live analysis exists to give a
+ * person tracks to correct rather than a list of candidates to approve.
+ * A detection pass that only wrote boundaries would leave the track
+ * editor empty on a side nobody had touched.
+ */
+promote: boolean, };
+
 export type Region = {
 /**
  * Where it starts, in seconds.
@@ -463,6 +594,24 @@ artwork: string | null,
  * Whether to replace files that are already there.
  */
 overwrite: boolean, };
+
+export type NewProject = {
+/**
+ * File name without the extension, or `null` to derive one.
+ */
+name: string | null,
+/**
+ * Release artist, off the sleeve.
+ */
+artist: string | null,
+/**
+ * Release title.
+ */
+album: string | null,
+/**
+ * Catalogue number, which is what actually identifies a pressing (§32).
+ */
+catalog: string | null, };
 
 // ----------------------------------------------------------------------
 // View models (§35)
@@ -699,6 +848,15 @@ start: number,
  */
 end: number,
 /**
+ * How long it is, in seconds.
+ *
+ * `end - start`, and carried rather than left to the caller on purpose: a
+ * track length is the number a person reads off the screen and the number
+ * `vcw list` prints, and two subtractions in two languages is how those
+ * two come to disagree about a rounding.
+ */
+seconds: number,
+/**
  * The frame it starts at.
  */
 startFrame: number,
@@ -738,6 +896,137 @@ musicbrainzId: string | null,
  * Whether a person has confirmed the metadata.
  */
 confirmed: boolean, };
+
+export type Boundary = {
+/**
+ * Row id, for a command that moves, locks or deletes one.
+ */
+id: number,
+/**
+ * The side it is on.
+ */
+sideId: number,
+/**
+ * The side letter, so a flat list groups without a second lookup.
+ */
+side: string,
+/**
+ * The frame it sits at, in that side's capture timeline.
+ */
+atFrame: number,
+/**
+ * The same position in seconds, divided by the capture's own rate.
+ */
+seconds: number,
+/**
+ * Which way the audio crosses it.
+ */
+edge: EdgeName,
+/**
+ * How much to trust it, in `0.0..=1.0`.
+ */
+confidence: number,
+/**
+ * What decided its position.
+ */
+provenance: ProvenanceName,
+/**
+ * Every provenance that reported it.
+ */
+sources: Array<ProvenanceName>,
+/**
+ * How many distinct detectors agreed, which is what §24's policy
+ * thresholds on. Sent as its own field rather than left as
+ * `sources.length`, because a person who placed the boundary reports zero
+ * sources and is not less certain for it.
+ */
+agreement: number,
+/**
+ * Whether analysis may move it (§24).
+ */
+locked: boolean,
+/**
+ * Whether a track is bounded by it.
+ *
+ * `false` is the interesting case: a detected boundary that no track uses.
+ */
+promoted: boolean,
+/**
+ * The measurements behind it.
+ */
+evidence: Array<Measurement>, };
+
+export type Measurement = {
+/**
+ * What was measured.
+ */
+name: string,
+/**
+ * The value, in whatever unit the name implies.
+ */
+value: number, };
+
+export type Project = {
+/**
+ * Absolute path to the `.vcw` file.
+ */
+path: string,
+/**
+ * The file stem, which is what a person named it.
+ */
+name: string,
+/**
+ * Release title, empty until something fills one in.
+ */
+album: string,
+/**
+ * Release artist.
+ */
+albumArtist: string,
+/**
+ * Catalogue number (§32), which is how a vinyl library is actually
+ * indexed.
+ */
+catalog: string,
+/**
+ * Release year.
+ */
+year: number | null,
+/**
+ * How many sides the project has rows for.
+ */
+sides: number,
+/**
+ * How many tracks.
+ */
+tracks: number,
+/**
+ * How many captures.
+ */
+captures: number,
+/**
+ * Total recorded audio, in seconds.
+ */
+seconds: number,
+/**
+ * The size of the `.vcw` file on disk, which for a vinyl project is most
+ * of what a person wants to know before opening it.
+ *
+ * `file_bytes` rather than `bytes`, and the longer name is load-bearing:
+ * `no_pcm_crosses_the_boundary` bans a field called `bytes` outright,
+ * because in this contract that word has only ever meant sample data. The
+ * guard fired on the first draft of this type, which is the guard working
+ * - the honest fix is to say which bytes, not to rename around the check.
+ */
+fileBytes: number,
+/**
+ * Last modification, in unix seconds.
+ */
+modified: number,
+/**
+ * Why the file could not be read, where it could not.
+ */
+problem: string | null, };
 
 export type Release = {
 /**
@@ -844,6 +1133,32 @@ format: string,
  */
 tracks: number, };
 
+export type Accepted = {
+/**
+ * The release title that was written.
+ */
+album: string,
+/**
+ * The release artist that was written.
+ */
+albumArtist: string,
+/**
+ * How many tracks were retitled.
+ */
+named: number,
+/**
+ * How many were left alone because a person had confirmed them.
+ */
+kept: number,
+/**
+ * Provider positions that named no track in this project.
+ */
+unmatched: Array<string>,
+/**
+ * Project tracks the tracklist did not cover, as §29 positions.
+ */
+unnamed: Array<string>, };
+
 export type Waveform = {
 /**
  * The capture this describes.
@@ -857,6 +1172,14 @@ startFrame: number,
  * One past the last frame covered.
  */
 endFrame: number,
+/**
+ * The first frame covered, in seconds.
+ */
+startSeconds: number,
+/**
+ * One past the last frame covered, in seconds.
+ */
+endSeconds: number,
 /**
  * Minimum, per column, in -1..=1.
  */
@@ -909,3 +1232,191 @@ title: string,
  * How many frames it will contain.
  */
 frames: number, };
+
+// ----------------------------------------------------------------------
+// Settings (§39)
+//
+// Five groups, named as §39 names them. Every default is either `null`
+// - let the engine negotiate and report what it got - or a constant read
+// out of the crate that owns the behaviour, which is why none of them
+// appears in this declaration. `Credential` is the one type here that
+// carries nothing: whether a token is configured and how long it is,
+// never the value.
+// ----------------------------------------------------------------------
+
+export type Settings = {
+/**
+ * Input, output, backend, rate, format, buffer size, capture mode.
+ */
+audio: AudioSettings,
+/**
+ * Default location, transaction and block size, recovery behaviour.
+ */
+recording: RecordingSettings,
+/**
+ * Algorithm, thresholds, minimum silence, minimum track length.
+ */
+detection: DetectionSettings,
+/**
+ * Which providers to ask, and how to identify ourselves to them.
+ */
+metadata: MetadataSettings,
+/**
+ * Format, codec options, output path, naming template.
+ */
+export: ExportSettings, };
+
+export type AudioSettings = {
+/**
+ * Capture device id, or `null` for the host default. The simulated source
+ * is what `null` gets on a machine with nothing attached.
+ */
+input: string | null,
+/**
+ * Playback device id, or `null` for the host default.
+ */
+output: string | null,
+/**
+ * Host API to prefer: `alsa`, `jack`, `coreaudio`, `wasapi`, `asio`.
+ */
+backend: string | null,
+/**
+ * Sample rate to pin, in Hz.
+ */
+rate: number | null,
+/**
+ * Sample format to pin, spelled as [`crate::command::parse_format`] takes
+ * it.
+ */
+format: string | null,
+/**
+ * Ring capacity in milliseconds. `None` takes §10's default.
+ *
+ * Milliseconds and not frames, because the thing being sized is a duration
+ * of tolerance to a stalled writer and the frame count that buys it
+ * changes with the rate.
+ */
+ringMillis: number | null,
+/**
+ * `shared`, `native` or `exclusive` (§8).
+ */
+mode: string | null, };
+
+export type RecordingSettings = {
+/**
+ * Where projects are kept, and what the browser lists (§34).
+ *
+ * `null` until a person picks one, and an unset library is an empty
+ * browser rather than a guess: creating a directory in somebody's home
+ * because they opened the application once is not a decision this
+ * application gets to make.
+ */
+library: string | null,
+/**
+ * Frames per stored block. `None` takes the writer's own default.
+ */
+blockFrames: number | null,
+/**
+ * How often to commit, in seconds.
+ *
+ * This is the crash-loss floor and nothing else is: a crash loses the
+ * uncommitted frames plus whatever the driver was holding, and the ring
+ * size does not enter into it.
+ */
+checkpointSeconds: number | null,
+/**
+ * What to do with a project that was not closed cleanly: `ask`, `recover`
+ * or `leave`.
+ */
+recovery: string | null, };
+
+export type DetectionSettings = {
+/**
+ * Which detectors to run: `silence`, `spectral`, `hmm`, or `all`.
+ */
+algorithm: string,
+/**
+ * How many detectors must agree before a boundary becomes a track (§24).
+ */
+minSources: number,
+/**
+ * The lowest confidence worth writing, in `0.0..=1.0`.
+ */
+minConfidence: number,
+/**
+ * The shortest gap that counts as a gap, in seconds.
+ */
+minSilenceSeconds: number,
+/**
+ * The shortest run of audio worth calling a track, in seconds.
+ *
+ * Seconds here and frames in the policy, because a person thinks in
+ * seconds and the detector needs frames - and the rate needed to convert
+ * belongs to the capture, which is why the conversion is not in this file.
+ */
+minTrackSeconds: number, };
+
+export type MetadataSettings = {
+/**
+ * Whether to ask Discogs (§26).
+ */
+discogs: boolean,
+/**
+ * Whether to ask MusicBrainz (§27).
+ */
+musicbrainz: boolean,
+/**
+ * Whether to ask AcoustID. Phase 2 (§45), off here.
+ */
+acoustid: boolean,
+/**
+ * Contact address sent in the user agent, per §40.
+ */
+contact: string | null,
+/**
+ * A `genre.dat` to fold provider genres through, or `null` for the
+ * built-in mapping.
+ */
+genreMap: string | null,
+/**
+ * Whether a lookup may go out at all. §40: the application stays fully
+ * usable offline, and this is how a person says so.
+ */
+online: boolean, };
+
+export type ExportSettings = {
+/**
+ * `wav` or `flac`.
+ */
+format: string,
+/**
+ * Where to write, or `null` to be asked each time.
+ */
+output: string | null,
+/**
+ * The naming template (§33).
+ */
+template: string,
+/**
+ * `none`, `embed`, `folder` or `both`.
+ */
+artwork: string, };
+
+export type Credential = {
+/**
+ * Which credential: `discogs`, `acoustid`.
+ */
+name: string,
+/**
+ * Whether one was found.
+ */
+present: boolean,
+/**
+ * How many characters it has, or zero when there is none.
+ */
+characters: number,
+/**
+ * The environment variable it is read from, so a panel can tell a person
+ * where to put it rather than offering a field that writes it to disk.
+ */
+variable: string, };

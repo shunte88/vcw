@@ -37,7 +37,7 @@
 //! exhaustive. The tag is not chosen here: it is
 //! [`vcw_core::Event::name`], which that module declares stable because it is
 //! what a UI subscribes to and what a log is grepped for.
-//! `the_tag_is_the_name_the_core_declares` asserts the two agree for every
+//! `every_event_keeps_its_name_across_the_boundary` asserts the two agree for every
 //! variant, so a rename in either place fails a test rather than silently
 //! dropping a subscriber's handler.
 //!
@@ -50,6 +50,15 @@
 //! the shell builds these three from that callback and from what `run`
 //! returned. They are in the same union because a frontend has one event
 //! stream, not two.
+//!
+//! [`Wire::DetectionFinished`] and [`Wire::DetectionFailed`] are there for the
+//! same reason and one more. A detection pass asked for from the UI is not the
+//! live analysis §22 runs during a capture: the live one belongs to the
+//! transport and publishes [`Wire::TrackDetected`] on the bus as it goes, and
+//! this one is a person pressing a key on a finished side. Both emit
+//! `track-detected` per boundary, because a marker appearing is the same fact
+//! either way - but only the requested pass can be said to have *finished*,
+//! and a frontend showing a spinner needs to be told.
 //!
 //! An export therefore ends in exactly one of two events, and a frontend that
 //! only handled progress would leave a progress bar at 99% forever. That is
@@ -121,6 +130,20 @@ impl From<vcw_types::Edge> for EdgeName {
         match edge {
             vcw_types::Edge::Start => Self::Start,
             vcw_types::Edge::End => Self::End,
+        }
+    }
+}
+
+/// The inverse, for a frontend placing a boundary (§31).
+///
+/// Total in this direction, unlike [`ProvenanceName`]'s conversion: a UI may
+/// only ever say `start` or `end`, and the two-variant enum is closed at both
+/// ends of the wire.
+impl From<EdgeName> for vcw_types::Edge {
+    fn from(name: EdgeName) -> Self {
+        match name {
+            EdgeName::Start => Self::Start,
+            EdgeName::End => Self::End,
         }
     }
 }
@@ -419,6 +442,48 @@ pub enum Wire {
         written: u32,
     },
 
+    /// A requested detection pass finished, and this is what it wrote.
+    ///
+    /// Sent once per pass rather than once per side: a person who asked for
+    /// every side wants to know when the whole thing is done, and the
+    /// boundaries appeared one at a time as `track-detected` while it ran.
+    ///
+    /// The three counts are the policy's answer, not the detector's, and the
+    /// difference is worth showing. `rejected` is boundaries §24's agreement
+    /// floor turned down, and a pass that reports forty found and two adopted
+    /// is telling the operator to lower `minSources` rather than that the
+    /// record has two tracks.
+    #[serde(rename = "detection-finished")]
+    DetectionFinished {
+        /// The sides examined, as letters.
+        sides: Vec<String>,
+        /// Boundary rows written or updated.
+        boundaries: u32,
+        /// Track rows created.
+        tracks: u32,
+        /// Decisions the adoption policy turned down.
+        rejected: u32,
+        /// Decisions a boundary the operator had already settled accounted for.
+        already_settled: u32,
+        /// How long the pass took, in seconds.
+        seconds: f64,
+    },
+
+    /// A requested detection pass stopped without finishing.
+    ///
+    /// Whatever earlier sides adopted stays adopted, for the same reason
+    /// [`Wire::ExportFailed`] leaves written files alone: adoption is per side
+    /// and committed per side, so the work that succeeded is real.
+    #[serde(rename = "detection-failed")]
+    DetectionFailed {
+        /// What went wrong, as a sentence.
+        reason: String,
+        /// The side it was on when it stopped, if it had got that far.
+        side: Option<String>,
+        /// Sides finished before it stopped.
+        completed: u32,
+    },
+
     /// The engine has stopped and will send nothing further.
     ///
     /// Always the last event and always sent, including on a failure: a
@@ -450,6 +515,8 @@ impl Wire {
             Self::ExportProgress { .. } => "export-progress",
             Self::ExportFinished { .. } => "export-finished",
             Self::ExportFailed { .. } => "export-failed",
+            Self::DetectionFinished { .. } => "detection-finished",
+            Self::DetectionFailed { .. } => "detection-failed",
             Self::Closed => "closed",
         }
     }

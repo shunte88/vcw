@@ -12,6 +12,18 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
+  // `src/*.test.ts` runs under jsdom, because the two things worth testing on
+  // this side of the boundary both touch the DOM: which chord a `KeyboardEvent`
+  // names, and whether a keystroke belonged to the field it landed in. Neither
+  // can be checked without `HTMLInputElement` existing.
+  //
+  // There is not much else to test here, and that is the point - §2 leaves the
+  // frontend nothing to compute, so what is left is the keyboard map, which is
+  // WP-16's exit criterion.
+  test: {
+    environment: "jsdom",
+    include: ["src/**/*.test.ts"],
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,

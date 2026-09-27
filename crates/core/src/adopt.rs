@@ -62,7 +62,7 @@ use vcw_project::error::Result;
 use vcw_project::track::{self, NewBoundary};
 use vcw_project::{Project, side};
 use vcw_signal::resolve::{Decision, Tolerance};
-use vcw_types::observation::{BoundaryObservation, Edge, Evidence};
+use vcw_types::observation::{BoundaryObservation, Edge, Evidence, Provenance};
 use vcw_types::vinyl::Side;
 
 use crate::detection::Refined;
@@ -93,6 +93,17 @@ pub struct Policy {
     /// Zero disables the check. A default is not set here because it depends on
     /// the rate, which the caller has and this does not.
     pub min_track_frames: u64,
+    /// A detector that must be among the sources, or `None` for any of them.
+    ///
+    /// §22 runs all three passes over one extraction, which is what makes their
+    /// agreement meaningful, so this does not turn a detector off - it narrows
+    /// what gets *written*. Set to [`Provenance::Silence`] and a boundary the
+    /// spectral pass found alone is not adopted, while one both found still is.
+    ///
+    /// That distinction is the reason this is a source filter rather than a
+    /// choice of algorithm: the extraction is where the cost is, and skipping a
+    /// pass would save nothing while making `min_sources` unsatisfiable.
+    pub require_source: Option<Provenance>,
 }
 
 impl Default for Policy {
@@ -103,6 +114,7 @@ impl Default for Policy {
             tolerance: Tolerance::of_frames(0),
             pair_tracks: true,
             min_track_frames: 0,
+            require_source: None,
         }
     }
 }
@@ -126,11 +138,20 @@ impl Policy {
     /// Whether a decision clears the bar.
     #[must_use]
     pub fn accepts(&self, decision: &Decision) -> bool {
-        // A locked decision came from the project in the first place, via
-        // `locked_observations`, and is not something the policy gets a vote on.
-        decision.locked
-            || (decision.agreement() >= self.min_sources
-                && decision.confidence >= self.min_confidence)
+        if decision.locked {
+            // A locked decision came from the project in the first place, via
+            // `locked_observations`, and is not something the policy gets a
+            // vote on - including the source filter: an operator's boundary
+            // has no detector among its sources and must not be dropped for
+            // it.
+            return true;
+        }
+        if let Some(required) = self.require_source
+            && !decision.sources.contains(&required)
+        {
+            return false;
+        }
+        decision.agreement() >= self.min_sources && decision.confidence >= self.min_confidence
     }
 }
 

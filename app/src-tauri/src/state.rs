@@ -50,6 +50,7 @@ use std::sync::Mutex;
 use serde::{Serialize, Serializer};
 use vcw_contract::command::Failure;
 use vcw_core::{Bus, Engine};
+use vcw_metadata::Cancel;
 
 use crate::audition::Playing;
 
@@ -67,6 +68,15 @@ pub(crate) struct Shell {
     pub(crate) project: Mutex<Option<PathBuf>>,
     /// The audition, if something is playing.
     pub(crate) playing: Mutex<Option<Playing>>,
+    /// The metadata search in flight, if there is one.
+    ///
+    /// The one piece of shell state that is not a copy of anything, and the
+    /// exception that proves the rule above: a cancellation token *is* the
+    /// thing itself rather than a cache of it, because there is nowhere else a
+    /// half-finished network request could be recorded. Starting a search
+    /// cancels whatever was here, which is what a person retyping an album
+    /// title means (§28).
+    pub(crate) searching: Mutex<Option<Cancel>>,
     /// The bus playback and export publish on.
     ///
     /// Separate from the engine's, because the engine owns its own and an
@@ -107,6 +117,14 @@ pub(crate) enum Error {
     /// The export refused.
     #[error("{0}")]
     Export(#[from] vcw_export::Error),
+    /// A provider refused, was unreachable, or had no credential.
+    ///
+    /// Distinct from [`Self::Invalid`] on purpose: a query the shell would not
+    /// send is the operator's to fix, and a provider that timed out is not.
+    /// §40's offline mode arrives here too, as
+    /// [`vcw_metadata::Error::Offline`].
+    #[error("{0}")]
+    Metadata(#[from] vcw_metadata::Error),
     /// A command argument was not usable.
     #[error("{field}: {why}")]
     Invalid {
@@ -124,17 +142,6 @@ pub(crate) enum Error {
     /// No project is open.
     #[error("no project is open")]
     NoProject,
-    /// The command is in the contract but the shell does not honour it yet.
-    ///
-    /// A refusal that says so, rather than a silent success. WP-15 declares the
-    /// whole of §35's surface and wires most of it; this is how the rest says
-    /// out loud that it is not there, and `not_wired_is_declared_not_hidden` in
-    /// `tests/surface.rs` is what keeps the list honest.
-    #[error("{command} is not wired into the shell yet")]
-    NotWired {
-        /// Which command.
-        command: &'static str,
-    },
 }
 
 impl Error {
@@ -145,11 +152,11 @@ impl Error {
             Self::Project(_) => "project",
             Self::Playback(_) => "playback",
             Self::Export(_) => "export",
+            Self::Metadata(_) => "metadata",
             Self::Invalid { .. } => "invalid-argument",
             Self::NotArmed => "not-armed",
             Self::NotPlaying => "not-playing",
             Self::NoProject => "no-project",
-            Self::NotWired { .. } => "not-wired",
         }
     }
 

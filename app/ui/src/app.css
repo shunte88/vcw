@@ -4,91 +4,595 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  Enough styling to read the smoke page. WP-16 brings the real thing.
+ *  The window's layout and its one palette.
+ */
+
+/*
+ * A monospaced dark interface, deliberately. This is an application whose
+ * screen is mostly numbers - timecodes, frame counts, decibels, confidences -
+ * and a proportional font makes a column of them jump about as the digits
+ * change. The dark ground is not a fashion: the waveform and the meters are
+ * light-on-dark, and a light interface around them would make the one thing a
+ * person is looking at the dimmest thing on the screen.
+ *
+ * Plain CSS, one file, no framework and no preprocessor. The whole surface is
+ * eleven panels of tables and forms; a utility framework would be a build-time
+ * dependency and a second vocabulary for describing a table.
+ *
+ * The layout is a single grid on the root: titlebar, panel, always-on strip,
+ * status line. The panel scrolls and nothing else does, so the transport and
+ * the meters cannot be scrolled off - which is the entire reason they are in
+ * their own row rather than inside the panel.
  */
 
 :root {
   color-scheme: dark;
+
+  /* The palette, named for what it is rather than for its colour. */
+  --ground: #14161a;
+  --raised: #191c22;
+  --sunken: #101216;
+  --line: #2a2f39;
+  --text: #d8dee9;
+  --dim: #8a8f99;
+  --accent: #4f8cc9;
+  --good: #7ec46f;
+  --warn: #f2c14e;
+  --bad: #d9646c;
+  --locked: #f2874e;
+
   font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  background: #14161a;
-  color: #d8dee9;
+  background: var(--ground);
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  padding: 1.5rem;
+  height: 100vh;
+  overflow: hidden;
 }
 
-h1 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0 0 1rem;
+#root {
+  height: 100%;
 }
 
-h2 {
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  height: 100%;
+}
+
+/* --- Titlebar ------------------------------------------------------------ */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--raised);
+  border-bottom: 1px solid var(--line);
+}
+
+.titlebar h1 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0;
+  color: var(--accent);
+}
+
+.titlebar .project {
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.tabs button.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0c0e12;
+}
+
+/* --- The panel ----------------------------------------------------------- */
+
+main {
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-head h2 {
   font-size: 0.85rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #81a1c1;
-  margin: 1.5rem 0 0.5rem;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  margin: 0;
+  flex: 1;
+}
+
+h3 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  margin: 0.5rem 0 0;
+}
+
+.empty,
+.hint {
+  color: var(--dim);
+  margin: 0;
+}
+
+.hint {
+  font-size: 0.9em;
+  max-width: 62ch;
+}
+
+.dim {
+  color: var(--dim);
+}
+
+.ok {
+  color: var(--good);
+}
+
+.clip {
+  color: var(--bad);
+  font-weight: 700;
+}
+
+/* --- Controls ------------------------------------------------------------ */
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.2rem 0.5rem;
 }
 
 button {
-  font: inherit;
-  background: #2e3440;
-  color: #d8dee9;
-  border: 1px solid #434c5e;
-  border-radius: 3px;
-  padding: 0.3rem 0.7rem;
-  margin: 0 0.3rem 0.3rem 0;
+  background: var(--raised);
   cursor: pointer;
 }
 
 button:hover:not(:disabled) {
-  background: #3b4252;
+  border-color: var(--accent);
 }
 
 button:disabled {
-  opacity: 0.4;
+  color: var(--dim);
   cursor: default;
 }
 
-table {
-  border-collapse: collapse;
-  width: 100%;
+button.locked {
+  color: var(--locked);
+  border-color: var(--locked);
 }
 
-th,
-td {
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.fields,
+.seed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.seed {
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 48ch;
+  padding: 0.75rem;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: var(--dim);
+  font-size: 0.9em;
+}
+
+label input,
+label select,
+label textarea {
+  color: var(--text);
+  font-size: 13px;
+  min-width: 18ch;
+}
+
+label.tick {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+textarea {
+  min-height: 4em;
+  resize: vertical;
+}
+
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.75rem;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+legend {
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.8rem;
+}
+
+fieldset .hint,
+fieldset table {
+  flex-basis: 100%;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+kbd {
+  font: inherit;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 0.3rem;
+  margin-right: 0.25rem;
+}
+
+code {
+  color: var(--accent);
+}
+
+/* --- Tables -------------------------------------------------------------- */
+
+.rows {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rows th {
   text-align: left;
-  padding: 0.2rem 0.6rem 0.2rem 0;
-  border-bottom: 1px solid #262b33;
+  font-weight: 600;
+  color: var(--dim);
+  border-bottom: 1px solid var(--line);
+  padding: 0.25rem 0.5rem;
   white-space: nowrap;
 }
 
-th {
-  color: #616e88;
-  font-weight: 400;
+.rows td {
+  padding: 0.2rem 0.5rem;
+  border-bottom: 1px solid #1d2128;
+  white-space: nowrap;
 }
 
-.log {
-  height: 16rem;
-  overflow-y: auto;
-  background: #0f1114;
-  border: 1px solid #262b33;
-  border-radius: 3px;
-  padding: 0.5rem;
+/* Right-aligned and tabular, so a column of numbers stays a column. */
+.rows .n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
-.log div {
-  white-space: pre;
+.rows tbody tr:hover {
+  background: #1d2128;
 }
 
-.kind {
-  color: #8fbcbb;
+.rows tbody tr.selected {
+  background: #223449;
 }
 
-.failure {
-  color: #bf616a;
+.rows tbody tr.open td:first-child {
+  border-left: 2px solid var(--accent);
+}
+
+.rows tbody tr.problem {
+  color: var(--warn);
+}
+
+/* A rejected boundary is dimmed, not hidden: see the argument in Tracks.tsx. */
+.rows tbody tr.rejected {
+  color: var(--dim);
+  font-style: italic;
+}
+
+.rows .path {
+  white-space: normal;
+  word-break: break-all;
+  color: var(--dim);
+}
+
+.rows.log .kind {
+  color: var(--accent);
+}
+
+.problems {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--warn);
+}
+
+.recovered {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 2px solid var(--warn);
+  background: #1d1a14;
+  color: var(--warn);
+  max-width: 72ch;
+}
+
+.negotiated,
+.evidence {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 0.75rem;
+  margin: 0;
+}
+
+.negotiated dt,
+.evidence dt {
+  color: var(--dim);
+}
+
+.negotiated dd,
+.evidence dd {
+  margin: 0;
+}
+
+.negotiated ul,
+.evidence ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.accepted {
+  padding: 0.5rem 0.75rem;
+  border-left: 2px solid var(--good);
+  background: #141a15;
+  max-width: 72ch;
+}
+
+/* --- The always-on strip ------------------------------------------------- */
+
+.always {
+  border-top: 1px solid var(--line);
+  background: var(--raised);
+  display: flex;
+  flex-direction: column;
+}
+
+.waveform-box {
+  width: 100%;
+  height: 160px;
+  background: var(--sunken);
+}
+
+.waveform canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+.waveform-foot,
+.meter-foot {
+  display: flex;
+  gap: 1rem;
+  padding: 0.2rem 0.75rem;
+  color: var(--dim);
+  font-size: 0.9em;
+}
+
+.waveform.empty,
+.meters.empty {
+  padding: 0.5rem 0.75rem;
+  color: var(--dim);
+}
+
+.meters {
+  padding: 0.4rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.meter-name {
+  width: 2ch;
+  color: var(--dim);
+}
+
+/*
+ * One track, three layers, no canvas. RMS under peak so the loud excursions
+ * stay visible over the body of the signal, and the hold needle absolutely
+ * positioned so it can sit past the end of both.
+ */
+.meter-track {
+  position: relative;
+  flex: 1;
+  height: 10px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.meter-peak,
+.meter-rms {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+}
+
+.meter-peak {
+  background: #2b5f8f;
+}
+
+.meter-rms {
+  background: var(--accent);
+  z-index: 1;
+}
+
+.meter-hold {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--warn);
+  z-index: 2;
+}
+
+.meter-db {
+  width: 6ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.transport-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.clock {
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.clock.playhead {
+  font-size: 1rem;
+  color: var(--warn);
+}
+
+.phase {
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.8rem;
+}
+
+.transport-buttons {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.transport-buttons .spacer {
+  width: 1rem;
+}
+
+/* --- Status line --------------------------------------------------------- */
+
+.status {
+  padding: 0.3rem 0.75rem;
+  background: var(--sunken);
+  border-top: 1px solid var(--line);
+  font-size: 0.9em;
+  min-height: 1.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refusal {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--bad);
+}
+
+.refusal strong {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* --- Overlays ------------------------------------------------------------ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: #0a0b0ecc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.overlay-box {
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1rem;
+  max-height: 100%;
+  overflow: auto;
+  width: 56rem;
+  max-width: 100%;
+}
+
+.overlay-box.wide {
+  width: 76rem;
+}
+
+.help-group {
+  margin-top: 0.75rem;
+}
+
+.help-group .chord {
+  width: 20ch;
 }

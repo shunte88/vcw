@@ -160,6 +160,68 @@ fn the_list_above_is_every_variant() {
 }
 
 #[test]
+fn every_wire_kind_is_a_core_event_or_is_named_as_shell_sent() {
+    // The inverse of the test above, and the one that would have caught a
+    // variant added to `Wire` and forwarded by nobody.
+    //
+    // `Wire` has variants with no `Event` behind them - the exporter and the
+    // requested detection pass report through their own callbacks - so the
+    // union is legitimately wider than the bus. What is not legitimate is a
+    // sixth one appearing without anyone saying so, because the frontend's
+    // reducer switches exhaustively and a kind nothing constructs is dead code
+    // that still has to be handled.
+    //
+    // Read out of the generated TypeScript rather than a hand-written list, for
+    // the reason `app/src-tauri/src/main.rs` reads its command tags the same
+    // way: the declaration is generated from the type, so a variant cannot hide
+    // from it.
+    const SENT_BY_THE_SHELL: [&str; 5] = [
+        "export-progress",
+        "export-finished",
+        "export-failed",
+        "detection-finished",
+        "detection-failed",
+    ];
+
+    let from_the_bus: std::collections::BTreeSet<_> =
+        every_event().iter().map(Event::name).collect();
+    let generated = vcw_contract::bindings::typescript();
+    let union = &generated[generated
+        .find("export type Wire =")
+        .expect("the contract declares a Wire union")..];
+    let union = &union[..union.find(";\n").expect("a declaration ends")];
+
+    let mut kinds = Vec::new();
+    let mut rest = union;
+    while let Some(at) = rest.find("\"kind\": \"") {
+        rest = &rest[at + 9..];
+        let close = rest.find('"').expect("a quoted tag closes");
+        kinds.push(&rest[..close]);
+        rest = &rest[close..];
+    }
+    assert!(kinds.len() >= 17, "the parser found only {kinds:?}");
+
+    for kind in &kinds {
+        assert!(
+            from_the_bus.contains(kind) || SENT_BY_THE_SHELL.contains(kind),
+            "{kind:?} is in `Wire` and nothing produces it. Either map it from a \
+             `vcw_core::Event` and add that event to `every_event`, or add it to \
+             `SENT_BY_THE_SHELL` and say in the module header which command sends it."
+        );
+    }
+    for name in SENT_BY_THE_SHELL {
+        assert!(
+            kinds.contains(&name),
+            "{name:?} is listed as sent by the shell and is not in `Wire` - renamed, or removed?"
+        );
+        assert!(
+            !from_the_bus.contains(&name),
+            "{name:?} is on the bus after all, so it belongs in `every_event` rather than the list"
+        );
+    }
+}
+
+#[test]
 fn the_tag_is_the_only_discriminator() {
     // §35's events are read by a `switch (event.kind)`, which only works if the
     // tag is a field of the object rather than a wrapper around it. serde's

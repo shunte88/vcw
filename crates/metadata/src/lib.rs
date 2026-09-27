@@ -102,6 +102,7 @@ pub mod positions;
 pub mod provider;
 pub mod query;
 pub mod release;
+pub mod setup;
 
 #[cfg(feature = "net")]
 pub use agent::Agent;
@@ -118,6 +119,7 @@ pub use policy::{Clock, Limiter, Retry, SystemClock};
 pub use provider::{Provider, search_all};
 pub use query::{Criterion, Fingerprint, Query};
 pub use release::{ArtworkRef, Candidate, Medium, ProviderId, Release, TrackEntry};
+pub use setup::Setup;
 
 // Re-exported because a caller working with a release works with its sides, and
 // should not have to name `vcw-types` to do it.

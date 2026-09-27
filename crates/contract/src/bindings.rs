@@ -192,11 +192,19 @@ pub fn typescript() -> String {
             decl::<crate::command::Playback>(),
             decl::<crate::command::Seek>(),
             decl::<crate::command::Marker>(),
+            decl::<crate::command::Placement>(),
+            decl::<crate::command::Removal>(),
+            decl::<crate::command::Lock>(),
+            decl::<crate::command::TrackEdit>(),
+            decl::<crate::command::Split>(),
+            decl::<crate::command::Merge>(),
+            decl::<crate::command::Detect>(),
             decl::<crate::command::Region>(),
             decl::<crate::command::Zoom>(),
             decl::<crate::command::Search>(),
             decl::<crate::command::Selection>(),
             decl::<crate::command::Export>(),
+            decl::<crate::command::NewProject>(),
         ],
     );
 
@@ -215,11 +223,35 @@ pub fn typescript() -> String {
             decl::<crate::view::Capture>(),
             decl::<crate::view::Side>(),
             decl::<crate::view::Track>(),
+            decl::<crate::view::Boundary>(),
+            decl::<crate::view::Measurement>(),
+            decl::<crate::view::Project>(),
             decl::<crate::view::Release>(),
             decl::<crate::view::Candidate>(),
+            decl::<crate::view::Accepted>(),
             decl::<crate::view::Waveform>(),
             decl::<crate::view::ExportPlan>(),
             decl::<crate::view::ExportFile>(),
+        ],
+    );
+
+    section(
+        &mut out,
+        "Settings (\u{a7}39)",
+        "Five groups, named as \u{a7}39 names them. Every default is either `null`\n\
+         - let the engine negotiate and report what it got - or a constant read\n\
+         out of the crate that owns the behaviour, which is why none of them\n\
+         appears in this declaration. `Credential` is the one type here that\n\
+         carries nothing: whether a token is configured and how long it is,\n\
+         never the value.",
+        &[
+            decl::<crate::settings::Settings>(),
+            decl::<crate::settings::Audio>(),
+            decl::<crate::settings::Recording>(),
+            decl::<crate::settings::Detection>(),
+            decl::<crate::settings::Metadata>(),
+            decl::<crate::settings::Export>(),
+            decl::<crate::settings::Credential>(),
         ],
     );
 

@@ -292,8 +292,19 @@ workspace of its own, which is what makes the rule *core crates have zero Tauri
 dependency* true by construction rather than by discipline - `cargo tree --workspace` at
 the repository root cannot reach Tauri, and CI fails if it ever can. The TypeScript the
 frontend compiles against is generated from those Rust types and committed, with a test
-that fails when the two disagree. What is in the window today is a smoke page - a device
-table, transport buttons, a meter readout and an event log - not WP-16's UI.
+that fails when the two disagree.
+
+The interface (WP-16) is what fills that window: eleven panels - project browser, capture
+workspace, transport, meters, waveform, track editor, metadata browser, export, settings,
+diagnostics and help - and a keyboard map that covers all twenty of §44's workflows, so
+none of them needs the mouse. Two rules hold it together. Nothing is computed in
+TypeScript: a panel renders the view models the contract already resolved, and where a
+component was caught doing arithmetic on a sample rate the field moved into Rust rather
+than the calculation being defended. And every keybinding is proved to reach something by
+a test that reads the components' own source, because the type checker can prove the map
+is complete without noticing that four of its entries did nothing - which is exactly what
+it had been doing. The window compiles and is fully wired; it has not yet been driven
+through a real capture by hand.
 
 ## Layout
 

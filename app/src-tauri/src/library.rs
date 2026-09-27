@@ -51,8 +51,8 @@
 use tauri::State;
 use vcw_contract::command::Zoom;
 use vcw_contract::read;
-use vcw_contract::view::{Capture, Device, Release, Side, Track, Waveform};
-use vcw_project::Project;
+use vcw_contract::view::{Boundary, Capture, Device, Release, Side, Track, Waveform};
+use vcw_project::{Project, session};
 
 use crate::state::{Error, Shell};
 
@@ -119,6 +119,22 @@ pub(crate) fn captures(shell: State<'_, Shell>) -> Result<Vec<Capture>, Error> {
     with_project(&shell, read::captures)
 }
 
+/// Every boundary in the project, promoted into a track or not (§31).
+///
+/// The track editor's own list. [`tracks`] answers with the pairs that survived
+/// §24's promotion policy; this answers with every observation, which on the
+/// real side is 270 rows where `tracks` is 6. A person cannot promote by hand
+/// what they cannot see, and the policy is deliberately blunt - so the 264 have
+/// to be reachable.
+///
+/// # Errors
+///
+/// As [`release`].
+#[tauri::command]
+pub(crate) fn boundaries(shell: State<'_, Shell>) -> Result<Vec<Boundary>, Error> {
+    with_project(&shell, read::boundaries)
+}
+
 /// One channel of one capture, drawn to a given width (§17, §20).
 ///
 /// The columns come from the stored summaries, so this is a few hundred rows of
@@ -146,8 +162,20 @@ pub(crate) fn waveform(shell: State<'_, Shell>, zoom: Zoom) -> Result<Waveform, 
     let request = vcw_signal::waveform::Request::new(start, end, zoom.pixels);
     let drawn =
         vcw_project::waveform::read(project.conn(), zoom.capture_id, zoom.channel, &request)?;
+    // The rate, so the view can carry the window in seconds as well as in
+    // frames. The frontend needs both - it draws in frames and seeks in
+    // seconds - and dividing one by the other in TypeScript would put a unit
+    // conversion on the wrong side of the boundary, where `vcw --json` cannot
+    // reach it.
+    let rate = session::load(project.conn(), zoom.capture_id)?
+        .ok_or_else(|| Error::Invalid {
+            field: "captureId".to_owned(),
+            why: format!("there is no capture {} in this project", zoom.capture_id),
+        })?
+        .info
+        .rate;
     project.close()?;
-    Ok(Waveform::of(zoom.capture_id, &drawn))
+    Ok(Waveform::of(zoom.capture_id, &drawn, rate))
 }
 
 /// Opens the project read-only, runs a reader, closes it.

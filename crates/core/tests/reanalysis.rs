@@ -305,6 +305,58 @@ fn adoption_will_not_promote_a_boundary_only_one_detector_saw() {
 }
 
 #[test]
+fn a_source_filter_narrows_what_is_written_without_dropping_the_operator() {
+    // §39's `detection.algorithm`. The point worth testing is not that the
+    // filter works but that it does not apply to a locked boundary: the only
+    // source an operator's boundary carries is `User`, so a naive
+    // `sources.contains(required)` would turn down a person's own marker the
+    // moment they narrowed the setting to one detector.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut project = a_side(&dir, "filter.vcw");
+    let rate = u64::from(RATE.hz());
+
+    let mut spectral_only = decision(
+        4 * rate,
+        Edge::Start,
+        &[Provenance::SpectralChange, Provenance::Hmm],
+    );
+    spectral_only.locked = false;
+    // What `locked_observations` hands back for a boundary a person placed.
+    let mut mine = decision(8 * rate, Edge::Start, &[Provenance::User]);
+    mine.locked = true;
+
+    let both = [spectral_only, mine];
+    let policy = Policy {
+        require_source: Some(Provenance::Silence),
+        ..Policy::at(RATE)
+    };
+    let adopted = adopt::adopt_decisions(&mut project, Side::A, &both, &policy).expect("adopt");
+    assert_eq!(
+        adopted.rejected, 1,
+        "the spectral-only boundary should have been turned down: {adopted:?}"
+    );
+    assert_eq!(
+        adopted.written(),
+        1,
+        "the operator's own boundary is not a detector's to filter: {adopted:?}"
+    );
+    let rows = track::boundaries(project.conn(), Side::A).expect("boundaries");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].at_frame, 8 * rate);
+
+    // And with no filter, both go in, so the difference is the setting.
+    let adopted =
+        adopt::adopt_decisions(&mut project, Side::A, &both, &Policy::at(RATE)).expect("adopt");
+    assert_eq!(adopted.rejected, 0, "{adopted:?}");
+    assert_eq!(
+        track::boundaries(project.conn(), Side::A)
+            .expect("boundaries")
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn a_detector_landing_beside_a_locked_boundary_is_skipped() {
     // The case the resolver cannot catch: a decision that arrives at adoption
     // without having been weighed against the operator's boundary, because the

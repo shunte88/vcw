@@ -136,9 +136,11 @@ pub(crate) fn play(
     device: Option<String>,
 ) -> Result<(), Error> {
     let path = shell.project_path()?;
-    let resolved = resolve(&path, capture_id, scope)?;
+    let (resolved, marks) = resolve(&path, capture_id, scope)?;
 
-    let mut audition = Audition::new(&path, capture_id).scope(resolved);
+    let mut audition = Audition::new(&path, capture_id)
+        .scope(resolved)
+        .marks(marks);
     if let Some(device) = device {
         audition = audition.device(device);
     }
@@ -187,12 +189,22 @@ pub(crate) fn playback(shell: State<'_, Shell>, verb: Playback) -> Result<(), Er
     playing.send(Verb::from(verb))
 }
 
-/// Turns a scope that names a row into one that names a span.
+/// Turns a scope that names a row into one that names a span, and reads the
+/// frames a skip should jump between.
+///
+/// Both in one open, because they come from the same project and the same
+/// capture, and a second read-only open to fetch the track edges would be a
+/// second chance for them to disagree with the span.
+///
+/// The marks are the whole capture's edges, not the scope's: [`Player::seek`]
+/// clamps into the span, so a skip out of a one-track audition lands at its own
+/// end rather than somewhere else, and filtering here would mean the shell
+/// deciding twice what playback already decides once.
 fn resolve(
     path: &std::path::Path,
     capture_id: i64,
     scope: Scope,
-) -> Result<vcw_core::playback::Scope, Error> {
+) -> Result<(vcw_core::playback::Scope, Vec<u64>), Error> {
     let project = vcw_project::Project::open_read_only(path)?;
     let layout = vcw_project::pcm::Layout::of(project.conn(), capture_id)?;
     let rate = layout.rate.hz();
@@ -228,8 +240,9 @@ fn resolve(
             why: "a scope that names a row has to be resolved against the project".to_owned(),
         })?,
     };
+    let marks = vcw_project::track::edges_of_capture(project.conn(), capture_id)?;
     project.close()?;
-    Ok(resolved)
+    Ok((resolved, marks))
 }
 
 /// The audition thread.

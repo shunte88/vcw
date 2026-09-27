@@ -49,6 +49,7 @@
 //! `docs/SCHEMA.md` uses, for the same reason: blessing is a decision, so it
 //! takes a deliberate word.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use vcw_contract::bindings;
@@ -151,21 +152,30 @@ fn no_pcm_crosses_the_boundary() {
     // column, not per frame - and this test fails if something ever adds a
     // field of raw audio beside them.
     //
-    // Field names rather than a substring search, because the prose above a
-    // declaration is allowed to say "samples" and `clippedSamples` is a count.
+    // The rule is a banned *name* on a field whose *type is a list of numbers*,
+    // and it took both halves to be right. Names alone rejected §39's
+    // `settings.audio` group and the browser's `bytes` file size, neither of
+    // which is a sample; types alone would allow `Array<number>` under any
+    // name at all. PCM is a list of numbers, so the conjunction is the thing
+    // being described - and the prose above a declaration stays free to say
+    // "samples", which it needs to, because `clippedSamples` is a count.
     let generated = bindings::typescript();
-    let banned = ["samples", "pcm", "audio", "buffer", "bytes", "blob"];
+    let banned = [
+        "samples", "pcm", "audio", "buffer", "bytes", "blob", "frames",
+    ];
     for line in generated.lines() {
         let line = line.trim();
         if line.starts_with('*') || line.starts_with('/') {
             continue;
         }
-        let Some(name) = line.split(':').next().map(str::trim) else {
+        let Some((name, declared)) = line.split_once(':') else {
             continue;
         };
+        let name = name.trim();
+        let numeric_list = declared.contains("Array<number>") || declared.contains("number[]");
         assert!(
-            !banned.contains(&name),
-            "the field {name:?} appears in the contract, which §35 forbids"
+            !(banned.contains(&name) && numeric_list),
+            "the field {name:?} crosses as a list of numbers, which \u{a7}35 forbids"
         );
         for array in ["Int16Array", "Float32Array", "Uint8Array", "ArrayBuffer"] {
             assert!(
@@ -174,6 +184,44 @@ fn no_pcm_crosses_the_boundary() {
             );
         }
     }
+}
+
+#[test]
+fn no_declaration_is_declared_twice() {
+    // One file is one flat namespace, and two modules with the same type name
+    // are perfectly legal Rust. `settings::Export` and `command::Export` both
+    // rendered as `export type Export` and the second shadowed the first, in a
+    // file that had already been blessed and committed - `cargo test` was
+    // green, because the clash does not exist on the Rust side at all.
+    //
+    // This is the cost of assembling one file rather than taking ts-rs's
+    // file-per-type export, which would have put them in separate modules and
+    // let both stand. It is still the right trade - a deleted type is the case
+    // a directory comparison gets wrong - but it needs this test to be paid
+    // for, and the remedy is `#[ts(rename = "...")]`, not a rename in Rust.
+    let generated = bindings::typescript();
+    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+    for line in generated.lines() {
+        let Some(rest) = line.strip_prefix("export type ") else {
+            continue;
+        };
+        let Some(name) = rest.split_whitespace().next() else {
+            continue;
+        };
+        *seen.entry(name).or_default() += 1;
+    }
+
+    let twice: Vec<_> = seen
+        .iter()
+        .filter(|(_, count)| **count > 1)
+        .map(|(name, count)| format!("{name} x{count}"))
+        .collect();
+    assert!(
+        twice.is_empty(),
+        "declared more than once, so the later one shadows the earlier: {}",
+        twice.join(", ")
+    );
+    assert!(seen.len() >= 30, "only found {} declarations", seen.len());
 }
 
 #[test]

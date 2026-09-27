@@ -37,6 +37,7 @@ vcw-audio = { path = "../crates/audio" }
 vcw-contract = { path = "../crates/contract" }
 vcw-core = { path = "../crates/core" }
 vcw-export = { path = "../crates/export" }
+vcw-metadata = { path = "../crates/metadata" }
 vcw-project = { path = "../crates/project" }
 vcw-signal = { path = "../crates/signal" }
 vcw-types = { path = "../crates/types" }

@@ -45,6 +45,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::event::{EdgeName, ProvenanceName};
+
 /// One channel's levels, in dBFS.
 ///
 /// Decibels rather than the amplitudes the meter computes: `20 * log10(x)` is
@@ -225,6 +227,13 @@ pub struct Track {
     pub start: f64,
     /// Where it ends, in seconds.
     pub end: f64,
+    /// How long it is, in seconds.
+    ///
+    /// `end - start`, and carried rather than left to the caller on purpose: a
+    /// track length is the number a person reads off the screen and the number
+    /// `vcw list` prints, and two subtractions in two languages is how those
+    /// two come to disagree about a rounding.
+    pub seconds: f64,
     /// The frame it starts at.
     pub start_frame: u64,
     /// The frame it ends at.
@@ -329,6 +338,10 @@ pub struct Waveform {
     pub start_frame: u64,
     /// One past the last frame covered.
     pub end_frame: u64,
+    /// The first frame covered, in seconds.
+    pub start_seconds: f64,
+    /// One past the last frame covered, in seconds.
+    pub end_seconds: f64,
     /// Minimum, per column, in -1..=1.
     pub min: Vec<f32>,
     /// Maximum, per column.
@@ -461,6 +474,7 @@ impl Track {
             position,
             start: record.start as f64 / hz,
             end: record.end as f64 / hz,
+            seconds: record.end.saturating_sub(record.start) as f64 / hz,
             start_frame: record.start,
             end_frame: record.end,
             start_boundary: record.start_boundary,
@@ -482,6 +496,30 @@ impl Candidate {
     /// [`vcw_metadata::release::Release`] does not carry it: whoever asked
     /// knows who answered, and storing it on the record would let the two
     /// disagree.
+    /// Builds the view from a search hit.
+    ///
+    /// Separate from [`Candidate::of`] because a provider's *search* answer and
+    /// its *release* answer are different types with different completeness: a
+    /// search hit knows how many tracks a listing claims without having fetched
+    /// them, and `tracks` is therefore an `Option` there and a count here.
+    /// Zero is the honest reading of "the listing did not say".
+    #[must_use]
+    pub fn found(provider: &str, candidate: &vcw_metadata::release::Candidate) -> Self {
+        Self {
+            provider: provider.to_owned(),
+            id: candidate.id.clone(),
+            album: candidate.album.clone(),
+            artist: candidate.artist.clone(),
+            year: candidate.year,
+            label: candidate.label.clone(),
+            catalog: candidate.catalog.clone(),
+            country: candidate.country.clone(),
+            format: candidate.format.clone(),
+            tracks: candidate.tracks.unwrap_or(0).try_into().unwrap_or(u32::MAX),
+        }
+    }
+
+    /// Builds the view from a provider's full release.
     #[must_use]
     pub fn of(provider: &str, release: &vcw_metadata::release::Release) -> Self {
         let vinyl = release.media.iter().find(|m| m.is_vinyl());
@@ -516,11 +554,18 @@ impl Waveform {
     /// of three floats. The frame count per column is dropped, because an empty
     /// column is already visible as `min == max == 0`.
     #[must_use]
-    pub fn of(capture_id: i64, drawn: &vcw_signal::waveform::Waveform) -> Self {
+    pub fn of(
+        capture_id: i64,
+        drawn: &vcw_signal::waveform::Waveform,
+        rate: vcw_types::SampleRate,
+    ) -> Self {
+        let hz = f64::from(rate.hz()).max(1.0);
         Self {
             capture_id,
             start_frame: drawn.start,
             end_frame: drawn.end,
+            start_seconds: drawn.start as f64 / hz,
+            end_seconds: drawn.end as f64 / hz,
             min: drawn.columns.iter().map(|c| c.min).collect(),
             max: drawn.columns.iter().map(|c| c.max).collect(),
             rms: drawn.columns.iter().map(|c| c.rms).collect(),
@@ -584,6 +629,203 @@ impl From<&vcw_project::session::Record> for Capture {
             started_at: record.started_at,
             finished_at: record.finished_at,
             diagnostics: record.diagnostics.into(),
+        }
+    }
+}
+
+/// One measurement behind a boundary.
+///
+/// The evidence a detector recorded, carried through unchanged: `level-db`,
+/// `flatness`, `gap-frames`. A UI shows these when a person asks *why* a
+/// boundary is where it is, and it cannot be asked to interpret them - the
+/// names are kebab-case and the units are implied by the name, which is
+/// [`vcw_types::observation::Evidence`]'s contract and not this crate's to
+/// restate.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Measurement {
+    /// What was measured.
+    pub name: String,
+    /// The value, in whatever unit the name implies.
+    pub value: f64,
+}
+
+/// A boundary, as the track editor needs it.
+///
+/// Distinct from [`Track`] on purpose, and the difference is the whole reason
+/// this type exists. A track is a *pair* of boundaries that survived §24's
+/// promotion policy; a boundary is a single observation, and most of the ones a
+/// detector produces never become a track. `Policy::min_sources` turned 270
+/// candidates into 6 on the real side, and the 264 that did not make it are
+/// still rows - so an editor that only ever sees tracks cannot show a person
+/// the boundary the detector nearly kept, which is exactly the one they want to
+/// promote by hand.
+///
+/// [`promoted`](Self::promoted) is the flag that separates the two, and it is
+/// computed here rather than inferred in the frontend: it means *some track
+/// names this boundary as its start or its end*, which is a join and not a
+/// property of the row.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Boundary {
+    /// Row id, for a command that moves, locks or deletes one.
+    pub id: i64,
+    /// The side it is on.
+    pub side_id: i64,
+    /// The side letter, so a flat list groups without a second lookup.
+    pub side: String,
+    /// The frame it sits at, in that side's capture timeline.
+    pub at_frame: u64,
+    /// The same position in seconds, divided by the capture's own rate.
+    pub seconds: f64,
+    /// Which way the audio crosses it.
+    pub edge: EdgeName,
+    /// How much to trust it, in `0.0..=1.0`.
+    pub confidence: f32,
+    /// What decided its position.
+    pub provenance: ProvenanceName,
+    /// Every provenance that reported it.
+    pub sources: Vec<ProvenanceName>,
+    /// How many distinct detectors agreed, which is what §24's policy
+    /// thresholds on. Sent as its own field rather than left as
+    /// `sources.length`, because a person who placed the boundary reports zero
+    /// sources and is not less certain for it.
+    pub agreement: u32,
+    /// Whether analysis may move it (§24).
+    pub locked: bool,
+    /// Whether a track is bounded by it.
+    ///
+    /// `false` is the interesting case: a detected boundary that no track uses.
+    pub promoted: bool,
+    /// The measurements behind it.
+    pub evidence: Vec<Measurement>,
+}
+
+/// A project in the library, as the browser lists it (§34).
+///
+/// One row per `.vcw` file found under the library root, and the counts are
+/// read out of each file rather than cached anywhere: §2 leaves one copy of the
+/// truth, and a browser that showed a stale track count would be a second.
+///
+/// A file that will not open still gets a row, with [`problem`](Self::problem)
+/// set and the counts left at zero. That is deliberate rather than defensive -
+/// a directory of records is somewhere a person keeps things, so a partial
+/// download, a foreign `.vcw` from a newer schema and a file still being
+/// written are all normal, and a browser that silently omitted them would be
+/// hiding the one thing worth saying.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    /// Absolute path to the `.vcw` file.
+    pub path: String,
+    /// The file stem, which is what a person named it.
+    pub name: String,
+    /// Release title, empty until something fills one in.
+    pub album: String,
+    /// Release artist.
+    pub album_artist: String,
+    /// Catalogue number (§32), which is how a vinyl library is actually
+    /// indexed.
+    pub catalog: String,
+    /// Release year.
+    pub year: Option<u32>,
+    /// How many sides the project has rows for.
+    pub sides: u32,
+    /// How many tracks.
+    pub tracks: u32,
+    /// How many captures.
+    pub captures: u32,
+    /// Total recorded audio, in seconds.
+    pub seconds: f64,
+    /// The size of the `.vcw` file on disk, which for a vinyl project is most
+    /// of what a person wants to know before opening it.
+    ///
+    /// `file_bytes` rather than `bytes`, and the longer name is load-bearing:
+    /// `no_pcm_crosses_the_boundary` bans a field called `bytes` outright,
+    /// because in this contract that word has only ever meant sample data. The
+    /// guard fired on the first draft of this type, which is the guard working
+    /// - the honest fix is to say which bytes, not to rename around the check.
+    pub file_bytes: u64,
+    /// Last modification, in unix seconds.
+    pub modified: i64,
+    /// Why the file could not be read, where it could not.
+    pub problem: Option<String>,
+}
+
+impl Boundary {
+    /// Builds the view from a row, its side letter and its capture's rate.
+    ///
+    /// `promoted` is passed in rather than looked up, because the caller is
+    /// reading every track anyway and doing it per boundary would be a query
+    /// per row.
+    #[must_use]
+    pub fn of(
+        side: vcw_types::Side,
+        record: &vcw_project::track::Boundary,
+        rate: vcw_types::SampleRate,
+        promoted: bool,
+    ) -> Self {
+        let hz = f64::from(rate.hz()).max(1.0);
+        Self {
+            id: record.id,
+            side_id: record.side_id,
+            side: side.letter().to_string(),
+            at_frame: record.at_frame,
+            seconds: record.at_frame as f64 / hz,
+            edge: record.edge.into(),
+            confidence: record.confidence,
+            provenance: record.provenance.into(),
+            sources: record.sources.iter().copied().map(Into::into).collect(),
+            agreement: u32::try_from(record.agreement()).unwrap_or(u32::MAX),
+            locked: record.locked,
+            promoted,
+            evidence: record
+                .evidence
+                .iter()
+                .map(|e| Measurement {
+                    name: e.name.clone(),
+                    value: e.value,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// What accepting a release did to the project (§26).
+///
+/// Returned by the command rather than published as an event, because a person
+/// pressed a button and is looking at the answer. The four counts are the
+/// interesting part: a tracklist that lines up exactly is the happy case and
+/// needs no explanation, and one that does not is something a person has to
+/// see before they trust the titles.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Accepted {
+    /// The release title that was written.
+    pub album: String,
+    /// The release artist that was written.
+    pub album_artist: String,
+    /// How many tracks were retitled.
+    pub named: u32,
+    /// How many were left alone because a person had confirmed them.
+    pub kept: u32,
+    /// Provider positions that named no track in this project.
+    pub unmatched: Vec<String>,
+    /// Project tracks the tracklist did not cover, as §29 positions.
+    pub unnamed: Vec<String>,
+}
+
+impl Accepted {
+    /// Builds the view from what [`vcw_core::identity::accept`] reported.
+    #[must_use]
+    pub fn of(release: &vcw_metadata::release::Release, applied: &vcw_core::Applied) -> Self {
+        Self {
+            album: release.album.clone(),
+            album_artist: release.album_artist.clone(),
+            named: u32::try_from(applied.tracks.len()).unwrap_or(u32::MAX),
+            kept: u32::try_from(applied.confirmed.len()).unwrap_or(u32::MAX),
+            unmatched: applied.unmatched.clone(),
+            unnamed: applied.unnamed.clone(),
         }
     }
 }

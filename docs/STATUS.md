@@ -1,7 +1,7 @@
 # VCW - project status
 
 **As of:** 2026-09-27
-**Phase:** 1 is underway - WP-01 through WP-15 are built, all on Linux x86_64 only.
+**Phase:** 1 is underway - WP-01 through WP-16 are built, all on Linux x86_64 only.
 All five Phase 0 spikes returned verdicts on their primary platform; gate G0 remains
 open on hardware coverage, WP-05's soak settled D3's firmed-config run, **WP-06 closes
 milestone M1, *it records*,** WP-07 locks D8, WP-08 adds the meters and the §10 fan-out
@@ -25,9 +25,14 @@ which is what **M4** asks for; what remains for M4 is running the chain end to e
 pass on a real record, and **WP-15 puts a window in front of all of it** - an eleventh
 crate, `vcw-contract`, holding §35's typed surface with the units already resolved, a
 Tauri 2 shell in a cargo workspace of its own so that the root workspace's tree cannot
-reach Tauri at all, and D9 locked as 911 lines of generated TypeScript with a drift test
-and two new CI jobs behind it.
-**Branch:** `main` at `25ed2fd` (WP-14 and WP-15), clean working tree.
+reach Tauri at all, and D9 locked as 1,422 lines of generated TypeScript with a drift test
+and two new CI jobs behind it, and **WP-16 makes that window usable from the keyboard
+alone** - eleven panels, 32 bindings covering all 20 of §44's workflows, and the exit
+criterion asserted by a test that was verified to fail rather than by a reading of the
+diff, which is how four workflows that had a binding and no handler were found. It also
+answers the four questions earlier work packages deferred to it, WP-07's, WP-09's,
+WP-11's and WP-13's, each in a file with the argument beside it.
+**Branch:** `main` at `51afd5f` (WP-14 and WP-15); WP-16 is gate-green and uncommitted.
 
 This is the running snapshot: where Phase 0 actually stands, what is proven versus
 assumed, what is waiting on a decision, and what is waiting on hardware. The plan of
@@ -1585,9 +1590,10 @@ audition is [`BOUNDARY_CONTEXT_SECONDS`] of 3 s each side of a frame, clamped, w
 the only one of the four that needed a number invented; §21 does not give one.
 
 The transport reduces the same way. Six verbs - `PLAY PAUSE STOP SEEK SKIP FORWARD
-SKIP BACK` - and the last three are all `seek` with the arithmetic done first. `SKIP` is
-[`SKIP_SECONDS`] of 10 s until WP-13 records boundaries, at which point the skips become
-"next boundary" and "previous boundary", which is what they are for.
+SKIP BACK` - and the last three are all `seek` with the arithmetic done first. `SKIP` was
+[`SKIP_SECONDS`] of 10 s here, with a note that once WP-13 recorded boundaries the skips
+would become "next boundary" and "previous boundary", which is what they are for. **WP-16
+did that**, and 10 s is now only the fallback for a side nothing has been analysed from.
 
 ### Epoch-tagged chunks, not a byte ring
 
@@ -2892,39 +2898,268 @@ default and has to be set before anything ships. The frontend is a smoke page an
 WP-16's UI. Linux x86_64 only, like everything else in Phase 1 - and the `shell` CI job
 is Linux-only too, so the WebKitGTK stack is the only webview this has ever met.
 
+## Phase 1 - WP-16, the React UI
+
+Built 2026-09-27. §34's panels, §43's keyboard map and §44's workflows. The frontend is
+now **4,486 lines of TypeScript and TSX across 22 files** - eleven panels under
+`app/ui/src/panels/`, a root that owns the layout and nothing else, one store, one keymap,
+two formatting helpers and two test files. The gate has a twelfth leg. **Both halves of
+the exit criterion are met, and both are asserted by a test rather than by a reading of
+the diff.**
+
+### The keyboard criterion needed three tests, and only two existed
+
+*Every §44 workflow completable by keyboard alone.* WP-15 left two checks behind and they
+looked like enough:
+
+- `COVERAGE` in `keymap.ts` is a `Record<Workflow, readonly Action[]>` over the literal
+  map, so a §44 workflow with no binding is a **type error in `pnpm check`** with no test
+  runner involved;
+- `keymap.test.ts` proves every chord is spellable by `keys.ts`, that no two bindings in
+  one scope collide, and that the §43 defaults are the chords §43 names.
+
+Between them they prove the map is *complete and consistent*. Neither can see whether a
+binding does anything, and four of them did not: `arm`, `search-metadata`,
+`choose-release` and `export` were in the map, passed both checks, and had no handler
+behind them. So there is a third test, `wiring.test.ts`, and it is WP-16's exit criterion
+written down:
+
+- it finds every `useKeys(` call in every `.tsx` file by reading the sources through
+  Vite's `import.meta.glob("./**/*.tsx", { query: "?raw" })`;
+- it asserts that **every action in `BINDINGS` is handled in at least one of them**;
+- and it asserts that **every §44 workflow has at least one handled action**, which is
+  the criterion itself and not a proxy for it.
+
+It was verified to fail before it was trusted: deleting Export's `useKeys` line makes it
+name both the `exportRun` action and the `export` workflow. The first version of its
+extractor was wrong in the quiet direction - it looked for a block ending in `\n  };`, so
+a single-line `useKeys("metadata", { lookup: search, accept });` was invisible and the test
+passed by not looking. It now counts brackets, and `handled()` matches both
+`record: () => ...` and the shorthand `arm,`. A test that cannot fail is worse than no
+test, which is why that paragraph is here rather than in a commit message.
+
+### The map was unreachable, which no amount of handlers would have fixed
+
+The second finding was structural. Every scoped binding - `t`, `a`, `d`, `l`, `Enter` -
+requires its panel to be in front, and at the start of WP-16 **nothing could bring a panel
+forward from the keyboard**. The criterion was unmeetable no matter how much was wired.
+Eight bindings were added, all `workflow: "navigate"`, all `scope: "global"`:
+`Ctrl+1`..`Ctrl+6` for the six panels, `Ctrl+D` for the diagnostics log and `Escape` to
+dismiss. `Ctrl` and a digit rather than a bare digit, because a bare digit is the first
+thing taken away the moment somebody types a catalogue number into a field. The map is
+now **32 actions covering all 20 of §44's workflows**.
+
+### No business logic in TS is a review gate, so it was reviewed - and it failed twice
+
+The contract does most of the work: a `Track` arrives carrying `A3`, its seconds and its
+confidence, so a component has nothing to compute. But "nothing left to compute" has to be
+true of every field a panel touches, and an audit of my own TypeScript found three places
+where it was not. All three were moved into Rust rather than defended:
+
+- **`Export.tsx` divided a frame count by 44,100.** A hard-coded rate in the one panel
+  whose job is to be right about what gets written. The plan does not carry a rate, and a
+  project with a 96 kHz side and a 48 kHz side makes *any* divisor wrong, so the panel now
+  shows frames and says so.
+- **`Waveform.tsx` multiplied and divided by `capture.rate`** to turn a playhead into a
+  pixel and a column into a frame. `view::Waveform` gained `start_seconds` and
+  `end_seconds`, so the panel now reads the span it was given.
+- **`Tracks.tsx` computed `row.end - row.start`.** `view::Track` gained `seconds`, which
+  is `end - start` over the rate, carried rather than left to the caller.
+
+That is the criterion behaving as intended: it caught three unit conversions in a
+frontend written by someone who knew the rule, which is roughly the rate at which they
+appear when nobody is checking. `store.ts` states the line in its own header - everything
+it holds is *a copy of the last thing Rust said* - with the one declared exception, the
+bounded event log, argued rather than smuggled.
+
+### The four deferrals, answered in code
+
+Each of these was recorded by an earlier work package as a WP-16 question. None is
+answered in prose only; each is a decision in a file with the argument beside it.
+
+- **WP-09: the waveform is polled, not pushed.** `Waveform.tsx` measures its own column
+  count with a `ResizeObserver` and asks for exactly that many. The argument is in its
+  header: S3 found the IPC free and the main-thread draw expensive, the rows are on disk
+  the instant the writer commits them, and a pushed `waveform-update` would deliver
+  columns at the writer's rate rather than at the width the view happens to be. Nothing
+  publishes that event today and now nothing needs to.
+- **WP-11: a rejected boundary is shown.** `Tracks.tsx` lists it with its confidence and
+  the detectors that agreed, dimmed and italic, not hidden. A person cannot promote what
+  the picture does not show, and `Policy::min_sources = 2` is a policy that gets tuned -
+  which it cannot be from a UI that renders only what survived it. The waveform draws it
+  too, thin against the thick locked ones, so the distinction survives greyscale.
+- **WP-07: a recovered capture is shown and never resumed.** `Capture.tsx` reports a
+  `recovered` or `interrupted` capture with how much of it survived and offers nothing but
+  play. Appending to a capture that stopped for a reason nobody has established is the one
+  operation in the application that can lose a rip. The panel says "Nothing has been
+  resumed or removed: play it, and decide", which is the honest state of it.
+- **WP-13: a skip lands *on* the mark.** Implemented in `vcw-core::playback`, where that
+  file's own constant doc had already predicted it. Detail below, because it turned out to
+  be more than a UI opinion.
+
+### WP-13's skip is now live, end to end
+
+The deferral was "whether a skip lands on the boundary or somewhere inside the track", and
+the answer is on it. The alternative - a second of lead-in so the needle drop is audible -
+is wrong for the verb: a person skipping forward is looking for the top of a track, and
+landing early means the first thing they hear is the end of the previous one.
+`BOUNDARY_CONTEXT_SECONDS` exists for the other job, auditioning a join to judge whether
+it is in the right place, and that is where context belongs.
+
+Three pieces, because the core half alone would have been inert:
+
+- **`vcw_project::track::edges_of_capture`** returns both ends of every track on every
+  side a capture was recorded to, ascending and deduplicated. Both ends and not just the
+  starts, so `SKIP BACK` from inside the last track lands at its top and `SKIP FORWARD`
+  from there lands at its end rather than running to the end of the side. Deduplicated
+  because adjacent tracks share a frame, and a duplicated mark is a skip that appears to
+  do nothing. One flat list across both faces, because §21 lets one capture hold two and
+  the needle does not stop at the join either.
+- **`Audition::marks`**, sorted and deduplicated by its builder rather than trusted, with
+  `Player::skip_forward` and `skip_back` landing on the next mark and falling back to
+  `SKIP_SECONDS` when there are none - an unanalysed side, which is the case the fixed
+  step exists for. The `render` driver mirrors it exactly, because a render is how a skip
+  is tested without a sound card and a driver that skipped differently would make that
+  test worthless.
+- **Both callers fill it.** `app/src-tauri/src/audition.rs` reads the edges in the same
+  read-only open that resolves the scope, and `crates/cli/src/play.rs` does the same, so
+  `vcw play --script "skip,skip"` moves between tracks. Nine new tests cover it: the
+  no-marks fallback, landing on the next and previous mark, a mark under the playhead not
+  counting in either direction, holding the key walking rather than sticking, the builder
+  sorting and deduplicating, a render whose marks are deliberately *not* ten seconds apart
+  so an implementation that ignored them could not land on them by accident, and the two
+  project-level queries.
+
+The marks handed in are the whole capture's, not the scope's, and that is deliberate:
+`Player::seek` clamps into the span, so a skip out of a one-track audition lands at its own
+end, and filtering in the shell would be the shell deciding twice what playback decides
+once. One behaviour is worth stating because it looks like a bug and is not: `SKIP BACK`
+from inside a track lands on that track's top, and walking further back needs a second
+press. That is what a transport's back button does.
+
+### WP-15's open design question: the shell keeps none of it
+
+Where the shell holds a provider client, a disk cache and a §39 credential was left to
+WP-16. The answer is that it holds none of the three. `app/src-tauri/src/metadata.rs`
+states it at the top and the code is short because of it: the client is built per call from
+`Setup`, the cache is a directory under Tauri's own `app_cache_dir`, and the credential is
+read from the environment at the call site and dropped when the command returns. The only
+thing held across a call is a `Cancel` token, and only because a half-finished network
+request has nowhere else to be recorded - a second search cancels the first rather than
+racing it.
+
+Both commands are `async` and do their work in `spawn_blocking`, because §40 boxes a
+search at ten seconds and a synchronous Tauri command runs on the main thread, which would
+mean a window frozen for ten seconds. `select_release` fetches first and opens the project
+for writing only after the fetch returns, so a provider timing out cannot hold a write
+lock on the project while it does. A request that names a provider overrides §39's on/off
+switch, on the grounds that a person who clicked "ask Discogs" has said what they want more
+recently than the settings panel did.
+
+### The escape hatch is gone, which makes the test a requirement
+
+WP-15 shipped a `NOT_WIRED` list and a `refused` command to answer for it, because a
+command a frontend can send and nothing answers is worse than one that refuses out loud.
+**All 17 commands in `Request` are now wired**, so `NOT_WIRED`, `fn refused` and
+`Error::NotWired` have been deleted rather than left as an empty array. That turns
+`every_command_in_the_contract_is_wired` from a reminder into a hard requirement: a verb
+added to the contract now fails the suite until something in the shell honours it.
+
+### What the panels are, and what each decides
+
+- **`Transport.tsx`** is always mounted, below whichever panel is in front, and owns the
+  ten transport actions. It takes the current capture and side as **props**: `App` decides
+  which they are, so a `marker` keypress on an ambiguous project does nothing rather than
+  guessing. §21 allows two faces on one capture, so "the first side with a capture" would
+  put a marker on side A of a record cued to side B; the rule is one side or none.
+- **`Meters.tsx`** draws percentage-width `div`s, not a canvas. S3's finding was that the
+  main thread is the cost, and three nested divs per channel cost the compositor and not
+  the main thread. The hold needle and the clip latch come from the event; nothing here
+  decides when a clip has expired.
+- **`Waveform.tsx`** fetches on resize and on the event that says the rows moved, and
+  draws in a second effect so a fetch does not block a paint.
+- **`Browser.tsx`** is §34's project list plus the three-field create helper the user
+  asked for - artist, recording title, catalogue number, none of them required, which is
+  what `config::new_project` already accepts.
+- **`Capture.tsx`** shows the device, the rate, the format, `problems`, and the negotiated
+  format beside the enumerated one, because §7's divergence is the thing an operator needs
+  to see before the needle drops.
+- **`Tracks.tsx`** is the editor: detect, delete, nudge and rename. `NUDGE` is 0.05 s and
+  a nudge sends `force: false`, so it can never break a lock - §24 refuses it and the
+  refusal says why.
+- **`Metadata.tsx`** seeds its four criteria from the release row and shows
+  `Accepted.unmatched`/`unnamed` as a *result* rather than an error, because a release
+  with fewer tracks than the side is a fact about the record.
+- **`Export.tsx`** plans and then runs, in that order, which is §33's order.
+- **`Settings.tsx`** writes every field whole. Credentials are shown as name, present,
+  character count and variable - there is no command in the shell that returns one, which
+  is a stronger guarantee than a masked input.
+- **`Diagnostics.tsx`** is §42's log, newest first, filterable by kind, paged at 120.
+- **`Help.tsx`** is generated from `BINDINGS` and shows the whole map, marking
+  out-of-scope groups rather than hiding them - a key a person cannot find is the same as
+  a key that does not exist.
+
+### The twelfth gate leg
+
+`uitest` (`pnpm test` in `app/ui`) is now a leg of its own, beside `uicheck`. The reason
+is the finding above: `pnpm check` proves the frontend compiles against the generated
+bindings and that the map covers §44, and it proved both of those while four workflows had
+no handler. CI gained the matching step. The gate now runs twelve legs -
+`fmt / clippy / test / parity / offline / deny / doc` at the root, `appfmt / appclippy /
+apptest` in `app/src-tauri`, and `uicheck / uitest` in `app/ui` - at **910 passing, 0
+failing, 12 ignored** in Rust and **16 passing** in the frontend, with the em-dash sweep
+clean.
+
+### What WP-16 leaves behind
+
+- **The window has never been opened.** `pnpm build` succeeds - 271 kB of JS, 6.15 kB of
+  CSS, 49 modules - every command is tested as a function and every binding is tested as
+  a wire, but **nothing has been driven through a real capture by hand and no screenshot
+  exists**. That run is the cheapest outstanding item in the plan and it is the only thing
+  that will say what §44 actually feels like.
+- **A playback open failure still arrives as a `capture-warning`** coded
+  `playback-failed`. Unchanged by WP-16 because the fix is an event on the bus, not a
+  workaround in the shell.
+- **`waveform-update` and `fingerprint-match`** are declared in §35 and nothing produces
+  them. The waveform decision above is why the first one is not missed.
+- **A side still has no extent**, and the Transport's one-side-or-none rule is the honest
+  consequence: on a capture holding two faces, the marker key does nothing until somebody
+  says which face. The fix is a frame range on `sides`, as recorded under WP-13.
+- **No macOS or Windows.** The frontend is WebKitGTK-only so far, which means the layout
+  has met one engine and one font stack.
+
 ## Next up
 
-**Where to pick up.** WP-15 is finished, gate-green and committed at `25ed2fd` together
-with WP-14, on a clean working tree. The last full gate ran eleven legs -
+**Where to pick up.** WP-16 is finished and gate-green on an uncommitted tree; WP-14 and
+WP-15 are committed at `51afd5f`. The last full gate ran twelve legs -
 `fmt / clippy / test / parity / offline / deny / doc` at the root, `appfmt / appclippy /
-apptest` in `app/src-tauri` and `uicheck` in `app/ui` - at **861 passing, 0 failing, 12
-ignored**, and the em-dash sweep over the changed files reports zero. Two legs caught
-things on the first run and both are fixed: the root `doc` leg found public documentation
-linking to a private item in the new crate, and `appclippy` found `WIRED` dead in the
-binary because only its test reads it. `/tmp/gate.sh` is the script.
+apptest` in `app/src-tauri` and `uicheck / uitest` in `app/ui` - at **910 passing, 0
+failing, 12 ignored** in Rust and 16 passing in the frontend, and the em-dash sweep over
+the changed files reports zero. `/tmp/gate.sh` is the script. Four legs caught something
+on a first run during WP-16 and all four are fixed: `fmt` and `appfmt` on edits made in a
+previous session, `doc` on an intra-doc link left dangling when a file's imports were
+trimmed, and `uicheck` on a test that reached for `node:fs` in a frontend that
+deliberately has no Node types.
 
-**`WP-16`, the React UI, is next** - and it is the largest single work package in the
-plan at weight 18, which is the whole of §34 and §43: project browser, capture workspace,
-transport, meters, waveform, track editor, metadata browser, export UI, settings and a
-full keyboard map. Two of its dependencies are already discharged. S3 measured the
-boundary and found the IPC free and the main-thread waveform draw the cost, so the shell
-hands over the summary rows WP-09 already writes rather than samples. And WP-15's
-contract resolved every unit on the Rust side, which is the half of WP-16's exit criterion
-that is easiest to fail slowly: *no business logic in TS* is a review gate, and the way to
-pass it is to have nothing left to compute - a `Track` already carries `A3`, its seconds
-and its confidence, so a component has nothing to do but render. The other half, *every
-§44 workflow completable by keyboard alone*, has nothing built behind it yet.
+**The single most valuable thing left is not code.** WP-16 closed the last of Phase 1's
+UI work, which means every stage of both §50's chain and §44's workflows now exists - and
+**neither has been run once from end to end**. M4 asks for the CLI chain; the window has
+never been opened at all. Both runs are cheap, need no new code, and are the only things
+that will say whether the parts hold together when nobody is stopping between steps.
 
-**What WP-15 leaves behind.** The shell's own gaps are listed in its section above, and
-three of them are worth carrying forward. `search_metadata` and `select_release` are
-declared and refused, and where the shell keeps a provider client, a cache and a
-credential is a WP-16 design question. **A playback failure arrives as a
-`capture-warning`** with the code `playback-failed`, because the open happens on a thread
-and the bus has no playback-refused event - the fix is an event on the bus. And
-**nothing in the shell has been driven through a real capture by hand**: the window opens,
-the frontend completes an IPC round trip, and every command is tested as a function, but
-arm-record-stop-play-export has been clicked only against an empty project. That run is
-cheap and it is the honest way to find out what §44 actually needs.
+**`WP-17`, the nightly soak and QA harness, is next** at weight 7 - the thing that turns
+a run that passed once into a run that cannot quietly regress. It is small beside WP-16,
+and the order matters: a harness written before the workflows existed would have tested
+the parts it could reach.
+
+**What WP-16 leaves behind.** Its section above has the list; three items carry forward.
+**Nothing has been driven through a real capture by hand and no screenshot exists** - the
+window compiles, every command is tested as a function and every keybinding is tested as
+a wire, but arm-record-stop-play-export has never been clicked. **A playback open failure
+still arrives as a `capture-warning`** coded `playback-failed`, because the open happens
+on a thread and the bus has no playback-refused event; the fix is an event on the bus.
+And the frontend has met **one browser engine and one font stack**, so the layout is
+unproven on macOS and Windows.
 
 **What WP-14 leaves behind.** §33 lists MP3 and Ogg as required initial formats and
 neither is built - they are in G3 because D5's encoders extend the LGPL relink obligation,
@@ -2945,14 +3180,12 @@ export: each link exists and each has been exercised against the real side in is
 M4 asks for the whole workflow end to end from the CLI, so the run itself is what is
 outstanding, not any part of it.
 
-**What WP-13 leaves for the transport.** `SKIP FORWARD` and `SKIP BACK` are still a fixed
-10 s. The boundaries to skip to now exist as rows and `track::boundaries` returns them in
-timeline order, so the remaining work is entirely in `vcw-core::playback` - ask the
-project for the next boundary past the cursor instead of adding ten seconds. It was left
-undone rather than smuggled in, because §21's verb belongs to the transport and WP-16 is
-what decides whether a skip lands on the boundary or somewhere inside the track. An
-earlier version of this paragraph said "the padded track start §33 exports" - **there is
-no padding in §33 and none in the exporter**, which cuts exactly the span between two
+**WP-13's skip is done.** `SKIP FORWARD` and `SKIP BACK` land on the next and previous
+track edge, falling back to ten seconds only on a side nothing has been analysed from.
+`track::edges_of_capture` is the query, `Audition::marks` carries the frames, and both the
+shell and the CLI fill it - detail in the WP-16 section above. An earlier version of this
+paragraph said a skip might land on "the padded track start §33 exports" - **there is no
+padding in §33 and none in the exporter**, which cuts exactly the span between two
 boundaries; the phrase was invented here and is corrected rather than left to be read as
 a requirement.
 
@@ -2979,9 +3212,10 @@ is to adopt one side or to record the faces separately; the fix is a frame range
 section above.
 
 One thing WP-09 deliberately left undone and did not need: **the waveform is read, not
-pushed.** The writer summarises every block as it commits, so the rows are there the
-instant they land, but nothing publishes a waveform event and a UI would have to ask. It
-is a WP-16 question about what the view wants, and cheap either way.
+pushed**, and WP-16 decided to keep it that way. The writer summarises every block as it
+commits, so the rows are there the instant they land; `Waveform.tsx` measures its own
+width and asks for exactly that many columns, which a pushed event could not have done.
+Nothing publishes `waveform-update` and nothing needs to.
 
 Still open on WP-03, WP-04 and WP-10, and all for the same reason: **Windows and
 macOS.** The device matrix is reported on one OS, the OS format verifier exists for

@@ -22,18 +22,34 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  Accepted,
   Arm,
   Audition,
+  Boundary,
+  Candidate,
   Capture,
+  Credential,
+  Detect,
   Device,
   Export,
   ExportPlan,
   Failure,
+  Lock,
   Marker,
+  Merge,
+  NewProject,
+  Placement,
   Playback,
+  Project,
   Release,
+  Removal,
+  Search,
+  Selection,
+  Settings,
   Side,
+  Split,
   Track,
+  TrackEdit,
   Transport,
   Waveform,
   Wire,
@@ -108,6 +124,71 @@ export function moveMarker(marker: Marker): Promise<void> {
   return invoke("move_marker", { marker });
 }
 
+/** Places a boundary, and returns the row id it was written as. */
+export function placeMarker(placement: Placement): Promise<number> {
+  return invoke("place_marker", { placement });
+}
+
+/** Deletes a boundary. */
+export function deleteMarker(removal: Removal): Promise<void> {
+  return invoke("delete_marker", { removal });
+}
+
+/**
+ * Locks or unlocks a boundary (§31).
+ *
+ * A locked boundary survives re-analysis, which is the only way a person can
+ * overrule a detector and have it stick.
+ */
+export function lockMarker(lock: Lock): Promise<void> {
+  return invoke("lock_marker", { lock });
+}
+
+/** Edits a track's metadata. Every field is optional; null leaves it alone. */
+export function editTrack(edit: TrackEdit): Promise<void> {
+  return invoke("edit_track", { edit });
+}
+
+/** Splits a track in two, and returns the id of the new second half. */
+export function splitTrack(split: Split): Promise<number> {
+  return invoke("split_track", { split });
+}
+
+/** Joins two adjacent tracks into one. */
+export function mergeTracks(merge: Merge): Promise<void> {
+  return invoke("merge_tracks", { merge });
+}
+
+/**
+ * Runs detection over a side, or the whole project.
+ *
+ * Returns as soon as the pass has started: a `track-detected` event arrives per
+ * boundary, then one `detection-finished` or `detection-failed`.
+ */
+export function detectTracks(detect: Detect): Promise<void> {
+  return invoke("detect_tracks", { detect });
+}
+
+/**
+ * Asks the metadata providers about this record (§28).
+ *
+ * Starting a search cancels one already in flight, so a caller that searches
+ * on every keystroke gets the last answer rather than a race.
+ */
+export function searchMetadata(search: Search): Promise<Candidate[]> {
+  return invoke("search_metadata", { search });
+}
+
+/**
+ * Accepts a candidate and writes it into the project (§26).
+ *
+ * The answer says what was named and what was not: a tracklist that does not
+ * line up with the captured sides is reported rather than forced.
+ */
+export function selectRelease(selection: Selection): Promise<Accepted> {
+  return invoke("select_release", { selection });
+}
+
 /** Resolves an export and returns the plan, writing nothing. */
 export function exportPlan(request: Export): Promise<ExportPlan> {
   return invoke("export_plan", { export: request });
@@ -116,6 +197,16 @@ export function exportPlan(request: Export): Promise<ExportPlan> {
 /** Writes an export. Progress and the outcome arrive as events. */
 export function exportRun(request: Export): Promise<void> {
   return invoke("export_run", { export: request });
+}
+
+/** Creates a project in the library, seeded from the sleeve. */
+export function newProject(seed: NewProject): Promise<Project> {
+  return invoke("new_project", { seed });
+}
+
+/** Writes §39's settings, whole. */
+export function saveSettings(settings: Settings): Promise<void> {
+  return invoke("save_settings", { settings });
 }
 
 // --- Commands that read (not in §35's list, because they change nothing) ---
@@ -148,4 +239,39 @@ export function captures(): Promise<Capture[]> {
 /** One channel of one capture, drawn to a given width. */
 export function waveform(zoom: Zoom): Promise<Waveform> {
   return invoke("waveform", { zoom });
+}
+
+/** Every boundary, promoted into a track or not. */
+export function boundaries(): Promise<Boundary[]> {
+  return invoke("boundaries");
+}
+
+/** Every project in the library, newest first. */
+export function projects(): Promise<Project[]> {
+  return invoke("projects");
+}
+
+/** §39's settings, or the defaults on first run. */
+export function settings(): Promise<Settings> {
+  return invoke("settings");
+}
+
+/** Where the library is, or null if nobody has chosen one. */
+export function libraryRoot(): Promise<string | null> {
+  return invoke("library_root");
+}
+
+/** The project the shell has open, which survives a window reload. */
+export function openPath(): Promise<string | null> {
+  return invoke("open_path");
+}
+
+/**
+ * Which credentials are configured (§39).
+ *
+ * Never their values. The shell has no command that would return one, which is
+ * the only way to be sure a settings panel cannot show a token by accident.
+ */
+export function credentials(): Promise<Credential[]> {
+  return invoke("credentials");
 }

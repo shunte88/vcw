@@ -104,15 +104,36 @@ use crate::events::{Bus, Event};
 /// twenty boundaries is not sitting through two minutes of music.
 pub const BOUNDARY_CONTEXT_SECONDS: f64 = 3.0;
 
-/// How far `SKIP FORWARD` and `SKIP BACK` move the playhead.
+/// How far `SKIP FORWARD` and `SKIP BACK` move the playhead with no marks.
 ///
-/// §21 names the operations without defining the step. Ten seconds is the
-/// convention every transport uses, and it is the right default for finding a
-/// spot in a side. Once WP-13 records boundaries these become "next boundary"
-/// and "previous boundary", which is what they are actually for; the fixed step
-/// is what they mean until then, and it is documented rather than pretended
-/// about.
+/// §21 names the operations without defining the step, and what they are
+/// actually for is moving between tracks: [`Audition::marks`] carries the frames
+/// to jump between, and a skip lands on the next one. Ten seconds is what a
+/// skip means when there are none - an unanalysed side, or a capture whose
+/// boundaries nobody has adopted - because a transport whose skip key did
+/// nothing until detection had run would be worse than one that nudges.
 pub const SKIP_SECONDS: f64 = 10.0;
+
+/// Where a skip lands, given the marks and a position.
+///
+/// # Lands *on* the mark, and this is WP-13's deferred question
+///
+/// The alternative was a little before it - a second of lead-in, so the needle
+/// drop is audible - and it is wrong. A person skipping forward is looking for
+/// the top of a track, and a skip that lands early means the first thing they
+/// hear is the end of the previous one. [`BOUNDARY_CONTEXT_SECONDS`] exists for
+/// the other job, auditioning a boundary to judge whether it is in the right
+/// place, and that is where the context belongs.
+///
+/// Strictly past the position in both directions, so holding the key walks the
+/// side rather than sticking on the mark under the playhead.
+fn next_mark(marks: &[u64], from: u64, forward: bool) -> Option<u64> {
+    if forward {
+        marks.iter().copied().find(|mark| *mark > from)
+    } else {
+        marks.iter().copied().rev().find(|mark| *mark < from)
+    }
+}
 
 /// How long the feeder thread sleeps when the queue is already full.
 ///
@@ -562,6 +583,16 @@ pub struct Audition {
     pub mode: vcw_types::CaptureMode,
     /// How deep the chunk queue is, in chunks.
     pub queue_chunks: usize,
+    /// Frames a skip jumps between, ascending (§21).
+    ///
+    /// Both ends of every track, normally - which is what
+    /// [`vcw_project::track::edges_of_capture`] returns, and what the shell and
+    /// the CLI both hand in. Empty means a skip is [`SKIP_SECONDS`] instead,
+    /// which is what an unanalysed side gets. They are frames and not boundary
+    /// ids on purpose: playback has no business opening the project a second
+    /// time to find out where a row is, and a caller that has already read the
+    /// tracks has the numbers in hand.
+    pub marks: Vec<u64>,
 }
 
 impl Audition {
@@ -576,7 +607,22 @@ impl Audition {
             format: None,
             mode: vcw_types::CaptureMode::Exclusive,
             queue_chunks: chunks::QUEUE_CHUNKS,
+            marks: Vec::new(),
         }
+    }
+
+    /// Names the frames a skip jumps between.
+    ///
+    /// Sorted and deduplicated here rather than trusted, because the caller's
+    /// natural source is a track list and two tracks that share a boundary
+    /// would otherwise make a skip that appears to do nothing.
+    #[must_use]
+    pub fn marks(mut self, marks: impl IntoIterator<Item = u64>) -> Self {
+        let mut frames: Vec<u64> = marks.into_iter().collect();
+        frames.sort_unstable();
+        frames.dedup();
+        self.marks = frames;
+        self
     }
 
     /// Narrows it to one of §21's targets.
@@ -641,8 +687,10 @@ pub struct Player {
     rate: SampleRate,
     /// The capture being played.
     capture_id: i64,
-    /// `SKIP FORWARD` and `SKIP BACK` in frames.
+    /// `SKIP FORWARD` and `SKIP BACK` in frames, when there are no marks.
     skip: u64,
+    /// Frames a skip jumps between, ascending. See [`Audition::marks`].
+    marks: Vec<u64>,
     /// Asks the feeder to finish.
     stop: Arc<AtomicBool>,
     /// The feeder thread, joined on [`Player::stop`].
@@ -740,6 +788,7 @@ impl Player {
             rate: layout.rate,
             capture_id: audition.capture_id,
             skip: frames_at(layout.rate, SKIP_SECONDS).max(1),
+            marks: audition.marks.clone(),
             cursor,
             stop,
             feeder: Some(thread),
@@ -867,14 +916,20 @@ impl Player {
         self.seek(frames_at(self.rate, seconds))
     }
 
-    /// `SKIP FORWARD`, by [`SKIP_SECONDS`].
+    /// `SKIP FORWARD`: to the next mark, or by [`SKIP_SECONDS`].
     pub fn skip_forward(&self) -> u64 {
-        self.seek(self.position().saturating_add(self.skip))
+        let from = self.position();
+        self.seek(
+            next_mark(&self.marks, from, true).unwrap_or_else(|| from.saturating_add(self.skip)),
+        )
     }
 
-    /// `SKIP BACK`, by [`SKIP_SECONDS`].
+    /// `SKIP BACK`: to the previous mark, or by [`SKIP_SECONDS`].
     pub fn skip_back(&self) -> u64 {
-        self.seek(self.position().saturating_sub(self.skip))
+        let from = self.position();
+        self.seek(
+            next_mark(&self.marks, from, false).unwrap_or_else(|| from.saturating_sub(self.skip)),
+        )
     }
 
     /// Applies one of §21's operations.
@@ -1115,15 +1170,22 @@ pub fn render(audition: &Audition, cues: &[Cue], out: &mut dyn Write) -> Result<
             }
             let landed = match cue.verb {
                 Verb::Seek(seconds) => Some(frames_at(layout.rate, seconds)),
+                // The same rule as the device path, and it has to be: a render
+                // is how a skip is tested without a sound card, and a driver
+                // that skipped differently would make that test worthless.
                 Verb::SkipForward => Some(
-                    cursor
-                        .frame()
-                        .saturating_add(frames_at(layout.rate, SKIP_SECONDS).max(1)),
+                    next_mark(&audition.marks, cursor.frame(), true).unwrap_or_else(|| {
+                        cursor
+                            .frame()
+                            .saturating_add(frames_at(layout.rate, SKIP_SECONDS).max(1))
+                    }),
                 ),
                 Verb::SkipBack => Some(
-                    cursor
-                        .frame()
-                        .saturating_sub(frames_at(layout.rate, SKIP_SECONDS).max(1)),
+                    next_mark(&audition.marks, cursor.frame(), false).unwrap_or_else(|| {
+                        cursor
+                            .frame()
+                            .saturating_sub(frames_at(layout.rate, SKIP_SECONDS).max(1))
+                    }),
                 ),
                 Verb::Play | Verb::Pause | Verb::Stop => None,
             };
@@ -1545,6 +1607,110 @@ mod tests {
         expected.extend_from_slice(&sent[back.landed as usize * FRAME..]);
         assert_eq!(out.len(), expected.len());
         assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn with_no_marks_a_skip_is_the_fixed_step() {
+        // The fallback, stated on its own so the four tests below are about the
+        // marks and nothing else.
+        assert_eq!(next_mark(&[], 1_000, true), None);
+        assert_eq!(next_mark(&[], 1_000, false), None);
+    }
+
+    #[test]
+    fn a_skip_lands_on_the_next_mark_and_not_before_it() {
+        // §21's SKIP FORWARD is "the top of the next track". Landing a second
+        // early would start it with the end of the previous one, which is the
+        // question WP-13 left open and this is the answer.
+        let marks = [0, 1_000, 2_500, 9_000];
+        assert_eq!(next_mark(&marks, 0, true), Some(1_000));
+        assert_eq!(next_mark(&marks, 999, true), Some(1_000));
+        assert_eq!(next_mark(&marks, 1_000, true), Some(2_500));
+        assert_eq!(next_mark(&marks, 2_499, true), Some(2_500));
+    }
+
+    #[test]
+    fn a_skip_back_lands_on_the_previous_mark() {
+        let marks = [0, 1_000, 2_500, 9_000];
+        assert_eq!(next_mark(&marks, 9_000, false), Some(2_500));
+        assert_eq!(next_mark(&marks, 2_501, false), Some(2_500));
+        assert_eq!(next_mark(&marks, 2_500, false), Some(1_000));
+        assert_eq!(next_mark(&marks, 1, false), Some(0));
+    }
+
+    #[test]
+    fn a_mark_at_the_position_is_not_where_a_skip_lands() {
+        // Strictly past, in both directions. A mark exactly under the playhead
+        // that counted would make SKIP FORWARD a no-op held down, and SKIP BACK
+        // at the top of a track would refuse to leave it.
+        assert_eq!(next_mark(&[4_000], 4_000, true), None);
+        assert_eq!(next_mark(&[4_000], 4_000, false), None);
+    }
+
+    #[test]
+    fn holding_a_skip_walks_the_marks_rather_than_sticking() {
+        let marks = [500, 1_500, 4_000];
+        let mut at = 0;
+        let mut visited = Vec::new();
+        while let Some(mark) = next_mark(&marks, at, true) {
+            visited.push(mark);
+            at = mark;
+        }
+        assert_eq!(visited, vec![500, 1_500, 4_000]);
+        let mut back = Vec::new();
+        while let Some(mark) = next_mark(&marks, at, false) {
+            back.push(mark);
+            at = mark;
+        }
+        assert_eq!(back, vec![1_500, 500]);
+    }
+
+    #[test]
+    fn marks_are_sorted_and_deduplicated_by_the_builder() {
+        // Adjacent tracks share a frame - one's end is the next one's start -
+        // so the natural caller hands in duplicates, and a duplicate mark is a
+        // skip that appears to do nothing.
+        let audition = Audition::new("/nowhere.vcw", 1).marks([4_000, 500, 4_000, 1_500, 500]);
+        assert_eq!(audition.marks, vec![500, 1_500, 4_000]);
+    }
+
+    #[test]
+    fn the_skip_verbs_move_between_marks_when_there_are_some() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (path, capture_id, _) = recorded(&dir, 25 * SECOND as usize);
+        // Deliberately not ten seconds apart, so a pass that ignored the marks
+        // and used SKIP_SECONDS could not land on them by accident.
+        let marks = [3 * SECOND, 7 * SECOND, 21 * SECOND];
+        let audition = Audition::new(&path, capture_id).marks(marks);
+        let mut out = Vec::new();
+        let cues = [
+            Cue {
+                after_frames: SECOND,
+                verb: Verb::SkipForward,
+            },
+            Cue {
+                after_frames: 2 * SECOND,
+                verb: Verb::SkipForward,
+            },
+            Cue {
+                after_frames: 3 * SECOND,
+                verb: Verb::SkipBack,
+            },
+        ];
+        let report = render(&audition, &cues, &mut out).expect("render");
+        let landed: Vec<u64> = report.applied.iter().map(|step| step.landed).collect();
+        // A cue's clock is frames *rendered*, not the playhead, so the third
+        // one fires a second after the second skip landed - which puts the
+        // cursor at 8 s, inside the track that starts at 7 s. So SKIP BACK
+        // lands on 7 s and not on 3 s: from inside a track it goes to that
+        // track's top, which is what a transport's back button does. Walking
+        // further back needs a second press, and that is
+        // `holding_a_skip_walks_the_marks_rather_than_sticking`.
+        assert_eq!(
+            landed,
+            vec![3 * SECOND, 7 * SECOND, 7 * SECOND],
+            "{report:?}"
+        );
     }
 
     #[test]
