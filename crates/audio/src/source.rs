@@ -287,8 +287,31 @@ impl Simulated {
         channels: u16,
         pace: Pace,
     ) -> Result<(Self, RingReader)> {
+        Self::deterministic_as(rate, channels, vcw_types::SampleFormat::S32, pace)
+    }
+
+    /// The same, in a chosen sample format.
+    ///
+    /// S32 is the default because it is the widest integer format and what a
+    /// device negotiation asks for first, but it is not the only one a project
+    /// can hold, and a caller pinning a format has a reason: a 32-bit project
+    /// cannot be exported as FLAC while `flacenc` stops at 24 bits, so a
+    /// simulated capture that could only be S32 made half of §33 untestable
+    /// without hardware. [`Pattern::Deterministic`] already writes the low
+    /// bytes of [`Simulated::expected_sample`] at the stored width, so the
+    /// capture stays recomputable frame by frame whichever format it is in.
+    ///
+    /// # Errors
+    ///
+    /// Only if the feeding thread cannot be spawned.
+    pub fn deterministic_as(
+        rate: SampleRate,
+        channels: u16,
+        format: vcw_types::SampleFormat,
+        pace: Pace,
+    ) -> Result<(Self, RingReader)> {
         Self::start(
-            Negotiated::simulated(rate, channels, vcw_types::SampleFormat::S32),
+            Negotiated::simulated(rate, channels, format),
             &Pattern::Deterministic,
             pace,
             Faults::none(),

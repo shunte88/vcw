@@ -1,7 +1,7 @@
 # VCW - project status
 
-**As of:** 2026-09-26
-**Phase:** 1 is underway - WP-01 through WP-13 are built, all on Linux x86_64 only.
+**As of:** 2026-09-27
+**Phase:** 1 is underway - WP-01 through WP-14 are built, all on Linux x86_64 only.
 All five Phase 0 spikes returned verdicts on their primary platform; gate G0 remains
 open on hardware coverage, WP-05's soak settled D3's firmed-config run, **WP-06 closes
 milestone M1, *it records*,** WP-07 locks D8, WP-08 adds the meters and the §10 fan-out
@@ -15,8 +15,15 @@ feature, and `cargo test -p vcw-metadata --no-default-features` is a gate leg, a
 **WP-13 turns a detection into a record** - schema v2, the release/side/track topology
 and every §31 editing verb, with both halves of its exit criterion asserted by test
 rather than argued: a byte-level fingerprint over both audio tables held constant across
-15 edits, and a locked boundary surviving a real second detection pass.
-**Branch:** `main` at `96438ff` (WP-12 and WP-13), pushed.
+15 edits, and a locked boundary surviving a real second detection pass, and **WP-14 turns a record
+into files** - a splitter that reads committed blocks and writes nothing back, WAV and
+FLAC written streaming, VRipr's naming templates and tag conventions ported, and both
+halves of its exit criterion asserted separately: exported bytes compared against the
+recorded blocks for three stored formats, and the tags read back by four pieces of
+software nobody here wrote. Every stage of §50's chain now has a CLI verb behind it,
+which is what **M4** asks for; what remains for M4 is running the chain end to end in one
+pass on a real record.
+**Branch:** `main` at `b549eab` (WP-13), with WP-14 **uncommitted** in the working tree.
 
 This is the running snapshot: where Phase 0 actually stands, what is proven versus
 assumed, what is waiting on a decision, and what is waiting on hardware. The plan of
@@ -2445,35 +2452,269 @@ built, and it is what would actually fix the hard cases. Alpha numbering is asse
 synthetic sides up to disc 3 and has never met a real box set. And, as everywhere in
 Phase 1, this is Linux x86_64 only.
 
+## Phase 1 - WP-14, export
+
+Built 2026-09-27. §33's last step: a finished project becomes files. A splitter that reads
+committed blocks plus edit instructions and writes nothing back, WAV and FLAC writers that
+stream, tags and artwork through lofty, and VRipr's naming templates ported token for
+token. **Exit criterion met on both halves.** Bit-exact WAV extraction is asserted against
+the source blocks in `crates/export/tests/from_a_project.rs`, and the tags are read back by
+four pieces of somebody else's software - `ffprobe`, `flac`, `metaflac` and python
+`mutagen` - in `crates/export/tests/third_party.rs`.
+
+```sh
+vcw export demo.vcw --into demoout --format flac
+```
+
+```
+  into       demoout
+  format     FLAC, template "{album_artist}/{album}/{tracknum} - {title}"
+  tracks     2 file(s), 171990 frame(s)
+  artwork    69 byte(s) of image/png, embedded and beside the files
+    1/2    demoout/Kraftwerk/Trans-Europe Express/01 - Europe Endless.flac
+    2/2    demoout/Kraftwerk/Trans-Europe Express/02 - Hall of Mirrors.flac
+  wrote      2 file(s), 1 cover(s), 171990 frame(s), 0.6 MiB
+```
+
+Verbatim, from a 44.1 kHz 24-bit project on `/data2/vcw-scratch/wp14cli`. `flac -t`
+reports `ok` on both files, `metaflac --show-bps` 24, and the directory holds
+`folder.png` beside the two tracks.
+
+### Plan, then run, because the collision is at track nine
+
+`splitter::plan` resolves every track to a path, a span and a set of tags and writes
+nothing; `splitter::run` produces the files. Everything knowable before the first byte is
+checked in the first call: an unknown token in the template, two tracks that want the same
+file, a file already on disk. An export is minutes of work over gigabytes, and a collision
+found at track nine is found too late. `--dry-run` is then free, and so is the list a UI
+wants to show before an operator commits to it.
+
+The splitter does no arithmetic on blocks at all. `pcm::Reader` already reassembles the
+per-channel blobs and hands out interleaved frames from any frame in the capture, so a
+boundary that lands mid-block costs nothing and there is no second opinion about where a
+block edge is. A track's audio is the span between its two boundaries, clamped to what was
+committed, and nothing else: no fade, no lead-in, no gap trimming. Earlier notes in this
+file mention a "padded track start §33 exports" - there is no padding in §33 and there is
+none in the code. An exporter that quietly added 200 ms of run-in would make the
+bit-exactness above untestable.
+
+### The FLAC encoder had to be written streaming, and the header patched at the end
+
+`flacenc::encode_with_fixed_block_size` builds the whole stream in RAM, which is fine for
+a track and not fine for a 2.33 GiB side. `Flac` uses the per-frame
+`encode_fixed_size_frame` instead and patches `STREAMINFO` in `finish`, which is what the
+reference encoder does. A `PADDING` block of 8 KiB goes in at `create` so the tagger can
+write a `VORBIS_COMMENT` in place rather than rewriting the file.
+
+**`STREAMINFO` must declare the nominal block size at both ends.** `update_frame_info`
+honestly recorded the short final frame as the minimum, and min != max tells libFLAC the
+stream is variably blocked - where frame headers carry sample numbers rather than frame
+numbers. `flac -t` then warned once per frame that the numbering did not increase and that
+the file might not be seekable, on a file whose audio frames were **byte-identical** to
+the reference encoder's. Measured against `flac 1.5.0` on the same input: it declares
+min = max = 4096 for a 48000-frame file and for a 300-frame one, where the only frame
+there runs short. `set_block_sizes(block_frames, block_frames)` is the fix.
+
+### The `fmt` chunk goes extensible above 16 bits, and a reader is why
+
+The 46 WAVs in `/data2/source_rips` are all 32-bit stereo with a 16-byte `fmt` chunk and
+format tag 1, so the corpus said plain PCM was fine at any width. Then `flac 1.5.0`,
+reading a 24-bit file we had just written, said *"legacy WAVE file has format type 1 but
+bits-per-sample=24"*. A warning from the reference encoder on our own output is not
+something to ship, so the rule is now `WAVE_FORMAT_EXTENSIBLE` when `channels > 2 ||
+bits > 16` and the plain 44-byte header otherwise. Both sides of that evidence are in the
+module docs, because the corpus is still true: readers tolerate the other shape.
+
+### What a container will not take, said out loud
+
+- **WAV stops at 4 GiB.** RIFF sizes are 32-bit. A 30-minute side at 192 kHz in 32-bit
+  stereo is 1.4 GiB, so this is reachable by a long unsplit side rather than by a track.
+  Refused before the file is created, with FLAC named as the answer.
+- **FLAC is an integer codec.** A float capture is legitimate - §8 allows it and Audacity
+  produces it - and choosing how to dither it is a decision about headroom that belongs to
+  a person. Refused, with WAV named.
+- **`flacenc` 0.5.1 stops at 24 bits and 96 kHz.** Both are the library's limits and
+  neither is the format's: FLAC allows 32 bits and 655350 Hz. §8 requires 192 kHz and §33
+  requires FLAC, so **this is a real gap in the requirement and not a theoretical one**,
+  and `the_flac_library_really_does_stop_where_we_say_it_does` fails the day either cap is
+  lifted so the refusal can be deleted.
+
+The 24-bit cap has teeth, because `vcw session` takes the widest integer format a device
+offers and that is S32 on this machine: **a default capture cannot be exported as FLAC.**
+Narrowing it silently was considered and rejected on measurement - a real 32-bit rip from
+`/data2/source_rips` uses the whole low byte (`OR` of every low byte is `0xff`, max
+absolute value 2,092,715,264), so dropping eight bits is not lossless and is not the
+exporter's decision. `vcw session --format s24` produces a project FLAC will take, WAV
+takes any of them, and the remedies for the general case are a 32-bit-capable encoder
+(libFLAC 1.4+ through bindings, at the cost of D5's pure-Rust choice) or an explicit,
+operator-chosen dither. Both are bigger than WP-14.
+
+### lofty 0.25 removed the freeform key, so the tags go in twice
+
+VRipr wrote its vinyl-specific fields with `ItemKey::Unknown("DISCOGS_RELEASEID")`. In
+lofty 0.25 `ItemKey` is a closed `Copy` enum with no such variant, so a freeform key
+cannot be named through the generic tag at all. The mapped fields are still built once as
+a `lofty::tag::Tag` - one list of assignments, not two - and it is then converted into the
+container's own tag, where the freeform keys can be named: `VorbisComments` for FLAC,
+where a key is just a key, and `Id3v2Tag` for WAV, where it is a `TXXX` frame.
+
+Two conventions are ported deliberately. A multi-value field is one string split on `';'`
+and written as **separate items**, so a player that understands multi-value shows two
+artists and one that does not shows the first rather than showing punctuation. And where
+the canonical Vorbis key differs from VRipr's, both go in: `LABEL` **and**
+`ORGANIZATION`, `RELEASECOUNTRY` **and** `COUNTRY`. A reader looking for either finds it,
+and a library built with the old tool keeps the shape it had.
+
+VRipr wrote no embedded artwork at all - it dropped a `folder.jpg` beside the tracks, and
+players that read embedded art showed nothing. The default here is `--artwork both`: one
+image file per album directory *and* a `CoverFront` picture in every file. `metaflac
+--export-picture-to` returns the bytes that went in.
+
+One incidental finding worth knowing: lofty maps `ItemKey::EncoderSoftware` to the Vorbis
+**vendor string**, not to an `ENCODER` comment. `metaflac --show-vendor-tag` prints
+`VCW 0.1.0`; `--export-tags-to` does not mention it. That is the right place for it in a
+FLAC file, and it is not where you would look.
+
+### Tagging must not move the audio, and that is asserted per container
+
+A tag write that shifts one sample has broken the bit-exactness the rest of the work
+package proves. FLAC is checked by digest - the stream's MD5 is over the samples, so an
+unchanged `metaflac --show-md5sum` plus a clean `flac -t` means only metadata moved - and
+WAV by finding the `data` chunk before and after and comparing it byte for byte.
+
+### The CLI
+
+```sh
+vcw export side-a.vcw --into ~/rips [--format flac|wav] [--template "{album_artist}/{album}/{tracknum} - {title}"]
+vcw export side-a.vcw --into ~/rips --side A [--side B]
+vcw export side-a.vcw --into ~/rips --artwork none|embed|folder|both
+vcw export side-a.vcw --into ~/rips --dry-run [--json]
+vcw export side-a.vcw --into ~/rips --overwrite
+```
+
+The project is opened **read-only**, because §33 says an export reads immutable blocks and
+edit instructions: opening it writable would make a crash mid-export a risk to the one
+thing in the project that cannot be redone. A line is printed as each file starts rather
+than as it finishes, since the file being worked on is the useful thing to see.
+
+### Tests
+
+820 in the workspace, 12 ignored, 69 of them new here: 36 in the `vcw-export` lib
+(15 `encoder`, 15 `naming`, 6 `tagging`), 14 in `tests/third_party.rs`, 13 in
+`tests/from_a_project.rs` and 6 in `crates/cli/tests/export_from_cli.rs`.
+
+The three files that carry the criterion:
+
+- **`from_a_project.rs`** records a known pattern through `vcw-project`'s own capture
+  writer, cuts it at frames that are deliberately not block-aligned, exports, and compares
+  each file's data chunk against the exact slice of what went in - for `Int16`, `Int32` and
+  four-channel `Int32`, where a stored frame and a WAV frame are the same bytes, so the
+  comparison is an identity and not a transform. `Int24Padded` gets its own test for the
+  dropped pad byte. A fourth test hands the reference decoder a FLAC export and compares
+  what comes back.
+- **`third_party.rs`** shells out to tools somebody else wrote and believes them over us:
+  `ffprobe` on every stored format, `flac -t`, a `flac -d` round trip, `metaflac
+  --show-md5sum` against the reference encoder's digest, `metaflac --export-tags-to` for
+  every tag, `mutagen` for both containers, `sox` for the duration. A missing tool skips
+  its own test, so this passes on a bare CI runner - and
+  `at_least_one_verifier_is_installed` fails when *nothing* is available, because the gate
+  can be unverified or it can be green, not both.
+- **`export_from_cli.rs`** drives the whole thing through the shipped binary on a machine
+  with nothing plugged in, and cross-checks the exported WAV against what `vcw play
+  --render` renders over the same frames. They share `pcm::Reader` underneath, which is
+  the point: there is meant to be exactly one way to get samples out of a project.
+
+### Fixed on the way past
+
+- **A provider's slash became a directory, in the original.** VRipr's
+  `apply_path_template` substitutes first, then splits on `/` and sanitises each segment,
+  so a Discogs title of `AC/DC Medley` becomes a directory called `AC` containing a file
+  called `DC Medley`, and its `sanitize_filename` maps the nine Windows-hostile
+  characters without touching `..`, so a title of `..` climbs out of the output
+  directory. The port does not inherit either: `Values::sanitised()` runs *before*
+  substitution, which is what keeps the operator's `/` in `{album}/{title}` - a directory
+  they asked for - apart from a provider's `/` inside a name. The per-segment pass
+  afterwards is kept and is not redundant: it catches the hazards typed into the template
+  itself.
+- **Typo suggestions could not see a transposition.** This one is ours, not VRipr's:
+  its threshold is `max(2, shorter/3)`, which accepts `titel` at a plain-Levenshtein
+  distance of 2, and the port tightened the budget to 1 for a five-character token and so
+  returned nothing. The distance is now Damerau-Levenshtein with adjacent transpositions,
+  which scores the swap as one edit and keeps the tighter budget; `bitrate` still
+  correctly gets no suggestion.
+- **The extension came from the template, so there was none.** `plan` produced
+  `01 - Europe Endless` with no `.flac`, caught by a test asserting the relative paths.
+  Appended rather than set with `with_extension`, which would read `Symphony No. 5` as a
+  file called `Symphony No` with an extension of ` 5` and replace it - there is a test for
+  that too.
+- **`vcw session --format` was silently ignored by the simulated source.** It was
+  hard-coded to S32, so `--format s16` produced a 32-bit project and there was no way to
+  make a FLAC-exportable capture without hardware. `Simulated::deterministic_as` honours
+  it; the pattern generator already wrote at the stored width, so a simulated capture stays
+  recomputable frame by frame in any format.
+- **`Writer::Flac` was 472 bytes against `Wav`'s 64**, so every writer moved by value
+  carried the larger. Boxed, with the reason written down.
+
+### What is not verified
+
+No UI: export is reachable through `vcw export` and nowhere else, which is WP-16. **MP3
+and Ogg are not built** - §33 lists them as required initial formats and the plan puts them
+in G3 behind D5's LGPL relink consequence, so this is a known deferral rather than an
+oversight. A 32-bit project cannot be exported as FLAC, as above. Nothing has been
+exported from the 2.33 GiB real side yet, so the streaming claim is asserted on tracks of
+seconds rather than of minutes, and no export has been timed. `vcw play --track N` is
+still only a label and does not resolve a track's span, which is why the CLI cross-check
+asks for a region in seconds and then asserts the span it got. Linux x86_64 only, like
+everything else in Phase 1.
+
 ## Next up
 
-**Where to pick up.** WP-12 and WP-13 are both finished, gate-green and **committed at
-`96438ff`**, so nothing is half-done and nothing is waiting to be saved. The last thing
-run was the full gate - `fmt / clippy / test / parity / offline / deny / doc` all green at
-**751 passing, 0 failing, 12 ignored** - and the real side re-adopted cleanly afterwards.
-`/tmp/gate.sh` is the script; the em-dash sweep over the changed files reports zero.
+**Where to pick up.** WP-14 is finished and gate-green, and **not yet committed**: the
+working tree holds the whole of it. The last thing run was the full gate -
+`fmt / clippy / test / parity / offline / deny / doc` all green at **820 passing,
+0 failing, 12 ignored** - and the export verb was then driven end to end through the
+shipped binary on a scratch project, WAV and FLAC both. `/tmp/gate.sh` is the script;
+the em-dash sweep over the changed files reports zero.
 
-**`WP-14`, export, is next**, at weight 9 and unblocked by WP-13: a track now has an
-extent, a number, a title and a release behind it, which is exactly what §33 asks a
-splitter for. It reads committed blocks and edit instructions and writes WAV and FLAC
-with tags, artwork and a naming template, all ported from VRipr. Two pieces are already
-on disk and should not be rewritten: `pcm::read`, WP-10's block reassembly, which is the
-only correct way to get samples back out of a project - the blocks are per channel and
-interleaving them is its job - and `track::positions`, which hands a naming template its
-`A1`/`1` strings without the template needing to know what a side is.
+**`WP-15`, the Tauri 2 shell, is next**, at weight 6 and unblocked since WP-07. It is
+the last thing between the engine and a user, and the CLI has been carrying that load on
+purpose: every verb the UI needs is already a function on a core crate with a test behind
+it, so the shell is a translation layer and not a second implementation. Its exit
+criterion - *core crates have zero Tauri dependency, enforced in CI* - is the rule that
+keeps it one, and D9's generated TS types with a drift check are the other half, because
+hand-written interfaces are how §2 erodes. S3 already measured the boundary: the IPC is
+free and the main-thread waveform draw is the cost, so the shell's job is to hand the
+frontend the summary rows WP-09 already writes rather than to move samples.
 
-Its exit criterion splits the way WP-10's did. *Bit-exact WAV extraction verified against
-source blocks* needs no hardware and no third party: read the blocks, write the file, read
-it back, compare. *Tags validated by third-party readers* needs software outside the repo,
-and picking which readers count is the first decision of that work package.
+**What WP-14 leaves behind.** §33 lists MP3 and Ogg as required initial formats and
+neither is built - they are in G3 because D5's encoders extend the LGPL relink obligation,
+and whether they ship as optional cargo features is a licensing call rather than a coding
+one. **A default capture cannot be exported as FLAC**: a device negotiation takes the
+widest integer format on offer, here S32, and `flacenc` 0.5.1 stops at 24 bits, with a
+96 kHz cap beside it that §8's 192 kHz requirement walks straight into.
+`vcw session --format s24` sidesteps both for testing; the real answers are a
+32-bit-capable encoder through bindings, at the cost of D5's pure-Rust choice, or an
+explicit operator-chosen dither, and `the_flac_library_really_does_stop_where_we_say_it_does`
+fails the day either cap is lifted. Nothing has been exported from the 2.33 GiB real side
+yet, so the streaming design is asserted on tracks of seconds, and **no export has been
+timed** - which is the figure a progress bar needs to mean anything.
+
+**§50's chain is now complete behind CLI verbs, and has never been run in one pass.**
+Connect, select album, set level, drop needle, record, flip, record, review, correct,
+export: each link exists and each has been exercised against the real side in isolation.
+M4 asks for the whole workflow end to end from the CLI, so the run itself is what is
+outstanding, not any part of it.
 
 **What WP-13 leaves for the transport.** `SKIP FORWARD` and `SKIP BACK` are still a fixed
 10 s. The boundaries to skip to now exist as rows and `track::boundaries` returns them in
 timeline order, so the remaining work is entirely in `vcw-core::playback` - ask the
 project for the next boundary past the cursor instead of adding ten seconds. It was left
 undone rather than smuggled in, because §21's verb belongs to the transport and WP-16 is
-what decides whether a skip lands on the boundary or on the padded track start §33
-exports.
+what decides whether a skip lands on the boundary or somewhere inside the track. An
+earlier version of this paragraph said "the padded track start §33 exports" - **there is
+no padding in §33 and none in the exporter**, which cuts exactly the span between two
+boundaries; the phrase was invented here and is corrected rather than left to be read as
+a requirement.
 
 **The promotion floor is a policy, and policies get tuned.** `Policy::min_sources` is 2,
 which is WP-11's over-segmentation finding turned into code, and on the real side it is
@@ -2577,6 +2818,17 @@ the spike harness.
   project the evidence round-trip defect was found on, so it now carries both the old
   compounded names and the healed ones. Delete it when the disk is wanted; a fresh copy
   of `side-a.vcw` reproduces it in one `cp` and two adopt passes.
+- **`/data2/vcw-scratch/wp14/`** and **`/data2/vcw-scratch/wp14cli/`** are WP-14's bench,
+  neither in the repository and both disposable. `wp14/` holds the hand-written WAV and
+  FLAC probes the encoder's header decisions were argued from, including the pair that
+  `flac 1.5.0` was asked to compare against its own output - `ref.flac` and `ref2.flac`
+  are the reference encoder's, `probe.flac` ours, and the `STREAMINFO` block-size finding
+  is the difference between them. `wp14cli/` holds the projects the shipped binary was
+  driven against: `side.vcw` (S32, two tracks, a release and artwork), `s16.vcw` and
+  `s24.vcw` proving `vcw session --format` now reaches the simulated source, `cover.png`,
+  and the `out/`, `wav/` and `flac24/` export trees. Reproduce any of it with
+  `vcw session --script "arm,record,sleep N,stop"` and a few `vcw tracks` calls; nothing
+  there took longer than a second to make.
 - **`/data2/vcw_soak/`** holds what is left of the WP-05 soak: `wp05.log`, the run
   transcript quoted above, and `live.vcw`, the four-second hardware capture. The 5.94
   GiB `wp05.vcw` has been deleted, as have the two three-minute WAL-pair projects.
@@ -2591,6 +2843,14 @@ the spike harness.
 - `.bench/` holds **~8 GB** of scratch databases - the 8.4 GB soak artefact plus older
   `.vripr`-suffixed files from before the rename. All gitignored and safe to delete; the
   S1 and S2 numbers are recorded here and in the spike write-ups.
+- **The first entry in `deny.toml`'s advisory ignore list arrived with WP-14.**
+  RUSTSEC-2024-0436 marks `paste` unmaintained and archived, with no safe upgrade because
+  the author retired the crate rather than patched it. It reaches us through `lofty` and
+  it is a proc macro: it runs at build time, emits identifiers, and no line of it is
+  linked into the binary. The exposure is a build-time dependency that will not receive
+  fixes, on a crate that has never had a fix to receive. The entry says all of that in
+  place, and says to check whether the dependency has gone the next time lofty moves - an
+  ignore nobody re-reads is how a real advisory gets through later.
 - Licensing today: MIT core, cpal Apache-2.0 as an ordinary dependency.
   `chromaprint-next` adds an LGPL-2.1-or-later relink obligation at Phase 2.
 - **Stay current on CPAL.** Two blocking defects and the device-id API all landed within

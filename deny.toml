@@ -18,7 +18,22 @@ targets = [
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+ignore = [
+    # RUSTSEC-2024-0436: `paste` is unmaintained and archived. It is not a
+    # vulnerability and there is no safe upgrade - the author has retired the
+    # crate rather than patched it.
+    #
+    # It reaches us through `lofty`, WP-14's tagger, and it is a **proc macro**:
+    # it runs at build time, emits identifiers, and no line of it is linked into
+    # the binary or executes at run time. So the exposure is that a build-time
+    # dependency will not receive fixes, and `paste` has had no CVE to fix in its
+    # lifetime; `pastey` is the drop-in fork if one is ever needed, and that is
+    # lofty's call to make, not ours.
+    #
+    # Reviewed rather than silenced: if this is still here when lofty next moves,
+    # check whether the dependency has gone with it and delete this entry.
+    "RUSTSEC-2024-0436",
+]
 
 [licenses]
 version = 2

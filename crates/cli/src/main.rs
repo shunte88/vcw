@@ -50,6 +50,7 @@
 mod capture;
 mod detect;
 mod devices;
+mod export;
 mod metadata;
 mod play;
 mod recover;
@@ -363,6 +364,40 @@ enum Command {
         what: ReleaseCommand,
         /// Machine-readable output.
         #[arg(long, global = true)]
+        json: bool,
+    },
+
+    /// Turn a finished project into files (§33).
+    ///
+    /// Reads immutable blocks plus the edit instructions and writes nothing
+    /// back, so the project is opened read-only. `--dry-run` resolves the whole
+    /// plan - every path, every tag, every frame count - and stops there.
+    Export {
+        /// Project to export from.
+        project: std::path::PathBuf,
+        /// Directory the files go under. Created if it is not there.
+        #[arg(long)]
+        into: std::path::PathBuf,
+        /// Container to write: wav or flac.
+        #[arg(long, default_value = "flac")]
+        format: String,
+        /// Naming template. Omit for the default.
+        #[arg(long)]
+        template: Option<String>,
+        /// A side letter. Repeat for several. Omit for every side.
+        #[arg(long = "side")]
+        sides: Vec<char>,
+        /// What to do with the front cover: none, embed, folder or both.
+        #[arg(long, default_value = "both")]
+        artwork: String,
+        /// Replace files that are already there.
+        #[arg(long)]
+        overwrite: bool,
+        /// Resolve and print the plan, and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Machine-readable output.
+        #[arg(long)]
         json: bool,
     },
 
@@ -845,6 +880,28 @@ fn main() -> anyhow::Result<()> {
             verify,
             json,
         }),
+        Command::Export {
+            project,
+            into,
+            format,
+            template,
+            sides,
+            artwork,
+            overwrite,
+            dry_run,
+            json,
+        } => export::run(&export::Args {
+            project,
+            into,
+            format,
+            template,
+            sides,
+            artwork,
+            overwrite,
+            dry_run,
+            json,
+        }),
+
         Command::Tracks {
             project,
             what,

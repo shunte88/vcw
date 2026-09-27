@@ -39,6 +39,11 @@ vcw-types = { path = "crates/types", version = "0.1.0" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 crc32fast = "1"
+# The FLAC encoder behind `vcw export --format flac` (D5). Pure Rust and
+# Apache-2.0, so no C library to relink and nothing new for the licence
+# allowlist; WAV is our own writer because a RIFF header is thirty lines and
+# every crate that writes one has an opinion about 24-bit that we do not share.
+flacenc = { version = "0.5", default-features = false }
 # 0.18.2 or newer is a hard floor, not a preference: 0.16 mis-reported ALSA formats
 # and could not select a device by PCM id. See docs/spikes/S1-cpal-capture.md.
 cpal = "0.18.2"
@@ -51,6 +56,10 @@ rtrb = "0.4"
 # the port has to agree with it numerically, and swapping in a real-input transform
 # would have made every parity difference an argument about arithmetic order.
 rustfft = "6"
+# Tag and artwork writing (§33). The same library VRipr tagged with, which
+# matters: the tags a player reads out of a VCW export should be the tags it read
+# out of a VRipr one. MIT OR Apache-2.0, MSRV 1.89.
+lofty = "0.25"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"

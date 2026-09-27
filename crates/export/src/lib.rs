@@ -40,5 +40,9 @@
 //! the bit-perfect claim survived the whole pipeline and not just the callback.
 
 pub mod encoder;
+pub mod error;
+pub mod naming;
 pub mod splitter;
 pub mod tagging;
+
+pub use error::{Error, Result};

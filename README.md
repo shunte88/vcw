@@ -239,6 +239,51 @@ tracks across a locked boundary and leaves the boundary behind as a marker of wh
 join was, and an operator can always overrule a lock - at which point the boundary
 becomes theirs, since whoever overrides a lock is the new author of that position.
 
+Export (WP-14) is where a project becomes files. It reads committed blocks and edit
+instructions and writes nothing back - the project is opened **read-only**, because a
+crash mid-export must not endanger the one thing in it that cannot be redone. A track's
+audio is the span between its two boundaries and nothing else: no fade, no lead-in, no
+gap trimming, so the bytes written are the bytes recorded. That is asserted and not
+asserted loosely: a test records a known pattern, cuts it at frames deliberately not
+block-aligned, and compares each exported WAV's data chunk against the exact slice of
+what went in, for three stored formats and for four channels as well as two.
+
+```sh
+vcw export side-a.vcw --into ~/rips --format flac
+vcw export side-a.vcw --into ~/rips --side A --dry-run --json
+vcw export side-a.vcw --into ~/rips --template "{album_artist}/{year} - {album}/{tracknum} {title}"
+```
+
+`plan` resolves every track to a path, a span and a set of tags before a single byte is
+written, so an unknown template token, two tracks that want the same filename, and a file
+already on disk are all reported up front - an export is minutes of work over gigabytes,
+and a collision found at track nine is found too late. `--dry-run` is what falls out of
+that for free.
+
+The naming templates are VRipr's, token for token, with its sanitisation rule corrected.
+The original substitutes first and cleans the assembled path afterwards, so a provider's
+`AC/DC Medley` becomes a directory called `AC`, and its cleaner never touches `..`. Here
+the values are cleaned *before* they go into the template, which is what keeps the `/`
+an operator typed into `{album}/{title}` - a directory they asked for - apart from a `/`
+that is just a character in somebody's title.
+
+Tags are VRipr's conventions too - a multi-value field is written as separate items
+rather than one string with a separator, and where the canonical Vorbis key differs
+from VRipr's, both are written (`LABEL` and `ORGANIZATION`, `RELEASECOUNTRY` and
+`COUNTRY`), so a library built with the old tool keeps its shape. Artwork defaults to
+both places at once: one image beside the tracks, as VRipr did, *and* embedded in every
+file, which VRipr never did.
+
+Tags are validated by software nobody here wrote - `ffprobe`, `flac`, `metaflac` and
+python `mutagen` - and a tag write is required not to move a sample: the FLAC stream's MD5
+must be unchanged after tagging, and the WAV `data` chunk byte-identical. Two limits are
+refused out loud rather than worked around. A WAV cannot exceed 4 GiB, because RIFF sizes
+are 32-bit. And `flacenc` 0.5.1 stops at 24 bits and 96 kHz, which are the library's
+limits and not the format's - so a 32-bit capture has no FLAC path today, and narrowing it
+silently is not on offer, because a real 32-bit rip uses the whole low byte and dropping
+eight of them is a decision about dither that belongs to a person. **MP3 and Ogg are not
+built yet.**
+
 ## Layout
 
 ```

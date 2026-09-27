@@ -11,6 +11,12 @@ authors.workspace = true
 [dependencies]
 vcw-types = { workspace = true }
 vcw-project = { workspace = true }
+flacenc = { workspace = true }
+lofty = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

@@ -202,9 +202,14 @@ impl Recorder {
                 (Box::new(capture), reader)
             }
             None => {
-                let (simulated, reader) = Simulated::deterministic(
+                // `setup.format` is honoured here as well as on a real device:
+                // it was silently ignored, so `--format s16` produced an S32
+                // capture and there was no way to make a project the FLAC
+                // encoder would accept without hardware.
+                let (simulated, reader) = Simulated::deterministic_as(
                     SampleRate(setup.rate.unwrap_or(48_000)),
                     setup.channels.unwrap_or(2),
+                    setup.format.unwrap_or(vcw_types::SampleFormat::S32),
                     Pace::RealTime,
                 )?;
                 (Box::new(simulated), reader)
