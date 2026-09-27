@@ -27,7 +27,7 @@ crate, `vcw-contract`, holding §35's typed surface with the units already resol
 Tauri 2 shell in a cargo workspace of its own so that the root workspace's tree cannot
 reach Tauri at all, and D9 locked as 911 lines of generated TypeScript with a drift test
 and two new CI jobs behind it.
-**Branch:** `main` at `fc8436f` (WP-14), with WP-15 **uncommitted** in the working tree.
+**Branch:** `main` at `25ed2fd` (WP-14 and WP-15), clean working tree.
 
 This is the running snapshot: where Phase 0 actually stands, what is proven versus
 assumed, what is waiting on a decision, and what is waiting on hardware. The plan of
@@ -2894,8 +2894,8 @@ is Linux-only too, so the WebKitGTK stack is the only webview this has ever met.
 
 ## Next up
 
-**Where to pick up.** WP-15 is finished and gate-green, and **not yet committed**: the
-working tree holds WP-14 and WP-15 together. The last full gate ran eleven legs -
+**Where to pick up.** WP-15 is finished, gate-green and committed at `25ed2fd` together
+with WP-14, on a clean working tree. The last full gate ran eleven legs -
 `fmt / clippy / test / parity / offline / deny / doc` at the root, `appfmt / appclippy /
 apptest` in `app/src-tauri` and `uicheck` in `app/ui` - at **861 passing, 0 failing, 12
 ignored**, and the em-dash sweep over the changed files reports zero. Two legs caught
@@ -3010,10 +3010,10 @@ the spike harness.
   `19dd459`. WP-01 is committed at `cd8e445`, WP-02 at `acb8835`, WP-03 at `941981a`,
   WP-04 at `95f1f52`, WP-05 at `358c44a`, WP-06 at `b2a517b` and WP-07 at `051a648`.
   WP-08 is committed at `75123ab`, WP-09 at `ae9b6d8` and `807d097`, WP-10 at `91ba45f`,
-  WP-11 at `35fc89d`, WP-12 and WP-13 together at `96438ff` and `b549eab`, and WP-14 at
-  `fc8436f`. **WP-15 is not committed**: `crates/contract/` and `app/` are both untracked
-  in the working tree, along with changes to `Cargo.toml`, `Cargo.lock`, `.gitignore`,
-  `.github/workflows/ci.yml` and `crates/types/src/observation.rs`. WP-13 is the second
+  WP-11 at `35fc89d`, WP-12 and WP-13 together at `96438ff` and `b549eab`, WP-14 at
+  `fc8436f`, and WP-14's documentation with the whole of WP-15 at `25ed2fd` - which is
+  where `crates/contract/`, `app/` and [ADR-0007](adr/0007-rust-typescript-contract.md)
+  land, along with the two new CI jobs. WP-13 is the second
   change to touch the schema - v2, the vinyl data model - so `docs/SCHEMA.md` went with
   it. WP-09 is the
   first change since WP-02 to touch the schema, so `docs/SCHEMA.md` was regenerated with
