@@ -96,9 +96,15 @@ export function App(): React.JSX.Element {
   const [generation, setGeneration] = useState(0);
   const reread = useCallback(() => setGeneration((n) => n + 1), []);
 
+  // Through `store.run`, which is the same reason `store.ts` grew a `catch`:
+  // an unhandled `Promise.all` here meant one failing read left the devices,
+  // the settings, the credentials *and* the library on their previous values
+  // with nothing said about it. Four panels describing a state that has gone.
+  // `run` puts the reason in the status line instead. `store.run` is stable,
+  // so the dependency stays `generation` alone.
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    void store.run(async () => {
       const [found, values, secrets, projects] = await Promise.all([
         api.devices(),
         api.settings(),
@@ -111,7 +117,7 @@ export function App(): React.JSX.Element {
         setCredentials(secrets);
         setLibrary(projects);
       }
-    })();
+    });
     return () => {
       cancelled = true;
     };
@@ -212,6 +218,7 @@ export function App(): React.JSX.Element {
             projects={library}
             selected={selected}
             onSelect={setSelected}
+            onLibraryChanged={reread}
           />
         )}
         {panel === "capture" && (

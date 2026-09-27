@@ -31,11 +31,12 @@
 // overrule a policy that was set too strictly, and the number they need in
 // order to judge it is the number that was already computed.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
 import type { Boundary, Track } from "../bindings/vcw";
 import { useKeys } from "../keys";
+import { step } from "../select";
 import { clock } from "../format";
 import type { Store } from "../store";
 
@@ -102,7 +103,40 @@ export function Tracks({
     ).then(store.reload);
   };
 
+  // Keeps whichever row the arrows just selected on screen. One callback for
+  // both lists: `nearest` only scrolls the pane the row is actually in.
+  const show = useCallback((row: HTMLTableRowElement | null) => {
+    row?.scrollIntoView({ block: "nearest" });
+  }, []);
+
+  // Two lists, two pairs of arrows (WP-16a). Every verb above acts on
+  // `chosen.track` or `chosen.boundary`, and before first light neither could
+  // be set without a click - so `Enter` to edit a track and `Delete` to remove
+  // a marker were bound to actions no keyboard could reach the subject of.
+  const moveTrack = (delta: -1 | 1) => () =>
+    onChoose({
+      ...chosen,
+      track: step(
+        project.tracks.map((row) => row.id),
+        chosen.track,
+        delta,
+      ),
+    });
+  const moveBoundary = (delta: -1 | 1) => () =>
+    onChoose({
+      ...chosen,
+      boundary: step(
+        project.boundaries.map((row) => row.id),
+        chosen.boundary,
+        delta,
+      ),
+    });
+
   useKeys("tracks", {
+    previousTrack: moveTrack(-1),
+    nextTrack: moveTrack(1),
+    previousBoundary: moveBoundary(-1),
+    nextBoundary: moveBoundary(1),
     detect: () => void run(() => api.detectTracks({ side: null, promote: true })),
     deleteMarker: () => {
       if (boundary !== undefined) {
@@ -213,6 +247,7 @@ export function Tracks({
             {project.tracks.map((row) => (
               <tr
                 key={row.id}
+                ref={row.id === chosen.track ? show : null}
                 className={row.id === chosen.track ? "selected" : ""}
                 onClick={() => onChoose({ ...chosen, track: row.id })}
                 onDoubleClick={() => setEditing(row.id)}
@@ -309,6 +344,7 @@ export function Tracks({
             {project.boundaries.map((row) => (
               <tr
                 key={row.id}
+                ref={row.id === chosen.boundary ? show : null}
                 className={[
                   row.id === chosen.boundary ? "selected" : "",
                   row.promoted ? "" : "rejected",

@@ -30,11 +30,12 @@
 // as an error. The release row is written either way, because the album, the
 // label and the catalogue number are right even when the tracklist is not.
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import * as api from "../api";
 import type { Accepted, Candidate } from "../bindings/vcw";
 import { useKeys } from "../keys";
+import { step } from "../select";
 import type { Store } from "../store";
 
 /** The metadata browser. */
@@ -97,7 +98,23 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
     }).then(store.reload);
   };
 
-  useKeys("metadata", { lookup: search, accept });
+  // `accept` acts on `chosen`, which before WP-16a only a click could set - so
+  // §44's choose-release needed a mouse for its middle step. The arrows are
+  // that step. A lookup lands on nothing selected, and the first `ArrowDown`
+  // takes the top candidate, which is the one the providers ranked first.
+  const move = (delta: -1 | 1) => () =>
+    setChosen(step(candidates.map(key), chosen, delta));
+
+  const show = useCallback((row: HTMLTableRowElement | null) => {
+    row?.scrollIntoView({ block: "nearest" });
+  }, []);
+
+  useKeys("metadata", {
+    lookup: search,
+    accept,
+    previousCandidate: move(-1),
+    nextCandidate: move(1),
+  });
 
   return (
     <section className="panel metadata">
@@ -189,6 +206,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
             {candidates.map((row) => (
               <tr
                 key={key(row)}
+                ref={key(row) === chosen ? show : null}
                 className={key(row) === chosen ? "selected" : ""}
                 onClick={() => setChosen(key(row))}
                 onDoubleClick={accept}

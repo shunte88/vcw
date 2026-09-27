@@ -29,6 +29,9 @@ serde_json = { workspace = true }
 tauri = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [features]
 # Tauri decides "am I a dev build?" from this feature and not from the cargo
 # profile: without it the window loads `devUrl` and lands on about:blank when no

@@ -22,11 +22,12 @@
 // in, and asking would be asking a person to guess at the answer the
 // application is about to find.
 
-import { useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 
 import * as api from "../api";
 import type { Project } from "../bindings/vcw";
 import { useKeys } from "../keys";
+import { step } from "../select";
 import { bytes, clock } from "../format";
 import type { Store } from "../store";
 
@@ -36,11 +37,22 @@ export function Browser({
   projects,
   selected,
   onSelect,
+  onLibraryChanged,
 }: {
   store: Store;
   projects: readonly Project[];
   selected: string | null;
   onSelect: (path: string | null) => void;
+  /**
+   * Re-read the library.
+   *
+   * The rows come from `config::projects`, which the root reads; `store.reload`
+   * only re-reads the *open* project. Opening a project can change a row -
+   * upgrading a pre-WP-13 file is the case that made this necessary - so the
+   * list has to be asked again, or the row a person just fixed goes on saying
+   * it needs fixing.
+   */
+  onLibraryChanged: () => void;
 }): React.JSX.Element {
   const [creating, setCreating] = useState(false);
   const [seed, setSeed] = useState({
@@ -51,13 +63,33 @@ export function Browser({
 
   const open = () => {
     if (selected !== null) {
-      void store.open(selected);
+      void store.open(selected).then(onLibraryChanged);
     }
   };
+
+  // Keeps the selected row on screen, so arrowing down a long library does not
+  // walk the selection out of the viewport. `nearest` rather than `center`:
+  // a list that re-centres on every press is a list that will not sit still.
+  const show = useCallback((row: HTMLTableRowElement | null) => {
+    row?.scrollIntoView({ block: "nearest" });
+  }, []);
+
+  // The rows answer the arrows as well as the mouse, because `openProject`
+  // acts on `selected` and nothing else could set it (WP-16a).
+  const move = (delta: -1 | 1) => () =>
+    onSelect(
+      step(
+        projects.map((project) => project.path),
+        selected,
+        delta,
+      ),
+    );
 
   useKeys("browser", {
     openProject: open,
     newProject: () => setCreating(true),
+    previousProject: move(-1),
+    nextProject: move(1),
   });
 
   const create = () => {
@@ -155,27 +187,47 @@ export function Browser({
           </thead>
           <tbody>
             {projects.map((project) => (
-              <tr
-                key={project.path}
-                className={[
-                  project.path === selected ? "selected" : "",
-                  project.path === store.project.path ? "open" : "",
-                  project.problem !== null ? "problem" : "",
-                ]
-                  .filter((name) => name !== "")
-                  .join(" ")}
-                onClick={() => onSelect(project.path)}
-                onDoubleClick={() => void store.open(project.path)}
-                title={project.problem ?? project.path}
-              >
-                <td>{project.album === "" ? project.name : project.album}</td>
-                <td>{project.albumArtist}</td>
-                <td>{project.catalog}</td>
-                <td className="n">{project.sides}</td>
-                <td className="n">{project.tracks}</td>
-                <td className="n">{clock(project.seconds)}</td>
-                <td className="n">{bytes(project.fileBytes)}</td>
-              </tr>
+              <Fragment key={project.path}>
+                <tr
+                  ref={project.path === selected ? show : null}
+                  className={[
+                    project.path === selected ? "selected" : "",
+                    project.path === store.project.path ? "open" : "",
+                    project.problem !== null ? "problem" : "",
+                  ]
+                    .filter((name) => name !== "")
+                    .join(" ")}
+                  onClick={() => onSelect(project.path)}
+                  onDoubleClick={() =>
+                    void store.open(project.path).then(onLibraryChanged)
+                  }
+                  title={project.path}
+                >
+                  <td>{project.album === "" ? project.name : project.album}</td>
+                  <td>{project.albumArtist}</td>
+                  <td>{project.catalog}</td>
+                  <td className="n">{project.sides}</td>
+                  <td className="n">{project.tracks}</td>
+                  <td className="n">{clock(project.seconds)}</td>
+                  <td className="n">{bytes(project.fileBytes)}</td>
+                </tr>
+                {/*
+                  On the row, not in a tooltip. `browse::summarise` promises
+                  "the row a browser draws greyed out with a reason beside
+                  it", and until WP-16a the reason was a `title=` attribute -
+                  so first light showed an amber row of zeros against a file
+                  holding twenty seconds of audio and said nothing about why.
+                  A hover is also no use to somebody driving this by keyboard.
+                */}
+                {project.problem !== null && (
+                  <tr
+                    className="problem-reason"
+                    onClick={() => onSelect(project.path)}
+                  >
+                    <td colSpan={7}>{project.problem}</td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>

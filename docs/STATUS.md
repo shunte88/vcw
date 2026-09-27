@@ -1,7 +1,7 @@
 # VCW - project status
 
 **As of:** 2026-09-27
-**Phase:** 1 is underway - WP-01 through WP-16 are built, all on Linux x86_64 only.
+**Phase:** 1 is underway - WP-01 through WP-16 are built, plus WP-16a, all on Linux x86_64 only.
 All five Phase 0 spikes returned verdicts on their primary platform; gate G0 remains
 open on hardware coverage, WP-05's soak settled D3's firmed-config run, **WP-06 closes
 milestone M1, *it records*,** WP-07 locks D8, WP-08 adds the meters and the §10 fan-out
@@ -32,7 +32,7 @@ criterion asserted by a test that was verified to fail rather than by a reading 
 diff, which is how four workflows that had a binding and no handler were found. It also
 answers the four questions earlier work packages deferred to it, WP-07's, WP-09's,
 WP-11's and WP-13's, each in a file with the argument beside it.
-**Branch:** `main` at `51afd5f` (WP-14 and WP-15); WP-16 is gate-green and uncommitted.
+**Branch:** `main` at `260fcdd` (WP-16), with WP-16a uncommitted in the working tree.
 
 This is the running snapshot: where Phase 0 actually stands, what is proven versus
 assumed, what is waiting on a decision, and what is waiting on hardware. The plan of
@@ -2903,9 +2903,16 @@ is Linux-only too, so the WebKitGTK stack is the only webview this has ever met.
 Built 2026-09-27. §34's panels, §43's keyboard map and §44's workflows. The frontend is
 now **4,486 lines of TypeScript and TSX across 22 files** - eleven panels under
 `app/ui/src/panels/`, a root that owns the layout and nothing else, one store, one keymap,
-two formatting helpers and two test files. The gate has a twelfth leg. **Both halves of
-the exit criterion are met, and both are asserted by a test rather than by a reading of
-the diff.**
+two formatting helpers and two test files. The gate has a twelfth leg.
+
+**The exit criterion was not met, and the test that was supposed to prove it could not
+see why.** That sentence replaces the one that stood here until WP-16a, which claimed
+both halves were met and asserted by tests. First light found otherwise: three of the
+four row selections in the application could only be made with a mouse, so five of §44's
+workflows could not be *started* from the keyboard, whatever the map said. See WP-16a
+below. The claim is corrected rather than deleted because the way it came to be written
+is the interesting part - the tests said what they were asked to say, and what they were
+asked was the wrong question.
 
 ### The keyboard criterion needed three tests, and only two existed
 
@@ -3112,11 +3119,11 @@ clean.
 
 ### What WP-16 leaves behind
 
-- **The window has never been opened.** `pnpm build` succeeds - 271 kB of JS, 6.15 kB of
-  CSS, 49 modules - every command is tested as a function and every binding is tested as
-  a wire, but **nothing has been driven through a real capture by hand and no screenshot
-  exists**. That run is the cheapest outstanding item in the plan and it is the only thing
-  that will say what §44 actually feels like.
+- **The window had never been opened** when this was written. `pnpm build` succeeded -
+  271 kB of JS, 6.15 kB of CSS, 49 modules - every command was tested as a function and
+  every binding as a wire, but nothing had been driven by hand and no screenshot existed.
+  That run was called the cheapest outstanding item in the plan and the only thing that
+  would say what §44 actually feels like. It was both: see WP-16a.
 - **A playback open failure still arrives as a `capture-warning`** coded
   `playback-failed`. Unchanged by WP-16 because the fix is an event on the bus, not a
   workaround in the shell.
@@ -3128,18 +3135,209 @@ clean.
 - **No macOS or Windows.** The frontend is WebKitGTK-only so far, which means the layout
   has met one engine and one font stack.
 
+## Phase 1 - WP-16a, what first light found
+
+Built 2026-09-27, straight after WP-16 and before WP-17, because §12's item 1 said to run
+the thing before building more of it. The window opened, all eight panels drew real data,
+and three defects came out that the 914-test gate had been green through. That is the
+whole argument for the run, so it is worth being precise about why each one was invisible.
+
+### The window works, which is the part that is easy to skip past
+
+Before the defects: the Projects panel listed four real projects with their release,
+catalogue number, side and track counts, length and size; the waveform strip read **1,920
+columns out of a 2.33 GiB capture** spanning 26:05.77 with the track boundaries drawn in;
+the Capture panel reported `48000 Hz s32 x2 (unverified)`, which is S1's
+never-trust-CPAL's-format-report surfacing honestly in the UI rather than being quietly
+smoothed over; Settings read the library root back out of
+`~/.config/dev.vcw.app/settings.json` and listed `discogs / no / VCW_DISCOGS_TOKEN`, so
+§39's "credentials come from the environment and are never written to a project" is
+visible to the operator; Metadata pre-filled from the stored release; and the Keys overlay
+grouped every binding by scope with its §43 reference and a "(not this panel)" annotation.
+None of that needed fixing. Screenshots are under `/data2/vcw-scratch/firstlight/`.
+
+### A selection no key could move, which is the one that changed a claim
+
+*Every §44 workflow completable by keyboard alone* (`PROJECT_PLAN.md:564`). Four lists in
+the application draw a chosen row: the projects, the tracks, the boundaries, the release
+candidates. Three of them could only be chosen by clicking:
+
+| File | Line | What could not be selected |
+|---|---|---|
+| `Browser.tsx` | 167 | the project `Enter` opens |
+| `Tracks.tsx` | 217 | the track `Enter` edits |
+| `Tracks.tsx` | 318 | the boundary `Delete` and the nudges act on |
+| `Metadata.tsx` | 193 | the candidate `Enter` accepts |
+
+A `grep` for `Arrow`, `tabIndex` or `onKeyDown` across `app/ui/src/panels/` returned
+nothing but Capture's two `focus()` calls onto native `<select>` elements. So `navigate`,
+`edit-track-metadata`, `delete-marker`, `move-marker` and `choose-release` all had a
+correct binding, a handler, a help-overlay entry - and no way to reach their own subject.
+
+The keyboard map documented the hole in its own words, which is the detail worth keeping.
+The overlay reads *"Open the selected project"*, *"Edit the selected track"*, *"Delete the
+selected marker"*, *"Accept the selected release"*, and contains **no binding that selects
+anything**. It was legible on screen, in the application, the first time anybody looked.
+
+**Why `wiring.test.ts` passed.** It asserts that every action in `BINDINGS` is a key of
+some `useKeys` handler object, and every one of them was. The test cannot see that a
+handler reads a piece of state, nor that the only thing which wrote that state was
+`onClick`. It answered "is this action handled" correctly; the criterion asks "can a
+person complete this workflow", and those come apart exactly here. Three tests were
+supposed to cover the criterion between them and all three were about *actions*.
+
+So WP-16a adds a fourth, and this one is about *lists*:
+
+```ts
+const lists  = (file) => (SOURCES[file]?.match(/"selected"/g)  ?? []).length;
+const movers = (file) => (SOURCES[file]?.match(/\bstep\(/g)     ?? []).length;
+```
+
+A panel that draws `n` selected rows must contain `n` calls to `step`, the shared mover.
+Both sides are counted out of the source, so a fifth list added without a mover fails in
+the gate rather than in a screenshot. It was mutation-checked by deleting Metadata's mover
+and confirming the failure names the file: `./panels/Metadata.tsx: 1 list(s), 0 mover(s)`.
+The `>= 3` guard beneath it exists so that renaming the `selected` CSS class makes the
+test fail loudly instead of passing vacuously - which is the failure mode of every test
+that reads source text, including the three it is joining.
+
+**The bindings.** `ArrowUp` and `ArrowDown`, unmodified and scoped per panel: the global
+map had already taken the horizontal pair for seeking, and a vertical arrow in a list can
+only mean one thing. The tracks panel needs both its lists, so `Shift` picks the boundary
+one, on the same argument §21's skip uses `Shift` for the coarser move. Eight bindings,
+eight `COVERAGE` entries, and the help overlay picked them all up without being touched -
+it walks the map.
+
+**One mover, not four.** `app/ui/src/select.ts` holds a nine-line `step()` and seven
+tests. It clamps rather than wrapping, because holding `ArrowDown` should come to rest on
+the last row - a list that jumps back to the top is a list you cannot arrive at the bottom
+of. With nothing selected the first press takes an end, which is what makes a panel
+reachable from a standing start and is the entire defect in one sentence. A `current` that
+is no longer in the list - a track that was deleted underneath the selection - is treated
+as a fresh start rather than an error. It knows nothing about tracks, so it is not
+business logic in TypeScript.
+
+Verified by driving the running window: four `ArrowDown` presses and `Enter` opened the
+fourth project; three `ArrowUp` presses walked the selection back up three rows, stepping
+over the reason rows rather than onto them; in the Tracks panel two `ArrowDown` presses
+chose `A2 Hall of Mirrors` while three `Shift+ArrowDown` presses chose the third boundary
+independently, and the evidence pane followed. Every panel's selected row also scrolls
+itself into view with `block: "nearest"`, because arrowing down a long library otherwise
+walks the selection out of the viewport.
+
+### The window can describe a project the shell does not have open
+
+The worst of the three, and nothing in the UI said a word about it.
+
+`transport::open_project` validated a path with `Project::open_read_only` and then
+committed it. A pre-WP-13 project passes that check completely: it is a real `.vcw` with
+the right `application_id`, and `identify()` tests `user_version` only for being *too
+new*. So the path was committed, and then every §29 read against it failed with
+`no such table: releases`, because in v1 there is no such table.
+
+Those five reads were an unhandled `Promise.all` in `store.ts`. One rejection meant
+`setProject` was never reached, so the window carried on showing the **previous** project
+- its title, its track list, its boundaries, its waveform - while `shell.project` pointed
+at the new one. The status line said `Ready.`
+
+That is not a cosmetic divergence. Every edit verb resolves against the shell's path, so
+`place_marker`, `split_track` or `export` would have gone to the file nobody was looking
+at. On a library of real rips that is an edit to the wrong record, and the operator's only
+clue would have been a title bar they had no reason to doubt.
+
+Three changes close it:
+
+- `Project::require_current_schema` (`crates/project/src/sqlite.rs`), raising a new
+  `Error::SchemaNeedsUpgrade`. Deliberately **not** called by `open_read_only`: v1 is a
+  schema this build reads perfectly well, and everything about a capture - the layout, the
+  blocks, the waveform - comes out of it unchanged. Refusing at the door would break the
+  readers that are entirely happy. It is asked by the readers that need a v2 table.
+- `open_project` asks it, and **upgrades rather than refuses**. §16 says a newer version
+  should upgrade an older project without destroying the original, `Project::open` does
+  exactly that inside a transaction, and v1 to v2 adds three empty tables and touches no
+  audio. The path is committed only once the reads are known to work, which is the
+  invariant the bug was the absence of. The decision lives in `ensure_readable`, split out
+  so it can be tested without a Tauri `State`.
+- `store.ts` catches. A failed read clears to `NO_PROJECT` and puts the reason in the
+  status line. An empty window with a reason on it is a bad outcome; a full window
+  describing the wrong record is a worse one.
+
+The root's own four-way read in `App.tsx` had the identical shape - one failure left the
+devices, the settings, the credentials *and* the library on stale values silently - so it
+now goes through `store.run`, which is what puts a reason on screen.
+
+### An amber row of zeros with no reason on it
+
+`browse::summarise`'s doc promises "the row a browser draws greyed out with a reason
+beside it". What it actually had was `title={project.problem ?? project.path}` - a hover
+tooltip. First light showed two amber rows reading `0 sides / 0 tracks / 0:00.00` against
+files holding twenty and six seconds of audio, with no reason anywhere on screen, and no
+reason at all reachable by somebody driving this by keyboard.
+
+The reason is now a row of its own under the row it belongs to, spanning the table because
+it is a sentence and not a cell. And it is a sentence about the project rather than about
+SQLite: `contents` asks `require_current_schema` *before* the reads, so the row reads
+
+> `/data2/vcw-firstlight/six-seconds.vcw was written by an older VCW (schema version 1,
+> this build uses 2). Open it to upgrade it.`
+
+rather than `no such table: releases`. Opening it then does what the row says. Verified
+end to end: `twenty-seconds.vcw` and `six-seconds.vcw` both went from `user_version` 1 to
+2 by four arrow presses and `Enter`, their amber rows healed, and their lengths filled in
+as 0:20.01 and 0:06.02 where both had read 0:00.00. Sides and tracks stay at zero, which
+is correct - a capture-only project has nothing analysed in it yet.
+
+Opening a project now also re-reads the library, through a new `onLibraryChanged` prop.
+`store.reload` only re-reads the *open* project, so without it the row a person had just
+fixed went on saying it needed fixing until something else refreshed the list.
+
+### Two cosmetic ones, and what the second one was really about
+
+The export panel's tickboxes sat a finger's width from their labels. The cause was
+`label input { min-width: 18ch }`: a checkbox got a box eighteen characters wide with the
+glyph drawn at its left edge. Worth recording because the first fix was **wrong** -
+`padding: 0` on the checkbox, which is also true and changed nothing visible, and the
+screenshot afterwards said so. The gap was measured off the frame at ~65 CSS pixels, which
+is 18ch at 13px monospace, which named the real rule.
+
+The `Into` field was too narrow for its own placeholder and clipped it mid-word, which
+reads as a truncated value rather than a hint. It asks for the width with a class rather
+than every text field being widened, because the metadata panel's four short fields fit on
+one row as they are.
+
+### What WP-16a leaves behind
+
+- 914 Rust tests and 24 frontend tests, all twelve gate legs green.
+- One new error variant, one new project method, one new frontend module, one new gate
+  assertion, eight new bindings.
+- The Metadata panel's arrows are covered by `select.ts`'s tests and by the wiring
+  assertion, but were **not** exercised in the running window: reaching a candidate list
+  means a live lookup against MusicBrainz or Discogs, and that is not a call to make
+  unasked. The other three lists were driven by hand.
+- **Nothing here was found by a test.** Every one of the five came out of opening the
+  window and pressing keys, on a tree that was gate-green at 910 tests when the session
+  started. That is the finding behind the findings, and it is the argument for putting
+  WP-17's harness next rather than more features.
+
 ## Next up
 
-**Where to pick up.** WP-16 is finished and gate-green on an uncommitted tree; WP-14 and
-WP-15 are committed at `51afd5f`. The last full gate ran twelve legs -
+**Where to pick up.** WP-16 is committed at `260fcdd`. **WP-16a is finished and
+gate-green but not committed** - it is the working tree, and it corrects WP-16's exit
+criterion rather than adding to it, so read its section above before anything else. The
+last full gate ran twelve legs -
 `fmt / clippy / test / parity / offline / deny / doc` at the root, `appfmt / appclippy /
-apptest` in `app/src-tauri` and `uicheck / uitest` in `app/ui` - at **910 passing, 0
-failing, 12 ignored** in Rust and 16 passing in the frontend, and the em-dash sweep over
-the changed files reports zero. `/tmp/gate.sh` is the script. Four legs caught something
-on a first run during WP-16 and all four are fixed: `fmt` and `appfmt` on edits made in a
-previous session, `doc` on an intra-doc link left dangling when a file's imports were
-trimmed, and `uicheck` on a test that reached for `node:fs` in a frontend that
-deliberately has no Node types.
+apptest` in `app/src-tauri` and `uicheck / uitest` in `app/ui` - at **914 passing, 0
+failing, 12 ignored** in Rust and 24 passing in the frontend, and the em-dash sweep over
+the changed files reports zero. `/data2/vcw-scratch/gate.sh` is the durable copy of the
+script.
+
+**First light has been run**, which is what the item below used to ask for, and it is the
+reason WP-16a exists. It cost about an hour and found five things in a tree that was
+gate-green at 910 tests, two of which no test in the repository could have caught by
+construction. The library it ran against is `/data2/vcw-firstlight` - four projects, one
+of them a 2.33 GiB real side - and `~/.config/dev.vcw.app/settings.json` points at it.
+Both pre-WP-13 projects in it have now been upgraded to v2 by being opened, so re-running
+the schema part of that exercise needs a fresh v1 copy.
 
 **The single most valuable thing left is not code.** WP-16 closed the last of Phase 1's
 UI work, which means every stage of both §50's chain and §44's workflows now exists - and

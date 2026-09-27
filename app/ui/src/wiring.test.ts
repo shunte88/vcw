@@ -127,6 +127,46 @@ describe("the keyboard map's wiring", () => {
     ).toEqual([]);
   });
 
+  // WP-16a. The two assertions above both passed while five of §44's workflows
+  // needed a mouse, and the reason is worth stating precisely, because it is
+  // the class of hole a source-reading test is prone to: they check that an
+  // *action* has a handler. They cannot see that the handler reads a piece of
+  // state, and that the only thing which set that state was `onClick`.
+  //
+  // `openProject` had a handler. It opened `selected`, and `selected` was set
+  // by clicking a row and by nothing else, so `Enter` on a fresh window did
+  // nothing at all. The same was true of the chosen track, the chosen boundary
+  // and the chosen release candidate.
+  //
+  // So the invariant is about lists rather than actions: a panel that draws a
+  // selected row must have a way to move that selection with a key. Both sides
+  // are counted from the source - `"selected"` is the class the CSS uses for
+  // the chosen row, and `step` is the only thing that moves a selection - so a
+  // fifth list added without a mover fails here rather than in a screenshot.
+  it("can move every selection from the keyboard", () => {
+    const lists = (file: string) =>
+      (SOURCES[file]?.match(/"selected"/g) ?? []).length;
+    const movers = (file: string) =>
+      (SOURCES[file]?.match(/\bstep\(/g) ?? []).length;
+
+    const files = Object.keys(SOURCES).filter((file) => lists(file) > 0);
+    expect(
+      files.length,
+      "no selectable list found at all, which means `selected` is no longer " +
+        "the class for a chosen row and this test is now vacuous",
+    ).toBeGreaterThanOrEqual(3);
+
+    const mouseOnly = files
+      .filter((file) => movers(file) !== lists(file))
+      .map((file) => `${file}: ${lists(file)} list(s), ${movers(file)} mover(s)`);
+    expect(
+      mouseOnly,
+      "these panels draw a selected row that no key can move. Every verb " +
+        "that acts on a selection is unreachable without a mouse, which is " +
+        "§44's \"completable by keyboard alone\" failing quietly",
+    ).toEqual([]);
+  });
+
   it("has a handler for every §44 workflow", () => {
     // The same assertion from the requirement's end rather than the map's, so
     // that a workflow whose only binding lost its handler is named as a

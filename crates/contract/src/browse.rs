@@ -42,8 +42,9 @@
 //!
 //! The browser's job is to describe a directory a person keeps records in, and
 //! such a directory always contains surprises: a partial copy, a `.vcw` written
-//! by a newer schema, a file being captured into right now, a name that happens
-//! to end in `.vcw` and is not a project at all. [`summarise`] answers with a
+//! by a newer schema, one written by an older one that has not been upgraded
+//! yet, a file being captured into right now, a name that happens to end in
+//! `.vcw` and is not a project at all. [`summarise`] answers with a
 //! row for every one of them, carrying `problem` rather than an error, because
 //! the alternative is a browser that silently omits the file the person is
 //! looking for.
@@ -148,6 +149,13 @@ pub fn summarise(path: &Path) -> view::Project {
 /// site where a transposed pair would typecheck.
 fn contents(path: &Path) -> vcw_project::Result<impl FnOnce(&mut view::Project)> {
     let project = Project::open_read_only(path)?;
+
+    // Asked before the reads rather than after one of them fails, because the
+    // §29 tables are what this function is for and a v1 file has none of them.
+    // Without it the row's reason is SQLite's `no such table: releases`, which
+    // is a sentence about a schema in front of somebody looking for a record.
+    project.require_current_schema()?;
+
     let conn = project.conn();
 
     let release = crate::read::release(conn)?;
@@ -220,6 +228,69 @@ mod tests {
         assert_eq!(names.len(), 2, "got {names:?}");
         assert!(names.contains(&"a".to_owned()));
         assert!(names.contains(&"b".to_owned()));
+    }
+
+    /// Turns a project back into the v1 it would have been before WP-13.
+    ///
+    /// Drops the §29 tables and winds `user_version` back, which is what a real
+    /// project captured by an earlier build looks like on disk. Cheaper and more
+    /// honest than keeping a binary fixture in the tree, because it is built by
+    /// the same migration set it is testing against.
+    fn wind_back_to_v1(path: &Path) {
+        let project = Project::open(path).expect("opening the project");
+        project
+            .conn()
+            .execute_batch(
+                // Everything migration 2 creates, dropped in the order the
+                // foreign keys point, then the bookkeeping that says it ran.
+                "DROP TABLE IF EXISTS tracks;
+                 DROP TABLE IF EXISTS track_boundaries;
+                 DROP TABLE IF EXISTS sides;
+                 DROP TABLE IF EXISTS release_artwork;
+                 DROP TABLE IF EXISTS releases;
+                 DELETE FROM schema_migrations WHERE version >= 2;
+                 PRAGMA user_version = 1;",
+            )
+            .expect("winding the schema back");
+        project.close().expect("closing it again");
+    }
+
+    /// First light found this one: a v1 project listed as zeros with no reason.
+    ///
+    /// The counts staying at zero is right - there is nothing to count - but the
+    /// row has to say why, and it has to say it in a sentence about the project
+    /// rather than about SQLite. A browser draws this one amber with the reason
+    /// beside it, and opening it upgrades it (§16).
+    #[test]
+    fn a_project_from_before_the_vinyl_tables_says_it_needs_upgrading() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let path = dir.path().join("older.vcw");
+        Project::create(&path)
+            .expect("creating the project")
+            .close()
+            .expect("closing it");
+        wind_back_to_v1(&path);
+
+        let listed = library(dir.path());
+        assert_eq!(listed.len(), 1);
+        let row = &listed[0];
+        let problem = row.problem.as_deref().expect("a reason");
+        assert!(
+            problem.contains("older VCW"),
+            "the reason should name the cause, got {problem:?}"
+        );
+        assert!(
+            problem.contains("Open it to upgrade it"),
+            "and say what to do about it, got {problem:?}"
+        );
+        assert!(
+            !problem.contains("no such table"),
+            "and not leak SQLite at a person, got {problem:?}"
+        );
+        assert_eq!(row.sides, 0);
+        assert_eq!(row.tracks, 0);
+        assert_eq!(row.name, "older", "it is still listed, and still named");
+        assert!(row.file_bytes > 0, "and still sized from the filesystem");
     }
 
     /// A real project reports what is in it.

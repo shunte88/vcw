@@ -102,6 +102,7 @@ export function Export({
         <label>
           Into
           <input
+            className="wide"
             value={into}
             placeholder="a directory that will be created if it is not there"
             onChange={(event) => setInto(event.target.value)}

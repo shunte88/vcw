@@ -349,26 +349,50 @@ export function useEngine(): Store {
 
   // The project rows. Read on mount so a reloaded window finds an engine that
   // is already armed, which is what `open_path` is for.
+  //
+  // The catch is not defensive tidiness, it is the fix for what first light
+  // found. These five reads used to be an unhandled `Promise.all`: if one
+  // rejected, `setProject` was never reached and the window carried on
+  // displaying the *previous* project - its title, its tracks, its waveform -
+  // while the shell pointed at the new one. Every edit verb resolves against
+  // the shell's path, so the next marker or split would have gone to the
+  // project nobody was looking at.
+  //
+  // So a failed read clears to `NO_PROJECT` and says why. An empty window with
+  // a reason on it is a bad outcome; a full window describing the wrong record
+  // is a worse one.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const path = await api.openPath();
-      if (cancelled) {
-        return;
-      }
-      if (path === null) {
+      try {
+        const path = await api.openPath();
+        if (cancelled) {
+          return;
+        }
+        if (path === null) {
+          setProject(NO_PROJECT);
+          return;
+        }
+        const [captures, sides, tracks, boundaries, release] =
+          await Promise.all([
+            api.captures(),
+            api.sides(),
+            api.tracks(),
+            api.boundaries(),
+            api.release(),
+          ]);
+        if (!cancelled) {
+          setProject({ path, captures, sides, tracks, boundaries, release });
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
         setProject(NO_PROJECT);
-        return;
-      }
-      const [captures, sides, tracks, boundaries, release] = await Promise.all([
-        api.captures(),
-        api.sides(),
-        api.tracks(),
-        api.boundaries(),
-        api.release(),
-      ]);
-      if (!cancelled) {
-        setProject({ path, captures, sides, tracks, boundaries, release });
+        setEngine((previous) => ({
+          ...previous,
+          refusal: api.asFailure(error),
+        }));
       }
     })();
     return () => {

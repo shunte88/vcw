@@ -48,6 +48,10 @@ tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
 thiserror = "2"
 
+# Tests only. Every fixture a shell test needs is a project file on disk, and
+# WP-16a added the first of them.
+tempfile = "3"
+
 # The same lints as the product workspace, deliberately: the shell is held to
 # the repository's standard and not to one of its own, and a rule that fires
 # here but not in `crates/` would make moving code between them an argument

@@ -204,6 +204,16 @@ button.locked {
   outline-offset: 1px;
 }
 
+/*
+ * Wide enough for a path. Asked for, rather than given to every text field:
+ * the export panel's `Into` placeholder is a sentence and was clipped mid-word
+ * at the intrinsic width, which reads as a truncated value rather than a hint,
+ * while the metadata panel's four short fields fit on one row as they are.
+ */
+input.wide {
+  min-width: 34ch;
+}
+
 .fields,
 .seed {
   display: flex;
@@ -242,6 +252,25 @@ label.tick {
   flex-direction: row;
   align-items: center;
   gap: 0.4rem;
+}
+
+/*
+ * A tickbox is not a text field, and the two rules above are written for text
+ * fields. `min-width: 18ch` is the one that mattered: it makes the checkbox's
+ * *box* eighteen characters wide while the glyph stays drawn at the left of
+ * it, so first light showed every tickbox in the export panel sitting a
+ * finger's width from the words it belongs to - and a label that far from its
+ * control is a label for the wrong one. The padding goes for the same reason.
+ *
+ * The attribute selector outranks `label input`, so this wins wherever a
+ * tickbox appears rather than only inside `.tick`.
+ */
+input[type="checkbox"],
+input[type="radio"] {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  flex: none;
 }
 
 textarea {
@@ -332,6 +361,23 @@ code {
 
 .rows tbody tr.problem {
   color: var(--warn);
+}
+
+/*
+ * The reason under the row it belongs to, spanning the table, because it is a
+ * sentence and not a cell. No hover state and no selected state: it is part of
+ * the row above it rather than a row of its own to arrow onto.
+ */
+.rows tbody tr.problem-reason td {
+  padding-top: 0;
+  padding-bottom: 0.4rem;
+  color: var(--warn);
+  white-space: normal;
+  font-size: 0.9em;
+}
+
+.rows tbody tr.problem-reason:hover {
+  background: none;
 }
 
 /* A rejected boundary is dimmed, not hidden: see the argument in Tracks.tsx. */

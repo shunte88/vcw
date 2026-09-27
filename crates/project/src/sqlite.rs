@@ -171,6 +171,35 @@ impl Project {
         Ok(migrate::current_version(&self.conn)?)
     }
 
+    /// Refuses a project older than this build, for a reader that needs v2.
+    ///
+    /// The §29 tables - `releases`, `sides`, `tracks` - do not exist in v1, so a
+    /// reader that queries them against a v1 file gets `no such table` from
+    /// SQLite. That is a true statement about a database and a useless one to put
+    /// in front of a person, so the readers that need those tables ask this first
+    /// and get [`Error::SchemaNeedsUpgrade`], which says what to do about it.
+    ///
+    /// Deliberately not called by [`Project::open_read_only`]: a v1 project is a
+    /// real project, and everything about a capture - the layout, the blocks, the
+    /// waveform - reads out of it unchanged. Refusing at the door would break the
+    /// readers that are perfectly happy.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::SchemaNeedsUpgrade`] if the file is older than
+    /// [`SCHEMA_VERSION`], or the underlying pragma read if it fails.
+    pub fn require_current_schema(&self) -> Result<()> {
+        let found = self.schema_version()?;
+        if found < SCHEMA_VERSION {
+            return Err(Error::SchemaNeedsUpgrade {
+                path: self.path.clone(),
+                found,
+                supported: SCHEMA_VERSION,
+            });
+        }
+        Ok(())
+    }
+
     /// The project-format version last written to the file (§16).
     pub fn format_version(&self) -> Result<Option<u32>> {
         Ok(meta::get(&self.conn, meta::FORMAT_VERSION)?.and_then(|v| v.parse().ok()))

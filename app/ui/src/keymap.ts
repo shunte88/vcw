@@ -257,6 +257,70 @@ export const BINDINGS = {
     scope: "browser",
     label: "Create a project",
   },
+  // --- Moving a selection ---------------------------------------------------
+  //
+  // WP-16a added these, and first light is why. Every binding above that acts
+  // on "the selected" something - open the selected project, edit the selected
+  // track, delete the selected marker, accept the selected release - had a
+  // handler, and `wiring.test.ts` proved it. What none of them had was a way to
+  // *make* the selection: the rows answered `onClick` and nothing else, so
+  // five of §44's workflows needed a mouse to reach their own first step.
+  //
+  // `ArrowUp` and `ArrowDown`, unmodified, which are free because the global
+  // seek took the horizontal pair. They are scoped per panel rather than
+  // global: a list is the only thing a vertical arrow could mean, and what the
+  // list holds differs, so the label can say what moves.
+  //
+  // The tracks panel has two lists and needs both. `Shift` picks the boundary
+  // list, on the same argument §21's skip uses Shift for the coarser move.
+  previousProject: {
+    chord: "ArrowUp",
+    workflow: "navigate",
+    scope: "browser",
+    label: "Select the project above",
+  },
+  nextProject: {
+    chord: "ArrowDown",
+    workflow: "navigate",
+    scope: "browser",
+    label: "Select the project below",
+  },
+  previousTrack: {
+    chord: "ArrowUp",
+    workflow: "edit-track-metadata",
+    scope: "tracks",
+    label: "Select the track above",
+  },
+  nextTrack: {
+    chord: "ArrowDown",
+    workflow: "edit-track-metadata",
+    scope: "tracks",
+    label: "Select the track below",
+  },
+  previousBoundary: {
+    chord: "Shift+ArrowUp",
+    workflow: "move-marker",
+    scope: "tracks",
+    label: "Select the marker above",
+  },
+  nextBoundary: {
+    chord: "Shift+ArrowDown",
+    workflow: "move-marker",
+    scope: "tracks",
+    label: "Select the marker below",
+  },
+  previousCandidate: {
+    chord: "ArrowUp",
+    workflow: "choose-release",
+    scope: "metadata",
+    label: "Select the candidate above",
+  },
+  nextCandidate: {
+    chord: "ArrowDown",
+    workflow: "choose-release",
+    scope: "metadata",
+    label: "Select the candidate below",
+  },
   help: {
     chord: "?",
     also: "F1",
@@ -347,17 +411,24 @@ export const COVERAGE: Record<Workflow, readonly Action[]> = {
   seek: ["seekBack", "seekForward"],
   skip: ["skipBack", "skipForward"],
   "place-marker": ["marker"],
-  "move-marker": ["nudgeBack", "nudgeForward"],
+  "move-marker": [
+    "nudgeBack",
+    "nudgeForward",
+    "previousBoundary",
+    "nextBoundary",
+  ],
   "delete-marker": ["deleteMarker"],
   "detect-tracks": ["detect"],
-  "edit-track-metadata": ["rename"],
+  "edit-track-metadata": ["rename", "previousTrack", "nextTrack"],
   "search-metadata": ["lookup"],
-  "choose-release": ["accept"],
+  "choose-release": ["accept", "previousCandidate", "nextCandidate"],
   export: ["exportRun"],
   checkpoint: ["checkpoint"],
   navigate: [
     "openProject",
     "newProject",
+    "previousProject",
+    "nextProject",
     "gotoBrowser",
     "gotoCapture",
     "gotoTracks",

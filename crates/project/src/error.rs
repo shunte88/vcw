@@ -72,6 +72,30 @@ pub enum Error {
         supported: u32,
     },
 
+    /// The project is older than this build, and the caller needed it current.
+    ///
+    /// Not raised by opening: v1 is a schema this build reads perfectly well, and
+    /// a capture-only project has nothing missing from it. It is raised by a
+    /// reader that needs a v2 table - a release, a side, a track - and found a
+    /// file written before those existed.
+    ///
+    /// Separate from [`Error::SchemaTooNew`] because the answer is the opposite
+    /// one. A project from the future cannot be read at all; this one upgrades
+    /// (§16), so the message says so rather than telling a person their project
+    /// is broken.
+    #[error(
+        "{path} was written by an older VCW (schema version {found}, this build uses \
+         {supported}). Open it to upgrade it."
+    )]
+    SchemaNeedsUpgrade {
+        /// The file we were asked to read.
+        path: PathBuf,
+        /// The schema version in the file.
+        found: u32,
+        /// The version the reader needed.
+        supported: u32,
+    },
+
     /// A migration failed, and was rolled back.
     #[error("migration to schema version {version} ({description}) failed and was rolled back")]
     Migration {
