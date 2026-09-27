@@ -1,0 +1,67 @@
+# The shell's workspace, which is deliberately not the product's.
+#
+# `app/src-tauri` is the only crate in it, and it is here rather than in the root
+# workspace for two reasons.
+#
+# The first is WP-15's exit criterion: core crates have zero Tauri dependency,
+# enforced in CI. The `core-is-ui-free` job runs `cargo tree --workspace` at the
+# root and fails if `tauri`, `wry`, `tao` or `webkit2gtk` appears anywhere in it.
+# That check is only meaningful while the shell is outside that workspace - as a
+# member it would put Tauri in the tree by construction and the job would have to
+# be weakened to a per-crate allow-list. A separate workspace makes the property
+# structural rather than policed.
+#
+# The second is the CI matrix. The product is built on four targets; WebKitGTK is
+# a Linux system dependency that every one of those jobs would then have to
+# install, for a crate three of them cannot run. The shell has a job of its own.
+#
+# It is a peer of the product, not a child: `vcw-app` depends on the core crates
+# by path and never the other way round.
+[workspace]
+resolver = "3"
+members = ["src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "VCW - The Vinyl Capture Workstation"
+license = "MIT"
+repository = "https://github.com/shunte88/vcw"
+authors = ["Stue Hunter"]
+
+[workspace.dependencies]
+# The core, by path. No version key: these are never published from here, and a
+# version would let a stale path resolve to something from crates.io.
+vcw-audio = { path = "../crates/audio" }
+vcw-contract = { path = "../crates/contract" }
+vcw-core = { path = "../crates/core" }
+vcw-export = { path = "../crates/export" }
+vcw-project = { path = "../crates/project" }
+vcw-signal = { path = "../crates/signal" }
+vcw-types = { path = "../crates/types" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }
+thiserror = "2"
+
+# The same lints as the product workspace, deliberately: the shell is held to
+# the repository's standard and not to one of its own, and a rule that fires
+# here but not in `crates/` would make moving code between them an argument
+# about lints. See the root `Cargo.toml`.
+[workspace.lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+todo = "warn"
+dbg_macro = "warn"
+
+[profile.release]
+opt-level = 3
+lto = true
+debug = 1

@@ -1,6 +1,8 @@
 # ADR-0003: Cargo workspace layout and crate naming
 
-**Status:** Accepted 2026-09-25.
+**Status:** Accepted 2026-09-25. Amended 2026-09-27 by
+[ADR-0007](0007-rust-typescript-contract.md), which adds an eleventh crate and a third
+workspace. The layering rule here is unchanged.
 **Requirements:** §2, §6, §4.5 · **Work package:** WP-01
 
 ## Context
@@ -90,4 +92,7 @@ in `docs/spikes/` stay reproducible rather than rotting quietly.
 - `vcw-cli` declares only what it links. `vcw-core` joins its dependencies at WP-07,
   when there is an engine to drive, rather than sitting unused in the manifest.
 - `app/` does not exist yet. It arrives with the Tauri shell at WP-15, and the CI rule
-  above is what keeps the boundary from eroding once it does.
+  above is what keeps the boundary from eroding once it does. **It did arrive, on
+  2026-09-27, as a workspace of its own** rather than as a member of this one - which is
+  what keeps the CI rule a statement about structure instead of an allow-list. See
+  [ADR-0007](0007-rust-typescript-contract.md).

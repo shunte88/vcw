@@ -2,13 +2,18 @@
 # §6's leaves as modules - see docs/adr/0003-workspace-layout.md for why the grouping
 # stops there rather than going all the way down to ~35 crates.
 #
+# The Tauri shell is a separate workspace under `app/`, for the same reason and one
+# more: WP-15's exit criterion is that no core crate depends on Tauri, and the
+# `core-is-ui-free` job proves it by walking this workspace's whole tree. A shell
+# inside it would put Tauri there by construction. See `app/Cargo.toml`.
+#
 # The Phase 0 spikes are a separate workspace under `spikes/`. They are finished
 # evidence, not living code: excluding them keeps the product's CI matrix about the
 # product, and a Linux-only job still compiles them so they cannot rot silently.
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-exclude = ["spikes"]
+exclude = ["app", "spikes"]
 
 [workspace.package]
 version = "0.1.0"
@@ -25,6 +30,7 @@ authors = ["Stue Hunter"]
 # Internal. Versioned as well as pathed so the crates stay publishable if that ever
 # becomes useful, and so a stale path cannot resolve to the wrong thing.
 vcw-audio = { path = "crates/audio", version = "0.1.0" }
+vcw-contract = { path = "crates/contract", version = "0.1.0" }
 vcw-core = { path = "crates/core", version = "0.1.0" }
 vcw-export = { path = "crates/export", version = "0.1.0" }
 vcw-fingerprint = { path = "crates/fingerprint", version = "0.1.0" }
@@ -64,6 +70,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
 thiserror = "2"
+# D9's half of the Rust/TypeScript contract: the TS declarations in
+# `app/ui/src/bindings/` are generated from the `vcw-contract` types by a test,
+# and a drift check fails the build when the two disagree. Derive-only and
+# permissive, with no runtime of its own - the whole tree it adds is syn, quote
+# and thiserror, all of which were already here.
+ts-rs = "12"
 # The blocking HTTP client behind the `net` feature of vcw-metadata (§40). Blocking
 # because VCW has no async runtime and is not getting one for two REST APIs; rustls
 # rather than native-tls so a Windows build needs no OpenSSL and the license

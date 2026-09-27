@@ -1,0 +1,45 @@
+[package]
+name = "vcw-app"
+description = "The Tauri 2 shell: a window, and the glue between it and the VCW core (§5, §35)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "vcw-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+vcw-audio = { workspace = true }
+vcw-contract = { workspace = true }
+vcw-core = { workspace = true }
+vcw-export = { workspace = true }
+vcw-project = { workspace = true }
+vcw-signal = { workspace = true }
+vcw-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+# Tauri decides "am I a dev build?" from this feature and not from the cargo
+# profile: without it the window loads `devUrl` and lands on about:blank when no
+# vite server is running. The tauri CLI adds it for release builds, but a
+# `cargo build --release` driven from CI or from a gate script does not use the
+# CLI, so it is on by default. `--no-default-features` gets the dev-server
+# behaviour back, which is what `pnpm tauri dev` wants.
+#
+# S3 lost an afternoon to this. It is the reason the spike's binary opened a
+# blank window and reported perfect IPC latency.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[lints]
+workspace = true

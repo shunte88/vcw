@@ -28,7 +28,7 @@ Pre-0.1. Phase 0 - proving the foundations before building on them.
 Full snapshot - what is proven, what is assumed, what is waiting on hardware or a
 decision - in [docs/STATUS.md](docs/STATUS.md).
 
-Phase 1 has started. The workspace scaffold (WP-01) is in place: ten `vcw-*` crates
+Phase 1 has started. The workspace scaffold (WP-01) is in place: eleven `vcw-*` crates
 under `crates/`, a four-target CI matrix, and the licence and toolchain gates. Schema v1
 (WP-02) is built and [documented](docs/SCHEMA.md); device enumeration (WP-03) and
 capture (WP-04) are built on Linux x86_64, with Windows and macOS still unverified.
@@ -284,11 +284,28 @@ silently is not on offer, because a real 32-bit rip uses the whole low byte and 
 eight of them is a decision about dither that belongs to a person. **MP3 and Ogg are not
 built yet.**
 
+The desktop shell (WP-15) puts a window in front of all of it. There is now an eleventh
+crate, `vcw-contract`, which is the typed command and event surface: every unit is
+resolved on the Rust side, so a view is handed `A3`, its seconds and its confidence
+rather than the arithmetic that produces them. The shell itself lives in `app/`, a cargo
+workspace of its own, which is what makes the rule *core crates have zero Tauri
+dependency* true by construction rather than by discipline - `cargo tree --workspace` at
+the repository root cannot reach Tauri, and CI fails if it ever can. The TypeScript the
+frontend compiles against is generated from those Rust types and committed, with a test
+that fails when the two disagree. What is in the window today is a smoke page - a device
+table, transport buttons, a meter readout and an event log - not WP-16's UI.
+
 ## Layout
 
 ```
 crates/          the product - one crate per REQUIREMENTS §6 group, §6's leaves
                  as modules. See docs/adr/0003-workspace-layout.md
+crates/contract/ the typed command, event and view surface (§35) - what the shell
+                 and `vcw --json` both answer with, so neither computes a unit twice
+app/             the desktop shell: a separate workspace, so the product's own
+                 workspace tree cannot reach Tauri. `app/src-tauri` is the Rust
+                 side, `app/ui` the React frontend, and
+                 `app/ui/src/bindings/vcw.d.ts` is generated - do not edit by hand
 spikes/          Phase 0 evidence, a separate workspace, excluded from the product
 docs/SCHEMA.md   the .vcw schema, generated - do not edit by hand
 docs/adr/        architecture decision records
@@ -414,6 +431,36 @@ self-identifying User-Agent both services ask for.
 
 Requires a Rust toolchain at 1.90 or newer and, on Linux, `libasound2-dev`. SQLite is
 compiled in, so there is no system SQLite to match.
+
+### The desktop shell
+
+The shell is its own workspace, so the commands above do not touch it and `cargo build
+--workspace` at the root needs no webview at all. It needs node 22 and pnpm, and on Linux
+`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev` and
+`librsvg2-dev`:
+
+```sh
+cd app/ui && pnpm install && pnpm build   # the frontend must exist before the Rust build
+cd ../src-tauri && cargo run              # or `cargo tauri dev` for a live reload
+```
+
+`tauri-build` fails the Rust build when `frontendDist` is missing, which is why the
+frontend goes first. A release build must keep the `custom-protocol` feature on - it is
+in the default set, and it is what tells Tauri it is not a development build; without it
+the binary loads `devUrl` and opens on a blank page.
+
+The TypeScript declarations the frontend compiles against are generated from the Rust
+types in `crates/contract` and committed, so `app/ui` typechecks with no Rust toolchain
+present. After changing a command, an event or a view model:
+
+```sh
+VCW_BLESS=1 cargo test -p vcw-contract --test bindings   # rewrite the declarations
+cargo test -p vcw-contract --test bindings               # and the drift check passes
+```
+
+CI runs the same test and then `git diff --exit-code` over the generated file, so a
+regenerated-but-uncommitted contract fails the build rather than reaching a frontend that
+believes something else.
 
 The spikes build separately:
 

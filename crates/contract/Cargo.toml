@@ -1,0 +1,29 @@
+[package]
+name = "vcw-contract"
+description = "The typed command, event and view-model surface between the Rust core and any UI (§35, D9)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+vcw-audio = { workspace = true }
+vcw-core = { workspace = true }
+vcw-export = { workspace = true }
+vcw-metadata = { workspace = true }
+vcw-project = { workspace = true }
+vcw-signal = { workspace = true }
+vcw-types = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+ts-rs = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

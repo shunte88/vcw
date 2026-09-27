@@ -1,7 +1,7 @@
 # VCW - project status
 
 **As of:** 2026-09-27
-**Phase:** 1 is underway - WP-01 through WP-14 are built, all on Linux x86_64 only.
+**Phase:** 1 is underway - WP-01 through WP-15 are built, all on Linux x86_64 only.
 All five Phase 0 spikes returned verdicts on their primary platform; gate G0 remains
 open on hardware coverage, WP-05's soak settled D3's firmed-config run, **WP-06 closes
 milestone M1, *it records*,** WP-07 locks D8, WP-08 adds the meters and the §10 fan-out
@@ -22,8 +22,12 @@ halves of its exit criterion asserted separately: exported bytes compared agains
 recorded blocks for three stored formats, and the tags read back by four pieces of
 software nobody here wrote. Every stage of §50's chain now has a CLI verb behind it,
 which is what **M4** asks for; what remains for M4 is running the chain end to end in one
-pass on a real record.
-**Branch:** `main` at `b549eab` (WP-13), with WP-14 **uncommitted** in the working tree.
+pass on a real record, and **WP-15 puts a window in front of all of it** - an eleventh
+crate, `vcw-contract`, holding §35's typed surface with the units already resolved, a
+Tauri 2 shell in a cargo workspace of its own so that the root workspace's tree cannot
+reach Tauri at all, and D9 locked as 911 lines of generated TypeScript with a drift test
+and two new CI jobs behind it.
+**Branch:** `main` at `fc8436f` (WP-14), with WP-15 **uncommitted** in the working tree.
 
 This is the running snapshot: where Phase 0 actually stands, what is proven versus
 assumed, what is waiting on a decision, and what is waiting on hardware. The plan of
@@ -307,6 +311,24 @@ silently. `probe.py` reports `project_rate` and `track_rates` as separate fields
   Still unmeasured: `project_history` generation 2 (needs one `.aup4` saved a second
   time), a project *created* natively in Audacity 4 rather than converted, an envelope
   with more than one point or a non-unity `val`, and a populated `autosave`.
+
+## Decisions resolved 2026-09-27
+
+1. **D9 locked** ([ADR-0007](adr/0007-rust-typescript-contract.md)): `ts-rs` 12, one
+   generated and committed declaration file, a drift test, and `git diff --exit-code`
+   over it in CI. `specta` lost on WP-15's exit criterion rather than on merit - its
+   Tauri half generates bindings from the command definitions, which would require the
+   crate declaring them to depend on Tauri, and that crate is a core crate.
+2. **The typed surface is a core crate, and the shell is a workspace of its own.** Two
+   halves of one decision: `vcw-contract` resolves every unit on the Rust side so that
+   §2's rule has nothing left to violate, and `app/` sits outside the root workspace so
+   that `core-is-ui-free` stays a statement about structure. ADR-0007 amends
+   [ADR-0003](adr/0003-workspace-layout.md), which had said `app/` would arrive at WP-15
+   and left open whether it would be a member.
+3. **64-bit integers cross the boundary as `number`.** `serde_json` writes a frame count
+   as a JSON number and `JSON.parse` returns a double, so `bigint` - which is `ts-rs`'s
+   default - is honest about the type and wrong about the value. The accepted ceiling is
+   2^53 frames, about a billion years at 192 kHz.
 
 ## Decisions resolved 2026-09-25
 
@@ -2667,24 +2689,242 @@ still only a label and does not resolve a track's span, which is why the CLI cro
 asks for a region in seconds and then asserts the span it got. Linux x86_64 only, like
 everything else in Phase 1.
 
+## Phase 1 - WP-15, the Tauri 2 shell
+
+Built 2026-09-27. §5's desktop shell, §35's command and event surface, and D9's generated
+TypeScript with a drift check. Two new things in the tree: **`crates/contract`**, the
+eleventh crate, which is the typed surface itself; and **`app/`**, a cargo workspace of its
+own holding the Tauri binary and a React frontend. **Exit criterion met, and structurally
+rather than by discipline** - `cargo tree --workspace` at the repository root cannot reach
+Tauri, because the shell is not a member of that workspace.
+
+### The exit criterion is a layout decision, not a lint
+
+*Core crates have zero Tauri dependency (enforced in CI).* The `core-is-ui-free` job has
+existed since WP-01: it walks `cargo tree --workspace` at the root and fails if `tauri`,
+`wry`, `tao` or `webkit2gtk` appears anywhere in it. That check is only worth running
+while the shell is outside the workspace, so `app/` is excluded from the root and carries
+its own `Cargo.toml`, with `crates/*` as path dependencies. Put the shell inside and Tauri
+is in the tree by construction, and the job has to be weakened to an allow-list of crates
+it is willing to forgive - which is the moment the criterion stops meaning anything.
+
+The second benefit is the four-target matrix. WebKitGTK is a Linux system library; the
+product's own jobs should not have to install it to compile a crate that is glue.
+
+The cost is paid honestly: root `fmt`, `clippy`, `test` and `doc` do not reach `app/`, so
+the gate has four more legs (`appfmt`, `appclippy`, `apptest` and the frontend's
+`uicheck`) and CI has two more jobs - **`shell`**, which installs the WebKitGTK stack and
+runs fmt, clippy and tests in `app/src-tauri`, and **`bindings-are-current`**, which
+regenerates the TypeScript and then runs `git diff --exit-code` over it. `app/Cargo.toml`
+repeats the root's `[workspace.lints]` table verbatim: a rule that fired in one workspace
+and not the other would make moving code between them an argument about lints.
+
+### The contract is a core crate, because units are application behaviour
+
+`vcw-contract` depends on `vcw-core`, `vcw-project`, `vcw-audio`, `vcw-types` and
+`serde` - and on nothing from Tauri. It holds three things §35 names:
+
+- **Events.** `Wire` is every `vcw_core::Event`, flattened into one discriminated union
+  tagged on `kind`, where the tag is exactly the string `Event::name` already returned.
+  A test builds one of all fourteen core events and asserts that each maps to a `Wire`
+  whose `kind` equals that name, so a new core event that falls through to the catch-all
+  fails the build rather than arriving at the frontend as an unlabelled warning.
+- **Commands.** `Request` is the eight verbs that change something, each parsed from JSON
+  with refusals that name the field at fault (`Failure { code, message, field }`).
+- **View models.** What a UI is given to draw, with the units already resolved: dBFS
+  rather than amplitudes, seconds beside frames, a side letter rather than a side index,
+  `A3` rather than a position index. Every one of those is a calculation, and §2 puts a
+  calculation in the application layer - not in a React component where it becomes a
+  second opinion the moment `vcw --json` prints the first one.
+
+`contract::read` is the read path: `release`, `captures`, `sides` and `tracks`, each
+taking a `&Connection` so a read-only handle serves them. `Track::of` needs a side letter,
+a sample rate and a numbering scheme to produce one row, which is why it is a constructor
+and not a `From` - a track row on its own cannot answer two of those three questions, and
+a view model that guessed 44.1 kHz would put every duration on a 48 kHz project out by
+nine percent. The test that covers it is named
+`seconds_come_from_the_rate_and_not_a_guess`.
+
+### D9: one generated file, and a test that fails on drift
+
+`app/ui/src/bindings/vcw.d.ts` is 911 lines, 30 exported declarations, generated by
+`bindings::typescript()` from ts-rs 12.0.1, committed, and rewritten with
+`VCW_BLESS=1 cargo test -p vcw-contract --test bindings` - the same convention
+`docs/SCHEMA.md` already uses for the schema dump. One file rather than ts-rs's
+file-per-type export, for a reason that only shows up in the failure case: a directory of
+generated files has to be compared entry by entry, and a *deleted* type is what that
+comparison gets wrong. One file is one string comparison, and a removed type is a removed
+block. The drift test reports the first differing line rather than the whole file.
+
+Three things about ts-rs had to be found by probing it:
+
+- **`u64` renders as `bigint` by default, which is wrong at run time.** `serde_json`
+  writes a frame count as a JSON number and `JSON.parse` returns a double, so nothing that
+  crosses this boundary is ever a `bigint`. A frontend typed that way cannot add two frame
+  counts without a cast that lies in the other direction. `Config::new().with_large_int("number")`
+  is the fix, and `nothing_generated_is_a_bigint` keeps it. The ceiling accepted is 2^53
+  frames, which at 192 kHz is about a billion years.
+- **`rename_all` renames variants; fields need `rename_all_fields` as well.** They are
+  independent, and a `peak_db` survived a whole probe as snake_case with only the first set.
+- **Every generated line ends in a space.** Stripped, because the first editor to save the
+  file would otherwise produce a whitespace diff of all 911 lines, and
+  `the_file_has_no_trailing_whitespace` asserts it.
+
+`no_pcm_crosses_the_boundary` is the other test worth naming: it walks the generated field
+names and fails on anything that would put samples through the IPC, which is S3's finding
+turned into a rule rather than a memory.
+
+### One event channel, and a thread per long command
+
+The shell emits everything on a single webview event, `vcw://event`, carrying the whole
+`Wire` union. Nothing is coalesced and nothing is binary: S3 measured the boundary as
+free, the main-thread waveform draw as the cost, and `InvokeResponseBody::Raw` as a
+pessimisation for frames this size. `pump.rs` spawns a forwarding thread per subscription
+which stops when an emit fails or when `wire.is_last()` - the `closed` event - arrives, so
+a closed window does not leave a thread reading a bus for ever.
+
+A synchronous `#[tauri::command]` runs on the main thread, the one drawing the window, so
+the two long commands spawn:
+
+- **Export** plans on the command thread, which is deliberate: a bad naming template comes
+  back as a refused command with a field name, and only then is a `vcw-export` thread
+  started. Progress arrives per file, and an export ends in exactly one of
+  `export-finished` or `export-failed`, because the command that starts it returns as soon
+  as the thread exists. Those two and `export-progress` are the three
+  `Wire` variants with no core event behind them.
+- **Playback** gets a thread because `vcw_core::playback::Player` is not `Send` - it owns
+  a `cpal::Stream`. The thread opens the player, owns it, takes `Verb`s over a channel and
+  calls `player.tick()` on a 16 ms timeout, without which no playhead is published. A
+  `stop` waits for the thread to join, because the next `play` opens the same device.
+
+`library.rs` opens the project read-only per read and **closes it explicitly**, which is
+what deletes the `-wal` and `-shm` sidecars; a handle dropped without one looks like a
+crash to the next recovery check. `edit.rs` is the only command that opens it writable,
+and it resolves the rate from the boundary's own side's capture before any arithmetic: a
+marker at 12.5 s is 600,000 frames at 48 kHz and 551,250 at 44.1, and the wrong one moves
+it half a second.
+
+### The surface test reads the generated TypeScript
+
+`main.rs` carries a `WIRED` list of six contract tags and a `NOT_WIRED` list of two, and
+the test that checks them parses `"command": "..."` out of the generated `Request`
+declaration rather than out of a hand-written list. A ninth verb added to the contract
+therefore fails the shell's tests without anyone remembering that this file exists. Three
+of the wired tags are served by a differently-named command, which is written down where
+the list is: `seek` is one of six playback verbs and a command per verb would be five
+functions that all call `player.apply`; `export` is served by `export_plan` and
+`export_run` because §33 plans before it writes; `transport` carries the capture verbs for
+the same reason. The read commands - `devices`, `tracks`, `waveform` and the rest - are
+not in `Request` at all, because §35's list is the commands that change something.
+
+Sixteen commands are registered. `devices` returns `Vec<Device>` rather than a `Result`:
+a machine with one broken USB interface should still show the other three.
+
+### The frontend is a smoke page, and that is all it is
+
+`app/ui` is React 19 on Vite 7 with TypeScript strict plus `noUncheckedIndexedAccess`,
+`exactOptionalPropertyTypes` and `verbatimModuleSyntax`. `src/api.ts` is the only file that
+calls `invoke`, and `App.tsx` is a device table, transport buttons, a frames-and-peak
+readout, a capture table and an event log. Its `describe(event: Wire)` switches over all
+seventeen event kinds exhaustively, which is the whole argument for D9 in one function: a
+new event kind is a compile error there rather than a silent gap in the log. `pnpm check`
+passed first time against the generated types, which is the evidence that they are usable
+and not merely current.
+
+### Fixed on the way past
+
+- **`custom-protocol` defaults to on.** Tauri decides "am I a dev build?" from that
+  feature and not from the cargo profile, so a release binary built without it loads
+  `devUrl` and lands on `about:blank`. This cost S3 an afternoon; the feature is in the
+  default set and the reason is in the manifest.
+- **`unreachable_pub` fires on every `pub` item in a binary crate**, which is correct -
+  nothing outside can name them. Everything in `app/src-tauri/src` is `pub(crate)`.
+- **An integration test cannot import a binary crate's items**, so the planned
+  `tests/surface.rs` is a `#[cfg(test)] mod tests` inside `main.rs` instead.
+- **The doc link `[parse_format]` was public documentation pointing at a private item**,
+  caught by the `doc` leg. Both halves of one mapping now have the same visibility, which
+  is the actual fix: `format_name` and `parse_format` are the wire spelling of a sample
+  format in each direction, spelled out rather than derived from `SampleFormat`'s
+  `Display`, so a rename in `vcw-types` cannot change what a frontend has to send.
+- **`WIRED` was dead code in the binary**, because only the test reads it.
+  `#[cfg(test)]`, since `generate_handler!` is the real wiring and a second copy compiled
+  into the product would be a second answer to the same question.
+- **`no_pcm_crosses_the_boundary` failed on `clippedSamples`** and on prose containing the
+  word. A substring ban was the wrong test; it compares field names now, and when an
+  export field called `bytes` tripped it, the field was renamed to `bytes_written` rather
+  than the test weakened - it is named for what it counts either way.
+
+### Tests
+
+**861 passing in the workspace, 0 failing, 12 ignored**, of which 37 are new here: 33 in
+`vcw-contract` (4 in the lib, 6 in `wire.rs`, 17 in `commands.rs`, 5 in `views.rs`, 5 in
+`bindings.rs`) and 4 in the shell. The gate is eleven legs now - `fmt clippy test parity
+offline deny doc` at the root, `appfmt appclippy apptest` in `app/src-tauri`, `uicheck` in
+`app/ui` - and the em-dash sweep covers `.ts`, `.tsx`, `.css` and `.json` as well.
+
+The shell ran on this desktop: the window opened, and the ALSA enumeration noise in its
+log is the proof that the frontend loaded and completed an IPC round trip, because nothing
+but the frontend's `devices()` call enumerates.
+
+### What is not verified
+
+**Nothing in the shell has been driven through a real capture by hand.** Arm, record,
+stop, play and export are wired and tested as functions; the buttons have been clicked
+only against an empty project. **No screenshot of the window was captured** -
+`gnome-screenshot -w` fell back to X11 on a Wayland session and hung.
+
+`search_metadata` and `select_release` are declared in the contract and **refused** with
+the code `not-wired`, named in `NOT_WIRED` rather than left out, because they need a
+provider client held across calls, a disk cache, a credential that §39 forbids storing in
+the project, and cancellation for a search a person changes their mind about. WP-12 built
+every piece of that except where the shell keeps them, and WP-16's metadata browser is
+what decides that - it is a design question, not a morning's wiring. `waveform-update` and `fingerprint-match` are declared in `Wire` and
+nothing produces them yet.
+
+**A playback failure arrives as a `capture-warning`** with the code `playback-failed`,
+because the open happens on a thread and the bus has no playback-refused event. It is a
+wart and it is recorded as one; the fix is an event on the bus, not a workaround in the
+shell.
+
+`bundle.active` is `false` and the icon is a 245-byte placeholder: packaging is WP-20 and
+this shell is not something to hand anyone. `csp` is `null`, which is Tauri's development
+default and has to be set before anything ships. The frontend is a smoke page and not
+WP-16's UI. Linux x86_64 only, like everything else in Phase 1 - and the `shell` CI job
+is Linux-only too, so the WebKitGTK stack is the only webview this has ever met.
+
 ## Next up
 
-**Where to pick up.** WP-14 is finished and gate-green, and **not yet committed**: the
-working tree holds the whole of it. The last thing run was the full gate -
-`fmt / clippy / test / parity / offline / deny / doc` all green at **820 passing,
-0 failing, 12 ignored** - and the export verb was then driven end to end through the
-shipped binary on a scratch project, WAV and FLAC both. `/tmp/gate.sh` is the script;
-the em-dash sweep over the changed files reports zero.
+**Where to pick up.** WP-15 is finished and gate-green, and **not yet committed**: the
+working tree holds WP-14 and WP-15 together. The last full gate ran eleven legs -
+`fmt / clippy / test / parity / offline / deny / doc` at the root, `appfmt / appclippy /
+apptest` in `app/src-tauri` and `uicheck` in `app/ui` - at **861 passing, 0 failing, 12
+ignored**, and the em-dash sweep over the changed files reports zero. Two legs caught
+things on the first run and both are fixed: the root `doc` leg found public documentation
+linking to a private item in the new crate, and `appclippy` found `WIRED` dead in the
+binary because only its test reads it. `/tmp/gate.sh` is the script.
 
-**`WP-15`, the Tauri 2 shell, is next**, at weight 6 and unblocked since WP-07. It is
-the last thing between the engine and a user, and the CLI has been carrying that load on
-purpose: every verb the UI needs is already a function on a core crate with a test behind
-it, so the shell is a translation layer and not a second implementation. Its exit
-criterion - *core crates have zero Tauri dependency, enforced in CI* - is the rule that
-keeps it one, and D9's generated TS types with a drift check are the other half, because
-hand-written interfaces are how §2 erodes. S3 already measured the boundary: the IPC is
-free and the main-thread waveform draw is the cost, so the shell's job is to hand the
-frontend the summary rows WP-09 already writes rather than to move samples.
+**`WP-16`, the React UI, is next** - and it is the largest single work package in the
+plan at weight 18, which is the whole of §34 and §43: project browser, capture workspace,
+transport, meters, waveform, track editor, metadata browser, export UI, settings and a
+full keyboard map. Two of its dependencies are already discharged. S3 measured the
+boundary and found the IPC free and the main-thread waveform draw the cost, so the shell
+hands over the summary rows WP-09 already writes rather than samples. And WP-15's
+contract resolved every unit on the Rust side, which is the half of WP-16's exit criterion
+that is easiest to fail slowly: *no business logic in TS* is a review gate, and the way to
+pass it is to have nothing left to compute - a `Track` already carries `A3`, its seconds
+and its confidence, so a component has nothing to do but render. The other half, *every
+§44 workflow completable by keyboard alone*, has nothing built behind it yet.
+
+**What WP-15 leaves behind.** The shell's own gaps are listed in its section above, and
+three of them are worth carrying forward. `search_metadata` and `select_release` are
+declared and refused, and where the shell keeps a provider client, a cache and a
+credential is a WP-16 design question. **A playback failure arrives as a
+`capture-warning`** with the code `playback-failed`, because the open happens on a thread
+and the bus has no playback-refused event - the fix is an event on the bus. And
+**nothing in the shell has been driven through a real capture by hand**: the window opens,
+the frontend completes an IPC round trip, and every command is tested as a function, but
+arm-record-stop-play-export has been clicked only against an empty project. That run is
+cheap and it is the honest way to find out what §44 actually needs.
 
 **What WP-14 leaves behind.** §33 lists MP3 and Ogg as required initial formats and
 neither is built - they are in G3 because D5's encoders extend the LGPL relink obligation,
@@ -2770,12 +3010,25 @@ the spike harness.
   `19dd459`. WP-01 is committed at `cd8e445`, WP-02 at `acb8835`, WP-03 at `941981a`,
   WP-04 at `95f1f52`, WP-05 at `358c44a`, WP-06 at `b2a517b` and WP-07 at `051a648`.
   WP-08 is committed at `75123ab`, WP-09 at `ae9b6d8` and `807d097`, WP-10 at `91ba45f`,
-  WP-11 at `35fc89d`, and WP-12 and WP-13 together at `96438ff`. WP-13 is the second
+  WP-11 at `35fc89d`, WP-12 and WP-13 together at `96438ff` and `b549eab`, and WP-14 at
+  `fc8436f`. **WP-15 is not committed**: `crates/contract/` and `app/` are both untracked
+  in the working tree, along with changes to `Cargo.toml`, `Cargo.lock`, `.gitignore`,
+  `.github/workflows/ci.yml` and `crates/types/src/observation.rs`. WP-13 is the second
   change to touch the schema - v2, the vinyl data model - so `docs/SCHEMA.md` went with
   it. WP-09 is the
   first change since WP-02 to touch the schema, so `docs/SCHEMA.md` was regenerated with
   it; regenerate with `VCW_BLESS=1 cargo test -p vcw-project --test schema_doc` whenever
   the schema moves, or `the_committed_document_matches_the_schema` fails.
+- **The gate is eleven legs now**, because the shell is a workspace of its own and the
+  root's legs cannot see it: `fmt clippy test parity offline deny doc` at the repository
+  root, `appfmt appclippy apptest` in `app/src-tauri`, and `uicheck` (`pnpm check`) in
+  `app/ui`. `/tmp/gate.sh` runs all eleven, tallies `gate-test.log` and
+  `gate-apptest.log` together, and sweeps the changed files for em dashes - a sweep that
+  now covers `.ts`, `.tsx`, `.css` and `.json` as well. The two new legs earned their
+  keep on the first run: `doc` found public documentation in the new crate linking to a
+  private item, and `appclippy` found a constant that only its own test reads.
+  Building the shell needs the frontend built first, since `tauri-build` fails when
+  `frontendDist` is missing.
 - **`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` is part of the gate.**
   It had never been run, and it found ten broken doc links across four crates that
   `clippy -D warnings` does not see: private items linked from public docs

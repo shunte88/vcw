@@ -97,6 +97,69 @@ jobs:
             && { echo "::error::a crate under crates/ depends on the UI shell"; exit 1; } \
             || echo "clean: no tauri, wry, tao or webkit2gtk under crates/"
 
+  # The shell, which is a workspace of its own so that the job above can be a
+  # statement about structure rather than a promise about discipline. Linux only:
+  # Tauri needs WebKitGTK, and the product's four-target matrix should not have to
+  # install it for a crate that is glue.
+  shell:
+    name: tauri shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shell system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev \
+            libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/ui/pnpm-lock.yaml
+      # The frontend first, because `tauri-build` fails the Rust build if
+      # `frontendDist` is not there - which is the right failure, and a confusing
+      # one to hit from the Rust half of the job.
+      - name: Build the frontend
+        run: pnpm install --frozen-lockfile && pnpm build
+        working-directory: app/ui
+      - name: fmt
+        run: cargo fmt --all -- --check
+        working-directory: app/src-tauri
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: app/src-tauri
+      - name: test
+        run: cargo test --workspace
+        working-directory: app/src-tauri
+
+  # D9: the committed TypeScript is generated from the Rust types, and this is the
+  # job that fails when the two disagree. It is a separate job from `test` because
+  # the failure needs its own message: the fix is a regeneration, not a code
+  # change, and the four-target matrix would report it four times.
+  bindings-are-current:
+    name: TypeScript matches Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Assert app/ui/src/bindings/vcw.d.ts is current
+        run: cargo test -p vcw-contract --test bindings
+      - name: Assert it was not blessed by accident
+        run: |
+          git diff --exit-code -- app/ui/src/bindings/ \
+            || { echo "::error::the bindings changed during the test run"; exit 1; }
+
   # The Phase 0 spikes are their own workspace and are not shipped, but the numbers
   # in docs/spikes/ are only reproducible while they still compile. Linux only -
   # tauri-ipc-bench needs WebKitGTK, and there is nothing to learn from building it

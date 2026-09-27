@@ -1,0 +1,94 @@
+/*
+ *  app.css
+ *
+ *  VCW - The Vinyl Capture Workstation
+ *  (c) 2026 Stue Hunter
+ *
+ *  Enough styling to read the smoke page. WP-16 brings the real thing.
+ */
+
+:root {
+  color-scheme: dark;
+  font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: #14161a;
+  color: #d8dee9;
+}
+
+body {
+  margin: 0;
+  padding: 1.5rem;
+}
+
+h1 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
+
+h2 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #81a1c1;
+  margin: 1.5rem 0 0.5rem;
+}
+
+button {
+  font: inherit;
+  background: #2e3440;
+  color: #d8dee9;
+  border: 1px solid #434c5e;
+  border-radius: 3px;
+  padding: 0.3rem 0.7rem;
+  margin: 0 0.3rem 0.3rem 0;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #3b4252;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.2rem 0.6rem 0.2rem 0;
+  border-bottom: 1px solid #262b33;
+  white-space: nowrap;
+}
+
+th {
+  color: #616e88;
+  font-weight: 400;
+}
+
+.log {
+  height: 16rem;
+  overflow-y: auto;
+  background: #0f1114;
+  border: 1px solid #262b33;
+  border-radius: 3px;
+  padding: 0.5rem;
+}
+
+.log div {
+  white-space: pre;
+}
+
+.kind {
+  color: #8fbcbb;
+}
+
+.failure {
+  color: #bf616a;
+}

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The core defaults and nothing else: every VCW capability is a command in this crate, so the frontend needs no plugin permissions to capture, play or export.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

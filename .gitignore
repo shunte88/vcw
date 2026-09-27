@@ -2,6 +2,7 @@
 # the Phase 0 spikes, which are excluded from it (ADR-0003).
 /target
 /spikes/target
+/app/target
 
 # Benchmark scratch databases (S2 spike output)
 /.bench/
@@ -59,8 +60,9 @@ vcw_kb.txt
 # Temporary analysis WAV (written to /tmp but just in case)
 /tmp/vcw_analysis_*.wav
 
-# Frontend build artefacts and dependencies (S3 spike; the same rules will
-# apply to the real UI crate under WP-01).
+# Frontend build artefacts and dependencies. The generated TypeScript under
+# `app/ui/src/bindings/` is NOT here: it is committed on purpose so the frontend
+# typechecks without a Rust toolchain, and a test regenerates and compares it.
 node_modules/
 **/dist/
 *.tsbuildinfo

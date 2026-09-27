@@ -17,6 +17,7 @@ proposed, so the plan may name decisions that have no record here yet.
 | [0004](0004-licence-and-toolchain.md) | Licence posture and toolchain floor (D7, D10) | Accepted 2026-09-25 |
 | [0005](0005-concurrency-model.md) | Concurrency model: threads, message passing, and where Tokio belongs (D8) | Accepted 2026-09-25 |
 | [0006](0006-playback-rate-policy.md) | Playback rate and format policy: no resampler, lossless conversion only | Accepted 2026-09-26 |
+| [0007](0007-rust-typescript-contract.md) | The Rust/TypeScript contract, and where the shell lives (D9) | Accepted 2026-09-27, amends 0003 |
 
 A superseded record is never deleted or rewritten. It is marked superseded and links
 forward, because the reasoning that turned out to be wrong is the most useful thing in

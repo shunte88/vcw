@@ -110,8 +110,13 @@ impl Provenance {
 /// Which way the audio crosses a boundary.
 ///
 /// A detector finds the edges of sound, and the two edges are not interchangeable:
-/// a start wants its onset preserved and an end wants its decay preserved, so the
-/// padding a splitter applies differs by kind (§33).
+/// a start is an onset and an end is a decay, so a detector's certainty about one
+/// says nothing about the other and the two are resolved separately.
+///
+/// An earlier version of this comment said the kind decides how much padding a
+/// splitter applies, citing §33. It does not: §33 has no padding requirement, and
+/// WP-14's splitter cuts exactly the span between two boundaries. The distinction
+/// is real, the justification given for it was invented.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Edge {
