@@ -169,6 +169,32 @@ pub struct Config {
     /// caused by not listening, and the first `RECORD` is a flag flip rather
     /// than a thread spawn and a session insert.
     pub start_paused: bool,
+
+    /// How long the source may deliver nothing before the capture is called
+    /// stalled, in milliseconds. Zero disables the watchdog.
+    ///
+    /// # Why the writer has to be the one to notice
+    ///
+    /// A device that is unplugged mid-capture does not report an error and does
+    /// not end the stream - it simply stops calling the callback. Every counter
+    /// in [`Diagnostics`] describes something that *happened*, so none of them
+    /// can describe data that never arrived, and
+    /// [`Diagnostics::is_clean`] therefore returns true for a capture that lost
+    /// twenty minutes of a side. Three separate callers turned that into
+    /// [`CaptureState::Finalised`], so an operator whose interface dropped out
+    /// ten seconds in was handed a ten-second project marked as a complete,
+    /// flawless capture.
+    ///
+    /// The source cannot see it, by definition. The writer can: it is the thing
+    /// waiting for bytes. So the watchdog lives here, and the downgrade to
+    /// [`CaptureState::Interrupted`] happens where the capture row is written
+    /// rather than at each caller - which is what stops the next caller getting
+    /// it wrong again.
+    ///
+    /// Two seconds. A pause does not trip it, because a paused writer still
+    /// drains a running device and still sees bytes. Found by WP-17's fault
+    /// harness; `--vanish-after` is the reproduction.
+    pub stall_millis: u32,
 }
 
 impl Default for Config {
@@ -183,6 +209,7 @@ impl Default for Config {
             poll: Duration::from_millis(5),
             diagnostics_millis: 2_000,
             start_paused: false,
+            stall_millis: 2_000,
         }
     }
 }
@@ -295,6 +322,15 @@ impl Latencies {
         self.0.iter().copied().max()
     }
 
+    /// Folds another distribution into this one.
+    ///
+    /// Raw samples rather than merged quantiles, because merging quantiles is
+    /// wrong and the tail is the whole question: the p99 of two p99s is not the
+    /// p99 of the union.
+    pub fn absorb(&mut self, other: &Self) {
+        self.0.extend_from_slice(&other.0);
+    }
+
     /// p50, p95, p99 and max, in microseconds, for a report.
     #[must_use]
     pub fn summary(&self) -> Option<(u64, u64, u64, u64)> {
@@ -319,6 +355,15 @@ pub struct Progress {
     peak_wal_bytes: AtomicU64,
     stopped: AtomicBool,
     paused: AtomicBool,
+    stalls: AtomicU64,
+    stalled: AtomicBool,
+    /// Whether the current quiet period has already been counted.
+    ///
+    /// Internal. Without it a device that vanishes is counted again on every
+    /// poll for the rest of the run, and `stalls` becomes a measure of how long
+    /// the soak was left running rather than of how many times the device went
+    /// away.
+    stalled_now: AtomicBool,
 }
 
 impl Progress {
@@ -355,6 +400,22 @@ impl Progress {
     pub fn peak_wal_bytes(&self) -> u64 {
         self.peak_wal_bytes.load(Ordering::Relaxed)
     }
+    /// Times the source went quiet for longer than [`Config::stall_millis`].
+    ///
+    /// Counted per episode, not per lost frame: how much was lost is exactly
+    /// what a vanished device does not tell us.
+    pub fn stalls(&self) -> u64 {
+        self.stalls.load(Ordering::Relaxed)
+    }
+    /// Whether the source has *ever* gone quiet for longer than the threshold.
+    ///
+    /// Latching rather than live, because a device that stalled and recovered
+    /// left a hole in the timeline either way, and the capture has to say so
+    /// after the fact. A caller wanting to know whether it is happening *now*
+    /// should watch [`Progress::stalls`] move.
+    pub fn has_stalled(&self) -> bool {
+        self.stalled.load(Ordering::Relaxed)
+    }
     /// Whether the writer has stopped, for whatever reason.
     pub fn is_stopped(&self) -> bool {
         self.stopped.load(Ordering::Relaxed)
@@ -390,6 +451,8 @@ pub struct Outcome {
     /// after the last block, and folding it into the distribution would make
     /// every run look as though it had one anomalous stall.
     pub final_checkpoint_micros: u64,
+    /// Times the source went quiet for longer than [`Config::stall_millis`].
+    pub stalls: u64,
     /// The state the session was closed in.
     pub state: CaptureState,
 }
@@ -414,6 +477,34 @@ impl Outcome {
         self.commit
             .max()
             .is_none_or(|worst| worst < config.commit_granularity_millis() * 1_000)
+    }
+
+    /// Whether the WAL stayed near its budget, allowing `slack` times it.
+    ///
+    /// # Why the budget needs slack at all
+    ///
+    /// [`Config::wal_bytes`] is a *threshold*, not a ceiling: SQLite checks it
+    /// after a commit and checkpoints from there, so the WAL always overshoots
+    /// by at least the commit that crossed the line, and a checkpoint that
+    /// finds a reader active does nothing and leaves the next commit to try
+    /// again. A 4 MiB budget measured 4.94 MiB idle and 6.56 MiB with four
+    /// waveform readers redrawing at 60 Hz, so the overshoot is real, small and
+    /// bounded.
+    ///
+    /// What this catches is the unbounded case, which is not hypothetical:
+    /// readers querying flat out hold a read snapshot open essentially all the
+    /// time, no checkpoint ever completes, and the same run reached 51 MiB. See
+    /// `cli::contend` - `--reader-hz 0` reproduces it, and is expected to fail
+    /// this check. That is what makes it a demonstration rather than a claim.
+    ///
+    /// Always true under [`Checkpoint::Never`], which grows the WAL without
+    /// bound on purpose, and under a `slack` of zero, which turns the check off.
+    #[must_use]
+    pub fn wal_within_budget(&self, config: &Config, slack: u32) -> bool {
+        if slack == 0 || config.checkpoint == Checkpoint::Never {
+            return true;
+        }
+        self.peak_wal_bytes <= config.wal_bytes.saturating_mul(u64::from(slack))
     }
 }
 
@@ -542,6 +633,7 @@ impl Writer {
                 prepare: Latencies::default(),
                 checkpoint: Latencies::default(),
                 final_checkpoint_micros: 0,
+                stalls: 0,
                 state: CaptureState::Recording,
             },
             progress: Arc::new(Progress::default()),
@@ -549,6 +641,11 @@ impl Writer {
             project,
             session,
         })
+    }
+
+    /// Records how many times the source went quiet, for the outcome.
+    fn record_stalls(&mut self, stalls: u64) {
+        self.outcome.stalls = stalls;
     }
 
     /// The live counters, shareable with a caller on another thread.
@@ -1030,6 +1127,12 @@ pub fn spawn_on<S: PcmSource + 'static>(
             let mut scratch = vec![0u8; writer.block_frames() as usize * writer.frame_bytes];
             let every = Duration::from_millis(u64::from(config.diagnostics_millis));
             let mut counters_written = Instant::now();
+            // Starts now rather than at the first byte, so a device that opens
+            // and never delivers at all is caught too - which is a stall with
+            // nothing before it, and the failure a person sees as "it recorded
+            // silence".
+            let mut last_data = Instant::now();
+            let stall_after = Duration::from_millis(u64::from(config.stall_millis));
             let mut was_paused = config.start_paused;
             thread_progress.paused.store(was_paused, Ordering::Relaxed);
             let outcome = loop {
@@ -1055,6 +1158,12 @@ pub fn spawn_on<S: PcmSource + 'static>(
                 }
                 let n = source.read(&mut scratch);
                 if n > 0 {
+                    // Bytes arrived, so the device is alive. Reset before the
+                    // pause check, not after: a paused writer reads and discards
+                    // from a running device, and treating that as silence would
+                    // report a stall for every pause an operator takes.
+                    last_data = Instant::now();
+                    thread_progress.stalled_now.store(false, Ordering::Relaxed);
                     if paused {
                         // Read and dropped. The ring stays empty, the counters
                         // stay honest, and the frame index does not advance.
@@ -1069,8 +1178,23 @@ pub fn spawn_on<S: PcmSource + 'static>(
                     }
                     continue;
                 }
-                // Nothing ready. Stop only when the producer has also gone, so a
-                // quiet moment is not mistaken for the end of the side.
+                // Nothing ready, and the producer has not gone. A device that
+                // is unplugged looks exactly like this and looks like it
+                // forever, so this is the only place the difference between a
+                // quiet moment and a dead device can be told - by how long it
+                // lasts. Counted once per episode; the flag latches so the
+                // capture row can be downgraded however the run ends.
+                if config.stall_millis > 0
+                    && !thread_stop.load(Ordering::Relaxed)
+                    && !source.is_finished()
+                    && last_data.elapsed() >= stall_after
+                    && !thread_progress.stalled_now.swap(true, Ordering::Relaxed)
+                {
+                    thread_progress.stalls.fetch_add(1, Ordering::Relaxed);
+                    thread_progress.stalled.store(true, Ordering::Relaxed);
+                }
+                // Stop only when the producer has also gone, so a quiet moment
+                // is not mistaken for the end of the side.
                 if thread_stop.load(Ordering::Relaxed) || source.is_finished() {
                     if !thread_stop.load(Ordering::Relaxed) {
                         // The producer going away is not the same thing as the
@@ -1097,6 +1221,16 @@ pub fn spawn_on<S: PcmSource + 'static>(
                         .map(|r| *r)
                         .unwrap_or((CaptureState::Interrupted, Diagnostics::default()));
                     writer.set_diagnostics(diagnostics);
+                    // The caller's verdict, overruled if the source went quiet.
+                    // Overruled here rather than returned for the caller to
+                    // apply, because three callers compute this state from
+                    // `Diagnostics::is_clean` alone and a fourth would too.
+                    let state = if thread_progress.stalled.load(Ordering::Relaxed) {
+                        CaptureState::Interrupted
+                    } else {
+                        state
+                    };
+                    writer.record_stalls(thread_progress.stalls.load(Ordering::Relaxed));
                     break writer.finish(state);
                 }
                 std::thread::sleep(config.poll);
@@ -1505,6 +1639,108 @@ mod tests {
         assert!((tail - 0.5).abs() < 1e-6, "{tail}");
     }
 
+    /// A source that delivers, then goes quiet without ever saying it is done.
+    ///
+    /// An unplugged USB interface, exactly: the stream is not closed and no
+    /// error is raised, the callback simply stops being called. `is_finished`
+    /// staying false is the whole point - it is what makes this different from
+    /// [`Canned`], and what the writer has to notice for itself.
+    struct Vanishing {
+        data: Vec<u8>,
+        at: usize,
+    }
+
+    impl PcmSource for Vanishing {
+        fn read(&mut self, dst: &mut [u8]) -> usize {
+            let n = dst.len().min(self.data.len() - self.at);
+            dst[..n].copy_from_slice(&self.data[self.at..self.at + n]);
+            self.at += n;
+            n
+        }
+
+        fn is_finished(&self) -> bool {
+            false
+        }
+    }
+
+    /// Runs a vanishing source to a stop and returns what the writer recorded.
+    ///
+    /// `Finalised` is passed in on purpose: the caller here is the one being
+    /// corrected. Every real caller computes that verdict from
+    /// `Diagnostics::is_clean`, and after a silent vanish all four counters are
+    /// zero, so `Finalised` is precisely what the writer will be told.
+    fn after_vanishing(stall_millis: u32) -> (Outcome, CaptureState) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let info = info();
+        let config = Config {
+            stall_millis,
+            ..Config::default()
+        };
+        let source = Vanishing {
+            data: pattern(config.block_frames(RATE) as usize * info.frame_bytes()),
+            at: 0,
+        };
+        let handle = spawn(project(&dir), &info, config, source).expect("spawn");
+        let capture_id = handle.capture_id();
+        // Long enough to cross a 100 ms threshold several times over, and short
+        // enough that the test is not a delay in the suite.
+        std::thread::sleep(Duration::from_millis(400));
+        handle.set_result(CaptureState::Finalised, Diagnostics::default());
+        let outcome = handle.stop().expect("stop");
+
+        let p = Project::open(dir.path().join("writer.vcw")).expect("reopen");
+        let on_disk: String = p
+            .conn()
+            .query_row(
+                "SELECT state FROM captures WHERE capture_id = ?1",
+                [capture_id],
+                |row| row.get(0),
+            )
+            .expect("reading the capture state");
+        (
+            outcome,
+            match on_disk.as_str() {
+                "finalised" => CaptureState::Finalised,
+                "interrupted" => CaptureState::Interrupted,
+                other => panic!("unexpected state on disk: {other}"),
+            },
+        )
+    }
+
+    #[test]
+    fn a_source_that_goes_quiet_without_a_word_is_not_a_finished_capture() {
+        // WP-17. Found by `vcw soak --vanish-after`: a device that stops
+        // delivering leaves every counter in `Diagnostics` at zero, because all
+        // four describe something that happened and this is data that never
+        // arrived. `is_clean` therefore returned true and three separate callers
+        // turned that into `Finalised` - so ten seconds of a twenty-two-minute
+        // side was recorded as a complete, flawless capture.
+        let (stalled, on_disk) = after_vanishing(100);
+        assert!(
+            stalled.stalls >= 1,
+            "the writer did not notice a source that stopped delivering"
+        );
+        assert_eq!(
+            stalled.state,
+            CaptureState::Interrupted,
+            "the writer was told Finalised and should have overruled it"
+        );
+        assert_eq!(
+            on_disk,
+            CaptureState::Interrupted,
+            "the project still claims a clean capture, which is the whole defect"
+        );
+
+        // The control arm. With the watchdog off, the same source through the
+        // same path produces the old answer - which is what proves the
+        // downgrade above came from the watchdog and not from something else
+        // about a source that stops early.
+        let (ignored, on_disk) = after_vanishing(0);
+        assert_eq!(ignored.stalls, 0);
+        assert_eq!(ignored.state, CaptureState::Finalised);
+        assert_eq!(on_disk, CaptureState::Finalised);
+    }
+
     #[test]
     fn the_writer_thread_drains_a_source_to_its_last_byte() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1688,6 +1924,48 @@ mod tests {
         );
         assert!(outcome.duration_secs(RATE) > 0.0);
         assert_eq!(outcome.duration_secs(0), 0.0);
+    }
+
+    #[test]
+    fn the_wal_budget_allows_an_overshoot_and_not_an_unbounded_one() {
+        // WP-17, §41. Until the contention test there was no WAL gate at all,
+        // and a run whose WAL reached 90 MiB against a 4 MiB budget printed
+        // "pass". These are the numbers that run measured.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = Config::default();
+        let mut w = Writer::begin(project(&dir), &info(), config).expect("begin");
+        w.push(&pattern(w.block_frames() as usize * info().frame_bytes()))
+            .expect("push");
+        let mut outcome = w.finish(CaptureState::Finalised).expect("finish");
+
+        let mib = 1024 * 1024;
+        assert_eq!(config.wal_bytes, 4 * mib, "the budget these numbers assume");
+
+        // Idle, and with four readers redrawing at 60 Hz: an overshoot, bounded.
+        for measured in [4 * mib, 4_940_000, 6_560_000] {
+            outcome.peak_wal_bytes = measured;
+            assert!(
+                outcome.wal_within_budget(&config, 4),
+                "{measured} bytes should be inside four times a 4 MiB budget"
+            );
+        }
+
+        // Four readers querying flat out, which starves the checkpoint.
+        outcome.peak_wal_bytes = 51 * mib;
+        assert!(
+            !outcome.wal_within_budget(&config, 4),
+            "51 MiB against a 4 MiB budget passed, so the gate is not a gate"
+        );
+        // Slack of zero measures without gating, and `Never` grows on purpose.
+        assert!(outcome.wal_within_budget(&config, 0));
+        let unbounded = Config {
+            checkpoint: Checkpoint::Never,
+            ..config
+        };
+        assert!(
+            outcome.wal_within_budget(&unbounded, 4),
+            "a policy that grows the WAL by design cannot fail for growing it"
+        );
     }
 
     /// A [`PcmSource`] that keeps producing until it is switched off.

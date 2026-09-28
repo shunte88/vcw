@@ -48,6 +48,7 @@
 //! export verbs follow at WP-13 onwards.
 
 mod capture;
+mod contend;
 mod detect;
 mod devices;
 mod export;
@@ -59,6 +60,7 @@ mod session;
 mod soak;
 mod tracks;
 mod waveform;
+mod wavfile;
 
 use clap::{Parser, Subcommand};
 use vcw_types::STANDARD_RATES;
@@ -444,6 +446,40 @@ enum Command {
         /// Skip the byte-for-byte readback.
         #[arg(long)]
         no_verify: bool,
+        /// Feed a real WAV rip through the capture path instead of the
+        /// generated pattern. Its rate, channels and format win over the flags.
+        /// §41's file-backed capture.
+        #[arg(long, value_name = "WAV")]
+        from_file: Option<std::path::PathBuf>,
+        /// Go silent after this many seconds of audio, saying nothing, the way
+        /// an unplugged device actually presents. R9.
+        #[arg(long)]
+        vanish_after: Option<f64>,
+        /// The same, with a stream error reported first.
+        #[arg(long)]
+        unplug_after: Option<f64>,
+        /// Report a stream error after this many seconds and keep going.
+        #[arg(long)]
+        error_after: Option<f64>,
+        /// Deliver one empty callback after this many seconds.
+        #[arg(long)]
+        starve_after: Option<f64>,
+        /// Fail if resident memory grows by more than this many MiB over the
+        /// run. Zero to measure without gating. §41.
+        #[arg(long, default_value_t = 32)]
+        max_growth_mib: u64,
+        /// Run this many threads drawing the waveform while the capture writes,
+        /// which is what the window does during a recording. §41.
+        #[arg(long, default_value_t = 0)]
+        readers: usize,
+        /// Redraws a second per reader. 60 is a window; 0 is flat out, which is
+        /// a fuzzer and starves the WAL checkpoint on purpose.
+        #[arg(long, default_value_t = 60)]
+        reader_hz: u32,
+        /// Fail if the WAL peaks above this many times its budget. Zero to
+        /// measure without gating. §41.
+        #[arg(long, default_value_t = 4)]
+        wal_slack: u32,
         /// Seconds between progress lines. Zero for silence.
         #[arg(long, default_value_t = 60)]
         every: u64,
@@ -1055,6 +1091,15 @@ fn main() -> anyhow::Result<()> {
             ring_millis,
             fast,
             no_verify,
+            from_file,
+            vanish_after,
+            unplug_after,
+            error_after,
+            starve_after,
+            max_growth_mib,
+            readers,
+            reader_hz,
+            wal_slack,
             every,
             json,
         } => soak::run(&soak::Options {
@@ -1071,6 +1116,15 @@ fn main() -> anyhow::Result<()> {
             ring_millis,
             fast,
             no_verify,
+            from_file,
+            vanish_after,
+            unplug_after,
+            error_after,
+            starve_after,
+            max_growth_mib,
+            readers,
+            reader_hz,
+            wal_slack,
             every,
             json,
         }),

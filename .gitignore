@@ -79,3 +79,8 @@ node_modules/
 
 # Config override for local dev (real config lives in ~/.config/vcw/)
 vcw.toml
+
+# Python bytecode from the spike probes. Tracked by accident until WP-17,
+# which is when a second machine pulled the repo and reported a dirty tree.
+__pycache__/
+*.pyc

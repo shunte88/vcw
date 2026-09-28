@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # The nightly soak. §41's exit criterion asks for a scheduled job, because
+  # the defects it looks for - memory over thousands of commits, a WAL that
+  # never gets checkpointed, a device that goes quiet - only show up in a run
+  # too long to put in front of a push.
+  schedule:
+    - cron: '0 4 * * *'
 
 env:
   CARGO_TERM_COLOR: always
@@ -187,3 +193,63 @@ jobs:
           workspaces: spikes
       - run: cargo check --workspace --all-targets
         working-directory: spikes
+
+  # WP-17, §41. The capture path run against itself: a simulated device feeding
+  # the real writer into a real project, then every byte recomputed and
+  # compared. `scripts/soak-harness.sh` holds the legs and the reasons; the
+  # gates are inside `vcw soak`, which exits non-zero on its own verdict.
+  soak:
+    name: soak harness (short)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux audio headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Release, not debug. A soak spends its time in the deinterleave, the
+      # summaries and the CRC, and a debug build of those is slow enough to
+      # change what the run is measuring.
+      - run: cargo build --release -p vcw-cli
+      - run: scripts/soak-harness.sh short "$RUNNER_TEMP/soak"
+      - name: Keep the logs whatever happened
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-short-logs
+          path: ${{ runner.temp }}/soak/*.log
+          if-no-files-found: warn
+
+  # The long leg. Real-time pace, an hour a run, one with the window open and
+  # one without, because the pair is what attributes a difference to the
+  # readers rather than to the runner.
+  #
+  # Scheduled and manual only: two hours is not something to put in a push's
+  # way, and a machine shared with a nightly's neighbours is the honest place
+  # for an endurance run but a poor one for a latency claim. The real-time
+  # numbers of record come off the rigs.
+  soak-nightly:
+    name: soak harness (nightly, real-time)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux audio headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p vcw-cli
+      - run: scripts/soak-harness.sh nightly "$RUNNER_TEMP/soak"
+      - name: Keep the logs whatever happened
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-nightly-logs
+          path: ${{ runner.temp }}/soak/*.log
+          if-no-files-found: warn

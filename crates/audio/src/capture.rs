@@ -350,6 +350,17 @@ impl Sink {
     pub const fn frame_bytes(&self) -> usize {
         self.frame_bytes
     }
+
+    /// Bytes the ring would accept right now.
+    ///
+    /// Not for the callback's use - a device callback that asked this and then
+    /// waited would be the exact real-time violation [`Sink::on_data`] is
+    /// written to avoid. It exists for a *simulated* feeder running at
+    /// [`crate::source::Pace::Metered`], which is not a callback, may block, and
+    /// needs to know when pushing would cost a frame.
+    pub fn free_bytes(&self) -> usize {
+        self.ring.free_bytes()
+    }
 }
 
 /// Whether this capture can be called bit-perfect, and why or why not.

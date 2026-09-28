@@ -118,9 +118,31 @@ pub enum Pace {
     /// Wall-clock, the way a device does. What a soak test needs, and the only
     /// setting under which overrun behaviour means anything.
     RealTime,
-    /// Flat out. Turns a 90-minute soak into seconds, at the cost of telling you
-    /// nothing about timing.
+    /// Flat out, dropping whatever the consumer cannot take. Turns a 90-minute
+    /// soak into seconds, at the cost of telling you nothing about timing.
+    ///
+    /// **A run at this pace cannot be byte-verified**, and that is not a defect
+    /// in the verifier. The ring overruns almost immediately, every overrun
+    /// discards a whole callback, and the writer's frame index therefore stops
+    /// agreeing with the source's - so frame *n* in the project holds the sample
+    /// the source produced for some later frame. What this pace is genuinely for
+    /// is provoking that loss on purpose: it is how
+    /// `a_reader_that_falls_behind_overruns_instead_of_blocking_the_producer`
+    /// proves §10's contract, and it is §41's dropped-frame case.
     Fast,
+    /// Flat out, but waiting for room instead of overrunning.
+    ///
+    /// No device behaves like this - a device never waits for its consumer, and
+    /// [`Sink::on_data`] must never block, which is why the waiting is done
+    /// *here*, on the feeding thread, and not in the sink. So this is a test
+    /// instrument and nothing else.
+    ///
+    /// It is the only pace that is both fast and verifiable, which is what makes
+    /// it the one a CI run can use: the source is driven by the writer's own
+    /// drain rate, nothing is dropped, and the written frame index still equals
+    /// the source frame index, so every byte can be recomputed and compared.
+    /// What it measures is throughput, never latency.
+    Metered,
 }
 
 /// Where a simulated capture's bytes come from.
@@ -130,12 +152,27 @@ pub enum Pattern {
     /// every byte it should have received and compare. This is what makes an
     /// end-to-end capture test a *verification* rather than a smoke test.
     Deterministic,
-    /// Raw interleaved PCM from a file, cycled if the capture outlasts it.
+    /// Interleaved PCM from a byte range of a file, cycled if the capture
+    /// outlasts it.
     ///
-    /// No header parsing: the file is bytes in the negotiated format, which is
-    /// what `/data2/source_rips` yields after a header strip and what the
-    /// capture path itself deals in.
-    File(PathBuf),
+    /// No header parsing here. The bytes in the range must already be in the
+    /// negotiated format, and finding that range in a container is the caller's
+    /// job - `cli::wavfile` does it for the WAVs in `/data2/source_rips`. This
+    /// crate has no business knowing about RIFF, and a source that guessed at a
+    /// header would be a source that could guess wrong.
+    ///
+    /// Range rather than whole file because a real rip is a container: the
+    /// audio starts 44 bytes in at the earliest, and what follows the audio is
+    /// metadata that would arrive as a burst of noise at the wrap.
+    File {
+        /// The file.
+        path: PathBuf,
+        /// First byte of audio.
+        offset: u64,
+        /// Bytes of audio, or `None` for everything to the end of the file.
+        /// Clamped to what is actually there either way.
+        bytes: Option<u64>,
+    },
     /// Digital black. Cheap, and the right choice when the test is about
     /// plumbing rather than payload.
     Silence,
@@ -242,6 +279,19 @@ impl Simulated {
                         // which is exactly the failure that is easy to miss.
                         std::thread::sleep(Duration::from_millis(20));
                         continue;
+                    }
+                    // Metered: hold the chunk back until it will fit. Checked
+                    // before the fill so a stop is honoured while waiting -
+                    // a consumer that has stopped reading would otherwise keep
+                    // this thread here until the ring drained, which it never
+                    // would.
+                    if pace == Pace::Metered {
+                        while sink.free_bytes() < scratch.len() {
+                            if thread_stop.load(Ordering::Relaxed) {
+                                return;
+                            }
+                            std::thread::yield_now();
+                        }
                     }
                     if !starved && faults.starve_after.is_some_and(|f| frame >= f) {
                         starved = true;
@@ -388,8 +438,18 @@ impl Source for Simulated {
 /// Produces the bytes. Lives on the feeding thread, so it may do I/O.
 #[derive(Debug)]
 enum Generator {
-    Deterministic { bytes_per_sample: usize },
-    File { handle: File, length: u64 },
+    Deterministic {
+        bytes_per_sample: usize,
+    },
+    File {
+        handle: File,
+        /// First byte of audio, and where a wrap seeks back to.
+        offset: u64,
+        /// Bytes of audio, already clamped to the file's real size.
+        length: u64,
+        /// Bytes taken since the last wrap.
+        consumed: u64,
+    },
     Silence,
 }
 
@@ -400,17 +460,35 @@ impl Generator {
                 bytes_per_sample: storage.bytes_per_sample(),
             }),
             Pattern::Silence => Ok(Self::Silence),
-            Pattern::File(path) => {
-                let handle = File::open(path).map_err(|e| Error::io(path, e))?;
-                let length = handle.metadata().map_err(|e| Error::io(path, e))?.len();
+            Pattern::File {
+                path,
+                offset,
+                bytes,
+            } => {
+                let mut handle = File::open(path).map_err(|e| Error::io(path, e))?;
+                let on_disk = handle.metadata().map_err(|e| Error::io(path, e))?.len();
+                // Clamped, not trusted. A WAV's declared data length is a number
+                // in the file, and a rip that was cut short still declares the
+                // length it meant to have - so a reader that believed it would
+                // read past the end and call the short read a device fault.
+                let available = on_disk.saturating_sub(*offset);
+                let length = bytes.map_or(available, |want| want.min(available));
                 if length < frame_bytes as u64 {
                     return Err(Error::NoConfiguration {
                         device: path.display().to_string(),
                         wanted: format!("at least one {frame_bytes}-byte frame"),
-                        offered: format!("{length} bytes"),
+                        offered: format!("{length} bytes of audio from offset {offset}"),
                     });
                 }
-                Ok(Self::File { handle, length })
+                handle
+                    .seek(SeekFrom::Start(*offset))
+                    .map_err(|e| Error::io(path, e))?;
+                Ok(Self::File {
+                    handle,
+                    offset: *offset,
+                    length,
+                    consumed: 0,
+                })
             }
         }
     }
@@ -431,19 +509,40 @@ impl Generator {
                     frame += 1;
                 }
             }
-            Self::File { handle, length } => {
+            Self::File {
+                handle,
+                offset,
+                length,
+                consumed,
+            } => {
                 let mut filled = 0;
                 while filled < buffer.len() {
-                    match handle.read(&mut buffer[filled..]) {
-                        Ok(0) => {
-                            // Wrap. A fixture shorter than the capture is the
-                            // normal case, not an error.
-                            if handle.seek(SeekFrom::Start(0)).is_err() || *length == 0 {
-                                buffer[filled..].fill(0);
-                                return;
-                            }
+                    if *consumed >= *length {
+                        // Wrap. A fixture shorter than the capture is the
+                        // normal case, not an error.
+                        if *length == 0 || handle.seek(SeekFrom::Start(*offset)).is_err() {
+                            buffer[filled..].fill(0);
+                            return;
                         }
-                        Ok(n) => filled += n,
+                        *consumed = 0;
+                    }
+                    // Never past the end of the audio. Whatever follows a data
+                    // chunk is metadata, and metadata read as samples is a burst
+                    // of noise once per wrap.
+                    let room = ((*length - *consumed) as usize).min(buffer.len() - filled);
+                    match handle.read(&mut buffer[filled..filled + room]) {
+                        // Short of the length the container declared. Silence
+                        // from here rather than a wrap, because a wrap on a
+                        // zero-length read is how a truncated file becomes an
+                        // infinite loop.
+                        Ok(0) => {
+                            buffer[filled..].fill(0);
+                            return;
+                        }
+                        Ok(n) => {
+                            filled += n;
+                            *consumed += n as u64;
+                        }
                         Err(_) => {
                             buffer[filled..].fill(0);
                             return;
@@ -496,10 +595,62 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("pcm.raw");
         std::fs::write(&path, [1u8, 2, 3, 4, 5, 6, 7, 8]).unwrap();
-        let mut g = Generator::new(&Pattern::File(path), 8, StorageFormat::Int32).unwrap();
+        let whole = Pattern::File {
+            path: path.clone(),
+            offset: 0,
+            bytes: None,
+        };
+        let mut g = Generator::new(&whole, 8, StorageFormat::Int32).unwrap();
         let mut buffer = vec![0u8; 24];
         g.fill(&mut buffer, 0, 2);
         assert_eq!(buffer, [1, 2, 3, 4, 5, 6, 7, 8].repeat(3));
+    }
+
+    #[test]
+    fn a_range_skips_the_header_and_stops_before_the_trailer() {
+        // The shape of a real rip: a header, the audio, and a metadata chunk
+        // after it. Both ends matter. Reading the header would offset every
+        // sample by its length; reading the trailer would deliver a burst of
+        // noise once per wrap, and a soak that wrapped hourly would be finding
+        // it hourly.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rip.wav");
+        let mut file = b"HEADERXX".to_vec();
+        file.extend_from_slice(&[1u8, 2, 3, 4, 5, 6, 7, 8]);
+        file.extend_from_slice(b"LISTjunk");
+        std::fs::write(&path, &file).unwrap();
+
+        let ranged = Pattern::File {
+            path: path.clone(),
+            offset: 8,
+            bytes: Some(8),
+        };
+        let mut g = Generator::new(&ranged, 8, StorageFormat::Int32).unwrap();
+        let mut buffer = vec![0u8; 24];
+        g.fill(&mut buffer, 0, 2);
+        assert_eq!(
+            buffer,
+            [1, 2, 3, 4, 5, 6, 7, 8].repeat(3),
+            "the range leaked into the header or the trailer"
+        );
+
+        // A declared length longer than the file is clamped, not trusted: a rip
+        // cut short still declares the length it meant to have.
+        let overclaimed = Pattern::File {
+            path,
+            offset: 8,
+            bytes: Some(4_000),
+        };
+        let mut g = Generator::new(&overclaimed, 8, StorageFormat::Int32).unwrap();
+        let mut buffer = vec![0u8; 16];
+        g.fill(&mut buffer, 0, 2);
+        assert_eq!(
+            buffer,
+            [
+                1, 2, 3, 4, 5, 6, 7, 8, b'L', b'I', b'S', b'T', b'j', b'u', b'n', b'k'
+            ],
+            "a clamped range should still read to the end of the file and wrap"
+        );
     }
 
     #[test]
@@ -507,7 +658,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("tiny.raw");
         std::fs::write(&path, [1u8, 2]).unwrap();
-        let err = Generator::new(&Pattern::File(path), 8, StorageFormat::Int32).unwrap_err();
+        let tiny = Pattern::File {
+            path,
+            offset: 0,
+            bytes: None,
+        };
+        let err = Generator::new(&tiny, 8, StorageFormat::Int32).unwrap_err();
         let text = err.to_string();
         assert!(text.contains('8'), "{text}");
         assert!(text.contains('2'), "{text}");

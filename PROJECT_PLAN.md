@@ -743,12 +743,29 @@ Each link has been exercised against the real 2.33 GiB side in isolation. Doing 
 run once, from `devices` to a FLAC on disk, is the cheapest remaining item on this list
 and it is what would close G1.
 
-1. **Next** - **WP-17, the test corpus and soak harness**, at weight 7: file-backed
-   capture simulation, multi-hour runs, memory growth, contention and WAL size. Small
-   beside WP-16, and deliberately after it - a harness written before the workflows
-   existed would have tested only the parts it could reach. What it turns into a
-   regression gate is the pair of runs in the paragraph below, which is why those come
-   first even though they are not code.
+1. **Done, 2026-09-28** - **WP-17, the test corpus and soak harness**, at weight 7.
+   All six of §41's gaps are closed: file-backed capture through `vcw soak --from-file`,
+   which retires the out-of-tree `realrip/` feeder; the four R9 device faults reachable
+   from the CLI with an inverted, non-vacuous pass condition; RSS sampled and gated;
+   reader threads drawing the waveform against a live project; the WAL size gated for
+   the first time; and `scripts/soak-harness.sh` wired to two CI jobs, one on every push
+   and a `schedule:` nightly - which is the exit criterion.
+
+   **It found two product defects, not just harness gaps**, which is the argument for
+   having run each gate in anger before wiring it to a verdict. A device that goes
+   silent - R9's real shape, no error and no empty callback - was being filed as a
+   `finalised` capture, because `Diagnostics`' four counters can only describe events
+   that *happened* and three call sites derived the capture state from `is_clean()`
+   alone. And nothing checked the WAL size: a run that reached 90 MiB against a 4 MiB
+   budget printed "pass: bounded WAL". Both are fixed, both have tests with control
+   arms, and the whole account is in `docs/STATUS.md`.
+
+   What it does **not** give is a timing claim from CI. A hosted runner shares its CPU
+   and its disk, so the nightly's endurance and correctness results stand and its commit
+   tail does not. The real-time numbers of record still come off the rigs - and the first
+   one from anything other than this box's SATA disk arrived today: 90 minutes of 24/192
+   on media2026's NVMe held a worst commit of **17.0 ms** flat from minute 15, against
+   102.6 ms here, with RSS growing about **0.5 MiB an hour**.
 
    **The run that matters more than the next work package.** Every stage of §50's chain
    has a CLI verb and every stage of §44's workflows has a keybinding, and **neither
@@ -870,9 +887,11 @@ and it is what would close G1.
 
 2. **In parallel, on the machine's own time** - the measurement jobs still queued from
    Phase 0, none of which need attention while they run:
-   - **The soak on other platforms.** `vcw soak` is the harness and needs no new code:
-     Pi 5 on SD *and* on NVMe (S2 expected those to differ), and Windows. These are what
-     would close WP-05's portability gap and the last of S2's.
+   - **The soak on other platforms.** `scripts/soak-harness.sh` is the harness and needs
+     no new code: Pi 5 on SD *and* on NVMe (S2 expected those to differ), and Windows.
+     These are what would close WP-05's portability gap and the last of S2's. The NVMe
+     half of that question now has one data point from media2026 rather than none, and
+     it was a large one - a worst commit of 17.0 ms against 102.6 ms on SATA.
    - **S3's `cpu-matrix.sh`**, written and unrun. Until it does, whether the
      `OffscreenCanvas` worker reduces *total* CPU rather than main-thread blocking is
      unmeasured - and that is the figure the Pi 5 decision needs.
@@ -888,9 +907,9 @@ and it is what would close G1.
    against the real 2.33 GiB side in isolation; the run itself is the outstanding item,
    not any part of it. It is cheap, it needs no new code, and it is the only thing that
    will say whether the chain holds together when nobody is stopping between steps.
-   **WP-17**, the nightly soak harness at weight 7, is what turns that one run into a
-   thing that cannot quietly regress, which is why it is item 1 above and the run itself
-   is item 3.
+   **WP-17 is now done**, so the harness that stops the capture path quietly regressing
+   is in place and this run is what remains. It is the next thing to do, and it needs
+   the turntable rather than a keyboard.
 
 **The remaining G0 exposure is hardware, not spikes.** Windows, Pi 5, Android, macOS
 and the real converters (HiFiBerry DAC+ADC Pro, Tascam DA-3000) are all re-runs of

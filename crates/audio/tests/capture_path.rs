@@ -235,6 +235,58 @@ fn a_reader_that_falls_behind_overruns_instead_of_blocking_the_producer() {
 }
 
 #[test]
+fn a_metered_source_waits_for_room_instead_of_dropping() {
+    // WP-17. `vcw soak --fast` ran at Pace::Fast and could never pass: the
+    // source outruns the writer, the ring overruns, and because an overrun
+    // discards a whole callback the written frame index stops agreeing with the
+    // source's - so the byte verifier compared frame n against the sample
+    // belonging to a later frame and reported a mismatch every time.
+    //
+    // **The two arms are measured together on purpose.** A metered run that
+    // reported no loss proves nothing on its own: it is also exactly what a
+    // machine fast enough to keep up would look like at Pace::Fast. The claim
+    // is that the two paces differ, so the dropping arm has to drop for this
+    // test to mean anything, and it is asserted rather than assumed.
+    let counters = |pace| {
+        let (source, reader) = Simulated::start(
+            Negotiated::simulated(SampleRate(192_000), 2, SampleFormat::S32),
+            &Pattern::Deterministic,
+            pace,
+            Faults::none(),
+            500,
+        )
+        .expect("start");
+        // Nobody reads, in either arm. The ring fills and stays full, which is
+        // the condition the two paces answer differently.
+        std::thread::sleep(Duration::from_millis(200));
+        // Read before the stop: `stop` consumes the source, and the frame count
+        // is the evidence that back-pressure is not a deadlock.
+        let delivered = source.frames();
+        let diagnostics = source.stop();
+        drop(reader);
+        (diagnostics, delivered)
+    };
+
+    let (flooded, _) = counters(Pace::Fast);
+    let (metered, delivered) = counters(Pace::Metered);
+
+    assert!(
+        flooded.overruns > 0 && flooded.dropped_frames > 0,
+        "the dropping arm did not drop, so this test proves nothing: {flooded:?}"
+    );
+    assert_eq!(
+        (metered.overruns, metered.dropped_frames),
+        (0, 0),
+        "a metered source overran; it is supposed to wait for room"
+    );
+    assert!(
+        delivered > 0,
+        "a metered source delivered nothing at all, which is a deadlock and not \
+         back-pressure"
+    );
+}
+
+#[test]
 fn a_starved_device_is_an_underrun_and_not_the_end_of_the_capture() {
     let (source, mut reader) = Simulated::start(
         Negotiated::simulated(SampleRate(48_000), 2, SampleFormat::S32),

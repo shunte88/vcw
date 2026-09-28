@@ -57,7 +57,7 @@ Predecessor **VRipr** keeps its own name - VCW is its successor, not a rebrand -
 | Spike | Question | Verdict |
 |---|---|---|
 | **S1** | Bit-perfect capture and playback through CPAL? | **Yes on Linux/x86_64**, on stock CPAL 0.18.2. Other platforms open. |
-| **S2** | Can SQLite absorb sustained 24/192 and survive a kill? | **Yes on x86_64/SSD**, 90-minute soak passed. Other platforms open. |
+| **S2** | Can SQLite absorb sustained 24/192 and survive a kill? | **Yes on x86_64**, 90-minute soaks passed on both a SATA disk (worst commit 102.6 ms) and NVMe (17.0 ms). Other platforms open. |
 | **S3** | Will Tauri IPC carry meter and waveform rates? | **Yes, with 12.5× headroom** on Linux/WebKitGTK, incl. a 30-min soak with zero loss. The constraint is main-thread *rendering* (29% naive vs 0.5% in a worker), not IPC. One open item: webview RSS +1.46 MiB/min (R8). Other platforms open. |
 | **S4** | Does `chromaprint-next` fingerprint from a stream? | **Yes, bit-identically.** Linux/x86_64. Other platforms open. |
 | **S5** | Is the Audacity project format readable? | **Yes, decisively - AUP3 and AUP4 both.** |
@@ -3319,17 +3319,283 @@ one row as they are.
   started. That is the finding behind the findings, and it is the argument for putting
   WP-17's harness next rather than more features.
 
+## Phase 1 - WP-17, the test corpus and soak harness
+
+Built 2026-09-28. §41 lists twelve kinds of test and the work package's exit criterion is
+"nightly CI job; regressions fail the build". Before writing anything, the existing
+`vcw soak` was run against its own `--fast` flag to see what was already there. It failed,
+which set the shape of the whole day: **every gate added here was run in anger before it
+was wired to a verdict, and three of them found something.**
+
+### `--fast` had never passed, and could not have
+
+The flag's doc comment called it a smoke test. A first run of it reported **3,578,279
+overruns, 1,717,573,920 dropped frames** and a byte mismatch at frame 48,000.
+
+The cause is not a bug in the writer; it is the pace being unverifiable by construction.
+`Pace::Fast` runs the simulated feeder flat out and the ring overruns almost immediately.
+§10's contract says a full ring costs the **whole** callback, so the writer's frame index
+stops agreeing with the source's: written frame *n* holds the sample the source generated
+for some later frame, and `Simulated::expected_sample(frame)` is the wrong expectation for
+every frame after the first drop.
+
+The first fix considered was to make `Pace::Fast` apply back-pressure. That would have
+been wrong, and grepping the eleven `Pace::Fast` sites is what showed it:
+`capture_path.rs`'s `a_reader_that_falls_behind_overruns_instead_of_blocking_the_producer`
+uses that pace *precisely because* it drops, and changing it would have disarmed the test
+protecting §10 without failing anything. So the change is additive - a third pace:
+
+- **`Pace::Metered`** waits for room instead of overrunning. No device behaves like this,
+  and `Sink::on_data` must still never block, which is why the waiting is done on the
+  feeding thread and never in the sink. It is the only pace that is both fast and
+  verifiable: driven by the writer's own drain rate, nothing is dropped, the written frame
+  index still equals the source frame index, and every byte can therefore be recomputed.
+  It measures throughput and never latency.
+
+`Capture::free_bytes()` is the accessor it needs, documented as not being for a callback's
+use. `--fast` now means metered, and the output says "metered" rather than "fast" so the
+distinction is visible in a log.
+
+The paired test asserts both arms, because a metered run reporting no loss proves nothing
+on its own - it is also what a machine fast enough to keep up would look like at
+`Pace::Fast`. The claim is that the two paces *differ*, so the dropping arm has to drop
+for the test to mean anything, and it is asserted rather than assumed.
+
+### A device that goes silent was filed as a flawless capture
+
+This is the defect of the day, and the fault harness found it within minutes of existing.
+
+`--vanish-after` models R9's real shape: a USB interface that stops delivering **without
+saying anything**. Not an error, not an empty callback - silence. Run it, and the capture
+was recorded as `finalised`, with `is_clean()` true and all four counters at zero.
+
+It is a structural hole, not an oversight. `Diagnostics` has exactly four counters -
+`overruns`, `underruns`, `dropped_frames`, `stream_errors` - and every one of them counts
+an event that *happened*. **None of them can describe data that never arrived.** Then
+three separate call sites (`core::engine::ending`, `cli::capture`, `cli::soak`) derive the
+capture's final state from `diagnostics.is_clean()` alone, so all three agree on the wrong
+answer. An operator whose interface dropped out ten seconds into a side would have been
+handed a ten-second project marked complete and flawless.
+
+Fixed in the writer, which is the only component that is waiting for bytes and can
+therefore notice their absence:
+
+- `Config::stall_millis`, default 2,000. Zero disables it.
+- `Progress::stalls` / `Progress::has_stalled()`, with a private `stalled_now` latch so
+  an episode is counted once rather than on every poll for the rest of the run.
+- `Outcome::stalls`, and a state **downgrade** at the single place the capture row is
+  finished: a stalled run is written as `interrupted` whatever the caller asked for.
+
+Overruled in the writer rather than returned for the caller to apply, because three
+callers already computed this from `is_clean` and a fourth would have too. The clock starts
+at spawn on purpose, so a device that opens and never delivers at all is caught as well. A
+paused writer does not trip it, because a paused writer still drains a live device.
+
+The test has a control arm at `stall_millis: 0` proving the old answer comes back, which
+is what makes it a test of the watchdog rather than of the source.
+
+### WAL contention: the instrument was the problem, and the WAL was ungated
+
+§41 asks for a database contention test. The thing worth contending over is what a user
+actually does during a recording - watch the waveform - so `cli::contend` runs reader
+threads issuing the same `project::waveform` queries the window issues, at three zoom
+levels, against a read-only connection opened on the live project.
+
+The first run looked like a serious defect: **WAL peak 89.78 MiB on a 24-second capture**
+against a 4 MiB budget, zero checkpoints completed, and the soak printed `pass`. The
+mechanism is real and specific - a checkpoint needs every reader gone to reclaim WAL pages,
+so continuous readers starve it - and it is invisible, because it shows up as a file size
+and not as an error anywhere.
+
+But four readers looping flat out issue about **11,000 queries a second**. That is not a
+window, it is a fuzzer. So the readers were given a redraw rate and the question was
+measured rather than argued:
+
+| readers | redraws/s | WAL peak |
+|---|---|---|
+| 0 | - | 4.94 MiB |
+| 4 | 10 | 4.94 MiB |
+| 4 | 60 | 6.56 MiB |
+| 1 | flat out | 10.88 MiB |
+| 4 | flat out | 42.6 - 89.8 MiB |
+
+At a realistic 60 Hz the overshoot is 1.6 MiB on a 4 MiB budget; at 10 Hz it is
+unmeasurable. **Commit latency was unaffected in every arm** (p50 ~6 ms, max ~30 ms), which
+is WAL mode delivering exactly what it promises: readers do not block the writer. So this
+is not a product defect - and the day's second finding is the one that remains:
+
+**nothing checked the WAL size at all.** A run that reached 90 MiB against a 4 MiB budget
+printed "pass: zero loss, bounded WAL, every byte accounted for". `Outcome::wal_within
+_budget` now gates it, at four times the configured budget by default, always true under
+`Checkpoint::Never` because that policy grows the WAL by design. `--reader-hz 0`
+reproduces the unbounded case on demand and is *expected* to fail the gate, which is what
+makes it a demonstration rather than a claim.
+
+### Memory growth is a number, then a gate
+
+Nothing in `crates/` sampled RSS. `Growth` now reads `VmRSS` from `/proc/self/status` on
+the progress tick that already exists - `/proc/self/statm` would have needed a page size,
+which means either a `libc` dependency or an assumption that is wrong on aarch64 with
+16 KiB pages.
+
+The baseline is the first sample taken at least five seconds in, not the first sample:
+resident size climbs while the binary faults in and SQLite allocates its page cache, and
+measuring from zero would report a leak on every run. A run too short to have a baseline
+reports that it has none rather than reporting zero growth.
+
+The evidence for the threshold came off the real soak rather than out of the air. A
+70-minute 24/192 real-time capture on media2026 measured **42,672 kB at 15 minutes and
+43,224 kB at 70 minutes** - about **0.5 MiB an hour**, on a run writing 2 GB. That same
+run went on to 90 minutes and was **still 43,224 kB at minute 85**, so the half-megabyte
+is early settling and not a slope. The gate is
+set at 32 MiB of growth, which is roughly sixty hours of headroom.
+
+### File-backed capture, through a verb
+
+`Pattern::File` existed and no verb reached it, which is why the feeder for real rips has
+been an out-of-tree `realrip/` directory since S1. `vcw soak --from-file` retires it.
+
+Two things had to change. `Pattern::File` was a whole-file reader, and a real rip is a
+container: the audio starts 44 bytes in **at the earliest**, and what follows the audio is
+metadata that would arrive as a burst of noise at every wrap. So it now carries a byte
+range, clamped to the file's real size rather than trusting the container's declared
+length - a rip that was cut short still declares the length it meant to have.
+
+Finding that range is `cli::wavfile`, and skipping 44 bytes is right often enough to be
+dangerous. A 24-bit file has a 40-byte `WAVE_FORMAT_EXTENSIBLE` `fmt `; a tagged rip
+carries a `LIST` or `id3 ` chunk that can come **before** `data`. Guessing wrong offsets
+every sample in the run and still verifies clean, because the verifier would be comparing
+the wrong bytes against themselves. So the chunks are walked, the pad byte on an
+odd-length chunk is honoured, and `data` before `fmt ` resolves rather than failing - a
+case that legal, rare, and one the first implementation got wrong until its test said so.
+
+The file's rate, channel count and format **win over the flags**, because reinterpreting a
+48 kHz 32-bit rip as 192 kHz 24-bit would produce a project that verified perfectly
+against the wrong bytes. Every WAV in `/data2/source_rips` turns out to be 32-bit PCM at
+48 kHz with format tag `0x0001` rather than `0xFFFE`, which the spec does not ask for
+above 16 bits - so the reader accepts both tags. Refusing them would have refused the
+corpus.
+
+`verify()` grew a file arm, and it re-reads the file rather than trusting anything the run
+produced: the feeder is a byte stream with a wrap, so stream byte *p* is file byte
+`offset + p % length`, and a block starting at frame *f* starts at stream byte
+`f * frame_bytes`. One read per block, not one per sample. Shifting the expected offset by
+a single byte makes it fail at frame 0, which is how it was checked.
+
+Two real rips have been through the path end to end: `Background_Memory Card.wav`
+(32:24) and `Charlatan_Equinox.wav` (42:19), 162.9 MB and 99.6 MB verified byte for byte.
+
+### The verifier has to stop at a loss, and that is the claim being made
+
+`--starve-after` failed for a reason worth recording. A starved device delivers one empty
+callback, and `source.rs` skips the generator while still advancing the frame index - which
+is correct, because the audio for those frames **never existed**. The written stream is
+contiguous while the source's index has a gap, so every frame after the starve is shifted
+and the byte comparison reports a mismatch on all of them.
+
+Comparing past a loss does not detect the loss - the loss is already counted as an
+underrun. So a run that injected one verifies up to the loss and stops. That is not the
+weaker check it looks like: "the damage was confined to the fault" is exactly the claim
+being made about a fault run, and this is what makes it checkable rather than asserted.
+
+### The harness, and the exit criterion
+
+`scripts/soak-harness.sh` holds the legs and the reasons. One script rather than a list of
+steps in a YAML file, so that the thing CI runs is the thing a person can run on the
+machine where the failure happened; a harness only reachable through a workflow file is a
+harness nobody reproduces. Every leg ends in `vcw soak`, which exits non-zero on its own
+verdict, so the gates live in the binary and the script only chooses the runs.
+
+`short` is eight legs in **1 minute 32 seconds**: `clean`, `contention`, the four faults,
+a synthesised WAV, and the corpus when `VCW_RIP` names one. The synthesised WAV is written
+by the script rather than committed, and it deliberately carries a `LIST` chunk in front
+of its audio - a CI runner has no vinyl corpus, but the property being checked is that
+whatever bytes the container holds come back out of the project unchanged, and synthesised
+bytes test that as well as recorded ones do.
+
+`nightly` is two real-time hours: one clean, one with four readers at 60 Hz. The pairing
+is the point, because it is the only way to attribute a difference in WAL peak or commit
+tail to the readers rather than to the runner.
+
+`.github/workflows/ci.yml` gained `schedule: '0 4 * * *'` and two jobs - `soak` on every
+push, `soak-nightly` on schedule and manual dispatch only. Both keep their logs as
+artifacts `if: always()`, and both build `--release`, because a soak spends its time in the
+deinterleave, the summaries and the CRC and a debug build of those changes what the run is
+measuring. Every leg runs at 48 kHz: a 24/192 stereo capture is 1.15 MB/s and an hour of
+it is 4 GB, which is most of a runner's free space, and none of the properties these legs
+check depend on the rate.
+
+The nightly's timing numbers are worth reading and not worth trusting. A hosted runner
+shares its CPU and its disk, so a commit tail measured there says as much about the
+neighbours as about the writer. The commit budget stays on because 250 ms against a ~25 ms
+p99 leaves an order of magnitude of headroom - it takes a genuinely pathological runner to
+breach it, and that is worth seeing too. **The real-time numbers of record come off the
+rigs, not off CI.**
+
+### The harness cannot pass by not testing
+
+A fault run's pass condition is the *opposite* of a clean run's: the fault has to show up,
+and then the damage has to stop at it. That inversion is easy to get wrong in a way that
+makes everything green, so it was checked from both ends:
+
+- `--starve-after 99999`, past the end of the run, correctly **FAILS** with
+  `NO UNDERRUN COUNTED`, and the harness script exits 1 with the reason visible.
+- `if false && pace == Pace::Metered` makes the metered test fail with "a metered source
+  overran; it is supposed to wait for room".
+- Faking 100 MiB of growth flips a passing run to `FAIL` with the memory line showing it.
+- Shifting the file verifier's offset by one byte fails at frame 0.
+
+Every one of those was run, reverted, and re-confirmed green.
+
+### Storage, on something other than this box's SATA disk
+
+media2026 (Ryzen 9 5900XT, NVMe) ran the same configuration this machine has been measured
+on all along. Identical 0.15-minute metered soaks, 48 kHz S24 stereo:
+
+| | rtf | commit p50 / p99 / max | prepare p50 / max |
+|---|---|---|---|
+| dev box (SATA) | 32.5 | 4.6 / 24.0 / 42.1 ms | 1.5 / 4.9 ms |
+| media2026 (NVMe) | 48.3 | 3.7 / 9.1 / 15.9 ms | 0.3 / 0.6 ms |
+
+The 90-minute 24/192 real-time run on it passed, and it is the longest verified capture
+the project has:
+
+```
+  ran         5400.0 s wall, 5400.1 s of audio, real-time factor 1.00001
+  written     1036815360 frames, 43202 blocks, 5.79 GiB of samples in 21601 commits
+  commit      p50 4.3 ms, p95 9.3 ms, p99 11.7 ms, max 17.0 ms, budget 250 ms
+  prepare     p50 1.3 ms, max 2.6 ms (deinterleave, summaries, crc)
+  wal         peak 5.25 MiB, 0 writer checkpoint(s)
+  counters    0 overruns, 0 underruns, 0 dropped frames, 0 stream errors
+  validate    clean
+  bytes       every one of 6220892160 matches what the source generated
+  verdict     pass: zero loss, bounded WAL, every byte accounted for
+```
+
+**The worst commit was 17.0 ms and it was already 17.0 ms at minute 15**, so the
+distribution is stationary over the whole run rather than degrading; against **102.6 ms**
+on this box's SATA disk that is a sixfold difference in the tail and no difference at all
+in the verdict. The WAL held 5.25 MiB across ninety minutes without the writer ever
+needing a checkpoint of its own, and **6.2 GB of samples were verified byte for byte** -
+the largest readback the project has done by two orders of magnitude. D3's 250 ms budget
+is not close to being the binding constraint on either disk.
+
 ## Next up
 
-**Where to pick up.** WP-16 is committed at `260fcdd`. **WP-16a is finished and
-gate-green but not committed** - it is the working tree, and it corrects WP-16's exit
-criterion rather than adding to it, so read its section above before anything else. The
-last full gate ran twelve legs -
+**Where to pick up.** WP-16a is committed at `2195581`, which is the tip of `main`.
+**WP-17 is complete and uncommitted**, so the tree is dirty on purpose: nine files
+changed, `crates/cli/src/contend.rs`, `crates/cli/src/wavfile.rs` and `scripts/` are new.
+Read WP-17's section above before anything else, because two of the things it found are
+product defects rather than harness gaps - a device that goes silent was being filed as a
+flawless capture, and nothing checked the WAL size at all.
+
+The gate is twelve legs -
 `fmt / clippy / test / parity / offline / deny / doc` at the root, `appfmt / appclippy /
-apptest` in `app/src-tauri` and `uicheck / uitest` in `app/ui` - at **914 passing, 0
-failing, 12 ignored** in Rust and 24 passing in the frontend, and the em-dash sweep over
-the changed files reports zero. `/data2/vcw-scratch/gate.sh` is the durable copy of the
-script.
+apptest` in `app/src-tauri` and `uicheck / uitest` in `app/ui` - and
+`/data2/vcw-scratch/gate.sh` is the durable copy of the script. There is a thirteenth
+thing to run now that is not in it: `scripts/soak-harness.sh short <dir>` is **1m48s** for
+seven legs and is what CI runs on every push, and `VCW_RIP` pointed at a WAV from
+`/data2/source_rips` adds an eighth, the corpus leg, for another 16 s.
 
 **First light has been run**, which is what the item below used to ask for, and it is the
 reason WP-16a exists. It cost about an hour and found five things in a tree that was
@@ -3339,11 +3605,14 @@ of them a 2.33 GiB real side - and `~/.config/dev.vcw.app/settings.json` points 
 Both pre-WP-13 projects in it have now been upgraded to v2 by being opened, so re-running
 the schema part of that exercise needs a fresh v1 copy.
 
-**The single most valuable thing left is not code.** WP-16 closed the last of Phase 1's
-UI work, which means every stage of both §50's chain and §44's workflows now exists - and
-**neither has been run once from end to end**. M4 asks for the CLI chain; the window has
-never been opened at all. Both runs are cheap, need no new code, and are the only things
-that will say whether the parts hold together when nobody is stopping between steps.
+**The single most valuable thing left is still not code, and half of it is now done.**
+WP-16 closed the last of Phase 1's UI work, which means every stage of both §50's chain
+and §44's workflows exists. The §44 half has been run - that is first light, above, and
+it cost an hour and found five defects. **§50's chain has still never been run once from
+end to end**, and M4 asks for exactly that: the CLI chain on a real record with a tagged
+FLAC at the end. It needs no new code and it needs the turntable, so it belongs at the
+rig, and it is the only remaining thing that will say whether the links hold when nobody
+is stopping between them.
 
 **`WP-17`, the nightly soak and QA harness, is next** at weight 7 - the thing that turns
 a run that passed once into a run that cannot quietly regress. It is small beside WP-16,
@@ -3451,16 +3720,24 @@ the spike harness.
   first change since WP-02 to touch the schema, so `docs/SCHEMA.md` was regenerated with
   it; regenerate with `VCW_BLESS=1 cargo test -p vcw-project --test schema_doc` whenever
   the schema moves, or `the_committed_document_matches_the_schema` fails.
-- **The gate is eleven legs now**, because the shell is a workspace of its own and the
+- **The gate is twelve legs now**, because the shell is a workspace of its own and the
   root's legs cannot see it: `fmt clippy test parity offline deny doc` at the repository
-  root, `appfmt appclippy apptest` in `app/src-tauri`, and `uicheck` (`pnpm check`) in
-  `app/ui`. `/tmp/gate.sh` runs all eleven, tallies `gate-test.log` and
+  root, `appfmt appclippy apptest` in `app/src-tauri`, and **both** `uicheck`
+  (`pnpm check`) and `uitest` (`pnpm test`) in `app/ui` - WP-16a split those two apart,
+  because `pnpm check` proves the frontend compiles and cannot prove it behaves.
+  `/data2/vcw-scratch/gate.sh` runs all twelve, tallies `gate-test.log` and
   `gate-apptest.log` together, and sweeps the changed files for em dashes - a sweep that
   now covers `.ts`, `.tsx`, `.css` and `.json` as well. The two new legs earned their
   keep on the first run: `doc` found public documentation in the new crate linking to a
   private item, and `appclippy` found a constant that only its own test reads.
   Building the shell needs the frontend built first, since `tauri-build` fails when
   `frontendDist` is missing.
+- **The soak harness is not one of the twelve, and should not be.** `scripts/soak-harness.sh
+  short <dir>` is 1m48s of real captures - seven of them, or eight and 2m04s with the
+  corpus leg - and it is what CI runs on every push. It belongs next to the gate rather than inside it, because it needs a writable
+  directory with a couple of gigabytes free and the gate needs nothing but the repository.
+  `VCW_RIP=/data2/source_rips/<a>.wav` adds the corpus leg. `nightly` instead of `short`
+  is two real-time hours and is for the scheduled job or an idle machine.
 - **`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` is part of the gate.**
   It had never been run, and it found ten broken doc links across four crates that
   `clippy -D warnings` does not see: private items linked from public docs
