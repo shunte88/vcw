@@ -95,7 +95,9 @@ pub fn library(root: &Path) -> Vec<view::Project> {
         .map(|path| summarise(&path))
         .collect();
 
-    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    // Newest first. `Reverse` rather than a flipped comparator: same stable
+    // order, and clippy asks for it from 1.98 on.
+    out.sort_by_key(|entry| std::cmp::Reverse(entry.modified));
     out
 }
 

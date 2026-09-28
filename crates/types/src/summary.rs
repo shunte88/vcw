@@ -135,11 +135,14 @@ impl Summary {
     /// the wrong length is a corrupt blob, and `validate` is where that gets
     /// reported; a renderer's job is to draw what is there.
     pub fn triplets(blob: &[u8]) -> impl Iterator<Item = Self> + '_ {
-        blob.chunks_exact(TRIPLET_BYTES).map(|chunk| {
-            let mut bytes = [0u8; TRIPLET_BYTES];
-            bytes.copy_from_slice(chunk);
-            Self::from_le_bytes(&bytes)
-        })
+        // `as_chunks` rather than `chunks_exact` because the chunk size is a
+        // constant, so the compiler can hand `from_le_bytes` the array it wants
+        // without the intermediate copy this used to make. Clippy asks for it
+        // from 1.98 on; it has been available since well before our MSRV.
+        blob.as_chunks::<TRIPLET_BYTES>()
+            .0
+            .iter()
+            .map(Self::from_le_bytes)
     }
 
     /// Combines summaries of adjacent runs, each weighted by its sample count.

@@ -421,7 +421,9 @@ fn genre_names(value: &serde_json::Value) -> Vec<String> {
             (!name.is_empty()).then(|| (genre["count"].as_i64().unwrap_or(0), name.to_string()))
         })
         .collect();
-    genres.sort_by(|left, right| right.0.cmp(&left.0));
+    // `Reverse` rather than a flipped comparator: same stable descending
+    // order, and clippy asks for it from 1.98 on.
+    genres.sort_by_key(|left| std::cmp::Reverse(left.0));
     genres.into_iter().map(|(_, name)| name).collect()
 }
 

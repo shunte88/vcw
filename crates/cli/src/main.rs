@@ -480,6 +480,11 @@ enum Command {
         /// measure without gating. §41.
         #[arg(long, default_value_t = 4)]
         wal_slack: u32,
+        /// Report the commit latency without failing the run on it. For shared
+        /// machines - a CI runner's commit tail measures the runner, not the
+        /// writer. Every other check still applies.
+        #[arg(long)]
+        ignore_commit_budget: bool,
         /// Seconds between progress lines. Zero for silence.
         #[arg(long, default_value_t = 60)]
         every: u64,
@@ -1100,6 +1105,7 @@ fn main() -> anyhow::Result<()> {
             readers,
             reader_hz,
             wal_slack,
+            ignore_commit_budget,
             every,
             json,
         } => soak::run(&soak::Options {
@@ -1125,6 +1131,7 @@ fn main() -> anyhow::Result<()> {
             readers,
             reader_hz,
             wal_slack,
+            ignore_commit_budget,
             every,
             json,
         }),

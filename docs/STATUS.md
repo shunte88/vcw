@@ -3580,22 +3580,153 @@ needing a checkpoint of its own, and **6.2 GB of samples were verified byte for 
 the largest readback the project has done by two orders of magnitude. D3's 250 ms budget
 is not close to being the binding constraint on either disk.
 
+## Phase 1 - the CI repair, 2026-09-28
+
+**CI had never been green.** Every one of the twenty runs GitHub still holds, back to
+2026-09-25, failed - while the local gate was green on every one of those commits. The two
+disagreed for three days and nothing said so, because nobody looked: the gate was the
+thing being trusted and CI was a notification nobody had opened.
+
+That is the finding. The five causes underneath it are almost incidental by comparison,
+but three of them were real defects and two were shipped the day before.
+
+### The local gate could not see what CI sees
+
+This box was on stable 1.94.1. CI runs `dtolnay/rust-toolchain@stable`, which was 1.98.1 -
+four releases and about six months of clippy lints ahead. A lint added in that window
+cannot fail a local run by construction, so `chunks_exact_to_as_chunks` sat unseen here
+while it turned CI red on every push.
+
+The fix is a leg, not a one-line edit. **`toolchain` is now leg zero** and fails when
+`rustup check` reports stable behind, with the note that CI runs the newer one; when
+`rustup check` cannot reach the network it reports `SKIPPED` rather than blocking a commit
+offline. Two more legs close the rest of the gap between the gate and CI's job list:
+**`msrv`** (`cargo +1.90 check --workspace --all-targets`, mirroring CI's own MSRV job, so
+an API newer than the promise fails here first) and **`spikes`**, which had no local
+counterpart at all.
+
+**Leg zero earned its place immediately.** Once the toolchain was current, clippy found
+**four** lint sites rather than the one CI had reported - `crates/types/src/summary.rs`,
+`crates/export/src/encoder.rs`, `crates/export/tests/from_a_project.rs`,
+`crates/metadata/src/musicbrainz.rs` and `crates/contract/src/browse.rs`. CI stops at the
+first crate that fails to compile, so its log named `vcw-types` and hid the other three
+crates completely. **A red CI tells you less than a green local gate, and the fix for that
+is not to read the log harder.** Two of the five are `as_chunks`, which also dropped an
+intermediate copy; two are `sort_by_key(Reverse(..))`, same stable order.
+
+### The memory gate was live on one platform in three
+
+`Growth` reads `VmRSS` from `/proc/self/status`. On Windows and macOS that read simply
+failed, `sampled` stayed false, no baseline was ever taken, and `within` returned true -
+so `--max-growth-mib 32` reported "not measured" and the run printed **pass**. WP-17's
+memory gate existed on Linux and was silently absent on the other two Tier 1 platforms.
+
+This is the exact failure the WP-17 section argues against, shipped inside WP-17, one day
+later. Writing down "a gate that has only ever been seen green is indistinguishable from a
+gate that cannot go red" does not make the next gate honest.
+
+The fix refuses rather than pretends. `resident_bytes` is `#[cfg(target_os = "linux")]`
+with an explicit `None` arm, and **`check_growth_gate` makes an unmeasurable gate an
+error**, naming `--max-growth-mib 0` as the remedy:
+
+```
+this platform cannot report resident memory, so --max-growth-mib 32 cannot be
+honoured. Pass --max-growth-mib 0 to soak without the memory gate; every other
+check still applies.
+```
+
+It is checked before the project is created, like the input file, so a run that cannot
+honour what it was asked costs nothing to find out. `Growth::sample_at` splits the reading
+from the policy, which is what lets the baseline logic be tested on a machine with no
+procfs - and that test failing on Windows and macOS is how the whole hole surfaced.
+`a_memory_gate_the_platform_cannot_honour_is_refused` covers all three cases: refused when
+unmeasurable, allowed when not requested, allowed when measurable.
+
+**Unverified:** the refusal has never executed on Windows or macOS. It is unit-tested and
+CI will be the first to run it.
+
+### The export verifiers were absent, and would have stayed absent on Windows
+
+`at_least_one_verifier_is_installed` failed on both Linux runners. **The test was right.**
+It exists so that the thirteen tests which read our exports back with somebody else's
+decoder cannot silently skip, and the runners had no `flac` and no `ffmpeg`. CI now
+installs them per platform.
+
+Fixing that exposed a second defect in the same file. `tool()` joined a bare name onto
+each `PATH` entry, so on Windows it would never find `ffprobe.exe` however many verifiers
+were installed - **every third-party check in that suite was unreachable on Windows**, and
+the only test that would have said so is the one that fails when none is found. Same shape
+as the memory gate: a helper that works on the developer's platform and quietly disables a
+whole class of verification elsewhere. It now tries the `.exe` suffix. The Windows step
+installs ffmpeg alone, since it carries `ffprobe` and one package is one thing that can go
+wrong.
+
+Windows had been failing before it ever reached these tests - `cargo test` stops at the
+first failing binary, and `vcw-cli`'s came first - so this one was queued behind the
+memory gate and invisible until it was fixed.
+
+### The soak job was red by construction
+
+Every correctness claim passed on the runner: zero loss, every byte verified, WAL bounded,
+memory flat, 3,438 reader queries covered. The job failed on **commit latency alone** -
+736.1 ms against a 250 ms budget on the `clean` leg.
+
+That number is the runner, not the writer. `PROJECT_PLAN.md` already said so before the
+first run: "a hosted runner shares its CPU and its disk, so the nightly's endurance and
+correctness results stand and its commit tail does not." **The caveat was written and the
+job was left asserting the thing the caveat denies.** Documenting a limitation is not the
+same as handling it.
+
+`vcw soak --ignore-commit-budget` reports the latency without gating on it, and the report
+line says so where nobody can miss it:
+
+```
+commit      p50 3.5 ms, p95 8.6 ms, p99 15.4 ms, max 49.0 ms, budget 5 ms (NOT GATED, so this is not a timing claim)
+```
+
+The JSON carries `"gated": false` beside the percentiles for the same reason. It is the
+only optional gate in the verdict: loss, byte fidelity, WAL bound, memory and reader
+health all still apply on a shared box, because none of them depend on who else is using
+the disk. `VCW_SHARED=1` turns it on, both CI soak jobs set it, and the same variable also
+sets `--max-growth-mib 0` on non-Linux, where the gate would now be refused.
+
+Checked from both ends, which is the standing rule: at a 5 ms block budget the same run
+**fails** with the gate on (52.0 ms, exit 1) and passes with it off, labelled.
+
+### The spikes job had never passed on a clean checkout
+
+`tauri::generate_context!` resolves `frontendDist` at compile time and panics if the
+directory is missing. The IPC spike's `dist/` is a build artefact and gitignored, so it
+exists on the machine that built it and nowhere else. Both CI and the `spikes` gate leg
+now write a placeholder `index.html` first; nothing there runs the window. A fresh clone
+needs the same `mkdir`, which is now the gate's job rather than folklore.
+
+### What this changes about the gate
+
+Fifteen legs, and the rule behind the list is new: **the gate must have a counterpart for
+every CI job.** It had eleven against CI's thirteen, and the two missing ones were exactly
+where the rot was - the toolchain that decides which lints exist, and the spikes workspace
+that only compiles where it was built. The em-dash sweep and the test tally are unchanged.
+
+A green gate now costs one `rustup` check more than it did and means considerably more
+than it did.
+
 ## Next up
 
 **Where to pick up.** WP-16a is committed at `2195581`, which is the tip of `main`.
-**WP-17 is complete and uncommitted**, so the tree is dirty on purpose: nine files
-changed, `crates/cli/src/contend.rs`, `crates/cli/src/wavfile.rs` and `scripts/` are new.
-Read WP-17's section above before anything else, because two of the things it found are
-product defects rather than harness gaps - a device that goes silent was being filed as a
-flawless capture, and nothing checked the WAL size at all.
+**WP-17 is committed at `b3b6e02`**, and the section above is worth reading before
+anything else, because two of the things it found are product defects rather than harness
+gaps - a device that goes silent was being filed as a flawless capture, and nothing
+checked the WAL size at all. **The CI repair that followed it is uncommitted**, and the
+section below it is that story.
 
-The gate is twelve legs -
-`fmt / clippy / test / parity / offline / deny / doc` at the root, `appfmt / appclippy /
-apptest` in `app/src-tauri` and `uicheck / uitest` in `app/ui` - and
-`/data2/vcw-scratch/gate.sh` is the durable copy of the script. There is a thirteenth
-thing to run now that is not in it: `scripts/soak-harness.sh short <dir>` is **1m48s** for
-seven legs and is what CI runs on every push, and `VCW_RIP` pointed at a WAV from
-`/data2/source_rips` adds an eighth, the corpus leg, for another 16 s.
+The gate is **fifteen legs** -
+`toolchain / fmt / clippy / test / parity / offline / deny / doc / msrv / spikes` at the
+root, `appfmt / appclippy / apptest` in `app/src-tauri` and `uicheck / uitest` in
+`app/ui` - and `/data2/vcw-scratch/gate.sh` is the durable copy of the script. There is a
+sixteenth thing to run that is not in it: `scripts/soak-harness.sh short <dir>` is
+**1m48s** for seven legs and is what CI runs on every push, and `VCW_RIP` pointed at a
+WAV from `/data2/source_rips` adds an eighth, the corpus leg, for another 16 s.
 
 **First light has been run**, which is what the item below used to ask for, and it is the
 reason WP-16a exists. It cost about an hour and found five things in a tree that was
@@ -3720,7 +3851,8 @@ the spike harness.
   first change since WP-02 to touch the schema, so `docs/SCHEMA.md` was regenerated with
   it; regenerate with `VCW_BLESS=1 cargo test -p vcw-project --test schema_doc` whenever
   the schema moves, or `the_committed_document_matches_the_schema` fails.
-- **The gate is twelve legs now**, because the shell is a workspace of its own and the
+- **The gate is fifteen legs now** (twelve until the CI repair added `toolchain`, `msrv`
+  and `spikes`), because the shell is a workspace of its own and the
   root's legs cannot see it: `fmt clippy test parity offline deny doc` at the repository
   root, `appfmt appclippy apptest` in `app/src-tauri`, and **both** `uicheck`
   (`pnpm check`) and `uitest` (`pnpm test`) in `app/ui` - WP-16a split those two apart,

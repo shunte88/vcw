@@ -225,7 +225,9 @@ fn a_padded_capture_exports_the_three_bytes_that_matter() {
 
     let stored = &sent[5_000 * frame_bytes..55_555 * frame_bytes];
     let expected: Vec<u8> = stored
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .flat_map(|sample| sample[..3].to_vec())
         .collect();
     assert_eq!(data_chunk(&plan.items[0].path), expected);

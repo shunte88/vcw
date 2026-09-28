@@ -53,9 +53,21 @@ use vcw_types::StorageFormat;
 /// Finds a tool on `PATH`, or `None`.
 fn tool(name: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|dir| dir.join(name))
-        .find(|candidate| candidate.is_file())
+    // `ffprobe` on Unix is `ffprobe.exe` on Windows, and a bare join finds
+    // neither there. Without the suffix every verifier in this file is absent on
+    // Windows however many of them are installed, and the only test that would
+    // say so is `at_least_one_verifier_is_installed`.
+    let names: Vec<String> = if cfg!(windows) {
+        vec![format!("{name}.exe"), name.to_owned()]
+    } else {
+        vec![name.to_owned()]
+    };
+    std::env::split_paths(&path).find_map(|dir| {
+        names
+            .iter()
+            .map(|name| dir.join(name))
+            .find(|candidate| candidate.is_file())
+    })
 }
 
 /// Runs a tool and returns its stdout and stderr together.

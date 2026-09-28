@@ -224,7 +224,7 @@ fn to_wire(spec: &Spec, stored: &[u8], out: &mut Vec<u8>) {
     out.clear();
     if spec.repacks() {
         out.reserve(stored.len() / 4 * 3);
-        for sample in stored.chunks_exact(4) {
+        for sample in stored.as_chunks::<4>().0 {
             out.extend_from_slice(&sample[..3]);
         }
     } else {

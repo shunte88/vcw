@@ -885,6 +885,25 @@ and it is what would close G1.
    either real power cuts on a rig nobody minds losing or a fault-injecting
    filesystem; both are already on S2's open list, and neither blocks M1.
 
+   **And then CI, which had never been green.** Checking WP-17's own exit criterion the
+   next afternoon showed every one of the twenty runs GitHub still holds had failed, back
+   to 2026-09-25, while the local gate was green on every one of those commits. Five
+   causes: a local toolchain four releases behind CI's stable, so a new clippy lint could
+   not fail a local run; the export suite's third-party verifiers absent from the runners,
+   which its own anti-vacuity test correctly refused to pass without; the soak job
+   asserting a commit-latency budget on a shared runner, which this plan had already said
+   it should not; a Phase 0 spike that only compiles where its `dist/` was built; and
+   **WP-17's memory gate live on Linux and silently absent on Windows and macOS**, where
+   it reported "not measured" and printed pass.
+
+   The last of those is the one worth remembering, because it is this plan's own lesson
+   failing one day after it was written down. Fixing it also turned up that every
+   third-party export check was unreachable on Windows, for the same reason: a helper
+   that works on the developer's platform and quietly disables a class of verification
+   elsewhere. Both now refuse rather than pretend, and **the gate grew from twelve legs
+   to fifteen** on a new rule - it must have a counterpart for every CI job. The two it
+   was missing were exactly where the rot was. `docs/STATUS.md` has the account.
+
 2. **In parallel, on the machine's own time** - the measurement jobs still queued from
    Phase 0, none of which need attention while they run:
    - **The soak on other platforms.** `scripts/soak-harness.sh` is the harness and needs

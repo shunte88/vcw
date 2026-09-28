@@ -157,6 +157,9 @@ pub(crate) struct Options {
     /// How many times its budget the WAL may reach before the run fails. Zero
     /// to measure without gating.
     pub(crate) wal_slack: u32,
+    /// Report the commit latency without gating on it. For shared machines,
+    /// where the tail measures the machine rather than the writer.
+    pub(crate) ignore_commit_budget: bool,
     /// How often to print a progress line, in seconds. Zero for silence.
     pub(crate) every: u64,
     /// Machine-readable output.
@@ -213,6 +216,10 @@ pub(crate) fn run(options: &Options) -> Result<()> {
             options.project.display()
         );
     }
+
+    // Checked before anything is created, like the file below: a soak that
+    // cannot honour the gate it was asked for should cost nothing to find out.
+    check_growth_gate(options.max_growth_mib, resident_bytes())?;
 
     // A file, if one was named, and then the format it dictates. Sniffed before
     // anything is created, so a file that cannot be read costs nothing.
@@ -411,7 +418,13 @@ pub(crate) fn run(options: &Options) -> Result<()> {
     // source produced, is a failure in either mode.
     let confined = report.is_clean()
         && verified.is_none_or(|v| v)
-        && outcome.commits_within_budget(&config)
+        // Optional, and the only gate here that is. A hosted CI runner shares
+        // its CPU and its disk with whatever else is on the box, so its commit
+        // tail measures the runner and not the writer: the first nightly saw
+        // 736 ms against a 250 ms budget with zero loss and every byte
+        // verified. Endurance and correctness still hold there; the tail does
+        // not, so CI turns this one off and the report says so.
+        && (options.ignore_commit_budget || outcome.commits_within_budget(&config))
         // A leak is a failure whether a fault was asked for or not, which is
         // what puts it here rather than in the clean-run arm below. So is a
         // reader that could not read: the writer is allowed to be interrupted,
@@ -478,7 +491,10 @@ pub(crate) fn run(options: &Options) -> Result<()> {
                 "limit_mib": options.max_growth_mib,
             },
             "commit_micros": { "p50": p50, "p95": p95, "p99": p99, "max": worst,
-                               "budget": config.commit_granularity_millis() * 1_000 },
+                               "budget": config.commit_granularity_millis() * 1_000,
+                               // So a consumer can tell a timing claim from a
+                               // run that only measured the timing.
+                               "gated": !options.ignore_commit_budget },
             "prepare_micros": outcome.prepare.summary()
                 .map(|(a, b, c, d)| serde_json::json!({ "p50": a, "p95": b, "p99": c, "max": d })),
             "checkpoint_micros": outcome.checkpoint.summary()
@@ -514,12 +530,17 @@ pub(crate) fn run(options: &Options) -> Result<()> {
         outcome.commits,
     );
     println!(
-        "  commit      p50 {:.1} ms, p95 {:.1} ms, p99 {:.1} ms, max {:.1} ms, budget {} ms",
+        "  commit      p50 {:.1} ms, p95 {:.1} ms, p99 {:.1} ms, max {:.1} ms, budget {} ms{}",
         p50 as f64 / 1_000.0,
         p95 as f64 / 1_000.0,
         p99 as f64 / 1_000.0,
         worst as f64 / 1_000.0,
         config.commit_granularity_millis(),
+        if options.ignore_commit_budget {
+            " (NOT GATED, so this is not a timing claim)"
+        } else {
+            ""
+        },
     );
     if let Some((a, _, _, d)) = outcome.prepare.summary() {
         println!(
@@ -627,6 +648,7 @@ pub(crate) fn run(options: &Options) -> Result<()> {
 /// Linux. §41 asks for memory-growth tests and this is the platform they run
 /// on; the soak says so in its output rather than reporting a zero that reads
 /// like a measurement.
+#[cfg(target_os = "linux")]
 fn resident_bytes() -> Option<u64> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;
     status
@@ -635,6 +657,40 @@ fn resident_bytes() -> Option<u64> {
         .and_then(|rest| rest.split_whitespace().next())
         .and_then(|kb| kb.parse::<u64>().ok())
         .map(|kb| kb * 1024)
+}
+
+/// Windows and macOS have no procfs, and asking them costs a dependency.
+///
+/// Returning `None` here is only safe because [`check_growth_gate`] refuses a
+/// gated soak on a platform it cannot measure. Before it did, WP-17's memory
+/// gate was live on one of three Tier 1 platforms and silently absent on the
+/// other two, which CI found the day after it shipped.
+#[cfg(not(target_os = "linux"))]
+fn resident_bytes() -> Option<u64> {
+    None
+}
+
+/// Refuses a memory gate this platform cannot honour.
+///
+/// `rss` is passed in rather than read here so that both answers are reachable
+/// from a test on any platform.
+///
+/// # Why this is an error and not a warning
+///
+/// The alternative is what WP-17 shipped first: `--max-growth-mib 32` on a
+/// machine with no procfs reported "not measured" and then printed `pass`. A
+/// gate that cannot fail is worse than no gate at all, because the report reads
+/// the same whether it held or was never applied. Refusing puts the choice in
+/// the operator's hands and records it in the command line.
+fn check_growth_gate(limit_mib: u64, rss: Option<u64>) -> Result<()> {
+    if limit_mib > 0 && rss.is_none() {
+        bail!(
+            "this platform cannot report resident memory, so --max-growth-mib {limit_mib} \
+             cannot be honoured. Pass --max-growth-mib 0 to soak without the memory gate; \
+             every other check still applies."
+        );
+    }
+    Ok(())
 }
 
 /// Resident memory over the run. §41's memory-growth test.
@@ -663,9 +719,15 @@ impl Growth {
     /// How long to let the process settle before taking the baseline.
     const SETTLE: Duration = Duration::from_secs(5);
 
-    /// Takes a sample.
+    /// Takes a sample, reading this process's own resident size.
     fn sample(&mut self, elapsed: Duration) {
-        let Some(rss) = resident_bytes() else {
+        self.sample_at(elapsed, resident_bytes());
+    }
+
+    /// The half of [`Growth::sample`] that does not touch the operating system,
+    /// so which sample becomes the baseline is testable off Linux too.
+    fn sample_at(&mut self, elapsed: Duration, rss: Option<u64>) {
+        let Some(rss) = rss else {
             return;
         };
         self.sampled = true;
@@ -700,7 +762,7 @@ impl Growth {
     /// One line for the human report.
     fn line(&self, limit_mib: u64) -> String {
         if !self.sampled {
-            return "not measured (no /proc on this platform)".to_owned();
+            return "not measured on this platform, so no memory gate ran".to_owned();
         }
         let mib = |bytes: u64| bytes as f64 / (1024.0 * 1024.0);
         let Some(grew) = self.grew_by() else {
@@ -1064,16 +1126,61 @@ mod tests {
 
     #[test]
     fn the_baseline_is_the_first_sample_after_the_settle_window() {
-        // `sample` reads this process's own RSS, so the assertions are about
-        // which sample became the baseline, not about the value.
+        // `sample_at` rather than `sample`: the assertions are about which
+        // sample became the baseline, and reading a real RSS to make that point
+        // is what made this test fail on Windows and macOS, where there is no
+        // procfs and every sample was `None`.
         let mut g = Growth::default();
-        g.sample(Duration::from_secs(1));
+        g.sample_at(Duration::from_secs(1), Some(40 * 1024 * 1024));
         assert!(g.sampled, "an early sample should still be recorded");
         assert_eq!(g.baseline, None, "the baseline was taken before the settle");
-        g.sample(Growth::SETTLE);
-        assert!(g.baseline.is_some(), "no baseline at the settle boundary");
-        let settled = g.baseline;
-        g.sample(Growth::SETTLE + Duration::from_secs(60));
-        assert_eq!(g.baseline, settled, "the baseline moved after it was set");
+        g.sample_at(Growth::SETTLE, Some(41 * 1024 * 1024));
+        assert_eq!(
+            g.baseline,
+            Some(41 * 1024 * 1024),
+            "no baseline at the settle boundary"
+        );
+        g.sample_at(
+            Growth::SETTLE + Duration::from_secs(60),
+            Some(50 * 1024 * 1024),
+        );
+        assert_eq!(
+            g.baseline,
+            Some(41 * 1024 * 1024),
+            "the baseline moved after it was set"
+        );
+        assert_eq!(g.peak, 50 * 1024 * 1024, "the peak did not follow the run");
+    }
+
+    #[test]
+    fn a_sample_the_platform_cannot_give_leaves_the_growth_unmeasured() {
+        let mut g = Growth::default();
+        g.sample_at(Growth::SETTLE, None);
+        assert!(!g.sampled, "an absent reading counted as a sample");
+        assert_eq!(g.baseline, None);
+        assert!(g.line(32).contains("no memory gate ran"));
+    }
+
+    #[test]
+    fn a_memory_gate_the_platform_cannot_honour_is_refused() {
+        // Both ends, which is the whole point: the gate must be refusable and
+        // it must not refuse a run that never asked for it.
+        let refused = check_growth_gate(32, None);
+        let message = refused
+            .expect_err("an unmeasurable gate was accepted")
+            .to_string();
+        assert!(
+            message.contains("--max-growth-mib 0"),
+            "no remedy: {message}"
+        );
+
+        assert!(
+            check_growth_gate(0, None).is_ok(),
+            "an ungated soak was refused for being ungated"
+        );
+        assert!(
+            check_growth_gate(32, Some(40 * 1024 * 1024)).is_ok(),
+            "a measurable gate was refused"
+        );
     }
 }

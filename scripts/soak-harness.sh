@@ -31,6 +31,24 @@ vcw=${VCW:-./target/release/vcw}
 mkdir -p "$dir"
 status=0
 
+# Two gates come off on a machine we do not own the timing of.
+#
+# VCW_SHARED=1 drops the commit-latency gate. A hosted runner shares its CPU
+# and its disk, so its commit tail measures the runner: the first nightly saw
+# 736 ms against a 250 ms budget on a run with zero loss, a bounded WAL, flat
+# memory and every byte verified. Endurance and correctness travel to a shared
+# box; a latency tail does not, and the rigs are where that number comes from.
+#
+# The memory gate needs procfs, and `vcw soak` now refuses a gate it cannot
+# honour rather than reporting one it did not apply - so on Windows and macOS
+# the limit is set to zero here, explicitly, where the intent is readable.
+gates=()
+[ "${VCW_SHARED:-0}" = 1 ] && gates+=(--ignore-commit-budget)
+case "$(uname -s)" in
+    Linux) ;;
+    *) gates+=(--max-growth-mib 0) ;;
+esac
+
 # 48 kHz throughout, not 192. The rate a leg runs at decides how much disk it
 # eats, and a 24/192 stereo capture is 1.15 MB/s: an hour of it is 4 GB, which
 # is most of a CI runner's free space. The properties these legs check - loss,
@@ -43,7 +61,10 @@ leg() {
     project="$dir/$name.vcw"
     rm -f "$project" "$project-wal" "$project-shm"
     printf '%-12s ' "$name"
-    if "$vcw" soak "$project" --rate 48000 --every 0 "$@" >"$dir/$name.log" 2>&1; then
+    # `${gates[@]+...}` rather than a bare `"${gates[@]}"`: macOS ships bash 3.2,
+    # where expanding an empty array under `set -u` is an unbound-variable error.
+    if "$vcw" soak "$project" --rate 48000 --every 0 ${gates[@]+"${gates[@]}"} "$@" \
+        >"$dir/$name.log" 2>&1; then
         echo "OK   $(grep -E '^  verdict' "$dir/$name.log" | sed 's/^  verdict *//')"
     else
         echo "FAILED"

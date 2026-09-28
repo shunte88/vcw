@@ -41,6 +41,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev
+      # WP-14's exports are verified by reading them back with somebody else's
+      # decoder, and `at_least_one_verifier_is_installed` fails the suite when
+      # none is present rather than letting thirteen tests skip in silence.
+      # That test was right and these runners were bare, which is why every CI
+      # run since the export tests landed has been red.
+      - name: Install the third-party export verifiers (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y flac ffmpeg
+      - name: Install the third-party export verifiers (macOS)
+        if: runner.os == 'macOS'
+        run: brew install flac ffmpeg
+      # ffmpeg alone on Windows: it carries ffprobe, which is all the suite
+      # needs, and one package is one thing that can go wrong.
+      - name: Install the third-party export verifiers (Windows)
+        if: runner.os == 'Windows'
+        run: choco install -y ffmpeg
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --workspace --all-targets
@@ -191,6 +207,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: spikes
+      # `tauri::generate_context!` resolves frontendDist at compile time and
+      # panics if the directory is absent. The spike's `dist/` is a build
+      # artefact and gitignored, so it exists on the machine that built it and
+      # nowhere else - which is why this job has never passed on a clean
+      # checkout. A placeholder is enough: nothing here runs the window.
+      - name: Give the IPC spike a frontendDist to point at
+        run: |
+          mkdir -p spikes/tauri-ipc-bench/dist
+          [ -f spikes/tauri-ipc-bench/dist/index.html ] || \
+            echo '<!doctype html><title>placeholder</title>' \
+              > spikes/tauri-ipc-bench/dist/index.html
       - run: cargo check --workspace --all-targets
         working-directory: spikes
 
@@ -215,6 +242,8 @@ jobs:
       # change what the run is measuring.
       - run: cargo build --release -p vcw-cli
       - run: scripts/soak-harness.sh short "$RUNNER_TEMP/soak"
+        env:
+          VCW_SHARED: 1
       - name: Keep the logs whatever happened
         if: always()
         uses: actions/upload-artifact@v4
@@ -246,6 +275,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release -p vcw-cli
       - run: scripts/soak-harness.sh nightly "$RUNNER_TEMP/soak"
+        env:
+          VCW_SHARED: 1
       - name: Keep the logs whatever happened
         if: always()
         uses: actions/upload-artifact@v4
