@@ -3711,14 +3711,118 @@ that only compiles where it was built. The em-dash sweep and the test tally are 
 A green gate now costs one `rustup` check more than it did and means considerably more
 than it did.
 
+## Phase 1 - what the first green-path CI run found, 2026-09-28
+
+The CI repair went in at `e7cd249` and the run that followed it was still red, which is
+the point of it. Everything the repair had aimed at worked: the export verifiers
+installed on all four runners, `soak harness (short)` passed with `VCW_SHARED=1` where it
+had failed on commit latency, `spikes still compile` passed on a clean checkout, and
+`fmt + clippy`, `msrv 1.90`, `cargo deny`, `core has no UI dependency` and
+`TypeScript matches Rust` were all green. What failed was `cargo test --workspace` on
+three of the four platforms, each for a different reason, and only `linux-x86_64` - the
+platform this is developed on - passed.
+
+**Four defects, two root causes, and the shape of both is the one this project keeps
+finding: a number calibrated on the dev box, asserted everywhere.**
+
+### Windows could never have run a debug build of this binary
+
+`test (windows-x86_64)` failed three `detect_from_cli` tests with the same message, and
+the message was the spawned child's rather than the test's:
+`thread 'main' has overflowed its stack`.
+
+Windows reserves **1 MiB** for a process's main thread against 8 MiB on Linux and macOS,
+and the size lives in the executable header rather than being asked for at run time. A
+debug `vcw --version` wants between **1.0 and 1.5 MiB before it has parsed an argument**,
+because clap's derive expands an `augment_subcommands` function per subcommand enum that
+builds every `Command` and every `Arg` as a local, and unoptimised they are all live at
+once. `gdb` puts the fault in `augment_subcommands`, five frames under `main`, with
+nothing of ours in between.
+
+Reproduced here in one command, which is the part worth keeping: `ulimit -s 1024` is
+Windows' ceiling on a machine that is not Windows, and the same binary that runs at
+`8192` aborts at `1024`. A release build of the same commit runs in **256 KiB**.
+
+So this was never a defect in a shipped binary, because releases are what ship. It was
+that **no integration test that spawns this binary could pass on Windows**, and because
+cargo stops at the first failing target, the rest of the CLI suite never ran there at
+all. Three tests were visible; the true count was unknown and still is.
+
+`main` now runs the CLI on a thread with a stack it asks for, 8 MiB, which is what the
+other two platforms hand a main thread anyway. A thread stack is mmapped, so it answers
+to neither the executable header nor `RLIMIT_STACK` - which is why this fix is testable
+where raising the header with the MSVC linker's `/STACK:` would not have been.
+`crates/cli/tests/startup.rs` is the gate: parsing and a real subcommand under a
+1024 KiB stack, plus `the_shell_really_does_lower_the_stack`, which fails if `sh` ignores
+the limit rather than letting the other two pass on 8 MiB of headroom. Verified from both
+ends - `main.rs` reverted, both tests fail quoting the overflow, restored, both pass.
+
+### The recovery test charged process start-up to recovery loss
+
+`test (linux-aarch64)` failed one test:
+`recovered only 0.750 s of a 2.626 s capture; the floor allows 1.000 s of loss`.
+
+`kill_at` started its clock at `spawn` and allowed `BLOCK_MILLIS + 750 ms`, the 750 ms
+being start-up slack "for a Pi booting this off an SD card". On a cold `ubuntu-24.04-arm`
+runner start-up was about **1.9 s**, so a test about commit granularity was measuring
+process launch.
+
+The clock now starts when the writer says it is capturing - `vcw soak` prints its banner
+once `persistence::spawn` has returned - so there is no start-up term left to guess at.
+The allowance is **one commit block, 250 ms**, which makes the assertion *tighter* than
+the one that was failing rather than looser: the measured shortfall on this host is
+0.126 s. The bound is two-sided, because the ring is already filling while the project is
+created and the banner comes after that, so the stored audio can begin up to a ring's
+worth before this clock starts. That is a ceiling on overstatement, not on loss, and
+S1's conclusion that the ring is not part of the loss is untouched.
+
+### The test was piping the child's stderr and throwing it away
+
+`test (macos-aarch64)` failed three tests, and all three accusations were wrong:
+`a killed writer should leave a hot log, found Sidecars { wal_bytes: 0, shm_bytes: 0 }`,
+`no hot log to dry-run against`, and `no such table: capture_blocks`.
+
+`start()` set `Stdio::piped()` on stderr and never read it. `Child::kill()` succeeds on a
+process that has already exited and `status.success()` is false either way, so
+**a writer that died during startup was indistinguishable from one that was killed** -
+and the assertions then blamed the writer for the sidecars it never got as far as
+creating. There is now a `still_running` check before every kill and `stderr_of` on every
+failure path. Verified by pointing a project at `/proc`: the assertion now reads
+`unable to open database file` instead of accusing the writer.
+
+**This makes macOS legible, it does not fix macOS.** What `vcw soak` does wrong on
+`macos-latest` is still unknown, and the next run is what will say.
+
+### A test that could pass by doing nothing
+
+`a_capture_killed_before_it_committed_anything_still_recovers` killed 120 ms after spawn
+and returned early if the project did not exist yet, on the reasoning that a machine too
+fast for the case under test should not fail. On the runners it is not a fast machine, it
+is a slow one, and the early return is a silent skip that asserts nothing - the same
+shape as WP-17's memory gate reporting "not measured" beside "pass". It now kills on the
+readiness signal, which is after `Project::create` and a full block before the first
+commit, and asserts the project exists rather than shrugging.
+
+### Where that leaves it
+
+Gate green at **931 tests**, three of them new, zero em dashes. Two of the four findings
+are fixed outright, one is a measurement that was wrong and is now right, and one is a
+diagnosis tool rather than a fix. Nothing here says the next CI run is green: Windows only
+ever showed its first failing test target, and macOS has not yet been asked the question
+in a form that produces an answer.
+
 ## Next up
 
-**Where to pick up.** WP-16a is committed at `2195581`, which is the tip of `main`.
-**WP-17 is committed at `b3b6e02`**, and the section above is worth reading before
-anything else, because two of the things it found are product defects rather than harness
-gaps - a device that goes silent was being filed as a flawless capture, and nothing
-checked the WAL size at all. **The CI repair that followed it is uncommitted**, and the
-section below it is that story.
+**Where to pick up.** **WP-17 is committed at `b3b6e02`** and the CI repair at
+`e7cd249`, which is the tip of `main`. The two sections above are worth reading before
+anything else. WP-17 found two product defects rather than harness gaps - a device that
+goes silent was being filed as a flawless capture, and nothing checked the WAL size at
+all. The first CI run on the repaired workflow then found four more, three of them on
+platforms nothing local can reach, and **the fixes for those are uncommitted**: a thread
+stack in `crates/cli/src/main.rs`, the new `crates/cli/tests/startup.rs`, and the
+measurement rewrite in `crates/cli/tests/kill_and_recover.rs`. Gate green at 931 tests.
+**CI has not been green yet**, and the honest reason is that Windows only ever showed its
+first failing test target while macOS had not been asked in a form that answers.
 
 The gate is **fifteen legs** -
 `toolchain / fmt / clippy / test / parity / offline / deny / doc / msrv / spikes` at the
@@ -3745,10 +3849,22 @@ FLAC at the end. It needs no new code and it needs the turntable, so it belongs 
 rig, and it is the only remaining thing that will say whether the links hold when nobody
 is stopping between them.
 
-**`WP-17`, the nightly soak and QA harness, is next** at weight 7 - the thing that turns
-a run that passed once into a run that cannot quietly regress. It is small beside WP-16,
-and the order matters: a harness written before the workflows existed would have tested
-the parts it could reach.
+**`WP-20`, the Audacity import, is next** at weight 10 - the largest item left in
+Phase 1 and the only remaining one that adds a capability rather than describing or
+shipping what already exists. It is also the best-prepared work in the repository, which
+is an argument for doing it while that is still true: S5 decoded AUP3 and AUP4 against 30
+real projects with full byte consumption, the Python oracle to diff a parse against
+exists, the corpus is at `/data2/vinyl_rips`, and the traps are written down rather than
+waiting to be rediscovered - `wavetrack/@rate` and not `project/@rate`, `user_version`
+and not the extension, `mode=ro` and not `immutable=1`, and reference-counted blocks
+because 532 refs point at 456 distinct blocks in one corpus project.
+
+**WP-18** (docs, weight 5) and **WP-19** (packaging, 7) are the rest of Phase 1 and both
+are wrapping work: they describe or ship what exists and will not get harder for waiting.
+WP-19 has three things queued for it already - `bundle.active` is `false`, the icon is a
+placeholder and `csp` is `null` - plus the open question of whether the Tauri binary has
+a Windows stack ceiling of its own. It does not use clap, so it does not share the CLI's
+frame, but nothing has measured it.
 
 **What WP-16 leaves behind.** Its section above has the list; three items carry forward.
 **Nothing has been driven through a real capture by hand and no screenshot exists** - the

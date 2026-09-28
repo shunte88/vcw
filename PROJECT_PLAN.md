@@ -904,6 +904,31 @@ and it is what would close G1.
    to fifteen** on a new rule - it must have a counterpart for every CI job. The two it
    was missing were exactly where the rot was. `docs/STATUS.md` has the account.
 
+   **And then the first run on the repaired workflow, which was still red, and that is
+   what it was for.** Everything the repair aimed at worked; what failed was
+   `cargo test --workspace` on three of four platforms, each differently, with only the
+   platform this is developed on passing. Four more defects, and the shape of all four is
+   the same as the shape of the five above: a number that is true on the dev box,
+   asserted everywhere.
+
+   The one with teeth: **Windows gives a main thread 1 MiB where Linux and macOS give 8,
+   and a debug build of the CLI needs between 1.0 and 1.5 MiB to parse an argument**,
+   because clap's derive builds every `Command` and `Arg` as a local of one unoptimised
+   function. Release runs in 256 KiB, so nothing shipped was ever affected - but no
+   integration test that spawns the binary could pass on Windows, and cargo stops at the
+   first failing target, so the size of that hole is still unknown. `main` now runs on a
+   thread with a stack it asks for, which unlike the MSVC linker's `/STACK:` is something
+   `ulimit -s 1024` can check from here.
+
+   The other three were all in one test file, and two of them were the test lying rather
+   than the product failing: a recovery-loss floor that charged 1.9 s of process start-up
+   to commit granularity, a child process whose stderr was piped and discarded so a
+   writer that died on startup looked exactly like one that was killed, and a case that
+   returned early and asserted nothing whenever the machine was slower than 120 ms. The
+   third is **WP-17's vacuous-gate lesson for the third time in two days**, which is
+   itself the finding: this class does not get caught by remembering it, only by running
+   the thing somewhere that is not here.
+
 2. **In parallel, on the machine's own time** - the measurement jobs still queued from
    Phase 0, none of which need attention while they run:
    - **The soak on other platforms.** `scripts/soak-harness.sh` is the harness and needs

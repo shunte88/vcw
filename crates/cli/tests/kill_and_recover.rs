@@ -59,8 +59,10 @@
 //! and closing the gap needs either real power cuts or a fault-injecting
 //! filesystem. S2 has both on its open list.
 
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime};
 
 use rusqlite::Connection;
@@ -100,10 +102,100 @@ fn start(path: &Path) -> Child {
             "0",
             "--no-verify",
         ])
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn vcw soak")
+}
+
+/// How long to wait for a writer to say it is capturing before giving up on it.
+///
+/// Generous because the only thing it is protecting against is a hang: every
+/// real answer, including a child that dies on startup, arrives as EOF long
+/// before this. A plain `cargo test` has no timeout of its own, so without this
+/// a writer that neither prints nor exits would hold a CI job until the job's
+/// own limit.
+const READY_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Blocks until the writer announces that it is capturing, and returns the
+/// instant the announcement arrived.
+///
+/// # Why the clock cannot start at `spawn`
+///
+/// It used to, with 750 ms of allowance for start-up "for a Pi booting this off
+/// an SD card". On a cold `ubuntu-24.04-arm` runner the real figure was 1.9 s,
+/// so the test charged process start-up to recovery loss and reported
+/// `recovered only 0.750 s of a 2.626 s capture`. On `macos-latest` the kill
+/// landed before the writer had created the schema, so there was no hot log and
+/// the assertion blamed the writer for it. One unmeasured term, two platforms,
+/// three failures, and none of them reproducible on the dev box - where
+/// start-up is tens of milliseconds and 750 ms looked like ample slack.
+///
+/// A measured signal has no such calibration. `vcw soak` prints its banner once
+/// `persistence::spawn` has returned, which is to say once the capture is
+/// already running, so the instant this returns is a little *after* the first
+/// frame rather than before it. [`kill_at`] bounds the consequence in both
+/// directions rather than pretending the gap is zero.
+fn wait_until_recording(child: &mut Child) -> Instant {
+    let stdout = child.stdout.take().expect("stdout was piped");
+    let (lines, arriving) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if lines.send(line).is_err() {
+                return;
+            }
+        }
+    });
+
+    loop {
+        match arriving.recv_timeout(READY_TIMEOUT) {
+            Ok(line) if line.starts_with("soaking ") => return Instant::now(),
+            Ok(_) => {}
+            // Disconnected means the child closed stdout, which for this binary
+            // means it exited; Timeout means it is wedged. Neither is a hot log
+            // to recover, and its stderr is the only thing that can say which.
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!(
+                    "the writer never reported that it was capturing:\n{}",
+                    stderr_of(child)
+                );
+            }
+        }
+    }
+}
+
+/// Everything the child put on stderr. Only call it once the child is gone.
+fn stderr_of(child: &mut Child) -> String {
+    let mut text = String::new();
+    if let Some(mut err) = child.stderr.take() {
+        let _ = err.read_to_string(&mut text);
+    }
+    if text.trim().is_empty() {
+        "(nothing on stderr)".to_owned()
+    } else {
+        text
+    }
+}
+
+/// Panics unless the writer is still running, quoting it if it is not.
+///
+/// A child that died on its own is otherwise indistinguishable from one that was
+/// killed: `kill` succeeds on a corpse and `status.success()` is false either
+/// way. That is why macOS reported
+/// `a killed writer should leave a hot log, found Sidecars { wal_bytes: 0 }`
+/// instead of whatever the writer had to say for itself - the stderr was piped
+/// and then thrown away. Asking first, and reading it, turns a wrong accusation
+/// into a message.
+fn still_running(child: &mut Child) {
+    if let Some(status) = child.try_wait().expect("try_wait") {
+        panic!(
+            "the writer exited on its own with {status} instead of capturing \
+             until it was killed:\n{}",
+            stderr_of(child)
+        );
+    }
 }
 
 /// Nanosecond jitter as a seed. No dependency, and reproducibility is not the
@@ -213,13 +305,14 @@ fn audit(conn: &Connection, capture_id: i64) -> u64 {
 fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
     let path = dir.join(format!("kill-{iteration}.vcw"));
     let mut child = start(&path);
-    let launched = Instant::now();
+    let recording_since = wait_until_recording(&mut child);
     std::thread::sleep(after);
+    still_running(&mut child);
 
     // SIGKILL on Unix, TerminateProcess on Windows. Either way the process gets
     // no chance to close the database, which is the condition under test.
     child.kill().expect("kill");
-    let ran_for = launched.elapsed();
+    let ran_for = recording_since.elapsed();
     let status = child.wait().expect("wait");
     assert!(!status.success(), "the child was supposed to be killed");
 
@@ -274,21 +367,29 @@ fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
     // Asserting the tight bound rather than the safe one is the point - a
     // regression that let the ring leak into the loss would pass the loose one.
     //
-    // The slack on top is process start-up, which is inside `ran_for` because
-    // the clock starts at `spawn` and the child has a project to create before
-    // it records anything. Measured at tens of milliseconds here; 750 ms is for
-    // a Pi booting this off an SD card.
+    // There is no slack for start-up any more, because `ran_for` no longer
+    // contains any: the clock starts when the writer says it is capturing, not
+    // when the process was asked to exist. See `wait_until_recording` for the
+    // three CI failures that cost.
+    //
+    // The bound is two-sided because the announcement and the first frame are
+    // not the same instant. The writer's ring is already filling while the
+    // project is created, and the banner comes after that, so the stored audio
+    // can begin up to a ring's worth *before* this clock started - which is a
+    // ceiling on the overstatement check, not on the loss.
     let recovered_secs = audited as f64 / f64::from(RATE);
-    let allowance = BLOCK_MILLIS as f64 / 1_000.0 + 0.75;
+    let block_secs = BLOCK_MILLIS as f64 / 1_000.0;
+    let ring_secs = RING_MILLIS as f64 / 1_000.0;
     assert!(
-        recovered_secs <= ran_for.as_secs_f64(),
-        "recovered {recovered_secs:.3} s from a capture that ran {:.3} s",
+        recovered_secs <= ran_for.as_secs_f64() + ring_secs + block_secs,
+        "recovered {recovered_secs:.3} s from a capture that ran {:.3} s, \
+         which is more than the ring can account for",
         ran_for.as_secs_f64()
     );
     assert!(
-        recovered_secs >= ran_for.as_secs_f64() - allowance,
+        recovered_secs >= ran_for.as_secs_f64() - block_secs,
         "recovered only {recovered_secs:.3} s of a {:.3} s capture; \
-         the floor allows {allowance:.3} s of loss",
+         the floor allows {block_secs:.3} s of loss, one commit block",
         ran_for.as_secs_f64()
     );
 
@@ -319,17 +420,24 @@ fn a_capture_killed_before_it_committed_anything_still_recovers() {
     // it rather than leaving a file that asks about it on every launch.
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("instant.vcw");
+    // Killed the instant the writer says it is capturing, rather than 120 ms
+    // after the process was asked to exist. The old form could not tell a
+    // too-fast machine from a too-slow one, so it guarded itself with
+    // `if !path.exists() { return }` - and a runner that had not finished
+    // creating the project inside 120 ms did not fail here, it passed here
+    // having asserted nothing at all. The banner is printed after
+    // `Project::create` returns and one commit block before the first block is
+    // written, which is the window this test wants and now always gets.
     let mut child = start(&path);
-    std::thread::sleep(Duration::from_millis(120));
+    wait_until_recording(&mut child);
+    still_running(&mut child);
     child.kill().expect("kill");
     let _ = child.wait();
 
-    if !path.exists() {
-        // Killed before the project was even created. Nothing to recover and
-        // nothing to assert; the run is simply too fast to be the case under
-        // test, and failing here would be a flake rather than a finding.
-        return;
-    }
+    assert!(
+        path.exists(),
+        "the writer announced a capture without leaving a project behind"
+    );
 
     let (ok, output) = recover_cli(&path, &["--apply", "--verify"]);
     assert!(ok, "vcw recover failed:\n{output}");
@@ -353,7 +461,9 @@ fn recovery_reports_before_it_writes() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("offered.vcw");
     let mut child = start(&path);
+    wait_until_recording(&mut child);
     std::thread::sleep(Duration::from_millis(1_800));
+    still_running(&mut child);
     child.kill().expect("kill");
     let _ = child.wait();
 
@@ -405,7 +515,9 @@ fn stranded_audio_is_not_discarded_without_being_asked() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("stranded.vcw");
     let mut child = start(&path);
+    wait_until_recording(&mut child);
     std::thread::sleep(Duration::from_millis(2_000));
+    still_running(&mut child);
     child.kill().expect("kill");
     let _ = child.wait();
 

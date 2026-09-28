@@ -62,6 +62,7 @@ mod tracks;
 mod waveform;
 mod wavfile;
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use vcw_types::STANDARD_RATES;
 
@@ -779,7 +780,51 @@ struct ReleaseFields {
     #[arg(long)]
     confirm: bool,
 }
+/// Stack for [`run`]. 8 MiB is what Linux and macOS hand a main thread by
+/// default, so this gives every platform the size the two we develop on already
+/// had.
+const RUN_STACK_BYTES: usize = 8 * 1024 * 1024;
+
+/// Runs the whole CLI on a thread whose stack size we chose.
+///
+/// # Why this is not just a call to `run`
+///
+/// Windows gives a process's main thread **1 MiB**, against 8 MiB on Linux and
+/// macOS, and it is fixed in the executable header rather than asked for at run
+/// time. `Cli::parse()` does not fit in 1 MiB in a debug build: clap's derive
+/// expands an `augment_subcommands` function per subcommand enum that builds
+/// every `Command` and every `Arg` as a local, and unoptimised they are all live
+/// at once. Measured on this tree, a debug `vcw --version` needs between 1.0 and
+/// 1.5 MiB and aborts with `thread 'main' has overflowed its stack`, while a
+/// release build of the same commit runs in 256 KiB.
+///
+/// So this was never a defect in a shipped binary, because releases are what
+/// ship. It was that **no integration test that spawns this binary could pass on
+/// Windows**, since `cargo test` builds it in debug: three `detect_from_cli`
+/// tests failed with the child's overflow quoted in the assertion, and the rest
+/// of the CLI suite never ran because cargo stops at the first failing target.
+///
+/// # Why a thread and not `/STACK:`
+///
+/// A thread stack is mmapped, so it is governed by neither the executable header
+/// nor `RLIMIT_STACK`. That makes the fix portable and, more importantly,
+/// **testable from the dev box**: `ulimit -s 1024` reproduces Windows' ceiling on
+/// Linux, which is how this was found without a Windows machine, and
+/// `tests/startup.rs` keeps it that way. Raising the header with the MSVC
+/// linker's `/STACK:` would have fixed Windows and left nothing that fails here.
 fn main() -> anyhow::Result<()> {
+    std::thread::Builder::new()
+        .name("vcw".to_owned())
+        .stack_size(RUN_STACK_BYTES)
+        .spawn(run)
+        .context("spawning the main thread")?
+        .join()
+        // Re-raised rather than reported, so a panic in `run` still looks
+        // exactly like a panic: same message, same backtrace, same exit code.
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+}
+
+fn run() -> anyhow::Result<()> {
     match Cli::parse().command {
         Command::Doctor => doctor(),
         Command::Devices {
