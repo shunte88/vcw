@@ -160,8 +160,15 @@ def parse_doc(blob, names):
             i += nbytes
             continue
         if tag == DICT_ENTRY:  # dict entries may also appear inline
+            # Same shape as an entry in the dict blob: id:u16 nbytes:u16, so
+            # four bytes of header. This branch has never executed - no corpus
+            # project carries an inline entry - and it read six, which is why
+            # the arithmetic is stated here rather than left to be discovered
+            # by whichever file first has one. Full byte consumption is the only
+            # thing that would have caught it, and it cannot fire on a branch
+            # that never runs.
             ident, nbytes = struct.unpack_from("<HH", blob, i)
-            i += 4 + 2
+            i += 4
             names[ident] = _utf32(blob[i : i + nbytes])
             i += nbytes
             continue

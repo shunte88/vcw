@@ -158,6 +158,12 @@ Stereo is **two sibling `wavetrack` elements**, the left carrying
 element with two channels. A clip-split project carries many `waveclip` /
 `sequence` pairs per track - one corpus file has 19 clips per channel.
 
+**Confirmed at WP-20 across all 30 files, both generations**: always exactly two
+`wavetrack` elements, always that pair of attribute values, always in that
+order. The importer still orders channels by `@channel` where the values are a
+permutation of `0..n` and falls back to document order otherwise, because
+"always" over 30 files is not a guarantee about the 31st.
+
 ## AUP4 - the delta, measured
 
 Four albums were opened in Audacity 4.0.0, converted automatically and saved,
@@ -473,9 +479,10 @@ never again be collapsed into one number by a caller.
     AUP4-only and matched `sampleblocks` exactly in all 5,664 cases, so it is
     worth validating against; its absence means AUP3, not corruption.
 15. **The dictionary is per-file.** Names present and the ids assigned to them
-    both vary between projects (59, 61 or 81 entries in this corpus). Resolve
-    names through the file's own dict every time; never cache an id across
-    files or hard-code one.
+    both vary between projects - **four sizes across the 30 files: 55, 59, 61
+    and 81** (55 is `OWS20.aup3`, 59 is `simples_test.aup3`, 61 is the other 23
+    AUP3s, 81 is all five AUP4s). Resolve names through the file's own dict
+    every time; never cache an id across files or hard-code one.
 16. **f64 attributes may re-round across a conversion.** `trimLeft` shifted by
     2.7e-15 s in two clips. Compare timing attributes with a tolerance, or in
     samples after multiplying by the rate, never with `==`.
@@ -490,6 +497,26 @@ never again be collapsed into one number by a caller.
     was missed here, but that is luck rather than a guarantee. (`immutable=1`
     remains the right choice only for read-only tooling over files already
     known to be checkpointed, because it avoids creating a `-shm`.)
+19. **`waveclip/@offset` is the sequence origin, not the audible start.** This
+    is the trap the importer spent the most care on. The audible span of a clip
+    is
+    `[offset + trimLeft, offset + numsamples / rate - trimRight]`, so
+    `offset` locates sample 0 of the *stored sequence* on the timeline and the
+    first audible sample sits `trimLeft` seconds later. A reader that treats
+    `offset` as the start of the audio places every trimmed clip early by its
+    own trim. Two consequences: a trim must be converted to samples by
+    rounding, not truncating, and **a clip's audible start almost never falls
+    on a 262,144-sample block boundary** - which is why WP-20 re-blocks the
+    timeline rather than adopting `sampleblocks` rows.
+20. **Document order is not offset order.** Clips must be sorted by offset
+    before they are read, and the sort cannot be assumed to have happened
+    upstream.
+21. **Most projects carry almost no metadata.** Across all 30 files: **GENRE in
+    28, ALBUM in 28, YEAR in 1, ARTIST in 1**, and two files (`simples_test` in
+    both generations) have no `tags` element content at all. An importer that
+    needs an artist to name a file will be without one in 29 cases out of 30,
+    so the naming template has to cope and the metadata lookup of §28 is the
+    real source of that field rather than the project file.
 
 ## Incidental finding, and it matters
 
@@ -550,12 +577,21 @@ fixed-width `u64` patched in place. Delete the corresponding `sampleblocks`
 rows, `VACUUM`, and the result is a few-MB project whose every surviving byte
 was written by Audacity. That belongs in WP-20, not here.
 
-## Next
+## Next - done at WP-20, 2026-09-28
 
 Port the grammar to Rust in the importer work package with the corpus as the
 regression test: parse every file, require full byte consumption, require zero
 dangling block references. The Python probe stays as the oracle the Rust
 implementation is diffed against.
+
+**All of that happened.** `crates/import` reads all 30 projects byte-complete
+with zero dangling references and is diffed against `probe.py --json` file by
+file, the shrink described above is `vcw_import::fixture` and produced the three
+committed fixtures, and the landing turns a project into a capture. The one
+thing the port added to the format's documentation is trap 19, which is written
+up above because it changed the design: `offset` is the sequence origin, so an
+adopted sample block would need a sample offset the schema has no room for, and
+the audio is re-blocked instead. See `docs/STATUS.md` for the work package.
 
 The corpus is now the regression set for both versions, and the rate rule the
 Rust importer must implement is `wavetrack/@rate`, with `project/@rate` ignored.

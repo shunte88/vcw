@@ -117,6 +117,15 @@ pub enum CaptureMode {
     /// Exclusive hardware access where the platform offers it (WASAPI exclusive,
     /// ALSA `hw:`); the only mode in which bit-perfection is plausible.
     Exclusive,
+    /// No stream was opened at all: the audio came out of another application's
+    /// project file (§12).
+    ///
+    /// Here because the other three are all answers to "how did VCW ask for this
+    /// device", and an import has no device to have asked about. Recording it as
+    /// `Shared` or `Native` would be the sort of plausible-looking default that
+    /// later gets read as a measurement, and the capture row is the one place a
+    /// reader looks to find out where the audio came from.
+    Imported,
 }
 
 impl CaptureMode {
@@ -126,6 +135,7 @@ impl CaptureMode {
             Self::Shared => "shared",
             Self::Native => "native",
             Self::Exclusive => "exclusive",
+            Self::Imported => "imported",
         }
     }
 
@@ -135,6 +145,7 @@ impl CaptureMode {
             "shared" => Some(Self::Shared),
             "native" => Some(Self::Native),
             "exclusive" => Some(Self::Exclusive),
+            "imported" => Some(Self::Imported),
             _ => None,
         }
     }
@@ -146,11 +157,21 @@ impl CaptureMode {
     /// conversion is the mixer's job. The other two might, which is a long way
     /// from saying they did - §9 settles that against the operating system, not
     /// against the mode that was asked for.
+    ///
+    /// [`CaptureMode::Imported`] cannot either, and for a different reason: the
+    /// samples may well be untouched, but whoever opened the device was not us
+    /// and left no record of how. Unknown provenance is reported as "no" rather
+    /// than inherited.
     pub const fn could_be_bit_perfect(self) -> bool {
         matches!(self, Self::Native | Self::Exclusive)
     }
 
-    /// Every mode, widest access first, for negotiation that falls back.
+    /// Every mode a device can be asked for, widest access first, for
+    /// negotiation that falls back.
+    ///
+    /// [`CaptureMode::Imported`] is deliberately absent: it is not a request
+    /// anyone can make of a device, so a negotiator that met it in this list
+    /// would try to open a stream in a mode that does not exist.
     pub const ALL: [Self; 3] = [Self::Exclusive, Self::Native, Self::Shared];
 }
 

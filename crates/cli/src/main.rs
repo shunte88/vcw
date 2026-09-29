@@ -52,6 +52,7 @@ mod contend;
 mod detect;
 mod devices;
 mod export;
+mod import;
 mod metadata;
 mod play;
 mod recover;
@@ -329,6 +330,36 @@ enum Command {
         /// project, which is minutes for a full side.
         #[arg(long)]
         verify: bool,
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Import an Audacity `.aup3` or `.aup4` project as a `.vcw` (§12).
+    ///
+    /// Writes a new project and never touches the source, which is opened
+    /// read-only. The audio is re-blocked through the capture writer, so what
+    /// lands is a capture like any other: playback, export, detection and
+    /// tagging all work on it unchanged.
+    Import {
+        /// The Audacity project to read.
+        source: std::path::PathBuf,
+        /// Where to write the project. Defaults to the source with a .vcw
+        /// extension. Refused if it already exists.
+        #[arg(short, long)]
+        output: Option<std::path::PathBuf>,
+        /// Which side the capture is. An Audacity project does not say.
+        #[arg(long, default_value_t = 'A')]
+        side: char,
+        /// Report what would land and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Do not turn labels into tracks.
+        #[arg(long)]
+        no_labels: bool,
+        /// Do not copy the tags onto the release.
+        #[arg(long)]
+        no_tags: bool,
         /// Machine-readable output.
         #[arg(long)]
         json: bool,
@@ -964,6 +995,23 @@ fn run() -> anyhow::Result<()> {
             apply,
             repair,
             verify,
+            json,
+        }),
+        Command::Import {
+            source,
+            output,
+            side,
+            dry_run,
+            no_labels,
+            no_tags,
+            json,
+        } => import::run(&import::Args {
+            source,
+            output,
+            side,
+            dry_run,
+            no_labels,
+            no_tags,
             json,
         }),
         Command::Export {

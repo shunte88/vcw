@@ -333,11 +333,13 @@ pub struct Rebuilt {
 ///
 /// # What it will not touch
 ///
-/// The `samples` blob, the format tag, and any block without a `capture_blocks`
-/// row. That last one is D4 as a guard rather than a comment: blocks imported
-/// from Audacity keep the summaries Audacity computed, including the weighting
-/// divergence recorded in [`crate::persistence::pyramid`], because rewriting
-/// them would make our copy of someone else's project differ from theirs.
+/// The `samples` blob, the format tag, and any block no capture claims - one
+/// with no `capture_blocks` row. That last one is D4 as a guard rather than a
+/// comment. Nothing writes such a block today: import re-blocks an Audacity
+/// timeline through the capture writer (see `capture_blocks` in
+/// [`crate::schema`]) and so produces rows like any other capture. The guard is
+/// for a block that arrives some other way, where rewriting summaries we did not
+/// compute would silently replace someone else's arithmetic with ours.
 ///
 /// # Errors
 ///

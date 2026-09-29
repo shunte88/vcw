@@ -565,7 +565,7 @@ in bytes and converts against the file's real page size. 216 tests. **Exit crite
 | **17** | Test corpus + soak harness: file-backed capture simulation, multi-hour runs, memory growth, contention, WAL stress, dropped-frame injection | §41 | 05 | 7 | Nightly CI job; regressions fail the build |
 | **18** | Docs: open project-format specification, recovery/validation API, user guide, diagnostic bundles | §42, §49 | 02, 06 | 5 | A third-party tool can read a project using the spec alone |
 | **19** | Packaging: AppImage/deb (x86_64 + aarch64), MSI, macOS bundle via CI, signing, release notes, checksum verification tool | - | 16 | 7 | Clean install and first-run capture on every Tier 1 platform; macOS bundle builds and passes non-device tests |
-| **20** | **Audacity import (tier A):** open `.aup3` and `.aup4`, read `sampleblocks`, decode the document to recover clips and labels, land it as a project for metadata assignment, splitting and tagged export | §12 | S5, 13 | 10 | Parses all 30 corpus projects (25 AUP3 + 5 AUP4) with full byte consumption and zero dangling block refs, diffed against the Python oracle; round-trips one of each version into a tagged export; **takes `wavetrack/@rate` and ignores `project/@rate`** (S5: the reverse would play 22 of 25 rips at 4× speed); switches on `user_version` not on the extension; opens with `mode=ro` not `immutable=1` so a populated WAL is honoured; reads `project` never `project_history`; skips the `0x10` thumbnail blob by length; **reference-counts sample blocks** (S5: 532 refs to 456 distinct blocks in the clip-split project, one shared three times) and never assumes dense or 1-based `blockid`s; validates AUP4's `waveblock/@length` against `sampleblocks` where present; compares timing f64s with a tolerance rather than `==`; treats an all-unity `envelope` as absent; refuses cleanly and informatively on anything it cannot parse |
+| **20** | **Audacity import (tier A):** open `.aup3` and `.aup4`, read `sampleblocks`, decode the document to recover clips and labels, land it as a project for metadata assignment, splitting and tagged export | §12 | S5, 13 | 10 | **Built 2026-09-28.** The twelfth crate, and the decision that shaped it is the landing: import **re-blocks the assembled timeline through `persistence::Writer`** rather than adopting `sampleblocks` rows. Adoption looks free - the blocks are already 1 MiB of immutable mono PCM - but `waveclip/@offset` is the sequence origin and not the audible start, so a clip's first audible sample almost never falls on a 262,144-sample boundary; an adopted block would need a per-block sample offset `capture_blocks` has no column for and `validate()` no way to check, and every reader in the project would need a special case for audio that came in rather than was recorded. Re-blocking costs one copy at import time and buys structural identity: **an imported capture is a capture**, which is the whole point of the work package. `CaptureMode::Imported` was added rather than defaulting to a lie, because the other three variants all answer "how did VCW ask for this device" and an import never did. D4 holds on the way in - `Int24Padded` keeps Audacity's own four-byte layout and no sample is converted - and gaps are written as silence because `capture_blocks.sequence` is contiguous and closing a gap would slide every label off the audio it names. CI reads **real Audacity bytes**: the shrinker deletes byte slices rather than writing a file, so a 68 KB fixture is still Audacity's dictionary, structure and attributes, and a fixture written here would have proved only that our encoder agrees with our decoder. Two defects came out of the tests, neither in the parser: a `Timeline` that trusted sortedness its input type does not carry (now a sort and an overlap refusal), and a label sitting past the end of the audio, which is the ordinary shape of a project somebody deleted a clip from - now reported and skipped rather than landed as a track pointing at nothing. The corpus oracle is the source file itself: for every clip on every channel the test reads the source `sampleblocks` row directly and compares the head and tail of its audible span at the frame the document puts it at, then checks the gaps are silent. The exit criterion is a test - both generations of `simples_test` imported, tracked, tagged, exported as WAV and compared byte for byte in the audio chunk, streamed a megabyte at a time. Driven by hand on a real 612 MB rip: 79,141,433 frames a channel, three tracks from labels, then 574.2 MiB of tagged WAV out of `vcw export`, with FLAC refused before the first file because float32 is not narrowable without somebody deciding about headroom. Exit criteria: parses all 30 corpus projects (25 AUP3 + 5 AUP4) with full byte consumption and zero dangling block refs, diffed against the Python oracle; round-trips one of each version into a tagged export; **takes `wavetrack/@rate` and ignores `project/@rate`** (S5: the reverse would play 22 of 25 rips at 4× speed); switches on `user_version` not on the extension; opens with `mode=ro` not `immutable=1` so a populated WAL is honoured; reads `project` never `project_history`; skips the `0x10` thumbnail blob by length; **reference-counts sample blocks** (S5: 532 refs to 456 distinct blocks in the clip-split project, one shared three times) and never assumes dense or 1-based `blockid`s; validates AUP4's `waveblock/@length` against `sampleblocks` where present; compares timing f64s with a tolerance rather than `==`; treats an all-unity `envelope` as absent; refuses cleanly and informatively on anything it cannot parse |
 
 **Total Phase 1: 149 sessions.** WP-12 (metadata) and WP-17/18 are the deliberately
 detachable ones - network-bound or documentation work that can absorb a session when the
@@ -929,7 +929,30 @@ and it is what would close G1.
    itself the finding: this class does not get caught by remembering it, only by running
    the thing somewhere that is not here.
 
-2. **In parallel, on the machine's own time** - the measurement jobs still queued from
+2. **Done, 2026-09-28** - **WP-20, the Audacity import**, at weight 10. The largest
+   item in Phase 1, and the last one that adds a capability. `vcw-import` is the twelfth
+   crate: all 30 corpus projects parse byte-complete with zero dangling block
+   references and are diffed against the Python oracle, three committed fixtures give CI
+   real Audacity bytes to read (the shrinker deletes byte slices rather than writing a
+   file), and `vcw import` lands a project as an **ordinary capture** so that every verb
+   from WP-04 onwards reads it unchanged.
+
+   **The mechanism is the interesting part.** Adopting Audacity's `sampleblocks` rows
+   looks free and does not work: `waveclip/@offset` is the sequence origin rather than
+   the audible start, so a trimmed clip's first audible sample almost never falls on a
+   262,144-sample boundary, and an adopted block would need a sample offset the schema
+   has no column for and `validate()` no way to check. Re-blocking through
+   `persistence::Writer` costs one copy at import time and buys structural identity.
+
+   **The exit criterion is a test rather than a demonstration**: both generations of
+   `simples_test` imported, tracked, tagged, exported as WAV and compared byte for byte
+   in the audio chunk. Driven by hand as well, on a real 612 MB rip: 79,141,433 frames a
+   channel, three tracks from labels, 574.2 MiB of tagged WAV out. Two defects came out
+   of the tests and neither was in the parser - a timeline that trusted sortedness its
+   input type does not carry, and a label sitting past the end of the audio, which is
+   the ordinary shape of a project somebody deleted a clip from.
+
+3. **In parallel, on the machine's own time** - the measurement jobs still queued from
    Phase 0, none of which need attention while they run:
    - **The soak on other platforms.** `scripts/soak-harness.sh` is the harness and needs
      no new code: Pi 5 on SD *and* on NVMe (S2 expected those to differ), and Windows.
@@ -946,13 +969,14 @@ and it is what would close G1.
    **D3's firmed-config soak is no longer on this list.** WP-05's exit soak *is* that
    run, with the product code rather than the spike harness.
 
-3. **Then** - **the first §50 run end to end**, which is what M4 asks for and what
+4. **Then** - **the first §50 run end to end**, which is what M4 asks for and what
    would close G1. Every link exists behind a CLI verb and every link has been exercised
    against the real 2.33 GiB side in isolation; the run itself is the outstanding item,
    not any part of it. It is cheap, it needs no new code, and it is the only thing that
    will say whether the chain holds together when nobody is stopping between steps.
-   **WP-17 is now done**, so the harness that stops the capture path quietly regressing
-   is in place and this run is what remains. It is the next thing to do, and it needs
+   **WP-17 and WP-20 are now done**, so the harness that stops the capture path quietly
+   regressing is in place, an Audacity project can be brought in as a capture, and this
+   run is what remains. It is the next thing to do, and it needs
    the turntable rather than a keyboard.
 
 **The remaining G0 exposure is hardware, not spikes.** Windows, Pi 5, Android, macOS

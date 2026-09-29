@@ -18,6 +18,7 @@ vcw-signal = { workspace = true }
 vcw-audio = { workspace = true }
 vcw-metadata = { workspace = true }
 vcw-export = { workspace = true }
+vcw-import = { workspace = true }
 vcw-project = { workspace = true }
 vcw-types = { workspace = true }
 anyhow = { workspace = true }

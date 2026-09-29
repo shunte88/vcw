@@ -264,8 +264,10 @@ pub use vcw_types::Summary;
 /// not divide evenly by 256. Both were confirmed against
 /// `/data2/vinyl_rips/simples_test.aup3`. We compute each level from the samples
 /// directly, which is the same answer everywhere Audacity's arithmetic is exact
-/// and a more accurate one where it is not. Blocks imported from Audacity keep
-/// their own summaries untouched (D4), so nothing is rewritten to match.
+/// and a more accurate one where it is not. Imported audio is summarised here
+/// too, since WP-20 re-blocks it through this writer, and the source project is
+/// never opened for writing - so the divergence is a difference between two
+/// files rather than something either of them has to be made to agree with.
 #[must_use]
 pub fn pyramid(format: StorageFormat, samples: &[u8], stride: u32) -> Vec<u8> {
     if stride == 0 {

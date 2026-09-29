@@ -1465,6 +1465,7 @@ dependencies = [
  "vcw-audio",
  "vcw-core",
  "vcw-export",
+ "vcw-import",
  "vcw-metadata",
  "vcw-project",
  "vcw-signal",
@@ -1532,6 +1533,20 @@ version = "0.1.0"
 dependencies = [
  "vcw-fingerprint",
  "vcw-metadata",
+ "vcw-types",
+]
+
+[[package]]
+name = "vcw-import"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "rusqlite",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "vcw-metadata",
+ "vcw-project",
  "vcw-types",
 ]
 

@@ -1,7 +1,8 @@
 # VCW - project status
 
-**As of:** 2026-09-27
-**Phase:** 1 is underway - WP-01 through WP-16 are built, plus WP-16a, all on Linux x86_64 only.
+**As of:** 2026-09-28
+**Phase:** 1 is underway - WP-01 through WP-17 are built, plus WP-16a and WP-20, all on
+Linux x86_64 only.
 All five Phase 0 spikes returned verdicts on their primary platform; gate G0 remains
 open on hardware coverage, WP-05's soak settled D3's firmed-config run, **WP-06 closes
 milestone M1, *it records*,** WP-07 locks D8, WP-08 adds the meters and the §10 fan-out
@@ -32,7 +33,14 @@ criterion asserted by a test that was verified to fail rather than by a reading 
 diff, which is how four workflows that had a binding and no handler were found. It also
 answers the four questions earlier work packages deferred to it, WP-07's, WP-09's,
 WP-11's and WP-13's, each in a file with the argument beside it.
-**Branch:** `main` at `260fcdd` (WP-16), with WP-16a uncommitted in the working tree.
+WP-17 then turned §41's twelve kinds of test into a harness and **found the defect of the
+week with it** - a device that goes silent was being filed as a flawless capture, because
+every counter in `Diagnostics` describes an event that happened and none of them can
+describe data that never arrived - and **WP-20 opens the door to twenty years of other
+people's rips**: an Audacity `.aup3` or `.aup4` is re-blocked through the same writer a
+live capture uses, so what lands is a capture and every verb from WP-04 onwards reads it
+without being told where the audio came from.
+**Branch:** `main` at `93a0ab8`, with WP-20 uncommitted in the working tree.
 
 This is the running snapshot: where Phase 0 actually stands, what is proven versus
 assumed, what is waiting on a decision, and what is waiting on hardware. The plan of
@@ -3811,9 +3819,192 @@ diagnosis tool rather than a fix. Nothing here says the next CI run is green: Wi
 ever showed its first failing test target, and macOS has not yet been asked the question
 in a form that produces an answer.
 
+## Phase 1 - WP-20, Audacity import
+
+Built 2026-09-28. Spike S5 had already decoded the format; this is the port, and the
+thing it exists to prove is not the parser. It is that **an Audacity project becomes an
+ordinary VCW capture**, so that every verb built between WP-04 and WP-14 works on twenty
+years of somebody else's rips without being told where the audio came from. The work
+package was taken next for exactly that reason: signing it off exercises most of the
+toolchain in one pass.
+
+Four steps, in order: the grammar in Rust, a fixture shrinker so CI has real Audacity
+bytes to read, the landing, and the round trip back out to a tagged file.
+
+### `vcw-import`, the twelfth crate
+
+The clean-room constraint from S5 holds: the grammar was derived from file bytes and no
+Audacity source was consulted, and the port was made from the spike's notes and the
+Python probe, not from anything upstream.
+
+The reading half is `sniff` (which version, from `user_version` and not from the
+extension), `doc` (the dictionary and the record stream), `model` (elements to clips,
+labels and tags), `read` (the two together) and `audit` (every block reference resolved
+against `sampleblocks`). All 30 corpus projects parse with **every byte of `project.doc`
+consumed and zero dangling block references**, and each one is diffed against
+`spikes/aup-format-probe/probe.py --json`: the oracle is an independent implementation of
+the same grammar, so a disagreement means one of the two is wrong and neither gets the
+benefit of the doubt.
+
+The refusals are part of the deliverable rather than a fallback. Tags `00 09 0B 0D 0E`
+never occur in 30 real files, so they are rejected rather than skipped; a file with no
+`application_id` is refused from its header rather than from a failed query, because the
+message a user sees for "this is not an Audacity project" should say that.
+
+### The fixture shrinker, which deletes rather than writes
+
+CI cannot hold a 271 MB project, and a fixture written here would prove only that our
+encoder agrees with our decoder - which is the mistake the corpus tests exist to avoid.
+So `fixture` shrinks a real project by **deleting byte slices**: the dictionary, the
+element structure and every attribute except the four it has to rewrite are bytes
+Audacity produced. `clips.aup3` is 68 KB, `clips.aup4` 72 KB and `rate-trap.aup3` 320 KB,
+and between them they carry both page sizes in use, both generations, a shared sample
+block, AUP4's `0x10` thumbnail blob and the rate trap. Five tests read them in CI.
+
+What a fixture cannot carry is audio - a repository is no place for somebody's commercial
+vinyl - so the sample bytes are zeros and the corpus tests cover decoding against the
+real files.
+
+### The landing: re-blocked, not adopted
+
+This was the decision of the work package. The obvious implementation is to adopt
+Audacity's `sampleblocks` rows into `capture_blocks` and copy nothing: the blocks are
+already 1 MiB of mono PCM and already immutable, which is what the schema wants.
+
+It does not work, and the reason is a trim. `waveclip/@offset` is the **sequence origin,
+not the audible start** - the audible span is `[offset + trimLeft, offset + numsamples /
+rate - trimRight]` - so a clip's first audible sample almost never falls on a
+262,144-sample boundary. An adopted block would need a per-block sample offset that
+`capture_blocks` has no column for and `validate()` no way to check, and every reader in
+the project - playback, export, the waveform pyramid, recovery - would need a special
+case for audio that came in rather than was recorded.
+
+So import **re-blocks the assembled timeline through `persistence::Writer`**, the same
+writer a live capture uses. It costs one copy of the audio at import time and buys
+structural identity: an imported capture is a capture. The three comments in
+`vcw-project` that had anticipated adopt-in-place were reconciled rather than left in
+tension, and `capture_blocks.blockid` now records the argument in place.
+
+Four things the timeline assembler has to get right, all of them asserted:
+
+- **Offset is the sequence origin.** Trims are rounded to samples, not truncated, and
+  document order is not even offset order.
+- **Gaps are load-bearing silence.** `capture_blocks.sequence` is documented contiguous,
+  and closing a gap would slide every label off the audio it names. So a gap is written
+  as zeros, which is silence in all three stored formats.
+- **No sample is converted.** D4 holds on the way in: `StorageFormat::Int24Padded`
+  (`0x00040001`, four bytes) keeps Audacity's own 24-bit layout rather than narrowing it.
+- **Blocks are shared, so they are read and not moved.** One 3-way shared block in the
+  clip-split project is read three times, and a test says so.
+
+`CaptureMode::Imported` was added rather than picking a plausible default. The other
+three variants all answer "how did VCW ask for this device", which an import never did;
+recording it as `Shared` or `Native` would be the sort of default that later reads as a
+measurement, and the capture row is the one place a reader looks to find out where the
+audio came from. It cannot claim bit-perfect, because unknown provenance is reported as
+"no" rather than inherited.
+
+Labels become locked user boundaries with titles, tags become the release - `ALBUM`,
+`ARTIST`, `YEAR`, `GENRE` through §32's normalisation, `COMMENTS` - and every tag is also
+kept verbatim under `import.tag.*` so nothing is lost by not having been mapped. What is
+deliberately dropped is editor state: gain, pan, mute, solo and envelopes describe how
+Audacity was set up to play a project, not what is on the record.
+
+### Two defects the tests found, neither of them in the parser
+
+**A `Timeline` trusted an invariant its input type does not carry.** Clips arrive sorted
+when `Project::from_events` parses a document, because the parser sorts them - but
+`model::Project` is an ordinary struct a caller can build by hand, and the landing tests
+do. The assembler had a `debug_assert!` where it needed a sort and a refusal; a
+hand-built project read the wrong clip rather than saying so. It now sorts, and refuses
+overlapping clips by name and time.
+
+**A label over deleted audio.** `rate-trap.aup3`'s three labels all sit past the end of
+the shrunken audio, which is also the ordinary shape of a project somebody deleted a clip
+from and kept the labels of. Landing them would have produced tracks pointing at
+nothing. A label beginning at or past the end of the audio is now **reported and
+skipped** - reported, because a silent drop is how a user loses track names without
+finding out - and one that merely overruns is clipped.
+
+### What the corpus says
+
+Two `#[ignore]`d tests run against the real files. The first lands two projects and then
+checks, for every clip on every channel, the head and tail of its audible span against
+**the source `sampleblocks` row read directly** at the frame the document puts it at, then
+checks the inter-clip gaps are silent. The oracle is the source file, not our reader: a
+trim off by one, a block stitched at the wrong offset or a swapped channel all move audio
+relative to the timeline, which is what it measures. The second lands both generations of
+`simples_test` and compares frames, format, channels and a CRC32 of the whole assembled
+audio - the AUP3 to AUP4 conversion is lossless on the audio layer, and this is the
+assertion that says so.
+
+Landed projects validate clean with no findings.
+
+### The round trip, which is the exit criterion
+
+`vcw import` has two modes, and the default is to do the work - the opposite of
+`vcw recover`, because an import creates a new file and destroys nothing. It refuses a
+destination that exists, and `--dry-run` reads the document, audits the blocks and prints
+what would land in about a second without writing a byte, which matters on a 612 MB
+source.
+
+The dry run always prints both rates when they disagree, which they do in 22 of the 25
+corpus projects:
+
+```text
+  audio       48000 Hz, 2 ch, Float32
+              project/@rate says 192000 Hz; that is an editor preference and is ignored
+```
+
+Driven by hand on a real 612 MB rip: imported in 2m04s (debug build), 79,141,433 frames a
+channel across 13,192 blocks, three tracks from labels, two tags. `vcw tracks list` and
+`vcw release show` then read it with no knowledge of its origin, and `vcw export` wrote
+574.2 MiB of tagged WAV in 9.7 s. Asking for FLAC instead produced the refusal it should:
+float32 is not narrowable to an integer codec without somebody deciding about headroom,
+and 24 of the 25 rips are float32 - so the message names WAV, and arrives before the
+first file rather than after half an album.
+
+The exit criterion itself is a test rather than a demonstration.
+`both_generations_of_one_project_export_as_the_same_audio` imports `simples_test.aup3`
+and `simples_test.aup4`, puts each through `vcw tracks` and `vcw release set`, exports
+both as WAV and compares the two sets of files **byte for byte in the audio chunk**,
+streamed a megabyte at a time because a side is 419 MB and a test that needs a gigabyte
+resident is a test that fails on the Pi. Tags are read back out of the written bytes by
+hand rather than with `lofty`, because a reader that shares the writer's idea of the
+format cannot catch the writer being wrong about it.
+
+#### What is verified, and what is not
+
+- **Verified:** all 30 corpus projects parse, byte-complete, against an independent
+  oracle; real vinyl audio at 24-bit and float32, with trims, gaps and shared blocks,
+  lands where the document says, checked against the source blocks; both generations of
+  one project land and export as identical audio; an imported project validates clean and
+  is read by `tracks`, `release` and `export` unchanged; the rate trap is honoured all the
+  way into a `.vcw`; the refusals for no audio, mixed rates, overlapping clips, a
+  fractional rate, an unknown tag, a non-Audacity file, an existing destination and
+  float32-to-FLAC all fire.
+- **Not verified:** nothing has imported a project written by an Audacity older than
+  3.7.x, because the corpus does not contain one. Import timing is a debug-build
+  observation on one machine and is not a budget. `TRACKNUMBER` is read and deliberately
+  not mapped, because §32 numbers tracks from their position on the side. And a side still
+  has no frame extent, so an import that actually holds two faces in one capture lands as
+  one side - the same gap WP-13 recorded.
+
+Tests: 40 lib, 5 fixture, 10 landing and 6 corpus in `vcw-import`, plus 6 for the verb in
+`vcw-cli`. Seven of those are `#[ignore]`d and read `/data2/vinyl_rips`, which is the
+user's own irreplaceable audio and is opened `mode=ro` every time.
+
+---
+
 ## Next up
 
-**Where to pick up.** **WP-17 is committed at `b3b6e02`** and the CI repair at
+**Where to pick up.** **WP-20 is built and uncommitted**; its section is above. The
+gate is green at 991 tests, and the round trip it was taken for works: a real 612 MB
+Audacity rip lands, `tracks` and `release` read it, and `export` writes tagged WAV.
+`vcw-import` is the twelfth crate. What is left in Phase 1 is **WP-18** (docs) and
+**WP-19** (packaging), plus **M4**, which needs the turntable rather than code.
+
+**WP-17 is committed at `b3b6e02`** and the CI repair at
 `e7cd249`, which is the tip of `main`. The two sections above are worth reading before
 anything else. WP-17 found two product defects rather than harness gaps - a device that
 goes silent was being filed as a flawless capture, and nothing checked the WAL size at
@@ -3849,15 +4040,19 @@ FLAC at the end. It needs no new code and it needs the turntable, so it belongs 
 rig, and it is the only remaining thing that will say whether the links hold when nobody
 is stopping between them.
 
-**`WP-20`, the Audacity import, is next** at weight 10 - the largest item left in
-Phase 1 and the only remaining one that adds a capability rather than describing or
-shipping what already exists. It is also the best-prepared work in the repository, which
-is an argument for doing it while that is still true: S5 decoded AUP3 and AUP4 against 30
-real projects with full byte consumption, the Python oracle to diff a parse against
-exists, the corpus is at `/data2/vinyl_rips`, and the traps are written down rather than
-waiting to be rediscovered - `wavetrack/@rate` and not `project/@rate`, `user_version`
-and not the extension, `mode=ro` and not `immutable=1`, and reference-counted blocks
-because 532 refs point at 456 distinct blocks in one corpus project.
+**`WP-20`, the Audacity import, is done.** It was the largest item left in Phase 1 and
+the only remaining one that added a capability rather than describing or shipping what
+already exists, and it was taken next because it was the best-prepared work in the
+repository: S5 had decoded both generations against 30 real projects and written the
+traps down rather than leaving them to be rediscovered. Two of them still cost something
+to honour - `waveclip/@offset` turned out to be the sequence origin, which is what
+decided the landing mechanism, and a label over deleted audio had to be reported rather
+than landed. Its section above has the account.
+
+What it leaves open is small and recorded there: no project older than Audacity 3.7.x has
+been imported because the corpus has none, `TRACKNUMBER` is deliberately unmapped, and a
+side still has no frame extent, so a project that really holds two faces in one capture
+lands as one side.
 
 **WP-18** (docs, weight 5) and **WP-19** (packaging, 7) are the rest of Phase 1 and both
 are wrapping work: they describe or ship what exists and will not get harder for waiting.

@@ -135,8 +135,10 @@ CREATE TABLE captures (
     channels       INTEGER NOT NULL,
     -- StorageFormat code, matching sampleblocks.sampleformat for this capture.
     storage_format INTEGER NOT NULL,
-    -- How the stream was opened: 'exclusive', 'native' or 'shared' (§9). These are
-    -- CaptureMode's three spellings; a request, not a confirmed outcome.
+    -- How the stream was opened: 'exclusive', 'native' or 'shared' (§9), or
+    -- 'imported' where no stream was opened because the audio came out of an
+    -- Audacity project (§12). CaptureMode's spellings; a request, not a
+    -- confirmed outcome.
     capture_mode   TEXT    NOT NULL,
     -- CPAL host, e.g. 'ALSA', 'WASAPI', 'CoreAudio'. Recorded for provenance.
     host_api       TEXT,
@@ -163,8 +165,13 @@ CREATE TABLE captures (
 -- Audacity keeps this in its document blob; we keep it in a table, because
 -- recovery has to work from committed rows alone with no document to parse.
 CREATE TABLE capture_blocks (
-    -- One row per sample block, sharing its key. Blocks Audacity wrote and we
-    -- imported have no row here, which is how the two halves stay separable.
+    -- One row per sample block, sharing its key. Every block a .vcw holds has
+    -- one, imported audio included: WP-20 re-blocks an Audacity timeline through
+    -- the capture writer rather than adopting its rows, because a clip's trim
+    -- almost never falls on a 262,144-sample boundary and an adopted block would
+    -- need a sample offset this table has no column for and validate() no way to
+    -- check. The cost is one copy at import; the gain is that an imported
+    -- capture is structurally identical to a recorded one.
     blockid      INTEGER PRIMARY KEY REFERENCES sampleblocks(blockid),
     -- The session this block belongs to.
     capture_id   INTEGER NOT NULL REFERENCES captures(capture_id),

@@ -35,6 +35,7 @@ vcw-core = { path = "crates/core", version = "0.1.0" }
 vcw-export = { path = "crates/export", version = "0.1.0" }
 vcw-fingerprint = { path = "crates/fingerprint", version = "0.1.0" }
 vcw-identify = { path = "crates/identify", version = "0.1.0" }
+vcw-import = { path = "crates/import", version = "0.1.0" }
 vcw-metadata = { path = "crates/metadata", version = "0.1.0" }
 vcw-project = { path = "crates/project", version = "0.1.0" }
 vcw-signal = { path = "crates/signal", version = "0.1.0" }

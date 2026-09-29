@@ -1,0 +1,24 @@
+[package]
+name = "vcw-import"
+description = "Reading Audacity .aup3 and .aup4 projects into VCW (§12)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+vcw-types = { workspace = true }
+vcw-project = { workspace = true }
+vcw-metadata = { workspace = true }
+rusqlite = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+crc32fast = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

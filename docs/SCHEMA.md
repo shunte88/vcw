@@ -68,7 +68,7 @@ One row per capture session (§13, §15). A session is unfinished exactly when f
 | `sample_rate` | `INTEGER NOT NULL` | Hz, as negotiated with the device. Authoritative, unlike Audacity's project/@rate, which is only an editor preference. |
 | `channels` | `INTEGER NOT NULL` | Channel count. Blocks are stored per channel, never interleaved. |
 | `storage_format` | `INTEGER NOT NULL` | StorageFormat code, matching sampleblocks.sampleformat for this capture. |
-| `capture_mode` | `TEXT NOT NULL` | How the stream was opened: 'exclusive', 'native' or 'shared' (§9). These are CaptureMode's three spellings; a request, not a confirmed outcome. |
+| `capture_mode` | `TEXT NOT NULL` | How the stream was opened: 'exclusive', 'native' or 'shared' (§9), or 'imported' where no stream was opened because the audio came out of an Audacity project (§12). CaptureMode's spellings; a request, not a confirmed outcome. |
 | `host_api` | `TEXT` | CPAL host, e.g. 'ALSA', 'WASAPI', 'CoreAudio'. Recorded for provenance. |
 | `device_id` | `TEXT` | Stable device identifier where the platform offers one. |
 | `device_name` | `TEXT` | Human-readable device name at the time of capture. |
@@ -85,7 +85,7 @@ The superset half: where each sample block came from and how to find it again. A
 
 | column | declaration | notes |
 |---|---|---|
-| `blockid` | `INTEGER PRIMARY KEY REFERENCES sampleblocks(blockid)` | One row per sample block, sharing its key. Blocks Audacity wrote and we imported have no row here, which is how the two halves stay separable. |
+| `blockid` | `INTEGER PRIMARY KEY REFERENCES sampleblocks(blockid)` | One row per sample block, sharing its key. Every block a .vcw holds has one, imported audio included: WP-20 re-blocks an Audacity timeline through the capture writer rather than adopting its rows, because a clip's trim almost never falls on a 262,144-sample boundary and an adopted block would need a sample offset this table has no column for and validate() no way to check. The cost is one copy at import; the gain is that an imported capture is structurally identical to a recorded one. |
 | `capture_id` | `INTEGER NOT NULL REFERENCES captures(capture_id)` | The session this block belongs to. |
 | `channel` | `INTEGER NOT NULL` | Zero-based channel index. |
 | `sequence` | `INTEGER NOT NULL` | Zero-based position within the channel. Contiguous, with no gaps. |
