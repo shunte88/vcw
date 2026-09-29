@@ -31,19 +31,23 @@ vcw=${VCW:-./target/release/vcw}
 mkdir -p "$dir"
 status=0
 
-# Two gates come off on a machine we do not own the timing of.
+# Three gates come off on a machine we do not own the timing of.
 #
-# VCW_SHARED=1 drops the commit-latency gate. A hosted runner shares its CPU
-# and its disk, so its commit tail measures the runner: the first nightly saw
-# 736 ms against a 250 ms budget on a run with zero loss, a bounded WAL, flat
-# memory and every byte verified. Endurance and correctness travel to a shared
-# box; a latency tail does not, and the rigs are where that number comes from.
+# VCW_SHARED=1 drops the two latency gates: the commit tail and §37's waveform
+# freshness. A hosted runner shares its CPU and its disk, so a tail measured
+# there measures the runner: the first nightly saw 736 ms against a 250 ms
+# budget on a run with zero loss, a bounded WAL, flat memory and every byte
+# verified. Endurance and correctness travel to a shared box; a latency tail
+# does not, and the rigs are where those numbers come from. The waveform is
+# measured either way - the report prints the percentiles and says "not
+# gated" - because the figure is still worth having from a runner, it just
+# cannot be allowed to fail a build.
 #
 # The memory gate needs procfs, and `vcw soak` now refuses a gate it cannot
 # honour rather than reporting one it did not apply - so on Windows and macOS
 # the limit is set to zero here, explicitly, where the intent is readable.
 gates=()
-[ "${VCW_SHARED:-0}" = 1 ] && gates+=(--ignore-commit-budget)
+[ "${VCW_SHARED:-0}" = 1 ] && gates+=(--ignore-commit-budget --waveform-budget-millis 0)
 case "$(uname -s)" in
     Linux) ;;
     *) gates+=(--max-growth-mib 0) ;;

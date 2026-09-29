@@ -67,14 +67,32 @@
 //! because an export of a two-hour side takes minutes and the webview cannot
 //! wait.
 //!
-//! # What §35 lists and nothing produces yet
+//! Playback has a refusal of its own for the same reason. An open that fails
+//! happens on the thread that would have owned the stream, long after the
+//! command returned, and until Phase 1's loose ends were closed it arrived as a
+//! `capture-warning` coded `playback-failed`. `playback-refused` is terminal
+//! where a warning is not, which is the difference a frontend needs: a warning
+//! can be followed by the audition it warned about, and a refusal cannot be
+//! followed by anything.
+//!
+//! # What §35 lists and this union does not carry
 //!
 //! `waveform-update` and `fingerprint-match` are absent, deliberately and
-//! visibly. The waveform pyramid is built by the writer as each block commits
-//! and *read* on demand, so there is nothing to push: adding the variant now
-//! would publish a promise the core cannot keep. Fingerprinting is Phase 2.
-//! Both are recorded in `docs/STATUS.md` as gaps; neither is a type this crate
-//! can invent its way out of.
+//! visibly, and for two different reasons.
+//!
+//! **`waveform-update` is refused rather than deferred**, and there is a
+//! measurement behind that: the pyramid is built by the writer as each block
+//! commits and read on demand in **p99 4.2 ms** with four readers competing
+//! during a 96 kHz capture, out of a picture at most **300 ms** stale, which is
+//! the commit interval. A push cannot make the picture newer, because the lag
+//! is the commit and not the notification - so the event would buy nothing and
+//! cost a second place where the state of the capture lives. §37's sub-second
+//! waveform latency is met by the read path. See *closing the loose ends* in
+//! `docs/STATUS.md` for the figures.
+//!
+//! **`fingerprint-match` is Phase 2's**, because its payload is a decision
+//! about what a match is and inventing the type now would be inventing the
+//! feature. It is the one §35 name still outstanding.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -340,6 +358,24 @@ pub enum Wire {
         seconds: f64,
     },
 
+    /// Playback would not open, so there is no audition and there never was.
+    ///
+    /// Terminal, and that is why it is not a [`Wire::CaptureWarning`]: nothing
+    /// published [`Wire::Auditioning`] before it and nothing will publish
+    /// [`Wire::PlaybackFinished`] after it, so a frontend that turned its
+    /// transport into a playing state on the way in has to be told here or
+    /// never.
+    #[serde(rename = "playback-refused")]
+    PlaybackRefused {
+        /// The capture that was asked for.
+        capture_id: i64,
+        /// What was asked for, in frames rather than seconds: the case that
+        /// matters is the one where the project could not be read.
+        scope: String,
+        /// Why it was refused.
+        reason: String,
+    },
+
     /// Playback stopped, and this is how it went.
     #[serde(rename = "playback-finished")]
     PlaybackFinished {
@@ -508,6 +544,7 @@ impl Wire {
             Self::CaptureFinished { .. } => "capture-finished",
             Self::Auditioning { .. } => "auditioning",
             Self::PlaybackPosition { .. } => "playback-position",
+            Self::PlaybackRefused { .. } => "playback-refused",
             Self::PlaybackFinished { .. } => "playback-finished",
             Self::CommandRefused { .. } => "command-refused",
             Self::CommandRejected { .. } => "command-rejected",
@@ -599,6 +636,15 @@ impl From<&Event> for Wire {
             Event::Playhead { frame, seconds } => Self::PlaybackPosition {
                 frame: *frame,
                 seconds: *seconds,
+            },
+            Event::Denied {
+                capture_id,
+                scope,
+                reason,
+            } => Self::PlaybackRefused {
+                capture_id: *capture_id,
+                scope: scope.clone(),
+                reason: reason.clone(),
             },
             Event::Ended {
                 capture_id,

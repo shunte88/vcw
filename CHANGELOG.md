@@ -80,6 +80,12 @@ what the first release will contain rather than a history of changes to it.
 * WAV and FLAC export from a plan that is resolved in full before a byte is
   written, with tagging, artwork and naming templates. A format that cannot
   carry the audio is refused up front rather than half way through a library.
+* **Files are named by the position on the label**, `A1`, `B2`, the way VRipr
+  named them: the default template writes `A1 - The Rainbow.flac`. A track's
+  number in its tags counts across the disc's sides, so a two-sided record no
+  longer produces two tracks numbered 2, and the position itself is kept in a
+  `VINYL_POSITION` tag - the one thing a vinyl rip knows that a CD rip does
+  not.
 
 ### Interface
 
@@ -88,6 +94,11 @@ what the first release will contain rather than a history of changes to it.
   checked against the application's own binding table by a test.
 * A command line that can do all of it with no window, including a whole capture
   session driven from a script.
+* **A side that will not play says why.** A device that cannot play a capture's
+  rate is refused rather than resampled, and the refusal now reaches the window
+  as a refusal: the transport stops showing itself as playing and the reason is
+  on screen. It used to arrive as a generic warning, which left a transport
+  claiming to play something that had never opened.
 
 ### Diagnostics
 
@@ -98,6 +109,11 @@ what the first release will contain rather than a history of changes to it.
 * `vcw doctor` reports the platform and what it can see; `--log` and `VCW_LOG`
   turn structured logging up per crate. Nothing on the audio callback path
   logs, by rule and by test.
+* **The waveform keeps up with the stylus, and there is a number for it.**
+  `vcw soak` measures how far the drawable waveform trails the device while a
+  capture runs: a quarter of a second at worst, which is the length of one
+  commit. A build where it falls behind by more than a second fails its own
+  test rather than shipping.
 
 ### For other tools
 

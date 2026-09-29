@@ -223,6 +223,22 @@ impl Project {
     }
 }
 
+/// Page cache every connection to a project is allowed, in KiB.
+///
+/// Negative to `cache_size` means kibibytes rather than pages, which is the form
+/// that does not change meaning when [`PAGE_SIZE`] does. 31.25 MiB, which is
+/// four blocks of a 24/192 capture plus room for the index pages a waveform
+/// query walks.
+///
+/// **It is a per-connection entitlement, so it multiplies.** A window with the
+/// writer open and four readers querying is allowed 156 MiB of page cache
+/// before anything has leaked, and a memory gate that does not know this reads
+/// a filling cache as growth: CI's `hour-contended` soak failed a flat 32 MiB
+/// growth gate at 39.1 MiB with four readers, on an hour that was otherwise
+/// clean on every count. `vcw soak` adds this per reader to its allowance and
+/// says so in the line it prints.
+pub const PAGE_CACHE_KIB: i64 = 32_000;
+
 /// Pragmas applied to every connection to a project.
 ///
 /// D3, provisional from S2: WAL, `synchronous=FULL`. The combination was chosen
@@ -233,7 +249,7 @@ fn apply_connection_pragmas(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "synchronous", "FULL")?;
     conn.pragma_update(None, "foreign_keys", true)?;
     conn.pragma_update(None, "temp_store", "MEMORY")?;
-    conn.pragma_update(None, "cache_size", -32_000i64)?;
+    conn.pragma_update(None, "cache_size", -PAGE_CACHE_KIB)?;
     Ok(())
 }
 

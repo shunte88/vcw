@@ -57,6 +57,8 @@ export function describe(event: Wire): string {
       return `${event.scope} on ${event.opened} (${event.conversion})`;
     case "playback-position":
       return `${event.seconds.toFixed(2)} s`;
+    case "playback-refused":
+      return `${event.scope} of capture ${event.captureId}: ${event.reason}`;
     case "playback-finished":
       return `${event.frames} frame(s), ${event.underruns} underrun(s), ${event.fidelity}`;
     case "command-refused":

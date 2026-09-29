@@ -112,12 +112,16 @@ pub enum Error {
     /// A template with no track number in it does this the moment a side has two
     /// untitled tracks, and the second silently overwriting the first is the worst
     /// possible outcome. Reported before anything is written.
+    ///
+    /// The tracks are named by their positions - `A2` and `B2` - because the
+    /// number within a side names neither of them: the first real export of a
+    /// two-sided project reported `tracks 2 and 2`.
     #[error("tracks {first} and {second} both export to {}", path.display())]
     NameCollision {
-        /// The first track to claim the name.
-        first: u32,
-        /// The second.
-        second: u32,
+        /// The position of the first track to claim the name, `A2`.
+        first: String,
+        /// The position of the second.
+        second: String,
         /// The path they agree on.
         path: PathBuf,
     },

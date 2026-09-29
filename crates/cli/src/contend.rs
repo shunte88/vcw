@@ -66,12 +66,13 @@
 //!
 //! [`Outcome::peak_wal_bytes`]: vcw_project::persistence::Outcome::peak_wal_bytes
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+use vcw_audio::capture::Counters;
 use vcw_project::persistence::Latencies;
 use vcw_project::sqlite::Project;
 use vcw_project::waveform::{self, Shape};
@@ -99,6 +100,15 @@ pub(crate) struct Tally {
     pub(crate) first_error: Option<String>,
     /// How long each query took, in microseconds.
     pub(crate) latency: Latencies,
+    /// How far behind the device the drawable waveform was, in microseconds.
+    ///
+    /// §37's *sub-second waveform latency*, measured end to end on the Rust
+    /// clock: the newest frame the device has handed to the ring, minus the
+    /// newest frame a read-only connection can draw, converted at the capture
+    /// rate. So it contains the ring dwell, the commit interval and SQLite's
+    /// visibility, which is the whole of what stands between a stylus and a
+    /// pixel except the drawing itself.
+    pub(crate) freshness: Latencies,
     /// Queries answered from each rung, in [`Level`] order.
     ///
     /// Reported because a run whose queries all came from one level tested one
@@ -117,6 +127,7 @@ impl Tally {
             *mine += theirs;
         }
         self.latency.absorb(&other.latency);
+        self.freshness.absorb(&other.freshness);
     }
 
     /// Whether the readers did their job: every query answered, and answered
@@ -131,6 +142,63 @@ impl Tally {
             return false;
         }
         readers == 0 || (self.queries > 0 && self.covered > 0)
+    }
+
+    /// §37's waveform latency, as a line of its own.
+    ///
+    /// Not folded into the readers' line: this is a claim about the product -
+    /// how stale the picture a person is watching can get - and the readers are
+    /// only the instrument that measures it.
+    pub(crate) fn freshness_line(
+        &self,
+        budget_millis: u64,
+        readers: usize,
+        real_time: bool,
+    ) -> String {
+        let Some((p50, _, p99, max)) = self.freshness.summary() else {
+            return if readers == 0 {
+                "not measured (--readers 0, so nothing drew the waveform)".to_owned()
+            } else {
+                "not measured (the readers never saw a committed block)".to_owned()
+            };
+        };
+        let ms = |micros: u64| micros as f64 / 1_000.0;
+        format!(
+            "behind the device by p50 {:.0} ms, p99 {:.0} ms, max {:.0} ms over {} redraw(s){}",
+            ms(p50),
+            ms(p99),
+            ms(max),
+            self.freshness.count(),
+            match (real_time, budget_millis) {
+                (false, _) =>
+                    ", not gated: at a metered pace this is production speed, not staleness"
+                        .to_owned(),
+                (true, 0) => ", not gated".to_owned(),
+                (true, budget) => format!(", budget {budget} ms (§37)"),
+            },
+        )
+    }
+
+    /// Whether the waveform stayed inside §37's sub-second claim.
+    ///
+    /// The p99 rather than the maximum, and the difference is the point: one
+    /// redraw held up behind a checkpoint is not a product that feels slow,
+    /// while one redraw in a hundred arriving a second late is. The maximum is
+    /// reported beside it either way, and zero measures without gating.
+    ///
+    /// `real_time` is the other way this returns true regardless. At a metered
+    /// pace the source is throttled but still outruns the wall clock, so the
+    /// frames between the device and the drawable end are a ratio of production
+    /// speed rather than a duration anybody experiences - the same reason
+    /// `--fast` cannot make a commit-latency claim either. The figure is still
+    /// printed, with the reason on the end of the line.
+    pub(crate) fn fresh_enough(&self, budget_millis: u64, real_time: bool) -> bool {
+        !real_time
+            || budget_millis == 0
+            || self
+                .freshness
+                .quantile(0.99)
+                .is_none_or(|p99| p99 <= budget_millis * 1_000)
     }
 
     /// One line for the report.
@@ -185,6 +253,26 @@ fn slot(level: Level) -> usize {
     LEVELS.iter().position(|l| *l == level).unwrap_or(0)
 }
 
+/// What the readers read, and what to compare it against.
+///
+/// A struct rather than six arguments, and it carries the device's own frame
+/// counter because §37's waveform latency is a difference between two clocks
+/// that only this process can see both of: what the device has produced, and
+/// what a read-only connection can draw.
+#[derive(Clone)]
+pub(crate) struct Subject {
+    /// The project file, opened `?mode=ro` by each reader.
+    pub(crate) path: PathBuf,
+    /// The capture being written.
+    pub(crate) capture_id: i64,
+    /// Its channel count, so the readers spread over the channels.
+    pub(crate) channels: u16,
+    /// Its rate, for turning a frame count into a duration.
+    pub(crate) rate: u32,
+    /// Frames the device has handed to the ring, live.
+    pub(crate) produced: Arc<Counters>,
+}
+
 /// Reader threads, running until [`Readers::stop`].
 pub(crate) struct Readers {
     stop: Arc<AtomicBool>,
@@ -205,21 +293,13 @@ impl Readers {
     /// decides whether a starved checkpoint is a product defect or an artefact
     /// of the instrument, so the instrument is adjustable and the default
     /// models the window. Zero means flat out.
-    pub(crate) fn start(
-        path: &Path,
-        capture_id: i64,
-        channels: u16,
-        count: usize,
-        hz: u32,
-    ) -> Self {
+    pub(crate) fn start(subject: &Subject, count: usize, hz: u32) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let threads = (0..count)
             .map(|n| {
                 let stop = Arc::clone(&stop);
-                let path: PathBuf = path.to_path_buf();
-                std::thread::spawn(move || {
-                    read_until_stopped(&path, capture_id, channels, n, hz, &stop)
-                })
+                let subject = subject.clone();
+                std::thread::spawn(move || read_until_stopped(&subject, n, hz, &stop))
             })
             .collect();
         Self { stop, threads }
@@ -243,14 +323,15 @@ impl Readers {
 /// An open that fails is counted and returned rather than retried: if the
 /// project cannot be opened read-only while it is being written, that is the
 /// finding, and retrying would bury it.
-fn read_until_stopped(
-    path: &Path,
-    capture_id: i64,
-    channels: u16,
-    seed: usize,
-    hz: u32,
-    stop: &AtomicBool,
-) -> Tally {
+fn read_until_stopped(subject: &Subject, seed: usize, hz: u32, stop: &AtomicBool) -> Tally {
+    let Subject {
+        path,
+        capture_id,
+        channels,
+        rate,
+        produced,
+    } = subject;
+    let (capture_id, channels, rate) = (*capture_id, *channels, *rate);
     let mut tally = Tally::default();
     let project = match Project::open_read_only(path) {
         Ok(project) => project,
@@ -276,6 +357,10 @@ fn read_until_stopped(
                 break;
             }
         }
+        // Read before the query, not after: the query costs a fraction of a
+        // millisecond against a lag of hundreds, and reading it first means the
+        // instrument can only ever understate itself.
+        let produced_now = produced.frames();
         let Ok(shape) = Shape::of(project.conn(), capture_id) else {
             // Before the first commit there is no shape to read. That is not a
             // failure, it is the first few hundred milliseconds.
@@ -285,6 +370,14 @@ fn read_until_stopped(
         if shape.frames == 0 {
             std::thread::yield_now();
             continue;
+        }
+        // What the window could draw, against what the stylus has delivered.
+        if rate > 0 && produced_now > shape.frames {
+            let behind = produced_now - shape.frames;
+            tally.freshness.record(behind * 1_000_000 / u64::from(rate));
+        } else if rate > 0 {
+            // Not an impossibility: a commit can land between the two reads.
+            tally.freshness.record(0);
         }
         let channel = (tick % u64::from(channels.max(1))) as u16;
         let request = span(&shape, tick);
@@ -332,5 +425,106 @@ fn span(shape: &Shape, tick: u64) -> Request {
                 .min(shape.frames.saturating_sub(window));
             Request::new(start, start + window, WIDTH)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A tally whose readers were behind the device by these many milliseconds.
+    fn behind(millis: &[u64]) -> Tally {
+        let mut tally = Tally::default();
+        for ms in millis {
+            tally.freshness.record(ms * 1_000);
+        }
+        tally
+    }
+
+    #[test]
+    fn the_waveform_gate_fails_a_run_that_fell_behind() {
+        // §37. The p99 and not the maximum: a hundred redraws, one of
+        // them stuck behind a checkpoint for two seconds, is a product that
+        // feels fine, and the maximum is printed beside the verdict either way.
+        let mut millis: Vec<u64> = (0..99).map(|_| 200).collect();
+        millis.push(2_000);
+        let one_bad_redraw = behind(&millis);
+        assert_eq!(one_bad_redraw.freshness.max(), Some(2_000_000));
+        assert!(
+            one_bad_redraw.fresh_enough(1_000, true),
+            "one redraw in a hundred should not fail §37's claim"
+        );
+
+        // Where it does fail: behind by a second and a half, consistently.
+        let slow = behind(&[1_500; 100]);
+        assert!(
+            !slow.fresh_enough(1_000, true),
+            "1.5 s of lag passed a 1 s budget"
+        );
+        assert!(
+            slow.fresh_enough(2_000, true),
+            "1.5 s of lag failed a 2 s budget"
+        );
+        assert!(
+            slow.fresh_enough(0, true),
+            "a zero budget is supposed to measure without gating"
+        );
+
+        // And the pace, which is the one that would have bitten a real run:
+        // `--fast` produces hours of audio in minutes, so the frames between
+        // the device and the drawable end are a throughput ratio. Gating on it
+        // would fail every metered leg in the harness.
+        assert!(
+            slow.fresh_enough(1_000, false),
+            "a metered run cannot make a staleness claim, so it cannot fail one"
+        );
+        assert!(
+            slow.freshness_line(1_000, 4, false).contains("not gated"),
+            "and the line has to say why: {}",
+            slow.freshness_line(1_000, 4, false)
+        );
+    }
+
+    #[test]
+    fn a_run_that_measured_nothing_says_so_rather_than_passing_quietly() {
+        // The failure this guards against is a silent one: a reader that never
+        // saw a committed block records no freshness at all, and a gate on an
+        // empty quantile would have called that a sub-second waveform.
+        let nothing = Tally::default();
+        assert!(nothing.freshness.summary().is_none());
+        assert!(
+            nothing
+                .freshness_line(1_000, 0, true)
+                .contains("--readers 0"),
+            "with no readers the line should name the reason"
+        );
+        assert!(
+            nothing
+                .freshness_line(1_000, 4, true)
+                .contains("never saw a committed block"),
+            "with readers the line should name the other reason: {}",
+            nothing.freshness_line(1_000, 4, true)
+        );
+
+        // And `clean` is the gate that catches it, because `fresh_enough` on an
+        // empty measurement cannot: there is no percentile to compare.
+        assert!(nothing.fresh_enough(1_000, true));
+        assert!(
+            !nothing.clean(4),
+            "four readers and no queries is a failure"
+        );
+    }
+
+    #[test]
+    fn the_waveform_line_reports_the_percentiles_it_gated_on() {
+        let tally = behind(&[100, 200, 300, 400]);
+        let line = tally.freshness_line(1_000, 4, true);
+        assert!(line.contains("4 redraw(s)"), "{line}");
+        assert!(line.contains("max 400 ms"), "{line}");
+        assert!(line.contains("budget 1000 ms (§37)"), "{line}");
+        assert!(
+            tally.freshness_line(0, 4, true).contains("not gated"),
+            "a zero budget should say so in the report, not just in the verdict"
+        );
     }
 }

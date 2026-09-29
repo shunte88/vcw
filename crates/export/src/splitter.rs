@@ -249,7 +249,7 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
     }
 
     let release = release::load(conn)?.unwrap_or_default();
-    let positions = position_map(conn, release.numbering)?;
+    let numbers = numbers(conn, release.numbering)?;
     let listing = track::listing(conn)?;
     if listing.is_empty() {
         return Err(Error::Nothing);
@@ -258,7 +258,7 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
     let cover = cover(conn, request)?;
     let mut items = Vec::new();
     // Path to the first track that claimed it, so a collision can name both.
-    let mut claimed: HashMap<PathBuf, u32> = HashMap::new();
+    let mut claimed: HashMap<PathBuf, String> = HashMap::new();
     let mut covers: Vec<PathBuf> = Vec::new();
     let mut captures: HashMap<i64, Option<i64>> = HashMap::new();
 
@@ -278,8 +278,8 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             });
         };
 
-        let position = positions.get(&record.id).cloned().unwrap_or_default();
-        let values = values(&release, &record, side, &position);
+        let numbers = numbers.get(&record.id).cloned().unwrap_or_default();
+        let values = values(&release, &record, side, &numbers);
         let relative = naming::path_for(&request.template, &values);
         // The extension is the container's and not the template's, so a naming
         // template works whichever format it is exported in. Appended rather
@@ -290,10 +290,12 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         path.push(request.container.extension());
         let path = PathBuf::from(path);
 
-        if let Some(first) = claimed.insert(path.clone(), record.number) {
+        // The positions, not the numbers within the sides: `tracks 2 and 2`
+        // named neither track and was the first thing a real project said.
+        if let Some(first) = claimed.insert(path.clone(), numbers.alpha.clone()) {
             return Err(Error::NameCollision {
                 first,
-                second: record.number,
+                second: numbers.alpha,
                 path,
             });
         }
@@ -324,7 +326,7 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             capture_id,
             span,
             path,
-            tags: tags(&release, &record, side, &position, request, cover.as_ref()),
+            tags: tags(&release, &record, side, &numbers, request, cover.as_ref()),
         });
     }
 
@@ -449,12 +451,68 @@ fn cut(
     writer.finish()
 }
 
-/// Track id to rendered position, so the naming template gets its `A1`.
-fn position_map(conn: &Connection, numbering: Numbering) -> Result<HashMap<i64, String>> {
-    Ok(track::positions(conn, numbering)?
-        .into_iter()
-        .map(|(record, position)| (record.id, position))
-        .collect())
+/// What a track is called, in the three forms an export needs.
+///
+/// `track::Record::number` is none of them. It is the number *within its side*
+/// (§29), so on any two-sided record side B's track 2 and side A's track 2 are
+/// both `2` - and using it for the naming template made every side-B track
+/// collide with a side-A track the moment two of them were untitled, while
+/// using it for the tag put two tracks numbered 2 on one album. Both were real:
+/// the first export of a real two-sided project refused with `tracks 2 and 2
+/// both export to .../02 -.flac`.
+#[derive(Debug, Clone)]
+struct Numbers {
+    /// The release's chosen form, `A1` or `6`: the template's `{tracknum}`.
+    ///
+    /// VRipr's `{tracknum}` was this, and §29 keeps VRipr's numbering, so the
+    /// default template writes `A1 - The Rainbow` exactly as VRipr did.
+    rendered: String,
+    /// The alpha position, whatever the numbering: `{position}`, and the
+    /// `VINYL_POSITION` tag, which is provenance and not presentation.
+    alpha: String,
+    /// One-based within its disc, counting across that disc's sides.
+    ///
+    /// What a tag's track number means: unique within a disc, restarting on the
+    /// next one, which is why this is not the release-wide sequence.
+    within_disc: u32,
+}
+
+impl Default for Numbers {
+    /// What an unnumbered track gets, which nothing in a loaded project is.
+    fn default() -> Self {
+        Self {
+            rendered: String::new(),
+            alpha: String::new(),
+            within_disc: 0,
+        }
+    }
+}
+
+/// Track id to the three numbers, in listing order.
+///
+/// The release-wide `sequence` is the same rule `track::positions` applies, and
+/// for `Numbering::Alpha` - the default - it is not used at all.
+fn numbers(conn: &Connection, numbering: Numbering) -> Result<HashMap<i64, Numbers>> {
+    let mut map = HashMap::new();
+    let mut sequence = 0;
+    let mut per_disc: HashMap<u32, u32> = HashMap::new();
+    for (side, record) in track::listing(conn)? {
+        sequence += 1;
+        let within_disc = per_disc
+            .entry(side.disc())
+            .and_modify(|n| *n += 1)
+            .or_insert(1);
+        let position = record.position(side);
+        map.insert(
+            record.id,
+            Numbers {
+                rendered: numbering.render(position, sequence),
+                alpha: position.alpha(),
+                within_disc: *within_disc,
+            },
+        );
+    }
+    Ok(map)
 }
 
 /// The front cover, if the project has one and the request wants it anywhere.
@@ -485,7 +543,12 @@ fn extension(mime: &str) -> &'static str {
 }
 
 /// A track and its release, as naming-template values.
-fn values(release: &release::Record, record: &track::Record, side: Side, position: &str) -> Values {
+fn values(
+    release: &release::Record,
+    record: &track::Record,
+    side: Side,
+    numbers: &Numbers,
+) -> Values {
     Values {
         title: record.title.clone(),
         artist: record.artist_or(&release.album_artist).to_owned(),
@@ -496,14 +559,14 @@ fn values(release: &release::Record, record: &track::Record, side: Side, positio
             .year
             .map(|year| year.to_string())
             .unwrap_or_default(),
-        tracknum: record.number.to_string(),
+        tracknum: numbers.rendered.clone(),
         composer: record.composer_or(&release.composer).to_owned(),
         country: release.country.clone(),
         catalog: release.catalog.clone(),
         label: release.label.clone(),
         discogs_id: release.discogs_id.clone().unwrap_or_default(),
         side: side.letter().to_string(),
-        position: position.to_owned(),
+        position: numbers.alpha.clone(),
         disc: side.disc().to_string(),
     }
 }
@@ -513,7 +576,7 @@ fn tags(
     release: &release::Record,
     record: &track::Record,
     side: Side,
-    position: &str,
+    numbers: &Numbers,
     request: &Request,
     cover: Option<&Cover>,
 ) -> Tags {
@@ -524,7 +587,7 @@ fn tags(
         album_artist: release.album_artist.clone(),
         genre: release.genres.join(";"),
         year: release.year,
-        track_number: Some(record.number),
+        track_number: Some(numbers.within_disc),
         track_total: None,
         disc_number: Some(side.disc()),
         disc_total: Some(release.discs.max(1)),
@@ -539,7 +602,7 @@ fn tags(
         musicbrainz_recording_id: record.musicbrainz_id.clone().unwrap_or_default(),
         // The position on the record, which no tag standard names and which is
         // the one piece of provenance a vinyl rip has and a CD rip does not.
-        extra: vec![("VINYL_POSITION".to_owned(), position.to_owned())],
+        extra: vec![("VINYL_POSITION".to_owned(), numbers.alpha.clone())],
         cover: if request.artwork.embeds() {
             cover.cloned()
         } else {

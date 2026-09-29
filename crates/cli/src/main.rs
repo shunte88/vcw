@@ -533,7 +533,8 @@ enum Command {
         #[arg(long)]
         starve_after: Option<f64>,
         /// Fail if resident memory grows by more than this many MiB over the
-        /// run. Zero to measure without gating. §41.
+        /// run, on top of the page cache each connection in the run is entitled
+        /// to fill. Zero to measure without gating. §41.
         #[arg(long, default_value_t = 32)]
         max_growth_mib: u64,
         /// Run this many threads drawing the waveform while the capture writes,
@@ -544,6 +545,12 @@ enum Command {
         /// a fuzzer and starves the WAL checkpoint on purpose.
         #[arg(long, default_value_t = 60)]
         reader_hz: u32,
+        /// Fail if the drawable waveform falls further behind the device than
+        /// this many milliseconds, at the 99th percentile. §37's sub-second
+        /// claim; zero to measure without gating. Needs --readers to measure
+        /// anything at all.
+        #[arg(long, default_value_t = 1000)]
+        waveform_budget_millis: u64,
         /// Fail if the WAL peaks above this many times its budget. Zero to
         /// measure without gating. §41.
         #[arg(long, default_value_t = 4)]
@@ -1248,6 +1255,7 @@ fn run() -> anyhow::Result<()> {
             max_growth_mib,
             readers,
             reader_hz,
+            waveform_budget_millis,
             wal_slack,
             ignore_commit_budget,
             every,
@@ -1274,6 +1282,7 @@ fn run() -> anyhow::Result<()> {
             max_growth_mib,
             readers,
             reader_hz,
+            waveform_budget_millis,
             wal_slack,
             ignore_commit_budget,
             every,

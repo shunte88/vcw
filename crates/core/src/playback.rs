@@ -252,6 +252,24 @@ impl Scope {
         }
     }
 
+    /// What was asked for, without needing the project open.
+    ///
+    /// [`Scope::describe`] answers in seconds, which needs a [`Layout`], which
+    /// needs the project. The one moment that is not available is the moment
+    /// most worth reporting: an audition refused because the project could not
+    /// be read has no rate to divide by. So this answers in frames.
+    #[must_use]
+    pub fn label(&self) -> String {
+        match self {
+            Self::Whole => "the whole capture".to_owned(),
+            Self::Region(span) => {
+                format!("the region {}-{} in frames", span.start, span.end)
+            }
+            Self::Track { number, .. } => format!("track {number}"),
+            Self::Boundary { at, .. } => format!("the boundary at frame {at}"),
+        }
+    }
+
     /// How to say what is playing, for [`Event::Auditioning`].
     #[must_use]
     pub fn describe(&self, layout: &Layout) -> String {

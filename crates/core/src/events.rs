@@ -62,7 +62,11 @@
 //! `recording-position` and `capture-warning` - plus the phase changes and
 //! command outcomes that §35's examples imply but do not name. The rest arrive
 //! with the work packages that generate them, and [`Event`] is
-//! `#[non_exhaustive]` so they can.
+//! `#[non_exhaustive]` so they can - except `waveform-update`, which will not
+//! arrive at all: the pyramid is read on demand in a millisecond and a push
+//! cannot make the picture newer than the commit that made it drawable. The
+//! measurement is in `vcw-contract`'s `event` module documentation.
+//! `fingerprint-match` is Phase 2's.
 
 use std::fmt;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -204,6 +208,27 @@ pub enum Event {
         /// The same thing in seconds.
         seconds: f64,
     },
+    /// Playback would not open, so there is no audition and there never was.
+    ///
+    /// The playback counterpart of [`Event::Refused`], and a variant of its own
+    /// rather than a [`Event::Warning`] because a refusal is *terminal*: no
+    /// [`Event::Auditioning`] came before it and no [`Event::Ended`] will
+    /// follow it, so a consumer that put a transport into a playing state when
+    /// it asked has nothing else coming to take it out again.
+    ///
+    /// A device that cannot play the capture's rate is refused rather than
+    /// resampled (§9, §21), and the open happens on the thread that will own
+    /// the stream, so by the time it fails the command that asked has already
+    /// returned successfully. This is the answer.
+    Denied {
+        /// The capture that was asked for.
+        capture_id: i64,
+        /// What was asked for, in frames: the project could not be read in the
+        /// case that matters, so there is no rate to express it in seconds.
+        scope: String,
+        /// Why it was refused.
+        reason: String,
+    },
     /// Playback stopped, and this is how it went.
     ///
     /// An underrun here is a gap the listener heard. It cannot be repaired
@@ -281,6 +306,7 @@ impl Event {
             Self::Rejected { .. } => "command-rejected",
             Self::Auditioning { .. } => "auditioning",
             Self::Playhead { .. } => "playback-position",
+            Self::Denied { .. } => "playback-refused",
             Self::Ended { .. } => "playback-finished",
             Self::Status { .. } => "status",
             Self::Closed => "closed",
@@ -362,6 +388,14 @@ impl fmt::Display for Event {
                 Ok(())
             }
             Self::Playhead { frame, seconds } => write!(f, "{frame} ({seconds:.3} s)"),
+            Self::Denied {
+                capture_id,
+                scope,
+                reason,
+            } => write!(
+                f,
+                "refused to play {scope} of capture {capture_id}: {reason}"
+            ),
             Self::Ended {
                 capture_id,
                 frames,

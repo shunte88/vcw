@@ -154,6 +154,9 @@ pub(crate) struct Options {
     /// Redraws a second per reader. Zero for flat out. See
     /// [`crate::contend::Readers::start`].
     pub(crate) reader_hz: u32,
+    /// How stale the drawable waveform may get, in milliseconds. §37's
+    /// sub-second claim, and zero to measure without gating.
+    pub(crate) waveform_budget_millis: u64,
     /// How many times its budget the WAL may reach before the run fails. Zero
     /// to measure without gating.
     pub(crate) wal_slack: u32,
@@ -314,13 +317,14 @@ pub(crate) fn run(options: &Options) -> Result<()> {
 
     // After the writer, because they read the capture it created, and before
     // the clock, because the load is supposed to cover the whole run.
-    let readers = crate::contend::Readers::start(
-        &options.project,
+    let subject = crate::contend::Subject {
+        path: options.project.clone(),
         capture_id,
         channels,
-        options.readers,
-        options.reader_hz,
-    );
+        rate,
+        produced: std::sync::Arc::clone(source.counters()),
+    };
+    let readers = crate::contend::Readers::start(&subject, options.readers, options.reader_hz);
 
     let started = Instant::now();
     let run_for = Duration::from_secs_f64(options.minutes * 60.0);
@@ -413,38 +417,73 @@ pub(crate) fn run(options: &Options) -> Result<()> {
         0.0
     };
     let (p50, p95, p99, worst) = outcome.commit.summary().unwrap_or((0, 0, 0, 0));
+    // Every gate, each one naming itself when it fails.
+    //
+    // A list rather than a conjunction because the verdict has to say which
+    // one: there are ten of these now, the report is twenty lines long, and a
+    // bare "FAIL" leaves whoever reads the nightly to diff the lines and guess.
+    let mut broke: Vec<&'static str> = Vec::new();
     // The damage must be confined whether a fault was asked for or not: a
     // project that no longer validates, or a byte that does not match what the
     // source produced, is a failure in either mode.
-    let confined = report.is_clean()
-        && verified.is_none_or(|v| v)
-        // Optional, and the only gate here that is. A hosted CI runner shares
-        // its CPU and its disk with whatever else is on the box, so its commit
-        // tail measures the runner and not the writer: the first nightly saw
-        // 736 ms against a 250 ms budget with zero loss and every byte
-        // verified. Endurance and correctness still hold there; the tail does
-        // not, so CI turns this one off and the report says so.
-        && (options.ignore_commit_budget || outcome.commits_within_budget(&config))
-        // A leak is a failure whether a fault was asked for or not, which is
-        // what puts it here rather than in the clean-run arm below. So is a
-        // reader that could not read: the writer is allowed to be interrupted,
-        // never to lock the window out.
-        && growth.within(options.max_growth_mib)
-        && contention.clean(options.readers)
-        // An unbounded WAL is confinement failing in the one place that costs
-        // disk rather than audio, and until WP-17 nothing checked it: a run
-        // that reached 90 MiB against a 4 MiB budget printed "pass".
-        && outcome.wal_within_budget(&config, options.wal_slack);
+    if !report.is_clean() {
+        broke.push("the project does not validate");
+    }
+    if verified == Some(false) {
+        broke.push("a byte does not match what the source generated");
+    }
+    // Optional, and the only gate here that is. A hosted CI runner shares its
+    // CPU and its disk with whatever else is on the box, so its commit tail
+    // measures the runner and not the writer: the first nightly saw 736 ms
+    // against a 250 ms budget with zero loss and every byte verified. Endurance
+    // and correctness still hold there; the tail does not, so CI turns this one
+    // off and the report says so.
+    if !options.ignore_commit_budget && !outcome.commits_within_budget(&config) {
+        broke.push("a commit took longer than its budget");
+    }
+    // A leak is a failure whether a fault was asked for or not, which is what
+    // puts it here rather than in the clean-run arm below. So is a reader that
+    // could not read: the writer is allowed to be interrupted, never to lock
+    // the window out.
+    if !growth.within(growth_allowance_mib(
+        options.max_growth_mib,
+        options.readers,
+    )) {
+        broke.push("resident memory grew past its allowance");
+    }
+    if !contention.clean(options.readers) {
+        broke.push("a reader could not draw the waveform");
+    }
+    // §37's sub-second waveform latency, which nothing measured until now.
+    // Gated with the readers rather than beside them because a stale picture is
+    // a defect in the product and not in the instrument.
+    if !contention.fresh_enough(options.waveform_budget_millis, !options.fast) {
+        broke.push("the waveform fell further behind the device than §37 allows");
+    }
+    // An unbounded WAL is confinement failing in the one place that costs disk
+    // rather than audio, and until WP-17 nothing checked it: a run that reached
+    // 90 MiB against a 4 MiB budget printed "pass".
+    if !outcome.wal_within_budget(&config, options.wal_slack) {
+        broke.push("the WAL grew past its budget");
+    }
     let evidence = Evidence::read(&faults, &diagnostics, outcome.frames, rate);
-    let passed = if options.injects_a_fault() {
-        confined && evidence.every_fault_showed_up()
+    if options.injects_a_fault() {
+        if !evidence.every_fault_showed_up() {
+            broke.push("an injected fault never showed up");
+        }
     } else {
+        if !diagnostics.is_clean() {
+            broke.push("the device reported a loss");
+        }
         // `stalls` is checked separately from `is_clean`, because it is the one
         // defect the source's counters structurally cannot report: a device
         // that stops delivering leaves all four of them at zero. See
         // `persistence::Config::stall_millis`.
-        confined && diagnostics.is_clean() && outcome.stalls == 0
-    };
+        if outcome.stalls > 0 {
+            broke.push("the source went quiet mid-capture");
+        }
+    }
+    let passed = broke.is_empty();
 
     if options.json {
         let payload = serde_json::json!({
@@ -481,6 +520,10 @@ pub(crate) fn run(options: &Options) -> Result<()> {
                 "query_micros": contention.latency.summary()
                     .map(|(a, b, c, d)| serde_json::json!({ "p50": a, "p95": b, "p99": c, "max": d })),
                 "by_level": contention.by_level,
+                "waveform_lag_micros": contention.freshness.summary()
+                    .map(|(a, b, c, d)| serde_json::json!({ "p50": a, "p95": b, "p99": c, "max": d })),
+                "waveform_budget_millis": options.waveform_budget_millis,
+                "waveform_gated": !options.fast && options.waveform_budget_millis > 0,
             },
             "memory": {
                 "sampled": growth.sampled,
@@ -489,6 +532,7 @@ pub(crate) fn run(options: &Options) -> Result<()> {
                 "end_bytes": growth.last,
                 "grew_bytes": growth.grew_by(),
                 "limit_mib": options.max_growth_mib,
+                "allowance_mib": growth_allowance_mib(options.max_growth_mib, options.readers),
             },
             "commit_micros": { "p50": p50, "p95": p95, "p99": p99, "max": worst,
                                "budget": config.commit_granularity_millis() * 1_000,
@@ -512,9 +556,20 @@ pub(crate) fn run(options: &Options) -> Result<()> {
             "validate_clean": report.is_clean(),
             "bytes_verified": verified,
             "passed": passed,
+            // Named, not just counted: a nightly's JSON is the only record of
+            // a red leg once the log has scrolled away.
+            "broke": broke,
         });
         println!("{}", serde_json::to_string_pretty(&payload)?);
-        return Ok(());
+        // The same exit status as the human-readable report, and it used to be
+        // `Ok(())` unconditionally: `--json` printed `"passed": false` and left
+        // the shell a zero. Anything driving the soak from a script - which is
+        // the only reason the flag exists - would have read a red run as green.
+        return if passed {
+            Ok(())
+        } else {
+            bail!("the soak did not pass")
+        };
     }
 
     println!(
@@ -567,8 +622,19 @@ pub(crate) fn run(options: &Options) -> Result<()> {
                 m as f64 / 1_000.0
             )),
     );
-    println!("  memory      {}", growth.line(options.max_growth_mib));
+    println!(
+        "  memory      {}",
+        growth.line(options.max_growth_mib, options.readers)
+    );
     println!("  readers     {}", contention.line(options.readers));
+    println!(
+        "  waveform    {}",
+        contention.freshness_line(
+            options.waveform_budget_millis,
+            options.readers,
+            !options.fast
+        )
+    );
     println!(
         "  file        {:.2} GiB",
         file_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
@@ -619,14 +685,12 @@ pub(crate) fn run(options: &Options) -> Result<()> {
     println!(
         "  verdict     {}",
         match (passed, options.injects_a_fault()) {
-            (true, false) => "pass: zero loss, bounded WAL, every byte accounted for",
+            (true, false) => "pass: zero loss, bounded WAL, every byte accounted for".to_owned(),
             (true, true) => {
                 "pass: the fault landed, the damage stopped there, and the project is intact"
+                    .to_owned()
             }
-            (false, true) =>
-                "FAIL - see the faults line: either the fault did not land, \
-                              or the damage was not confined",
-            (false, false) => "FAIL",
+            (false, _) => format!("FAIL - {}", broke.join("; ")),
         }
     );
 
@@ -669,6 +733,74 @@ fn resident_bytes() -> Option<u64> {
 fn resident_bytes() -> Option<u64> {
     None
 }
+
+/// The growth allowance for a run, in MiB: the leak margin the operator asked
+/// for, plus the page cache every connection in the run is entitled to fill.
+///
+/// Zero stays zero, because zero means no gate at all.
+///
+/// # Why a page cache is not growth
+///
+/// [`vcw_project::PAGE_CACHE_KIB`] gives the writer's connection 31.25 MiB of
+/// page cache, and SQLite never asks for it back. It fills over the first
+/// minutes of a run as the writer appends, and then it stops - which is the
+/// shape a bounded cache has and a leak does not.
+///
+/// The baseline cannot absorb it. It is taken one [`Growth::SETTLE`] in, which
+/// is long enough for the binary to fault in and SQLite to allocate, and far
+/// too early for a cache that fills over minutes. So every MiB the cache claims
+/// after the settle point is counted as growth by a measurement that is working
+/// exactly as designed.
+///
+/// # What that cost, and what filled it, measured
+///
+/// CI's `hour-contended` nightly failed at 39.1 MiB of growth against a flat
+/// 32 MiB gate - baseline 19.9, peak 59.1, end 56.8 - on an hour that was clean
+/// on every other count: zero loss, every one of 1,036,846,080 bytes verified,
+/// WAL bounded, real-time factor 1.00000, with four readers making 679,478
+/// queries. Two six-minute runs on the dev box, same audio, one variable:
+///
+/// | readers | baseline | peak     | grew     |
+/// |---------|----------|----------|----------|
+/// | 0       | 14.5 MiB | 41.7 MiB | 27.2 MiB |
+/// | 4       | 22.8 MiB | 52.0 MiB | 29.2 MiB |
+///
+/// So the writer's own connection is nearly the whole of the old gate, and four
+/// readers are 2 MiB between them. That is not a reader being frugal: it is
+/// [`vcw_project::Project::open_read_only`] not applying the pragma at all, so
+/// a read-only connection gets SQLite's default cache rather than the
+/// entitlement the writer has. Hence the two terms below rather than one
+/// multiplied by connections, which is what the first version of this function
+/// did on the strength of the nightly alone.
+///
+/// That is also why the 90-minute soak has always passed the flat gate: the
+/// same run plateaus at about 42 MiB and then grows 0.5 MiB an hour, so an
+/// hour-long leg spends most of its length flat and the number the gate reads
+/// depends on where the baseline happened to land. A gate on a knife edge is
+/// not a gate.
+///
+/// What is left over is the leak margin, and it is the operator's number: a
+/// leak has to exceed every cache in the run *plus* `--max-growth-mib` before
+/// this fails. That is weaker than the figure it replaces looked, and exactly
+/// as strong as the figure it replaces was.
+fn growth_allowance_mib(limit_mib: u64, readers: usize) -> u64 {
+    if limit_mib == 0 {
+        return 0;
+    }
+    // Rounded up: the entitlement is 31.25 MiB and a gate is not the place to
+    // be strict about three quarters of a mebibyte.
+    let writer = vcw_project::PAGE_CACHE_KIB as u64 / 1024 + 1;
+    limit_mib + writer + READER_PAGE_CACHE_MIB * readers as u64
+}
+
+/// What one read-only connection's page cache may come to, in MiB.
+///
+/// SQLite's own default, because that is what a reader gets:
+/// [`vcw_project::Project::open_read_only`] applies `foreign_keys` and nothing
+/// else, so `cache_size` stays at the compiled-in `-2000`, i.e. 2000 KiB.
+/// Measured, four readers over six minutes claimed 2 MiB between them - well
+/// inside this - so this is a ceiling and not a prediction.
+const READER_PAGE_CACHE_MIB: u64 = 2;
 
 /// Refuses a memory gate this platform cannot honour.
 ///
@@ -760,7 +892,7 @@ impl Growth {
     }
 
     /// One line for the human report.
-    fn line(&self, limit_mib: u64) -> String {
+    fn line(&self, limit_mib: u64, readers: usize) -> String {
         if !self.sampled {
             return "not measured on this platform, so no memory gate ran".to_owned();
         }
@@ -782,7 +914,14 @@ impl Growth {
             if limit_mib == 0 {
                 " (no limit set)".to_owned()
             } else {
-                format!(" of {limit_mib} allowed")
+                {
+                    let allowance = growth_allowance_mib(limit_mib, readers);
+                    format!(
+                        " of {allowance} allowed ({limit_mib} plus the {} MiB of page cache \
+                         this run's connections may fill)",
+                        allowance - limit_mib
+                    )
+                }
             },
         )
     }
@@ -1110,6 +1249,94 @@ mod tests {
     }
 
     #[test]
+    fn a_page_cache_is_an_allowance_and_not_growth() {
+        // CI's nightly and the dev box's answer to it, in assertions. 39.1 MiB
+        // of growth with four readers failed the flat 32 MiB gate on an hour
+        // clean on every other count, and a six-minute run with no readers at
+        // all grew 27.2 MiB - so the cache the configuration already promised
+        // every connection is most of what the gate was reading.
+        let mib = 1024 * 1024;
+        let contended = growth(Some(19 * mib), 59 * mib);
+        assert!(
+            !contended.within(32),
+            "40 MiB of growth passed a flat 32 MiB gate"
+        );
+        assert!(
+            contended.within(growth_allowance_mib(32, 4)),
+            "growth inside five connections' page cache failed the gate"
+        );
+
+        // The writer's connection is nearly all of it, which is the correction
+        // the uncontended run forced: 27.2 MiB of growth with no readers at
+        // all.
+        // It passed the flat gate, which is the knife edge rather than a
+        // defence: 27.2 MiB of cache against a 32 MiB budget leaves under 5
+        // MiB, so on that gate a run's verdict turned on where the baseline
+        // landed. Against the allowance it has the whole budget to spare.
+        let uncontended = growth(Some(14 * mib), 41 * mib + 717 * mib / 1000);
+        assert!(uncontended.within(32));
+        assert!(
+            uncontended.grew_by().unwrap() > 32 * mib * 3 / 4,
+            "the fixture no longer sits near the flat gate it exposed"
+        );
+        assert!(
+            uncontended.within(growth_allowance_mib(32, 0)),
+            "the writer's page cache failed the gate"
+        );
+
+        // A leak is still a leak: past every cache in the run plus the margin.
+        assert!(
+            !growth(Some(19 * mib), 319 * mib).within(growth_allowance_mib(32, 4)),
+            "300 MiB of growth passed"
+        );
+
+        // Zero means no gate, and adding connections to no gate must not make
+        // one.
+        assert_eq!(growth_allowance_mib(0, 4), 0);
+
+        // The arithmetic itself, so a changed cache size is a failing test
+        // rather than a quietly different gate. The writer is entitled to the
+        // configured cache; a reader gets SQLite's default and is charged for
+        // that instead.
+        let writer = vcw_project::PAGE_CACHE_KIB as u64 / 1024 + 1;
+        assert_eq!(growth_allowance_mib(32, 0), 32 + writer);
+        assert_eq!(
+            growth_allowance_mib(32, 4),
+            32 + writer + 4 * READER_PAGE_CACHE_MIB
+        );
+        // A reader is worth a fraction of the writer, not a copy of it. The
+        // first version of this gate multiplied and allowed 187 MiB.
+        assert!(READER_PAGE_CACHE_MIB * 8 < writer);
+    }
+
+    #[test]
+    fn the_memory_line_says_what_it_allowed_and_why() {
+        // A report that prints one number while the gate uses another is how a
+        // gate stops being checkable from its own output.
+        let line = growth(Some(19 * 1024 * 1024), 59 * 1024 * 1024).line(32, 4);
+        assert!(
+            line.contains(&format!("of {} allowed", growth_allowance_mib(32, 4))),
+            "{line}"
+        );
+        assert!(
+            line.contains(&format!(
+                "{} MiB of page cache",
+                growth_allowance_mib(32, 4) - 32
+            )),
+            "{line}"
+        );
+        // And with no readers the cache it names is the writer's alone.
+        let solo = growth(Some(19 * 1024 * 1024), 20 * 1024 * 1024).line(32, 0);
+        assert!(
+            solo.contains(&format!(
+                "{} MiB of page cache",
+                growth_allowance_mib(32, 0) - 32
+            )),
+            "{solo}"
+        );
+    }
+
+    #[test]
     fn a_run_with_no_settled_baseline_reports_nothing_rather_than_zero() {
         // Growth from a baseline taken before the process settled would be
         // startup allocation counted as a leak, so a run too short to have one
@@ -1117,11 +1344,11 @@ mod tests {
         let short = growth(None, 40 * 1024 * 1024);
         assert_eq!(short.grew_by(), None);
         assert!(short.within(1), "a run with no baseline was failed");
-        assert!(short.line(1).contains("too short"));
+        assert!(short.line(1, 0).contains("too short"));
 
         // And a platform without procfs is not a flawless run, it is an
         // unmeasured one.
-        assert!(Growth::default().line(32).contains("not measured"));
+        assert!(Growth::default().line(32, 0).contains("not measured"));
     }
 
     #[test]
@@ -1158,7 +1385,7 @@ mod tests {
         g.sample_at(Growth::SETTLE, None);
         assert!(!g.sampled, "an absent reading counted as a sample");
         assert_eq!(g.baseline, None);
-        assert!(g.line(32).contains("no memory gate ran"));
+        assert!(g.line(32, 0).contains("no memory gate ran"));
     }
 
     #[test]

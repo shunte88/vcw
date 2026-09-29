@@ -83,7 +83,7 @@ pub use recovery::{Assessment, Plan, Recovered, Sidecars, recover, recover_all, 
 pub use rusqlite::Connection;
 pub use schema::{APPLICATION_ID, EXTENSION, FORMAT_VERSION, SCHEMA_VERSION};
 pub use session::Session;
-pub use sqlite::{Access, Project, block_checksum};
+pub use sqlite::{Access, PAGE_CACHE_KIB, Project, block_checksum};
 pub use validate::{Finding, Options, Report, integrity_check, validate};
 
 /// Unix seconds, for the `*_at` columns.

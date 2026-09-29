@@ -163,6 +163,24 @@ jobs:
       - name: Test the frontend
         run: pnpm test
         working-directory: app/ui
+      # `tauri-build` refuses to run at all while `bundle.externalBin` names a
+      # file that is not there, and WP-19 made it name the CLI. The sidecar is a
+      # *packaging* artefact: `tools/stage-cli.sh` builds the real one in the
+      # `package` job, which is the job that fails if staging breaks. Checking
+      # and testing the shell needs the path to exist, not the binary to work -
+      # nothing here executes it - so a placeholder is what this job wants
+      # rather than a 10 MB release build of another workspace.
+      #
+      # This is also why the local gate was green while this job was red: the
+      # dev box had a real staged sidecar left over from a package build, so the
+      # `appclippy` and `apptest` legs passed on an untracked artefact that no
+      # fresh clone has. `gate.sh` now writes the same placeholder.
+      - name: Placeholder for the CLI sidecar
+        run: |
+          mkdir -p app/src-tauri/binaries
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          printf 'not the CLI: see tools/stage-cli.sh\n' \
+            > "app/src-tauri/binaries/vcw-$triple"
       - name: fmt
         run: cargo fmt --all -- --check
         working-directory: app/src-tauri

@@ -161,7 +161,20 @@ frame: number,
 /**
  * The same thing in seconds.
  */
-seconds: number, } | { "kind": "playback-finished",
+seconds: number, } | { "kind": "playback-refused",
+/**
+ * The capture that was asked for.
+ */
+captureId: number,
+/**
+ * What was asked for, in frames rather than seconds: the case that
+ * matters is the one where the project could not be read.
+ */
+scope: string,
+/**
+ * Why it was refused.
+ */
+reason: string, } | { "kind": "playback-finished",
 /**
  * The capture that was playing.
  */

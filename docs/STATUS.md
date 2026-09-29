@@ -2512,7 +2512,10 @@ vcw export demo.vcw --into demoout --format flac
   wrote      2 file(s), 1 cover(s), 171990 frame(s), 0.6 MiB
 ```
 
-Verbatim, from a 44.1 kHz 24-bit project on `/data2/vcw-scratch/wp14cli`. `flac -t`
+Verbatim, from a 44.1 kHz 24-bit project on `/data2/vcw-scratch/wp14cli`. The
+two file names would read `A1 - Europe Endless.flac` today: `{tracknum}` is the
+position on the label now, which is what VRipr's was and what §29 keeps - see
+*a two-sided record collided with itself* below for why. `flac -t`
 reports `ok` on both files, `metaflac --show-bps` 24, and the directory holds
 `folder.png` beside the two tracks.
 
@@ -2892,13 +2895,17 @@ the code `not-wired`, named in `NOT_WIRED` rather than left out, because they ne
 provider client held across calls, a disk cache, a credential that §39 forbids storing in
 the project, and cancellation for a search a person changes their mind about. WP-12 built
 every piece of that except where the shell keeps them, and WP-16's metadata browser is
-what decides that - it is a design question, not a morning's wiring. `waveform-update` and `fingerprint-match` are declared in `Wire` and
-nothing produces them yet.
+what decides that - it is a design question, not a morning's wiring. `waveform-update` and `fingerprint-match` are named in §35, and
+they are **absent from `Wire` rather than declared in it** - an earlier version of this
+sentence had that backwards. The pyramid is built by the writer and read on demand, so
+there is nothing to push, and declaring the variant would publish a promise the core
+cannot keep.
 
-**A playback failure arrives as a `capture-warning`** with the code `playback-failed`,
-because the open happens on a thread and the bus has no playback-refused event. It is a
-wart and it is recorded as one; the fix is an event on the bus, not a workaround in the
-shell.
+**A playback failure arrived as a `capture-warning`** with the code `playback-failed`,
+because the open happens on a thread and the bus had no playback-refused event. It was a
+wart and it was recorded as one; the fix was an event on the bus, not a workaround in the
+shell. That event was built when Phase 1's loose ends were closed - see *Phase 1 -
+closing the loose ends* below.
 
 `bundle.active` is `false` and the icon is a 245-byte placeholder: packaging is WP-20 and
 this shell is not something to hand anyone. `csp` is `null`, which is Tauri's development
@@ -3134,7 +3141,7 @@ clean.
   would say what §44 actually feels like. It was both: see WP-16a.
 - **A playback open failure still arrives as a `capture-warning`** coded
   `playback-failed`. Unchanged by WP-16 because the fix is an event on the bus, not a
-  workaround in the shell.
+  workaround in the shell. Closed later: see *Phase 1 - closing the loose ends*.
 - **`waveform-update` and `fingerprint-match`** are declared in §35 and nothing produces
   them. The waveform decision above is why the first one is not missed.
 - **A side still has no extent**, and the Transport's one-side-or-none rule is the honest
@@ -4359,21 +4366,579 @@ Artefacts on this machine: `VCW_0.1.0_amd64.deb` at 11.2 MB and
 `VCW_0.1.0_amd64.AppImage` at 88.6 MB, both in `app/target/release/bundle/` and
 both rebuilt after the last fix.
 
+## Phase 1 - closing the loose ends
+
+Built 2026-09-29, after every work package in Phase 1 was. This section is the
+things that were carried as "recorded and not fixed" - and the first CI run that
+was read properly, which turned out to be the same subject: every finding below
+is something a green gate had been asserting for days.
+
+### A playback refusal is now an event, not a warning
+
+Four of the sections above carry the same paragraph. **A playback open failure
+arrives as a `capture-warning` coded `playback-failed`, because the open happens
+on a thread and the bus has no playback-refused event; the fix is an event on the
+bus, not a workaround in the shell.** It was written under WP-15, repeated under
+WP-16, and repeated again in `## Next up`. It is now wrong, which is the only
+reason this is worth a section: it was the cheapest item left in Phase 1 and it
+had survived three work packages.
+
+`Event::Denied` is that event. The name is `playback-refused` on the wire, and it
+is **a variant of its own rather than a warning because a refusal is terminal**:
+no `Auditioning` came before it and no `Ended` will follow it, so a consumer that
+put its transport into a playing state when it asked has nothing else coming to
+take it out again. That is the whole argument, and it is why the same failure
+*during* playback stays a warning - a verb that fails mid-audition is a mishap in
+something that is still running and will still end.
+
+The path is the one the contract's drift tests lay out, and it is worth listing
+because it is the shape of every future event: the variant in
+`vcw_core::events::Event` with a `name()` arm and a `Display` arm, the wire
+variant in `crates/contract/src/event.rs` with its `kind()` and its `From<&Event>`
+mapping, the variant count in `crates/contract/tests/wire.rs` raised from 14 to
+15, the regenerated `app/ui/src/bindings/vcw.d.ts`, a `detail()` arm in
+`crates/cli/src/session.rs` so `--json` carries the fields, the reducer case in
+`app/ui/src/store.ts` and the log line in `app/ui/src/describe.ts`. Two of those
+are compile errors rather than choices: the frontend's `fold` and `describe`
+switches are exhaustive over the union, so a new kind stops the build until
+somebody decides what the UI does with it. That is D9 earning its keep.
+
+`Scope::label()` is the small new thing in `vcw-core`. `Scope::describe` answers
+in seconds, which needs a `Layout`, which needs the project open - and **the one
+moment that is not available is the moment most worth reporting**, because an
+audition refused because the project could not be read has no rate to divide by.
+So the label answers in frames, and the refusal says `the region 0-480000 in
+frames of capture 7: unable to open database file` rather than nothing.
+
+The reducer does two things and both matter: the transport goes back to not
+playing, because this event is the only thing that will ever say so, and the
+reason is shown, because "the device will not play 96 kHz" is a sentence somebody
+can act on. A device that cannot play a capture's rate is refused rather than
+resampled (§9, §21), so that sentence is the product working as specified and the
+UI had no way to say it.
+
+**Four mutations, four assertions.** Publishing a warning instead of the refusal
+fails the shell's new test with the old event quoted in the message; publishing
+anything after the refusal fails the "nothing follows it" assertion; removing the
+reducer's `playing: false` fails the store test; and removing the reason from the
+message fails the test that reads it. **The fifth mutation found a test of my
+own.** A reducer test that folds a refusal into the initial state and asserts the
+transport is not playing passes with the reducer's reset removed - nothing is
+playing in `NOTHING` either, so it asserted the starting state rather than the
+fold. It is deleted, and the finding is a comment in `store.test.ts` where the
+next person to write one will read it.
+
+### The memory gate was reading a page cache as a leak
+
+The nightly's `hour-contended` leg failed on one line: `memory baseline 19.9
+MiB, peak 59.1 MiB, end 56.8 MiB, grew 39.1 MiB of 32 allowed`. Everything else
+about that hour was perfect - zero loss, every one of 1,036,846,080 bytes
+verified, a bounded WAL, a real-time factor of 1.00000, and four readers making
+679,478 queries while it ran.
+
+`cache_size = -32_000` in `crates/project/src/sqlite.rs` is 31.25 MiB of SQLite
+page cache, and SQLite never gives it back. It fills over the first minutes of a
+run and then stops, which is the shape a bounded cache has and a leak does not.
+The baseline cannot absorb it: the baseline is taken one `Growth::SETTLE` in,
+which is five seconds, long enough for the binary to fault in and far too early
+for a cache that fills over minutes. So the gate was counting a fixed
+entitlement as growth, and doing exactly what it was written to do.
+
+**Two hypotheses died on the way to the fix, both of them mine.** The first was
+that the four readers were the whole of it. Two six-minute runs on the dev box,
+same audio, `--max-growth-mib 0` so the run reports rather than judges, one
+variable:
+
+| readers | baseline | peak     | grew     | rtf     |
+|---------|----------|----------|----------|---------|
+| 0       | 14.5 MiB | 41.7 MiB | 27.2 MiB | 1.00013 |
+| 4       | 22.8 MiB | 52.0 MiB | 29.2 MiB | 1.00013 |
+
+The uncontended run grew 27.2 MiB with one connection open. So it is the
+*writer's* cache, and the readers are 2 MiB between them. The second hypothesis
+followed from the first correction and was wrong in the other direction: I had
+already rewritten the allowance as `limit + per_connection * (1 + readers)`,
+counting every connection as entitled to the full 31.25 MiB, which allows 187
+MiB on a four-reader run and would let a real leak through. The four-reader
+measurement is what refuted it.
+
+**Why a reader is cheap.** `Project::open_read_only` does not call
+`apply_connection_pragmas`. It sets `foreign_keys` and nothing else, so a
+read-only connection runs on SQLite's compiled-in `cache_size` of 2000 KiB while
+the appending writer holds fifteen times that. That is worth restating as an
+open question rather than a finding, because it is the wrong way round: the
+writer appends and rarely re-reads a page, and the connection that would use a
+large cache is the one drawing waveforms out of 64 KiB blob pages (WP-09's
+finding). Whether the writer needs 31.25 MiB at all - and whether a reader
+should be given it - is a tuning question with an `rss` measurement attached,
+and it matters most on the Pi 5, where the soak is queued and the RAM is not
+free. Nothing here changes either number.
+
+So the gate now states the entitlement instead of tripping over it:
+`--max-growth-mib` is a leak margin *on top of* the page cache the run's
+connections may fill, which is the writer's `PAGE_CACHE_KIB` (now exported from
+`vcw-project` rather than an inline literal) plus 2 MiB for each reader. The
+report prints the sum and the parts, so the gate is checkable from its own
+output: `grew 1.8 MiB of 72 allowed (32 plus the 40 MiB of page cache this run's
+connections may fill)`. The nightly's 39.1 MiB passes that with room, a 300 MiB
+leak fails it, and a unit test pins the arithmetic so a changed `cache_size` is
+a red test rather than a quietly different gate. One of those assertions exists
+only to make the 187 MiB mistake impossible to make twice.
+
+**And the flat gate was never as strong as it looked.** 27.2 MiB of cache
+against a 32 MiB budget leaves under 5 MiB, so on that gate a verdict turned on
+where the baseline happened to land. The 90-minute soak passed it because the
+run plateaus at about 42 MiB and then grows half a MiB an hour, so an hour-long
+leg spends most of its length flat. The capture path's memory is still flat -
+that is the WP-17 finding and it stands - but the number the old gate was
+reading was mostly a cache filling up.
+
+### A two-sided record collided with itself
+
+The first export of a real project never got to the audio. It refused at the
+plan, as §33 says it should, with the message that named the defect:
+
+```
+Error: tracks 2 and 2 both export to .../Spirit of Eden/02 -.flac
+```
+
+`track::Record::number` is the number *within its side* - §29's alpha position,
+the number printed on the label - so on any record with a B side it repeats.
+Side A's second track and side B's second track are both `2`, and the export was
+using that number for two things it does not fit: the naming template's
+`{tracknum}`, where it made every untitled side-B track collide with a side-A
+track, and the tag's track number, where it put two tracks numbered 2 on one
+album. The message could not even name the two tracks, because both their names
+were `2`.
+
+**VRipr had this right and the port lost it.** `{tracknum}` is a VRipr token, and
+in VRipr it expanded to the alpha position: `format!("{}{}", dt.side, dt.number)`
+in `src/metadata/mod.rs`, so the default template - the same string in both
+products - wrote `A1 - The Rainbow`. §29 says VRipr's alpha numbering is
+retained, and now it is:
+
+* `{tracknum}` renders through the release's `Numbering`: `A1` under `Alpha`,
+  which is the default, and the running number across the release under
+  `Numeric`. `naming::expand` already passed a non-numeric track number through
+  untouched, so the machinery was waiting for it.
+* `{position}` and the `VINYL_POSITION` tag are the alpha position **whatever
+  the numbering is**. That is a second small fix in the same place: under
+  `Numeric` they used to render `6`, which threw away the one piece of
+  provenance a vinyl rip has that a CD rip does not.
+* The tag's track number is the track's one-based position **within its disc**,
+  counting across that disc's sides, because that is what every player assumes
+  a track number means. Not the release-wide sequence: on a two-disc set,
+  disc 2's first track is 1 again, and `disc_number` is what separates them.
+* A collision now names the tracks by position: `tracks A2 and B2 both export
+  to ...`.
+
+Both ends proved, on a test that builds a two-sided project with four untitled
+tracks and one capture behind both faces. Putting `record.number` back into the
+template fails it on the file names; putting it back into the tag fails it with
+`[Some(1), Some(2), Some(1), Some(2)]` against `[Some(1), Some(2), Some(3),
+Some(4)]`. Nothing in the suite had caught it because every export test until
+now used one side.
+
+### The first export of a real side, timed
+
+§37 asks for it and nothing had ever measured it. The subject is the first-light
+capture in `/data2/vcw-firstlight/real-side-a.vcw`: **192 kHz, 2 channels,
+Int32, 300,627,479 frames**, 26 minutes 6 seconds of a real side in a 2.33 GiB
+project, laid out as four tracks over 299,366,400 frames.
+
+**FLAC refused it, up front and by name:**
+
+```
+Int32 audio cannot be written as FLAC: the FLAC format allows 32-bit samples but
+flacenc 0.5.1 stops at 24, and narrowing 32 bits to 24 loses signal. Export this
+one as WAV.
+```
+
+That is the refusal WP-14 wrote for exactly this case, arriving on the first real
+project put in front of it, and the output directory was still empty afterwards.
+It is worth stating what it means in practice: **a 32-bit capture is a WAV-only
+capture**, and the default export format cannot carry it at all.
+
+**WAV, the same side, release build, `/data2`:**
+
+| | |
+|---|---|
+| Written | 4 files and 1 cover, 299,366,400 frames, 2284.0 MiB |
+| Wall clock | **28.36 s** |
+| CPU | 5.49 s user, 8.56 s system, 49% of one core |
+| Rate | 80.5 MiB/s, **55x real time** |
+| Peak RSS | **832 MiB** |
+
+So an hour-long side is about a minute, and the job is I/O bound rather than
+CPU bound at half a core.
+
+**The peak resident figure is the finding.** 832 MiB for a 2.3 GiB export is not
+a buffer anybody chose: sampling `VmRSS` every second through the run gives
+12 MB flat with three spikes in it, of 600, 247 and 834 MiB - one per track, and
+each one the size of the track it belongs to. `lofty`'s `Id3v2Tag::save_to_path`
+rewrites a RIFF file in memory to insert the `id3 ` chunk, so **tagging a WAV
+costs the file's own size in RAM**, after the audio has been written perfectly
+and streamed through a 64 KiB buffer.
+
+The FLAC path does not do this, and the difference was measured rather than
+assumed. A 24/96 Int24Packed project of 398,088,000 frames - 4 hours 36 minutes
+of audio, 1377.8 MiB of FLAC out - took **1m58.71s** at 91% of a core (105.15 s
+of it user time, so this one is CPU bound where the WAV was I/O bound) and
+peaked at **13.1 MiB of resident memory**, with a 630 KB PNG cover embedded. That
+cover is eighty times the 8192 bytes of padding the encoder leaves for a tag, so
+it forces the rewrite the padding exists to avoid, and `metaflac` confirms the
+picture went in. 140x real time, and memory flat. So lofty streams a FLAC
+rewrite and buffers a RIFF one.
+
+What that costs: §37 asks for bounded memory use, and WAV export is the one path
+in the product where it does not hold. A WAV track may be just under 4 GiB
+before the container's own ceiling refuses it, and tagging one would ask for
+4 GiB of RAM - which is the whole machine on a 4 GB Pi. **Recorded, not fixed:**
+the remedy is to stop asking lofty to write the container and write the `id3 `
+chunk ourselves, appended after the data chunk with only the RIFF size to
+correct, which is the shape the FLAC writer already uses and would make the
+memory flat for every format. That changes the bytes of every exported WAV, so
+it wants third-party verification beside it rather than a footnote in a change
+about something else.
+
+### Sub-second waveform latency, measured
+
+§37 asks for four things about a capture in progress - *responsive UI during
+capture*, *sub-second waveform latency*, *real-time-feeling meters*, *bounded
+memory use* - and until now the soak measured one of them, *bounded memory*,
+and that only since WP-17. It counted the readers' queries and timed them, which
+says the window can ask a question while the writer works and says nothing at
+all about whether the answer is current. A reader answering in one millisecond
+out of a picture ten seconds stale passes every gate the soak had.
+
+**The measurement.** A reader thread now reads `Counters::frames()` - the newest
+frame the device has handed to the ring - immediately *before* it asks
+`Shape::of` for the newest frame a read-only connection can draw, and records
+the difference in microseconds at the capture rate. In that order on purpose:
+the query costs a fraction of a millisecond against a lag of hundreds, and
+reading the device's clock first means the instrument can only ever understate
+itself. What the figure contains is the whole path from stylus to drawable
+pixel except the drawing: the ring dwell, the commit interval, and SQLite's
+visibility rules. What it does not contain is the webview, which is deliberate
+and is dealt with below.
+
+**Two minutes, 96 kHz, Int24Packed, four readers, real-time pace, `/data2`:**
+
+```
+readers     4 reader(s), 26499 queries, 58934802240 frames covered,
+            p50 1.0 ms, p99 4.2 ms, max 14.3 ms
+waveform    behind the device by p50 130 ms, p99 250 ms, max 300 ms
+            over 26499 redraw(s), budget 1000 ms (§37)
+```
+
+**The lag is the commit interval and nothing else**, which is the result worth
+having. Blocks are 250 ms and a batch is one, so a block becomes visible when
+it commits; a reader sampling uniformly between two commits sees a mean of half
+an interval, and 130 ms is half of 250. The p99 is one whole interval and the
+maximum is one interval plus a commit's own 50 ms. There is no queue anywhere in
+this path, no accumulating backlog, and no term that grows with the length of
+the capture - the same 250 ms at two minutes as at two hours, because `Shape::of`
+reads the pyramid's top rung and not the samples (WP-09's finding, and §37's
+*waveform rendering independent of total sample count* is the same claim from
+the other side).
+
+So **sub-second waveform latency holds with a factor of four in hand, and the
+budget is now a gate**: `--waveform-budget-millis`, default 1000, gating the
+p99 rather than the maximum. That choice is the one judgement in here. One
+redraw in a hundred arriving a second late is a product that feels slow; one
+redraw held up behind a checkpoint is not, and the maximum is printed beside the
+verdict either way so nothing is hidden by the choice.
+
+**Proved at both ends, and the failing end is the more interesting one.** Since
+the lag *is* the commit interval, raising the interval is the regression: the
+same run with `--batch-blocks 8` commits every 2 s and reports `behind the
+device by p50 1010 ms, p99 2000 ms, max 2030 ms`, and fails. Everything else
+about that run passed - zero loss, every byte verified, the commit budget (which
+scales with the batch, to 2000 ms) comfortably met, memory flat, the WAL bounded,
+and the readers still answering at a p50 of 0.8 ms. **A batch of eight is a
+perfectly healthy writer with an unusable window**, and before this change the
+soak would have called it a pass. That is the whole argument for the gate.
+
+The harness agrees at a quarter of the length: `short`'s `contention` leg, 15
+seconds with four readers, reports `p50 130 ms, p99 270 ms, max 350 ms over 3138
+redraw(s)` and passes, and all eight legs of `short` are green including the
+corpus leg fed from a real rip. The same p50 to the millisecond at an eighth of
+the redraws is what a figure that is structurally the commit interval looks
+like.
+
+**A trap the gate walked into, and the harness would have found a year from
+now.** `--fast` runs the source at a metered pace: throttled so nothing drops,
+but still 28x real time. A reader on that run measures 1250 ms of lag and it
+means nothing - the frames between the device and the drawable end are a ratio
+of production speed, not a duration anybody experiences, and at 28x a 45 ms
+commit looks like 1.25 s. The first version of this gate would have failed every
+metered leg that ever gained a `--readers`, for the same reason `--fast` cannot
+make a commit-latency claim and the byte verifier cannot run at `Pace::Fast`.
+So the gate is off at a metered pace, the figure is still printed, and the line
+carries the reason: `not gated: at a metered pace this is production speed, not
+staleness`. The unit test that pins it asserts the exemption rather than the
+comment. What saved this from shipping is that the eight-leg harness is a
+different instrument from the unit tests: `short` passed, and reading *why* the
+one leg with readers was the only one making the claim is what turned it up.
+
+**What a FAIL says now.** That run also showed up something the report had been
+getting away with: the verdict printed a bare `FAIL` and left the reader to diff
+twenty lines against a green run. Ten conditions can fail a soak, so each one
+names itself - `FAIL - the waveform fell further behind the device than §37
+allows` - and the names go into `--json` as `broke` too, because a nightly's
+JSON is the only record of a red leg once the log has scrolled.
+
+**And `--json` was exiting zero on a failing soak.** Found while checking that
+the new key came out where it should: the JSON arm printed its payload and
+returned `Ok(())` unconditionally, so a run with `"passed": false` in its own
+output handed the shell a success. Nothing in the repository drives the soak
+that way - the harness reads the human-readable report - which is exactly why it
+survived: the flag exists for scripts, and the only consumer that would have
+found it is one nobody has written yet. It now exits with the same status as the
+report it replaces, and prints the payload first so the JSON is still there to
+read.
+
+**Which half of "responsive UI during capture" this is**, and the finding that
+came out of asking. The measured half is the Rust half: everything from the
+device callback to a drawable summary, inside 300 ms at the worst. The other
+half belongs to `app/ui/src/panels/Waveform.tsx`, and reading it to write this
+section turned up something the figures above make newly relevant.
+
+**The panel is polled, and it does not poll during a capture.** WP-16 settled
+pushed-versus-polled and the argument is in the component's own header: a redraw
+is driven by the four things that change the picture - the capture, the channel
+and range, the panel width, and a project generation counter - and by nothing
+else, with `capture-finished` bumping the generation so the last block appears
+without an event that carries pixels. The counter is bumped by exactly four
+event kinds - `capture-finished`, `track-detected`, `detection-finished`,
+`export-finished` - and `recording-position`, which arrives throughout a
+capture, is deliberately not one of them, because a re-read per meter tick is
+the mistake S3's spike warned about. That decision is sound and the reasons for
+it still hold. What it means, stated plainly for the first time, is that **a
+waveform does not grow while a record is being recorded**: the freshness measured
+above is what the engine can serve, not what a person currently sees. The
+component says as much - *what polling costs is freshness during a live capture,
+and that cost is paid by the meters instead* - and it is a reasonable reading of
+§37 that the meters are what *real-time-feeling* refers to and the waveform is
+what you look at afterwards to place a boundary.
+
+It is not the only reading, and the cost of the other one is now known rather
+than guessed. A live-growing waveform means a timer while the phase is
+`recording`, and the numbers say what that would cost: the query is p99 4.2 ms
+in Rust, the picture would be 130-300 ms behind, and S3 measured a full-canvas
+main-thread redraw of a 1400x220 waveform at **29% of the main thread sustained
+at 60 Hz**, which is about 5 ms of main thread per redraw - so **2 Hz is
+roughly 1% of the main thread for a picture a quarter of a second old**. That is
+cheap enough that "the waveform does not move while you record" should be a
+decision somebody makes on purpose rather than a consequence of the dependency
+list of an effect. **Recorded, not changed**: it is a product judgement about
+what a recording screen should do, it belongs beside whether the panel
+auto-scrolls and where the playhead sits during capture, and this change is
+about measurement.
+
+S3's other results apply unchanged and are worth restating because they bound
+the answer either way: delivery across the Tauri boundary is ~10 ms and the
+boundary itself is free, an `OffscreenCanvas` worker costs **0.5%** against the
+main thread's 29%, and the worker was the only configuration that never missed
+a frame budget. A panel redrawing a few times a second does not need the worker;
+one that follows a capture at 60 Hz would.
+
+**What is still unmeasured**, stated plainly rather than implied: the meters
+(§37's *real-time-feeling* is not a number and needs one), the webview's own RSS
+over a long session (S3 measured ~1.46 MiB/min with no plateau - risk R8, and
+the only figure here that looks like a problem), and all of it on anything but
+x86_64 Linux. The Pi 5 is where a 250 ms commit interval is least likely to
+survive, and its soak is queued.
+
+On the harness: `VCW_SHARED=1` turns this gate off alongside the commit tail,
+and the same argument applies verbatim - a hosted runner's timing measures the
+runner. The figure is still measured and printed there, with `not gated` on the
+end of the line, because a number from a runner is worth having even when it
+cannot be allowed to fail a build.
+
+### The two events §35 names and nothing publishes, decided
+
+`waveform-update` and `fingerprint-match` have been carried as a gap since
+WP-15, in three documents and in a comment in every one of the four places a new
+event has to be added. The gap was never a defect - both are *absent* from the
+wire union rather than declared and dead, so the frontend's exhaustive `switch`
+cannot be written against them and nothing promises them - but "recorded as a
+gap" in four files is not the same as a decision in one.
+
+**`waveform-update` was already decided, in the one place that had to live with
+it.** `Waveform.tsx`'s header settled pushed-versus-polled under WP-16 and
+argued it properly: a pushed waveform means the engine deciding how wide the
+panel is and how many pixels a peak column covers, which are facts only the
+browser has. What was missing was not the decision but the evidence, and the
+measurement above supplies it: the poll costs **p50 1.0 ms and p99 4.2 ms** with
+four readers competing for the same database during a 96 kHz capture, and
+returns a picture at most **300 ms** stale. An event could not make that picture
+newer, because the lag is the commit interval and is the same for a push as for
+a poll. So the event would buy nothing and cost the thing §35's other events are
+careful about: a second place where the state of the capture lives. Every event
+in the union either carries something the frontend cannot compute
+(`meter-update`) or says *the project changed, read it again*
+(`track-detected`). A waveform notification is the second kind, and
+`track-detected` already is it.
+
+**So it is refused rather than deferred**, and that is now written where the
+next person looks rather than only in a React component: `vcw-contract`'s
+`event` module documentation carries the figures, `vcw-core`'s says the variant
+will not arrive, and `store.ts` says why no case handles it. The alternative
+reading - that §35's list is a checklist of things to publish - would have added
+a 60 Hz event to a pyramid that answers in a millisecond.
+
+**`fingerprint-match` stays open because the thing behind it does not exist.**
+Fingerprinting is Phase 2, the event's payload is a decision about what a match
+*is* (§26's regions, a confidence, a provider), and inventing the type now would
+be inventing the feature. It is the one §35 name that is still a gap, and it is
+recorded as Phase 2's rather than as an omission.
+
+### The gate was green because of a file nobody tracks
+
+`WP-19` made `bundle.externalBin` name the CLI, so `tauri-build` now refuses to
+run while `app/src-tauri/binaries/vcw-<triple>` is missing. That directory is in
+`.gitignore`, correctly - it holds a 10 MB build artefact. The dev box has had a
+real one in it since the first package build, so `appfmt`, `appclippy` and
+`apptest` all passed here, and **the same three steps failed on every CI run for
+two days** with `resource path binaries/vcw-x86_64-unknown-linux-gnu doesn't
+exist`. A fresh clone would have failed identically.
+
+This is the third time the same lesson has been paid for, and the first time it
+was a *missing* file rather than a present one: a green gate has to mean a green
+CI, and anything the gate needs that the repository does not carry is a hole in
+that claim. Both ends now write the same one-line placeholder - a text file, not
+a binary, because nothing in either place executes it - and the real staging is
+`tools/stage-cli.sh` in the `package` job, which is the job that must fail if
+staging breaks. The failure was reproduced on this machine by moving the staged
+binary aside, and the placeholder was watched to fix it.
+
+### WP-17's memory gate stopped four recovery tests on two platforms
+
+`vcw soak` defaults to a 32 MiB growth gate and **refuses to start where resident
+memory cannot be read**, which is every platform without a procfs. That refusal
+is right, and it is WP-17's own finding: a gate that cannot fail is worse than no
+gate, because the report reads the same whether it held or was never applied.
+
+What it also did was stop `kill_and_recover.rs`, whose writer is `vcw soak`, on
+Windows and macOS - all four tests, before the first frame, with the refusal text
+as the failure. **Recovery has never been exercised on either platform**, and the
+reason is a flag this file never passed. It passes `--max-growth-mib 0` now,
+explicitly and with the reason beside it, because a kill-and-recover test has
+nothing to say about memory.
+
+### A harness that closes a pipe under a running child
+
+`recovery_reports_before_it_writes` calls `wait_until_recording` and discards
+what it returns, which drops the receiver, which ends the thread draining the
+child's stdout, which closes the read end of the pipe. The writer prints a
+progress line every second; the next one fails; and **`println!` panics on a
+failed write**, so the child died with `failed printing to stdout: Broken pipe
+(os error 32)` and the test blamed it for exiting on its own.
+
+A race, and the dev box wins it: the kill at 1.8 s usually lands before the
+second progress line at 2 s. A loaded runner does not, which is why this was red
+on `linux-x86_64` and on `linux-aarch64` and green here. The drain thread now
+keeps draining after the receiver has gone, which is the property a harness owes
+a child it is going to kill later.
+
+It leaves a product question open rather than closed: `vcw soak ... | head -3`
+panics for the same reason, because Rust ignores `SIGPIPE` and turns the failed
+write into a panic in whichever thread printed. That is a real defect in a CLI
+and it is **not** what CI hit - CI hit the harness - so it is recorded here and
+not fixed in the same change.
+
+### What a byte audit means once the device has dropped something
+
+`a_capture_killed_at_a_random_point_recovers_every_time` failed on
+`linux-x86_64` with `channel 0 frame 48000 is not what the device produced`, and
+the frame number is the whole diagnosis: 48000 frames at 48 kHz is exactly the
+1000 ms ring, so the ring had filled and one callback had been discarded. The
+product says what happens next in as many words, in `Pace::Fast`'s own doc
+comment: an overrun discards a whole callback while the source's frame index
+moves on, so stored frame *n* holds the sample the source produced for some later
+frame, and **every frame after a gap mismatches**. `soak --starve-after` already
+verifies only up to the fault for exactly this reason. The audit in the test did
+not know any of it.
+
+It does now, and it is a stronger check than it was. On a mismatch it searches
+for the shift rather than being told it: the delta that puts the source's audio
+back under the stored bytes for sixteen consecutive frames is the size of the
+gap, and each sample is a 32-bit function of its own frame index, so sixteen of
+them agreeing is not a coincidence anybody has to argue about. A mismatch that no
+gap up to five seconds explains is still a failure. So the claim survives the
+loss instead of being suspended by it: the audio either side of a gap is exactly
+what the source produced, at a named offset, nothing was invented and nothing was
+moved, and **the gap itself is named in the output** rather than tolerated
+silently. The channels have to agree about it too, because a callback carries
+every channel, and a gap in one of them and not the other is something no
+overrun can produce.
+
+Both ends were proved on purpose. `--starve-after 1.0` puts one empty callback
+into the run, and the audit reports `Gap { at: 48000, frames: 480 }` - one
+callback, 10 ms, at exactly one second - on every iteration, and passes.
+Corrupting a single byte at frame 24000 fails with the diagnosis printed: stored
+`[46, 5E, D1, D0]`, the source's `[47, 5E, D1, D0]`, and no gap that explains it.
+
+**And it found something.** The first version of the rule that goes with the gap
+was `dropped_frames > 0`: a capture that lost audio must not be filed as a
+flawless one, §15's requirement and WP-17's finding. It failed on the starved
+run, with `Diagnostics { overruns: 0, underruns: 1, dropped_frames: 0 }` - which
+is the two counters dividing the loss honestly, and only one of them able to
+count it. A ring overrun discards a callback we were handed, so the frames are
+known and counted. A device that delivers an empty callback has told us nothing
+about what it skipped, so `underruns` is the only true thing to say. The rule is
+`!is_clean()`, which is what §15 actually asks, and it holds in both cases.
+
+Then it found the second thing: the same run, killed at 1.76 s, with a lost
+callback at 1.00 s, and **four zeros in the row**. That is the writer's
+`diagnostics_millis` interval, 2000 ms by default, and it is a documented
+decision rather than a defect - persisting the counters costs an fsync, doing it
+on every commit would be eight a second, and `capture_diagnostics.updated_at` is
+what recovery reads so it can report the staleness instead of hiding it. The
+assertion now allows exactly that interval, taken from `Config::default()` rather
+than written down again, plus the commit block. The consequence is worth stating
+plainly: **a capture killed within two seconds of its first fault reads as
+clean**, and the timestamp beside the counters is the only thing that says
+otherwise.
+
 ## Next up
 
-**Where to pick up.** **Phase 1's last three work packages are built and
-uncommitted**: WP-20 (Audacity import), WP-18 (docs) and WP-19 (packaging), and
-their sections are above in that order. The gate is green across fifteen legs at
-**1031 tests**. What is left in Phase 1 is **M4**, which needs the turntable
-rather than code, and the platform half of WP-19's exit criterion, which needs
-the rigs.
+**Where to pick up.** **Every work package in Phase 1 is built and committed**,
+through WP-19 at `9d1daa4`, which is the tip of `main`. The gate is green across
+fifteen legs. What is uncommitted is a day's work: the playback refusal event,
+the five CI repairs, the two-sided naming fix, the first timed export, and
+§37's waveform-latency measurement and gate - every section under *closing the
+loose ends* above.
 
-**Nothing is committed past `1140dcb`**, and **CI has still not been green**.
-That is the first thing to fix, and it is now the only thing standing between
-the tree and a releasable tag: the `package` job is written, signs when the
-secrets exist, writes and verifies checksums, and drafts a release from
-`CHANGELOG.md`, but it has never run on a tag and the macOS half of WP-19's exit
-criterion is a claim only CI can make.
+**Phase 1's loose ends are closed.** The pile was three items: the
+playback-refused event, a decision on the two unemitted events, and the first
+real export timing beside §37's figures for a capture in progress. All three
+are done and each one found something: the refusal was terminal by design and
+the reducer had to say so, the export collided a two-sided record with itself
+and showed that tagging a WAV costs the file's own size in RAM, and the
+waveform-latency work found that the soak had been calling a two-second-stale
+window a pass. The one item deliberately left open is the WAV tagging memory
+cost, which changes the bytes of every exported WAV and wants verification of
+its own.
+
+**CI has still not been green, and the reasons are now known rather than
+guessed.** Five things were red on the WP-19 push and on the nightly, and **all
+five are fixed in the tree**: the shell job's missing CLI sidecar, WP-17's
+memory gate stopping four recovery tests on Windows and macOS, a harness that
+closed a pipe under a running child, a byte audit that did not know what a
+dropped callback does to frame numbering, and a memory gate reading a bounded
+page cache as a leak. Each was explained and reproduced or measured locally
+before it was touched; none was fixed by retrying the job. What no local run can
+answer is whether Windows and macOS have more to say about recovery, because
+those four kill tests have never run there.
+
+**All four `package` jobs passed on the 2026-09-29 nightly**: macOS on Apple
+silicon in 8m14s, Windows in 24m43s, Linux x86_64 in 14m34s and Linux aarch64 in
+11m46s. That is new, and it is half of WP-19's exit criterion arriving without a
+rig: **the bundles build on every Tier 1 platform**. The half that is still
+outstanding is that nobody has installed three of them. `release` has still
+never run, because it only runs on a tag.
 
 **Installed and run on Linux x86_64, by hand, from the deb** - device
 enumeration, a 589824-frame capture at 96 kHz S32 with no losses, and a clean
@@ -4381,16 +4946,12 @@ enumeration, a 589824-frame capture at 96 kHz S32 with no losses, and a clean
 installed.** Where the CLI sidecar lands in an MSI and in a `.app` is an open
 question, and neither directory is on `PATH`.
 
-**WP-17 is committed at `b3b6e02`** and the CI repair at
-`e7cd249`, which is the tip of `main`. The two sections above are worth reading before
-anything else. WP-17 found two product defects rather than harness gaps - a device that
-goes silent was being filed as a flawless capture, and nothing checked the WAL size at
-all. The first CI run on the repaired workflow then found four more, three of them on
-platforms nothing local can reach, and **the fixes for those are uncommitted**: a thread
-stack in `crates/cli/src/main.rs`, the new `crates/cli/tests/startup.rs`, and the
-measurement rewrite in `crates/cli/tests/kill_and_recover.rs`. Gate green at 931 tests.
-**CI has not been green yet**, and the honest reason is that Windows only ever showed its
-first failing test target while macOS had not been asked in a form that answers.
+**WP-17 is committed at `b3b6e02`, the CI repair at `e7cd249` and `93a0ab8`.**
+Its sections above are worth reading before anything else: it found two product
+defects rather than harness gaps - a device that goes silent was being filed as a
+flawless capture, and nothing checked the WAL size at all - and the first CI run
+on the repaired workflow found four more, three of them on platforms nothing
+local can reach.
 
 The gate is **fifteen legs** -
 `toolchain / fmt / clippy / test / parity / offline / deny / doc / msrv / spikes` at the
@@ -4431,19 +4992,17 @@ been imported because the corpus has none, `TRACKNUMBER` is deliberately unmappe
 side still has no frame extent, so a project that really holds two faces in one capture
 lands as one side.
 
-**WP-18** (docs, weight 5) and **WP-19** (packaging, 7) are the rest of Phase 1 and both
-are wrapping work: they describe or ship what exists and will not get harder for waiting.
-WP-19 has three things queued for it already - `bundle.active` is `false`, the icon is a
-placeholder and `csp` is `null` - plus the open question of whether the Tauri binary has
-a Windows stack ceiling of its own. It does not use clap, so it does not share the CLI's
-frame, but nothing has measured it.
+**WP-18 and WP-19 are built**, and the three things that were queued for WP-19 are
+settled: `bundle.active` is on, the icon is generated from an SVG, and `csp` is set. What
+was queued and is still open is whether the Tauri binary has a Windows stack ceiling of
+its own. It does not use clap, so it does not share the CLI's frame, but nothing has
+measured it.
 
-**What WP-16 leaves behind.** Its section above has the list; three items carry forward.
-**Nothing has been driven through a real capture by hand and no screenshot exists** - the
-window compiles, every command is tested as a function and every keybinding is tested as
-a wire, but arm-record-stop-play-export has never been clicked. **A playback open failure
-still arrives as a `capture-warning`** coded `playback-failed`, because the open happens
-on a thread and the bus has no playback-refused event; the fix is an event on the bus.
+**What WP-16 leaves behind.** Its section above has the list; two items carry forward,
+the playback refusal having been built. **Nothing has been driven through a real capture
+by hand** - the window compiles, every command is tested as a function and every
+keybinding is tested as a wire, and first light drove all twenty workflows against a
+library, but arm-record-stop-play-export has never been clicked against a turntable.
 And the frontend has met **one browser engine and one font stack**, so the layout is
 unproven on macOS and Windows.
 

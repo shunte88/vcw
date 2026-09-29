@@ -104,7 +104,13 @@ export type Engine = {
 };
 
 /** Nothing has happened yet. */
-const NOTHING: Engine = {
+/**
+ * The state before anything has happened.
+ *
+ * Exported alongside [`fold`] for the same reason: a reducer test needs a
+ * starting point, and inventing one in the test would let the two drift.
+ */
+export const NOTHING: Engine = {
   phase: "idle",
   frames: 0,
   seconds: 0,
@@ -129,8 +135,13 @@ const NOTHING: Engine = {
  * is a compile error here, which is the whole argument for D9. The `default` at
  * the end is unreachable and is there so the function still returns a value if
  * a build ever compiles against an older declaration file.
+ *
+ * Exported for `store.test.ts`, which is the only caller outside this module: a
+ * pure function over one event and one state is the cheapest place to assert
+ * what the window does with an event, and the alternative is mounting the
+ * application to find out.
  */
-function fold(state: Engine, event: Wire): Engine {
+export function fold(state: Engine, event: Wire): Engine {
   switch (event.kind) {
     case "phase-change":
       return { ...state, phase: event.to };
@@ -169,6 +180,22 @@ function fold(state: Engine, event: Wire): Engine {
       return { ...state, playhead: event.seconds };
     case "playback-finished":
       return { ...state, playing: false, auditioning: null };
+    case "playback-refused":
+      // Both halves matter. The transport goes back to not playing, because
+      // this event is the only thing that will ever say so - there is no
+      // `playback-finished` behind a refusal - and the reason is shown, because
+      // "the device will not play 96 kHz" is a sentence somebody can act on.
+      return {
+        ...state,
+        playing: false,
+        auditioning: null,
+        playhead: 0,
+        refusal: {
+          code: "playback-refused",
+          message: `${event.scope} of capture ${event.captureId}: ${event.reason}`,
+          field: null,
+        },
+      };
     case "export-progress":
       return { ...state, exporting: [event.index, event.of] };
     case "export-finished":
@@ -228,9 +255,13 @@ function fold(state: Engine, event: Wire): Engine {
       // would make it the second place a boundary lives.
       //
       // §35 also names `waveform-update` and `fingerprint-match`, and neither
-      // is in the union: nothing publishes them yet. They are not handled here
-      // because a case for a kind the type does not have will not compile,
-      // which is the drift check working in the direction that matters.
+      // is in the union. `waveform-update` never will be: the pyramid answers
+      // a query in about a millisecond and is at most one commit interval
+      // behind the device, so a push cannot make the picture newer: the window
+      // asks when it draws. `fingerprint-match` is Phase 2's. Neither is
+      // handled here because a case for a kind the type does not have will not
+      // compile, which is the drift check working in the direction that
+      // matters.
       return state;
     case "closed":
       return { ...NOTHING, log: state.log };

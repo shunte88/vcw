@@ -100,6 +100,11 @@ fn every_event() -> Vec<Event> {
             frame: 1_000,
             seconds: 0.02,
         },
+        Event::Denied {
+            capture_id: 1,
+            scope: "the whole capture".to_owned(),
+            reason: "the device will not play 96000 Hz".to_owned(),
+        },
         Event::Ended {
             capture_id: 1,
             frames: 44_100,
@@ -153,7 +158,7 @@ fn the_list_above_is_every_variant() {
     let names: std::collections::BTreeSet<_> = every_event().iter().map(Event::name).collect();
     assert_eq!(
         names.len(),
-        14,
+        15,
         "a core event was added or removed: {names:?}. Map it in \
          `vcw_contract::event::Wire` and add it to `every_event` above."
     );

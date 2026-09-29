@@ -359,6 +359,13 @@ pub(crate) fn detail(event: &Event) -> serde_json::Value {
         Event::Playhead { frame, seconds } => serde_json::json!({
             "frame": frame, "seconds": seconds,
         }),
+        Event::Denied {
+            capture_id,
+            scope,
+            reason,
+        } => serde_json::json!({
+            "capture_id": capture_id, "scope": scope, "reason": reason,
+        }),
         Event::Ended {
             capture_id,
             frames,

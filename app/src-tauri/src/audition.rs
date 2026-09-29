@@ -40,12 +40,22 @@
 //!
 //! It also decides where errors go. A device that cannot play the capture's
 //! rate is refused rather than resampled (§9), and by the time the thread finds
-//! that out the command has already returned. So an open that fails is
-//! published as a warning with the code `playback-failed` and arrives at the
-//! frontend as `capture-warning`. That is the honest answer given the bus has
-//! no playback-refused event, and it is a wart: the code is there so a UI can
-//! tell this apart from an overrun, and a later work package should give
-//! playback a refusal event of its own.
+//! that out the command has already returned successfully. An open that fails
+//! is therefore published as [`Event::Denied`], which reaches the frontend as
+//! `playback-refused`.
+//!
+//! That event exists because of this module and it replaced a wart. Until it
+//! did, a refused open arrived as a `capture-warning` coded `playback-failed`,
+//! which is the wrong shape in one specific way: a warning can be followed by
+//! the thing it warned about, and a refusal cannot be followed by anything. No
+//! `auditioning` came before it and no `playback-finished` will come after it,
+//! so a frontend holding a transport in a playing state has to learn it here or
+//! never.
+//!
+//! A verb that fails *after* the stream opened is still a warning, and
+//! deliberately: audio was playing, the audition ends the ordinary way, and
+//! `playback-finished` follows. The two cases are not the same event because
+//! they are not the same fact.
 //!
 //! The thread also ticks. [`Player::tick`] is what publishes the playhead, so a
 //! loop that only waited for verbs would play perfectly and report nothing.
@@ -250,11 +260,13 @@ fn run(audition: &Audition, bus: &Bus, orders: &Receiver<Verb>) {
     let player = match Player::open(audition, bus) {
         Ok(player) => player,
         Err(error) => {
-            // The command has already returned, so this is the only way to
-            // say so. See the module docs: it is a wart, not a preference.
-            bus.publish(&Event::Warning {
-                code: "playback-failed",
-                detail: error.to_string(),
+            // The command has already returned, so this is the only way to say
+            // so, and it is terminal: nothing else will be published about this
+            // audition.
+            bus.publish(&Event::Denied {
+                capture_id: audition.capture_id,
+                scope: audition.scope.label(),
+                reason: error.to_string(),
             });
             return;
         }
@@ -270,6 +282,9 @@ fn run(audition: &Audition, bus: &Bus, orders: &Receiver<Verb>) {
             Ok(Verb::Stop) | Err(RecvTimeoutError::Disconnected) => break,
             Ok(verb) => {
                 if let Err(error) = player.apply(verb) {
+                    // A warning rather than a refusal: the stream opened, audio
+                    // played, and `player.stop()` below still publishes
+                    // `playback-finished`. See the module docs.
                     bus.publish(&Event::Warning {
                         code: "playback-failed",
                         detail: error.to_string(),
@@ -287,4 +302,55 @@ fn run(audition: &Audition, bus: &Bus, orders: &Receiver<Verb>) {
     // `stop` publishes `playback-finished`, which is how the frontend learns
     // that the audition is over whether it asked or the end arrived.
     let _ = player.stop();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vcw_contract::event::Wire;
+
+    /// An audition that cannot possibly open, for the cheapest reason: there is
+    /// no project at the path.
+    ///
+    /// A device that refuses a rate is the case this event was written for, and
+    /// it is not the case a test can arrange - it needs a converter that says
+    /// no. What both cases share is the part worth asserting: the failure
+    /// happens on the thread, after the command returned, and the bus is the
+    /// only way anybody hears about it.
+    fn cannot_open() -> Audition {
+        Audition::new(std::path::Path::new("/nonexistent/no.vcw"), 7)
+            .scope(vcw_core::playback::Scope::Whole)
+    }
+
+    #[test]
+    fn a_refused_open_is_a_refusal_and_not_a_warning() {
+        let bus = Bus::new();
+        let events = bus.subscribe();
+        let (_verbs, orders) = channel::<Verb>();
+
+        run(&cannot_open(), &bus, &orders);
+
+        let published = events.drain();
+        let Some(Event::Denied {
+            capture_id,
+            scope,
+            reason,
+        }) = published.first()
+        else {
+            panic!("a refused open published {published:?}");
+        };
+        assert_eq!(*capture_id, 7);
+        assert_eq!(scope, "the whole capture");
+        assert!(!reason.is_empty(), "a refusal with no reason in it");
+
+        // Terminal, which is the whole argument for the variant: a frontend
+        // that turned its transport on when it asked to play is turning it off
+        // here or never.
+        assert_eq!(
+            published.len(),
+            1,
+            "something followed the refusal: {published:?}"
+        );
+        assert_eq!(Wire::from(&published[0]).kind(), "playback-refused");
+    }
 }

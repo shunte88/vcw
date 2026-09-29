@@ -67,6 +67,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use rusqlite::Connection;
 use vcw_audio::source::Simulated;
+use vcw_project::persistence::Config;
 use vcw_project::recovery::{self, Sidecars};
 use vcw_project::{Options, Project, session, validate};
 use vcw_types::CaptureState;
@@ -101,6 +102,16 @@ fn start(path: &Path) -> Child {
             "--every",
             "1",
             "--no-verify",
+            // Off, and explicitly. `vcw soak` defaults to a 32 MiB growth gate
+            // and refuses to start where resident memory cannot be read, which
+            // is every platform without a procfs - so on Windows and macOS all
+            // four tests here died before the first frame with
+            // `this platform cannot report resident memory`. That refusal is
+            // right: §41's gate must not read as a pass where it was never
+            // applied. It is also nothing to do with recovery, which is what
+            // this file is about.
+            "--max-growth-mib",
+            "0",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -139,11 +150,19 @@ const READY_TIMEOUT: Duration = Duration::from_secs(60);
 fn wait_until_recording(child: &mut Child) -> (Instant, mpsc::Receiver<String>) {
     let stdout = child.stdout.take().expect("stdout was piped");
     let (lines, arriving) = mpsc::channel();
+    // Drains for the child's whole life, and keeps draining after the receiver
+    // has gone rather than returning. Returning drops the `BufReader`, which
+    // closes the read end of the pipe, and the writer prints a progress line
+    // every second: the next one then fails, and `println!` panics on a failed
+    // write, so the child died with
+    // `failed printing to stdout: Broken pipe (os error 32)` and the test
+    // blamed it for exiting on its own. A caller that wants only the banner
+    // (`recovery_reports_before_it_writes` does) drops the receiver
+    // immediately, which made that a race against the writer's own timer - won
+    // on this host, lost on a loaded runner.
     std::thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            if lines.send(line).is_err() {
-                return;
-            }
+            let _ = lines.send(line);
         }
     });
 
@@ -230,14 +249,58 @@ fn recover_cli(path: &Path, args: &[&str]) -> (bool, String) {
     )
 }
 
+/// A span of audio the device never delivered, as found in the stored stream.
+///
+/// `at` is the stored frame the gap sits in front of: stored frame `at` holds
+/// the sample the source produced for frame `at + frames`, and everything after
+/// it is shifted by the same amount.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Gap {
+    at: u64,
+    frames: u64,
+}
+
+/// How far ahead of itself the stored stream may be found before the search
+/// gives up. Five seconds is longer than any capture this file takes, so the
+/// bound never decides an answer - it only stops the search on audio that is
+/// not the source's at any offset.
+const MAX_GAP_FRAMES: u64 = RATE as u64 * 5;
+
+/// Frames that have to agree before a shift is believed. Every sample is a
+/// 32-bit function of its own frame index, so one frame matching by chance is
+/// already a one-in-four-billion coincidence; sixteen makes it unarguable, and
+/// stops a gap being "found" at the first delta that happens to line up.
+const RESYNC_WINDOW: u64 = 16;
+
 /// Recomputes every sample in the capture from the frame index stored in its
-/// own block, and returns the frame count if all of them match.
+/// own block, and returns the frame count together with the device-side gaps
+/// that had to be allowed for.
 ///
 /// Deliberately does not trust `captures.frames`, `sequence`, or the order rows
-/// happen to come back in. A block that was written at the wrong offset, on the
-/// wrong channel, or after a gap fails here rather than passing on its own
+/// happen to come back in. A block written at the wrong offset, on the wrong
+/// channel, or out of sequence fails here rather than passing on its own
 /// internal consistency.
-fn audit(conn: &Connection, capture_id: i64) -> u64 {
+///
+/// # Why a mismatch is not immediately a failure
+///
+/// The whole method rests on stored frame *n* holding the sample the source
+/// produced for frame *n*, and one lost callback breaks that for the rest of the
+/// run: the simulated source is paced by a clock it does not own, and when the
+/// ring fills, a whole callback is discarded while the source's frame index
+/// moves on. `Pace::Fast` says so in as many words, and it is the same
+/// mechanism that makes `soak --starve-after` verify only up to the fault.
+/// A busy CI runner reaches it without being asked: this is what
+/// `channel 0 frame 48000 is not what the device produced` was, one ring's
+/// worth into the run, on a runner compiling three other jobs.
+///
+/// Comparing past that point reports a mismatch on every remaining frame and
+/// says nothing new, so the audit does what the product's verifier does and
+/// re-synchronises instead - but it has to *find* the shift rather than be told
+/// it, which is the stronger claim: the audio after a gap is still exactly the
+/// audio the source produced, at a named offset, so nothing was invented and
+/// nothing was moved. A mismatch that no gap explains is still a failure, and
+/// the gaps themselves are returned for the caller to hold the device to.
+fn audit(conn: &Connection, capture_id: i64) -> (u64, Vec<Gap>) {
     let mut stmt = conn
         .prepare(
             "SELECT b.channel, b.sequence, b.start_frame, b.frame_count, s.samples
@@ -259,6 +322,13 @@ fn audit(conn: &Connection, capture_id: i64) -> u64 {
 
     let mut per_channel = vec![0u64; CHANNELS as usize];
     let mut expect_sequence = vec![0i64; CHANNELS as usize];
+    // Frames the device dropped before this channel's current position, and
+    // where. Per channel and not global, because a callback carries every
+    // channel: a real device-side gap therefore has to show up in all of them,
+    // at the same stored frame and the same size, and that agreement is checked
+    // rather than assumed.
+    let mut shift = vec![0u64; CHANNELS as usize];
+    let mut gaps: Vec<Vec<Gap>> = vec![Vec::new(); CHANNELS as usize];
     for row in rows {
         let (channel, sequence, start, frames, samples) = row.expect("row");
         assert!(
@@ -283,15 +353,31 @@ fn audit(conn: &Connection, capture_id: i64) -> u64 {
              but holds {} bytes",
             samples.len()
         );
-        for i in 0..frames as u64 {
-            let want = Simulated::expected_sample(start as u64 + i, channel as u16).to_le_bytes();
+        let mut i = 0u64;
+        while i < frames as u64 {
+            let stored = start as u64 + i;
             let at = i as usize * WIDTH;
-            assert_eq!(
-                &samples[at..at + WIDTH],
-                &want[..WIDTH],
-                "channel {channel} frame {} is not what the device produced",
-                start as u64 + i
-            );
+            let got = &samples[at..at + WIDTH];
+            let want = Simulated::expected_sample(stored + shift[ch], channel as u16).to_le_bytes();
+            if got == &want[..WIDTH] {
+                i += 1;
+                continue;
+            }
+            let Some(delta) = resync(&samples, i, frames as u64, start as u64, shift[ch], channel)
+            else {
+                panic!(
+                    "channel {channel} frame {stored} is not what the device produced: \
+                     stored {got:02X?}, the source's frame {} is {:02X?}, and no gap of \
+                     up to {MAX_GAP_FRAMES} frames puts the source's audio here either",
+                    stored + shift[ch],
+                    &want[..WIDTH]
+                );
+            };
+            gaps[ch].push(Gap {
+                at: stored,
+                frames: delta,
+            });
+            shift[ch] += delta;
         }
         per_channel[ch] += frames as u64;
         expect_sequence[ch] += 1;
@@ -301,7 +387,37 @@ fn audit(conn: &Connection, capture_id: i64) -> u64 {
         per_channel.iter().all(|f| *f == per_channel[0]),
         "channels hold different amounts of audio: {per_channel:?}"
     );
-    per_channel[0]
+    assert!(
+        gaps.iter().all(|found| *found == gaps[0]),
+        "the channels disagree about where the device dropped audio, which no \
+         overrun can produce: {gaps:?}"
+    );
+    (per_channel[0], gaps.swap_remove(0))
+}
+
+/// The gap that puts the source's audio back under the stored frames, or `None`
+/// if no gap does.
+///
+/// Searched rather than derived, because the counters say how much was dropped
+/// and never where. `RESYNC_WINDOW` frames have to agree, so the answer is the
+/// real shift and not the first delta that lines up on one sample.
+fn resync(
+    samples: &[u8],
+    i: u64,
+    frames: u64,
+    start: u64,
+    shift: u64,
+    channel: i64,
+) -> Option<u64> {
+    let window = RESYNC_WINDOW.min(frames - i);
+    (1..=MAX_GAP_FRAMES).find(|delta| {
+        (0..window).all(|j| {
+            let at = (i + j) as usize * WIDTH;
+            let want = Simulated::expected_sample(start + i + j + shift + delta, channel as u16)
+                .to_le_bytes();
+            samples[at..at + WIDTH] == want[..WIDTH]
+        })
+    })
 }
 
 /// One kill, start to finish. Returns the recovered frame count.
@@ -369,9 +485,12 @@ fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
     assert!(!record.needs_recovery());
 
     // The frames the row claims are the frames that are really there, and every
-    // one of them is the sample the generator would have produced.
-    let audited = audit(project.conn(), record.id);
+    // one of them is the sample the generator would have produced - allowing
+    // for audio the device never delivered, which `audit` has to find rather
+    // than be told about.
+    let (audited, gaps) = audit(project.conn(), record.id);
     assert_eq!(audited, record.frames, "the row overstates what is stored");
+    let lost: u64 = gaps.iter().map(|gap| gap.frames).sum();
 
     let report = validate(
         &project,
@@ -393,6 +512,48 @@ fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
     let block_secs = BLOCK_MILLIS as f64 / 1_000.0;
     let ring_secs = RING_MILLIS as f64 / 1_000.0;
     let block_frames = u64::from(RATE) * BLOCK_MILLIS / 1_000;
+
+    // A gap belongs to the device and not to recovery, so it is reported rather
+    // than tolerated silently, and one thing still has to hold: §15 says a
+    // capture that lost audio must not read as a flawless one, which is WP-17's
+    // finding in the one place that can still produce it - the counters reach
+    // the row on the writer's own timer, and this writer was killed. A gap
+    // inside the last commit block is exempt for exactly that reason; anything
+    // earlier had time to be noted.
+    if !gaps.is_empty() {
+        println!(
+            "  the device dropped {lost} frames in {} gap(s): {gaps:?}",
+            gaps.len()
+        );
+        //
+        // `is_clean` rather than `dropped_frames`, because the two counters
+        // divide the loss honestly and only one of them can count it: a ring
+        // overrun discards a callback we were handed, so its frames are known
+        // and counted, while a device that delivers an empty callback has told
+        // us nothing about what it skipped. `soak --starve-after 1.0` proves
+        // exactly that - the audit finds a 480-frame gap at frame 48000 against
+        // `Diagnostics { underruns: 1, dropped_frames: 0 }` - and §15's claim
+        // is the same in both cases: not a flawless capture.
+        //
+        // The allowance is the writer's own diagnostics interval, taken from
+        // the config rather than written down here, plus the commit block. Both
+        // terms are earned: the counters reach the row on that timer, so a
+        // capture killed less than an interval after a fault genuinely has four
+        // zeros in it, which `--starve-after 1.0` with a kill at 1.76 s
+        // produces. That is the documented cost of not fsyncing a counter row
+        // eight times a second, and `capture_diagnostics.updated_at` is what
+        // recovery reads to report the staleness rather than hide it.
+        let interval = u64::from(Config::default().diagnostics_millis);
+        let noticed_by = block_frames + u64::from(RATE) * interval / 1_000;
+        if gaps.iter().any(|gap| gap.at + noticed_by < audited) {
+            assert!(
+                !record.diagnostics.is_clean(),
+                "the device dropped {lost} frames more than {interval} ms before \
+                 the kill and the row calls the capture clean: {:?}",
+                record.diagnostics
+            );
+        }
+    }
 
     // One: the timing-free one, and the one that actually says "commit
     // granularity". A block is committed whole or not at all, and a killed
@@ -438,11 +599,18 @@ fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
         )
         .min(1.0);
     let produced = ran_for.as_secs_f64() * pacing;
+    // Audio the device dropped was produced and never offered, so it is not
+    // recovery's loss and the floor has to allow for it by exactly the amount
+    // the audit measured - not by a tolerance. On every run that lost nothing,
+    // which is every run on an idle host, this term is zero and the bound is
+    // the tight one the fifty-kill run established.
+    let lost_secs = lost as f64 / f64::from(RATE);
     assert!(
-        recovered_secs >= produced - block_secs,
+        recovered_secs >= produced - block_secs - lost_secs,
         "recovered {recovered_secs:.3} s of the {produced:.3} s the source had \
          produced ({:.3} s of clock at rtf {pacing:.5}); the floor allows \
-         {block_secs:.3} s of loss, one commit block",
+         {block_secs:.3} s of loss, one commit block, plus the {lost_secs:.3} s \
+         the device dropped",
         ran_for.as_secs_f64()
     );
 
@@ -600,7 +768,16 @@ fn stranded_audio_is_not_discarded_without_being_asked() {
     let project = Project::open(&path).expect("reopen");
     assert!(recovery::survey(project.conn()).expect("survey").is_empty());
     let record = &session::all(project.conn()).expect("all")[0];
-    assert_eq!(audit(project.conn(), record.id), record.frames);
+    // A repair removes the stranded block, so what is left is a shorter run of
+    // the same audio: the audit must still recompute every byte of it. Any gap
+    // is reported rather than asserted against - this is a real-time source, so
+    // whether the ring overran is a fact about the machine, and the claim being
+    // made here is that the audio either side of one is still the source's.
+    let (audited, gaps) = audit(project.conn(), record.id);
+    assert_eq!(audited, record.frames);
+    if !gaps.is_empty() {
+        println!("  the device dropped audio during the run: {gaps:?}");
+    }
 }
 
 /// The stress version. Twenty kills rather than six, spread over a wider range

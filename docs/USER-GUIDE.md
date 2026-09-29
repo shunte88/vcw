@@ -44,9 +44,12 @@ reachable from the tabs or from `Ctrl+1` to `Ctrl+6`:
 
 Across the top of every workspace is the transport - the same arm, record,
 pause, resume and stop the `vcw session` verb drives - with the meters and the
-waveform under it. `Ctrl+d` opens the event log, which is every event the core
-published in this session and the first place to look when something did not do
-what you expected.
+waveform under it. **While a record is playing, watch the meters**: the waveform
+is drawn from what has been committed and it appears when the capture stops, not
+as the side goes by. Nothing is missing while it is blank - the audio is on disk
+within a quarter of a second of the stylus reading it either way. `Ctrl+d` opens
+the event log, which is every event the core published in this session and the
+first place to look when something did not do what you expected.
 
 When the application refuses something it says so in a banner and leaves the
 refusal there until you dismiss it with `Escape`. That is deliberate: a refusal
@@ -218,7 +221,10 @@ vcw export side-a.vcw --into ~/Music --dry-run    # the whole plan, no files
 ```
 
 Files are laid out and named from a template, tagged from the release and the
-track, and the cover goes beside them. Three things worth knowing:
+track, and the cover goes beside them. The default template is
+`{album_artist}/{album}/{tracknum} - {title}`, and `{tracknum}` is the position
+printed on the label - so side A's first track is `A1 - The Rainbow.wav` and
+side B's is `B1 - ...`. Four things worth knowing:
 
 * `--dry-run` resolves the whole plan - every path, every tag, every frame
   count - and stops there. It is the cheapest way to find out what an export
@@ -229,6 +235,10 @@ track, and the cover goes beside them. Three things worth knowing:
 * A refusal can still leave the empty directories the plan created. An empty
   `Album/` left behind is untidy; half a FLAC would be a corrupt library, and
   that is the trade being made.
+* **A 32-bit capture can only leave as WAV.** The FLAC encoder stops at 24 bits
+  and narrowing 32 to 24 throws signal away, so `--format flac` refuses it by
+  name rather than quietly dithering. Capture at `--format s24` if FLAC is
+  where the rip is going to live.
 
 ## When you need to report a problem
 

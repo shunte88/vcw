@@ -120,10 +120,15 @@ fn described(project: &mut Project) {
     release::put_artwork(project, release::Artwork::FRONT, "image/png", PNG, None).expect("art");
 }
 
-/// Adds titled tracks over frame ranges, in order.
+/// Adds titled tracks over frame ranges, in order, on side A.
 fn titled(project: &mut Project, ranges: &[(u64, u64, &str)]) {
+    titled_on(project, Side::A, ranges);
+}
+
+/// The same, on a named side.
+fn titled_on(project: &mut Project, side: Side, ranges: &[(u64, u64, &str)]) {
     for &(start, end, title) in ranges {
-        let id = track::add_track(project, Side::A, start, end).expect("track");
+        let id = track::add_track(project, side, start, end).expect("track");
         track::update(project, id, &track::Update::title(title)).expect("title");
     }
 }
@@ -332,11 +337,114 @@ fn two_tracks_that_want_the_same_file_are_refused_before_anything_is_written() {
     request.template = "{album}/{title}".to_owned();
     match splitter::plan(project.conn(), &request) {
         Err(Error::NameCollision { first, second, .. }) => {
-            assert_eq!((first, second), (1, 2));
+            // The positions, so the message names the tracks rather than
+            // their numbers within a side.
+            assert_eq!((first.as_str(), second.as_str()), ("A1", "A2"));
         }
         other => panic!("expected a collision, got {other:?}"),
     }
     assert!(!out.exists(), "a refused plan left files behind");
+}
+
+#[test]
+fn a_two_sided_record_numbers_its_tracks_across_the_disc() {
+    // The first export of a real two-sided project refused with `tracks 2 and 2
+    // both export to .../02 -.flac`, and the message named neither track
+    // because both numbers were 2. `track::Record::number` is the number
+    // *within its side* (§29), so on any record with a B side it repeats: one
+    // file name for two tracks, and one album carrying two tracks numbered 2.
+    // Nothing the operator did caused it and nothing they could do would avoid
+    // it, short of titling every track.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, _, _) = recorded(dir.path(), StorageFormat::Int16, 2, 60_000);
+    described(&mut project);
+    // Two faces on one capture, which is what a real flip produces: a side has
+    // no extent of its own.
+    let b = Side::from_letter('B').expect("B is a side");
+    side::ensure(&mut project, b).expect("side B");
+    let capture = side::load(project.conn(), Side::A)
+        .expect("side A")
+        .and_then(|row| row.capture)
+        .expect("a capture behind side A");
+    side::attach(&mut project, b, capture).expect("attach B");
+    // Untitled on purpose: the title is the only thing that was hiding this.
+    titled_on(
+        &mut project,
+        Side::A,
+        &[(0, 20_000, ""), (20_000, 30_000, "")],
+    );
+    titled_on(
+        &mut project,
+        b,
+        &[(30_000, 50_000, ""), (50_000, 60_000, "")],
+    );
+
+    let out = dir.path().join("out");
+    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Flac))
+        .expect("four untitled tracks over two sides collided");
+
+    // The default template is VRipr's, and VRipr's `{tracknum}` was the alpha
+    // position: `A1 - Title`, the number printed on the label.
+    let names: Vec<String> = plan
+        .items
+        .iter()
+        .map(|item| {
+            item.path
+                .file_name()
+                .expect("a file name")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(names, ["A1 -.flac", "A2 -.flac", "B1 -.flac", "B2 -.flac"]);
+
+    // A tag's track number is unique within its disc and says nothing about
+    // which face it came from, which is what every player assumes.
+    let numbers: Vec<Option<u32>> = plan
+        .items
+        .iter()
+        .map(|item| item.tags.track_number)
+        .collect();
+    assert_eq!(numbers, [Some(1), Some(2), Some(3), Some(4)]);
+    let positions: Vec<String> = plan
+        .items
+        .iter()
+        .map(|item| item.tags.extra[0].1.clone())
+        .collect();
+    assert_eq!(positions, ["A1", "A2", "B1", "B2"]);
+    assert!(
+        plan.items
+            .iter()
+            .all(|item| item.tags.disc_number == Some(1)),
+        "one disc, two faces"
+    );
+
+    // Numeric numbering moves `{tracknum}` and leaves `{position}` alone,
+    // because the position is provenance rather than presentation: it is the
+    // one fact a vinyl rip has that a CD rip does not.
+    let mut record = release::load(project.conn())
+        .expect("load")
+        .expect("a release");
+    record.numbering = vcw_types::vinyl::Numbering::Numeric;
+    release::store(&mut project, &record).expect("store");
+    let mut request = Request::new(&out, Container::Flac);
+    request.template = "{tracknum} {position}".to_owned();
+    let plan = splitter::plan(project.conn(), &request).expect("plan");
+    let names: Vec<String> = plan
+        .items
+        .iter()
+        .map(|item| {
+            item.path
+                .file_name()
+                .expect("a file name")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(
+        names,
+        ["01 A1.flac", "02 A2.flac", "03 B1.flac", "04 B2.flac"]
+    );
 }
 
 #[test]
