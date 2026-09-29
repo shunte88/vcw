@@ -14,6 +14,7 @@ vcw-project = { workspace = true }
 vcw-metadata = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 crc32fast = { workspace = true }

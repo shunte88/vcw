@@ -101,6 +101,7 @@ impl Project {
         meta::set(&conn, meta::LAST_WRITTEN_BY, migrate::APPLIED_BY)?;
         meta::set(&conn, meta::LAST_WRITTEN_AT, &now)?;
 
+        tracing::debug!(path = %path.display(), schema = SCHEMA_VERSION, "created a project");
         Ok(Self {
             conn,
             path,
@@ -120,6 +121,7 @@ impl Project {
         meta::set(&conn, meta::LAST_WRITTEN_BY, migrate::APPLIED_BY)?;
         meta::set(&conn, meta::LAST_WRITTEN_AT, &crate::now().to_string())?;
 
+        tracing::debug!(path = %path.display(), access = "read-write", "opened a project");
         Ok(Self {
             conn,
             path,
@@ -139,6 +141,7 @@ impl Project {
         )?;
         conn.pragma_update(None, "foreign_keys", true)?;
         identify(&conn, &path)?;
+        tracing::debug!(path = %path.display(), access = "read-only", "opened a project");
         Ok(Self {
             conn,
             path,

@@ -3996,13 +3996,390 @@ user's own irreplaceable audio and is opened `mode=ro` every time.
 
 ---
 
+## Phase 1 - WP-18, the documents and the diagnostic bundle
+
+Built 2026-09-28. Five deliverables: the format specification (already written at WP-02
+and now load-bearing), a third-party reader that proves it, the supported project API,
+the user guide, and `vcw bundle`. §42 and §49.
+
+The theme of the work package is that **a document is a claim, and a claim wants a
+test**. Four of the five defects found in this pass were in things I had just written
+and believed.
+
+### The exit criterion, made permanent
+
+"A third-party tool can read a project using the spec alone" is not a thing that can be
+asserted once. `crates/project/tests/third_party_spec.rs` drives `tools/vcw-read.py`
+over projects the product wrote and requires the two implementations to agree on what
+the project holds, on the bytes of every one of the five storage formats, on where a
+track starts and stops, on a damaged block, and on refusing what it should not read.
+Two implementations of one document, rather than a document compared with the code that
+generated it.
+
+Six deliberate mutations of the Python reader were needed to establish that the five
+tests can fail, and the fourth one found that **the half-open-span test could not**: the
+mutation "read a span as inclusive" still passed, because the only track being checked
+ended at the end of the capture and `read_frames` clamps. The first of two adjacent
+tracks has room to be wrong, and now both are checked.
+
+If no Python 3 is on the machine the test panics rather than skipping. A test that turns
+itself off would report that the specification is readable on a host where nothing had
+read it.
+
+### `vcw bundle`, and building around a negative
+
+§42 asks for a diagnostic bundle that reports version, OS, backend, device
+configuration, project integrity and capture errors **without including recorded audio**.
+The hard clause is the last one, so the tests are the negatives: a searchable ASCII
+marker is written as the capture's PCM and must appear nowhere in the document, raw or
+hex; no string value may exceed 4,096 characters; no track title, album, artist or
+project path may appear; credentials appear by presence and character count only. Six
+mutations of `bundle.rs` proved each of those can fail.
+
+`a_bundle_carries_no_audio` was the second assertion in this pass that could not fail,
+and for two reasons at once. Blocks are stored **per channel**, so the marker written
+into an interleaved buffer was de-interleaved into alternating halves and never appeared
+in a blob; and a 200-frame fixture was under the 4,096-character guard anyway. The
+fixture now builds two per-channel streams and interleaves from them at 24,000 frames.
+
+Everything about a project in the bundle is a shape or a count. The table row counts are
+read from `sqlite_master` rather than from a list, because the first draft asked for a
+`waveform_blocks` that does not exist and reported it as `null` - which reads like an
+empty table rather than like a bug in the bundle.
+
+It started at 7.7 MB. Summarising the device survey took it to 593 KB, digesting each
+`capability_fingerprint` to 16 hex characters took it to 128 KB, and compressing long
+channel lists to a min, a max and a count took it to **99 KB**, or 2.6 KB with
+`--no-devices`. `--all-devices` still writes the whole survey for the case where the
+question is about one device's capabilities.
+
+A bundle of a project that will not open is still a bundle: the open failure is recorded
+and everything else in the document survives. That is the case the verb exists for.
+
+### Logging, at the seams that diagnose
+
+`tracing` is now a dependency of seven crates and the shell, with the subscriber
+installed only by the two binaries, a `--log` flag, a `VCW_LOG` filter that takes a
+target each, and `warn` as the default so the JSON-emitting verbs stay pipeable. Logs go
+to stderr, never stdout, because several verbs emit JSON documents and a log line in the
+middle of one makes it unparseable.
+
+§42's "routine audio callbacks shall not log" is enforced by
+`crates/audio/tests/no_logging_on_the_audio_thread.rs`, which reads the source of the
+four modules the callback runs through and the bodies of both `on_data` entry points and
+fails on any of ten macros. The third test in that file requires the rest of the crate
+to log at least four times: a rule that is satisfied by doing nothing is not a rule. The
+one logging call on a callback is the host error callback, which is not routine and sits
+in code that already allocates, and says so in a comment.
+
+Credentials stay out of the log structurally rather than carefully:
+`vcw_metadata::agent::without_query` strips a URL's query string before any log line, so
+a provider that one day wants its key as `?token=` does not put it in every line of a
+file people paste into bug reports. Import logs `labels_skipped.len()` and not the
+labels, because a skipped label is a track title.
+
+### The two documents, and what checking them found
+
+`docs/PROJECT-API.md` is §49's supported surface - read, validate, recover, migrate -
+with `crates/project/examples/read_a_project.rs` beside it as a compiled companion that
+the gate builds. Verifying the prose against the code immediately found `Plan::Salvage`,
+which does not exist; the variants are `DryRun`, `Commit` and `Repair`.
+
+`docs/USER-GUIDE.md` is §50's workflow from both ends, and its two tables are generated
+rather than transcribed. `app/src-tauri/tests/the_user_guide_lists_every_key.rs` parses
+`app/ui/src/keymap.ts` and requires the guide to list every chord, label, scope and §43
+suggestion, with no extras. It is a Rust test reading a TypeScript file because vite's
+`server.fs.allow` denies reading `docs/` from the UI tests, and loosening a desktop
+application's dev-server allowlist to make a documentation check possible is a poor
+trade.
+
+`crates/cli/tests/the_user_guide_names_real_commands.rs` checks every `vcw ...` line in
+the guide against the binary's own `--help`: every subcommand name, every flag name, and
+whether a documented line stopped short of a subcommand that is required. It found three
+wrong command lines in the first draft - `vcw export --out` where the flag is `--into`,
+`vcw tracks --split 3 --at N` where `split` is a subcommand taking two positionals, and
+`vcw metadata release <id>` where the verb is `fetch`. All three read perfectly well.
+Structural rather than executed, deliberately: running every documented line would reach
+a metadata provider over the network and open an audio device.
+
+### The recovery floor, repaired on the way past
+
+The first full gate run of this work package failed `kill_and_recover`'s random-kill
+test at 3.255 s of clock against 3.000 s of recovered audio, over a floor that allows
+one 250 ms commit block. It was not recovery. The simulated source is paced by a clock
+it does not own, and on a host running the rest of the gate it falls behind real time, so
+a floor that treats wall-clock seconds as seconds of audio fails by a few milliseconds
+for reasons that have nothing to do with the thing under test.
+
+The bound is now three checks that can each carry a different part of the claim. A block
+is committed whole or not at all and a killed writer never flushes the part-filled one,
+so **the recovered frame count is an exact multiple of the block** whatever the scheduler
+did - that is the timing-free assertion, and it is the one that actually says "commit
+granularity". The ceiling stays as it was. The floor is taken against
+`ran_for * rtf`, the pacing the writer itself last reported, which is the audio that
+existed rather than the time that passed: on an idle host rtf is 0.9998-something and the
+bound is the tight one the fifty-kill run established, and on a starved host it relaxes
+by exactly the amount of audio that was never made. `--every 1` guarantees a progress
+line lands, and its absence is a failure rather than a skipped check.
+
+Three mutations confirmed the three: losing one extra block, keeping a partial block, and
+inventing two and a half seconds each fail a different one.
+
+### Where it stands
+
+The gate is green across all fifteen legs at **1013 tests**, up from 991. New files:
+`crates/project/tests/third_party_spec.rs`, `crates/project/examples/read_a_project.rs`,
+`crates/cli/src/bundle.rs`, `crates/cli/src/logging.rs`,
+`crates/cli/tests/bundle_from_cli.rs`,
+`crates/cli/tests/the_user_guide_names_real_commands.rs`,
+`crates/audio/tests/no_logging_on_the_audio_thread.rs`,
+`app/src-tauri/tests/the_user_guide_lists_every_key.rs`, `docs/PROJECT-API.md` and
+`docs/USER-GUIDE.md`.
+
+## Phase 1 - WP-19, packaging and release
+
+Built 2026-09-28. The work package ships what the previous eighteen built, and
+the thing worth recording is that **shipping it is the first exercise that runs
+the product the way a stranger will**. Every leg of the gate runs code from a
+source tree; a package runs a copy of a build artefact, from a path nobody
+chose, against a configuration file. Three of the five findings in this pass
+could not have come from anywhere else, and one of them was not in the product
+at all.
+
+### What a package contains
+
+The shell was already bundled by `cargo tauri build`. Two things were missing
+from it and both matter to a person who installs rather than builds.
+
+The **CLI travels inside the package**. Every workflow in `docs/USER-GUIDE.md`
+is a `vcw ...` line, `vcw bundle` is what somebody is asked to send when
+something breaks, and until this pass the only way to get either was to install
+Rust and compile. It ships as a Tauri `externalBin` sidecar, which wants a file
+named `binaries/vcw-<target-triple>`; `tools/stage-cli.sh` is what builds and
+names it, adding `--target` only when the triple is not the host and `.exe` for
+a Windows one. The deb puts it on `PATH` as `/usr/bin/vcw`, so the guide's
+command lines work on an installed system, which is the only state in which
+anybody will read them.
+
+The **debug sections came out**. Measured, because the difference is not small:
+`debug = 1` in `app/Cargo.toml` produced a 95 MB binary, a 25.7 MB deb and a
+104 MB AppImage. `debug = 0` with `strip = "debuginfo"` leaves **16.4 MB**, an
+**11.2 MB deb that now also carries the CLI**, and an **88.6 MB AppImage** whose
+remaining bulk is WebKitGTK and its dependencies rather than anything of ours.
+Stripping the debug sections keeps the symbol table, so a panic backtrace still
+names its frames and loses only the line numbers. The CLI keeps its line tables
+for a local build and gives them up only for a shipped one, which is what the
+new `[profile.ship]` in the root manifest is for: the soak reads backtraces, and
+a release profile that is also the shipping profile makes those two needs fight.
+
+Beside those, the small obligations: `libasound2` declared once rather than
+twice, because the deb bundler appends its own `Depends` and a duplicate is a
+lintian error; the licence installed as `/usr/share/doc/vcw/copyright` through
+`deb.files`, which is the only mechanism that puts an arbitrary file in a deb;
+a real icon set rendered from a real SVG by `tools/make-icons.sh`; `bundle.active`
+true and a `csp` that is no longer `null`, which were the three items WP-16 left
+queued here.
+
+One trap for anybody building a package by hand: `cargo tauri build` must be run
+from **`app/src-tauri`**, which is what the CI job does. From `app/` the CLI
+finds the nearest `package.json`, decides the app directory is `app/ui`, and
+runs `beforeBuildCommand` from there, so `pnpm --dir ui build` looks for
+`app/ui/ui` and the build stops before it compiles anything.
+
+### A four-minute build, checked by eight fast tests
+
+Packaging configuration fails at build time, and the build is four minutes on
+this machine and twenty across the matrix in CI. That is the wrong feedback loop
+for a JSON file, so `app/src-tauri/tests/the_bundle_ships_what_a_user_needs.rs`
+reads `tauri.conf.json` and asks the questions the bundler would: does every
+file the configuration names exist, is the CLI actually staged and named for a
+triple, is every Tier 1 platform in `targets`, is the identifier one macOS can
+use, is the `Depends` list free of what the bundler adds anyway, is the window
+locked down, and is the version one number in one place.
+
+Ten deliberate mutations confirmed nine of them. The tenth is the interesting
+one: pointing `icon` at a file that does not exist **passes the test and fails
+the compile**, because `generate_context!` opens every icon at macro-expansion
+time and panics with the path. The loop over icons stays, because it carries
+`licenseFile` and the `deb.files` sources too, and the test now says in a
+comment that the compiler is the real guard for that one entry.
+
+### The repository was hiding files the build needs
+
+`.gitignore` contained `/tools`, left over from VRipr training material that has
+since moved out of the repository. It was ignoring three files that are not
+training material:
+
+* `tools/vcw-read.py`, which **is WP-18's exit criterion**. The independent
+  reader that proves the format is open was not in the repository.
+* `tools/verify-release.py`, which the CI workflow names five times.
+* `tools/make-icons.sh`, which is how the icon set is regenerated.
+
+No gate leg could see this, and none ever would have: every one of them runs
+against the working tree, where the files are present. A fresh clone would have
+failed the `package` job at the checksum step and the `test` leg at the
+third-party spec, and the error would have named a missing file rather than a
+stale ignore rule.
+
+`crates/cli/tests/every_file_the_build_needs_is_tracked.rs` is the guard. It
+collects every path the CI workflow names and every path a Rust source reaches
+for, then asks git, for each one, **which rule ignores it** rather than merely
+whether one does. That distinction is the whole design: `dist/` and
+`gen/schemas/` are supposed to be ignored, because CI builds them, so the test
+holds an allowlist of build-output rules and fails on anything else. It checks
+"exists and is not ignored" rather than "is tracked", so a new file that has not
+been committed yet is legal. Three findings came out of writing it: a path in a
+header comment pointing at `/data2/vripr` made `git check-ignore` exit 128, a
+deliberately built spike `dist/` needed the allowlist, and `check-ignore -v`
+reports the last **matching** rule, which may be a negation, so `!**/tests/fixtures/**`
+was read as "ignored" when it means the opposite.
+
+### First run, on the only platform this machine can speak for
+
+The deb was extracted the way an install lays it out, and the result is a
+first-run capture that the operating system agrees with: `/usr/bin/vcw` from the
+package enumerated the devices, armed one, recorded **589824 frames at 96 kHz
+S32 with 0 overruns, 0 underruns and 0 dropped frames**, and `vcw recover
+--verify` read every block back clean. That is WP-19's exit criterion for Linux
+x86_64, and it is met.
+
+The AppImage launches and draws the real interface. Under the desktop session it
+then ignored every synthetic keystroke and mouse click, which looked exactly
+like a packaged-build input bug and was not: the session is Wayland, XTEST is
+dropped, and `xdotool getwindowfocus` returns the compositor's guard window.
+Re-run under `Xvfb`, the same artefact is fully interactive. The finding is
+about the harness, and filing it as a product defect would have cost a day.
+
+### Two product defects, found by clicking the package
+
+Both are in the frontend, both were invisible to 1013 tests, and both needed the
+application to be running rather than reasoned about.
+
+**A project created in the window was missing from the list until a restart.**
+`Browser.tsx` called `store.reload()` after creating a project and not
+`onLibraryChanged()`. They are not the same thing: the first re-reads the project
+the shell has open, the second re-reads the directory it came from. Creating a
+project changes both. The project was open, on disk, and absent from the list it
+was created in.
+
+**The first option in the device picker said "Host default" and armed a tone
+generator.** `Arm.device: null` means the simulated source, which is how the
+transport is driven with nothing plugged in, and the panel offered it under a
+label that promises the opposite. A first run therefore drew full-scale meters
+from synthetic audio and filed a capture against device `simulated source`. The
+option now says **"Simulated source (no device)"**, and a new `defaultInput()`
+picks the host's own default input when nothing is pinned, so the honest choice
+is also the default one.
+
+Each fix was confirmed in the artefact, not just in the tree: the project-list
+one in the rebuild that followed it, and the device one in a rebuilt AppImage
+driven under `Xvfb`, whose device field opens on the one device the host calls
+its default input while the shipped frontend bundle contains the new label and
+no longer contains the old one. That screenshot also shows something to leave
+alone deliberately. The
+device it selects is named **"Default ALSA Output (currently PipeWire Media
+Server)"**, which reads wrong in a capture panel and is correct: `alsa:default`
+reports `is_default_input: true` with `input.supported: true`, and the name is
+ALSA's own description of the PCM rather than anything VCW composed. Renaming
+somebody else's device in our interface would be worse than the confusion.
+
+Both defects are held by tests, and the first of them is **the frontend's first
+rendered test**: `Browser.test.tsx`
+mounts the panel with `createRoot`, submits the form and counts the calls, which
+is not a question source text can answer. `vite.config.ts` now includes
+`src/**/*.test.tsx` for exactly that reason.
+
+### The checksum tool, and what a checksum says
+
+`tools/verify-release.py` writes and checks a coreutils-format `SHA256SUMS`,
+standard library only and Python 3.8 upwards, because the one moment it is needed
+is on a machine where nothing is installed yet. `crates/cli/tests/release_checksums.rs`
+runs it: the easy half is the file that verifies, and the seven tests spend their
+time on the tampered artifact, the download that never finished, the artifact
+nobody signed up for, the pinned digest given out of band, and the sums file the
+tool cannot parse, which is an error rather than a reassuring summary over a
+file it never looked at.
+
+Run against the real artifacts it reported **eighty unrelated files as
+unlisted**, because the sums file was not beside them and the sweep looked at
+every file in its directory. It now looks only at things shaped like a release,
+and the epilog says out loud that names resolve beside the sums file, which is
+where it differs from `sha256sum -c`.
+
+The tool's own documentation carries the limit: a matching digest says the bytes
+are the bytes the release was built from, and nothing whatever about who built
+them. Anybody who can replace a download can replace the checksums beside it.
+That is what the signing steps are for, and `--expect` is how to pin a digest to
+one you were told through another channel.
+
+### Signing, and what happens without a certificate
+
+The `package` job signs on macOS and Windows when the repository has the
+secrets, and **builds anyway when it does not**, because a release that cannot
+be built without a certificate is a release nobody can reproduce. What it must
+not do is produce an unsigned artifact quietly, so both branches write a line
+into the job summary naming which happened, including what the user will see:
+Gatekeeper refusing the bundle, or SmartScreen warning about the installer. The
+updater's key is handled the same way and is used only if it is set.
+
+Release notes come from `CHANGELOG.md`, which is new and written for the person
+installing rather than the person committing: every entry is something somebody
+can see. A tag cut before the Unreleased section is renamed still carries its
+notes, and a tag cut after it does not carry them twice. The notes always end
+with how to verify the download.
+
+### What this work package cannot close from here
+
+The exit criterion asks for a clean install and a first-run capture on **every**
+Tier 1 platform. **Linux x86_64 is done and evidenced above. The rest needs the
+rigs.** Linux aarch64, Windows and macOS are built by the `package` matrix and
+have never been installed by hand, which is the only thing that counts here, and
+the macOS half of the criterion (bundle builds, non-device tests pass) is a CI
+claim that CI has not yet made, because **CI has still not been green**.
+
+Two open questions belong to the platforms rather than to the code. **Where the
+sidecar lands in an MSI and in a `.app` is unknown**, and neither directory is on
+`PATH`, so `vcw` from a Windows or macOS install may need a shim or a documented
+full path rather than the `/usr/bin/vcw` the deb gets for free. And
+`tauri-build` warns that `STATIC_VCRUNTIME is deprecated; use
+build.windows.staticVCRuntime`, which is harmless today and will not be.
+### Where it stands
+
+The gate is green across all fifteen legs at **1031 tests**, up from 1013. New
+files: `app/src-tauri/tests/the_bundle_ships_what_a_user_needs.rs`,
+`crates/cli/tests/every_file_the_build_needs_is_tracked.rs`,
+`crates/cli/tests/release_checksums.rs`, `app/ui/src/panels/Browser.test.tsx`,
+`app/ui/src/panels/Capture.test.tsx`, `tools/stage-cli.sh`, `CHANGELOG.md`,
+`app/.cargo/config.toml`, the icon set rendered from
+`app/src-tauri/icons/icon.svg`, and three files that existed but were hidden by
+`.gitignore`: `tools/vcw-read.py`, `tools/verify-release.py` and
+`tools/make-icons.sh`.
+
+Artefacts on this machine: `VCW_0.1.0_amd64.deb` at 11.2 MB and
+`VCW_0.1.0_amd64.AppImage` at 88.6 MB, both in `app/target/release/bundle/` and
+both rebuilt after the last fix.
+
 ## Next up
 
-**Where to pick up.** **WP-20 is built and uncommitted**; its section is above. The
-gate is green at 991 tests, and the round trip it was taken for works: a real 612 MB
-Audacity rip lands, `tracks` and `release` read it, and `export` writes tagged WAV.
-`vcw-import` is the twelfth crate. What is left in Phase 1 is **WP-18** (docs) and
-**WP-19** (packaging), plus **M4**, which needs the turntable rather than code.
+**Where to pick up.** **Phase 1's last three work packages are built and
+uncommitted**: WP-20 (Audacity import), WP-18 (docs) and WP-19 (packaging), and
+their sections are above in that order. The gate is green across fifteen legs at
+**1031 tests**. What is left in Phase 1 is **M4**, which needs the turntable
+rather than code, and the platform half of WP-19's exit criterion, which needs
+the rigs.
+
+**Nothing is committed past `1140dcb`**, and **CI has still not been green**.
+That is the first thing to fix, and it is now the only thing standing between
+the tree and a releasable tag: the `package` job is written, signs when the
+secrets exist, writes and verifies checksums, and drafts a release from
+`CHANGELOG.md`, but it has never run on a tag and the macOS half of WP-19's exit
+criterion is a claim only CI can make.
+
+**Installed and run on Linux x86_64, by hand, from the deb** - device
+enumeration, a 589824-frame capture at 96 kHz S32 with no losses, and a clean
+`recover --verify`. **Windows, macOS and Linux aarch64 have never been
+installed.** Where the CLI sidecar lands in an MSI and in a `.app` is an open
+question, and neither directory is on `PATH`.
 
 **WP-17 is committed at `b3b6e02`** and the CI repair at
 `e7cd249`, which is the tip of `main`. The two sections above are worth reading before

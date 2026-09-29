@@ -99,7 +99,7 @@ fn start(path: &Path) -> Child {
             "--ring-millis",
             &RING_MILLIS.to_string(),
             "--every",
-            "0",
+            "1",
             "--no-verify",
         ])
         .stdout(Stdio::piped())
@@ -136,7 +136,7 @@ const READY_TIMEOUT: Duration = Duration::from_secs(60);
 /// already running, so the instant this returns is a little *after* the first
 /// frame rather than before it. [`kill_at`] bounds the consequence in both
 /// directions rather than pretending the gap is zero.
-fn wait_until_recording(child: &mut Child) -> Instant {
+fn wait_until_recording(child: &mut Child) -> (Instant, mpsc::Receiver<String>) {
     let stdout = child.stdout.take().expect("stdout was piped");
     let (lines, arriving) = mpsc::channel();
     std::thread::spawn(move || {
@@ -148,8 +148,11 @@ fn wait_until_recording(child: &mut Child) -> Instant {
     });
 
     loop {
-        match arriving.recv_timeout(READY_TIMEOUT) {
-            Ok(line) if line.starts_with("soaking ") => return Instant::now(),
+        // Bound before the match so the receiver is not still borrowed by the
+        // scrutinee when an arm hands it to the caller.
+        let next = arriving.recv_timeout(READY_TIMEOUT);
+        match next {
+            Ok(line) if line.starts_with("soaking ") => return (Instant::now(), arriving),
             Ok(_) => {}
             // Disconnected means the child closed stdout, which for this binary
             // means it exited; Timeout means it is wedged. Neither is a hot log
@@ -305,8 +308,29 @@ fn audit(conn: &Connection, capture_id: i64) -> u64 {
 fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
     let path = dir.join(format!("kill-{iteration}.vcw"));
     let mut child = start(&path);
-    let recording_since = wait_until_recording(&mut child);
-    std::thread::sleep(after);
+    let (recording_since, progress) = wait_until_recording(&mut child);
+
+    // Sleep in slices and keep reading, because one number on the writer's own
+    // progress line is what makes the floor below hold on a busy machine: the
+    // real-time factor, audio produced over clock elapsed. The simulated source
+    // is paced by a clock it does not own, so on a host that is compiling the
+    // rest of the gate it falls behind, and a floor that treats wall-clock
+    // seconds as seconds of audio fails by a few milliseconds for reasons that
+    // have nothing to do with recovery. That is not hypothetical: 3.255 s of
+    // clock against 3.000 s of audio, on this host, with the gate running.
+    let mut rtf: Option<f64> = None;
+    let until = Instant::now() + after;
+    while Instant::now() < until {
+        let slice = (until - Instant::now()).min(Duration::from_millis(50));
+        if let Ok(line) = progress.recv_timeout(slice)
+            && let Some((_, after_rtf)) = line.split_once("rtf ")
+        {
+            rtf = after_rtf
+                .split(',')
+                .next()
+                .and_then(|number| number.parse().ok());
+        }
+    }
     still_running(&mut child);
 
     // SIGKILL on Unix, TerminateProcess on Windows. Either way the process gets
@@ -358,38 +382,67 @@ fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
     .expect("validate");
     assert!(report.is_clean(), "{:?}", report.findings);
 
-    // Loss is bounded by commit granularity, and by measurement that is *all*
-    // it is bounded by. Across fifty kills on this host every recovered length
-    // came back an exact multiple of the 250 ms block and the shortfall never
-    // reached one whole block, with a 1000 ms ring in play the entire time. So
-    // the ring is not part of the loss: a writer that keeps up drains it before
-    // the crash matters, which is what S1 concluded and this now demonstrates.
-    // Asserting the tight bound rather than the safe one is the point - a
-    // regression that let the ring leak into the loss would pass the loose one.
+    // Loss is bounded by commit granularity: across fifty kills on an idle host
+    // every recovered length came back an exact multiple of the 250 ms block
+    // with a 1000 ms ring in play the whole time, so the ring is not part of
+    // the loss. A writer that keeps up drains it before the crash matters,
+    // which is what S1 concluded.
     //
-    // There is no slack for start-up any more, because `ran_for` no longer
-    // contains any: the clock starts when the writer says it is capturing, not
-    // when the process was asked to exist. See `wait_until_recording` for the
-    // three CI failures that cost.
-    //
-    // The bound is two-sided because the announcement and the first frame are
-    // not the same instant. The writer's ring is already filling while the
-    // project is created, and the banner comes after that, so the stored audio
-    // can begin up to a ring's worth *before* this clock started - which is a
-    // ceiling on the overstatement check, not on the loss.
+    // Three checks, because they can each carry a different part of that.
     let recovered_secs = audited as f64 / f64::from(RATE);
     let block_secs = BLOCK_MILLIS as f64 / 1_000.0;
     let ring_secs = RING_MILLIS as f64 / 1_000.0;
+    let block_frames = u64::from(RATE) * BLOCK_MILLIS / 1_000;
+
+    // One: the timing-free one, and the one that actually says "commit
+    // granularity". A block is committed whole or not at all, and a killed
+    // writer never gets to flush the part-filled one, so what survives is a
+    // whole number of blocks however loaded the machine was. A recovery that
+    // truncated to the nearest anything else, or that kept a partial block it
+    // had not committed, fails here and cannot hide in a tolerance.
+    assert_eq!(
+        audited % block_frames,
+        0,
+        "recovered {audited} frames, which is not a whole number of \
+         {block_frames}-frame commit blocks",
+    );
+
+    // Two: the ceiling, which is two-sided because the announcement and the
+    // first frame are not the same instant. The writer's ring is already
+    // filling while the project is created and the banner comes after that, so
+    // the stored audio can begin up to a ring's worth *before* this clock
+    // started. That is a check on overstatement, not on loss.
     assert!(
         recovered_secs <= ran_for.as_secs_f64() + ring_secs + block_secs,
         "recovered {recovered_secs:.3} s from a capture that ran {:.3} s, \
          which is more than the ring can account for",
         ran_for.as_secs_f64()
     );
+
+    // Three: the floor, against the audio that existed rather than against the
+    // clock. `ran_for * rtf` is how much the source had produced by the kill,
+    // taking the pacing the writer itself last reported; rtf is clamped at 1.0
+    // because a source cannot outrun real time and a rounded 1.00001 should not
+    // buy the product any slack. On an idle host rtf is 0.9999-something and
+    // this is the tight bound the fifty-kill run established. On a starved one
+    // it relaxes by exactly the amount of audio that was never made, which is
+    // the only part of the failure that was ever about the scheduler.
+    //
+    // `--every 1` and a kill no earlier than 1.6 s in mean a progress line
+    // always lands. If one did not, this check would silently not run, and a
+    // check that turns itself off is not a check.
+    let pacing = rtf
+        .expect(
+            "the writer printed no progress line before it was killed, so the \
+             pacing-corrected floor could not be applied",
+        )
+        .min(1.0);
+    let produced = ran_for.as_secs_f64() * pacing;
     assert!(
-        recovered_secs >= ran_for.as_secs_f64() - block_secs,
-        "recovered only {recovered_secs:.3} s of a {:.3} s capture; \
-         the floor allows {block_secs:.3} s of loss, one commit block",
+        recovered_secs >= produced - block_secs,
+        "recovered {recovered_secs:.3} s of the {produced:.3} s the source had \
+         produced ({:.3} s of clock at rtf {pacing:.5}); the floor allows \
+         {block_secs:.3} s of loss, one commit block",
         ran_for.as_secs_f64()
     );
 
@@ -429,7 +482,7 @@ fn a_capture_killed_before_it_committed_anything_still_recovers() {
     // `Project::create` returns and one commit block before the first block is
     // written, which is the window this test wants and now always gets.
     let mut child = start(&path);
-    wait_until_recording(&mut child);
+    let _ = wait_until_recording(&mut child);
     still_running(&mut child);
     child.kill().expect("kill");
     let _ = child.wait();

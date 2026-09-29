@@ -17,8 +17,10 @@ vcw-signal = { workspace = true }
 crc32fast = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

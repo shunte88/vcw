@@ -97,18 +97,38 @@ impl Transport for Agent {
             call = call.header(&header.name, &header.value);
         }
 
+        tracing::debug!(
+            url = %without_query(&request.url),
+            timeout_ms = millis(request.timeout),
+            "provider request"
+        );
         let mut response = match call.call() {
             Ok(response) => response,
             // A 4xx or 5xx is an answer, not a failure: the client decides whether
             // 429 is worth retrying and 404 is worth reporting, and it cannot
             // decide that if the status never reaches it.
             Err(ureq::Error::StatusCode(status)) => {
+                tracing::warn!(
+                    url = %without_query(&request.url),
+                    status,
+                    "the provider answered with an error status"
+                );
                 return Ok(Response::status(status, Vec::new()));
             }
             Err(ureq::Error::Timeout(_)) => {
+                tracing::warn!(
+                    url = %without_query(&request.url),
+                    timeout_ms = millis(request.timeout),
+                    "the provider did not answer in time"
+                );
                 return Err(TransportError::Timeout(millis(request.timeout)));
             }
             Err(error) => {
+                tracing::warn!(
+                    url = %without_query(&request.url),
+                    error = %error,
+                    "the provider request failed"
+                );
                 return Err(classify(&error));
             }
         };
@@ -129,12 +149,30 @@ impl Transport for Agent {
                 ureq::Error::Timeout(_) => TransportError::Timeout(millis(request.timeout)),
                 other => classify(&other),
             })?;
+        tracing::debug!(
+            url = %without_query(&request.url),
+            status,
+            bytes = out.body.len(),
+            "provider response"
+        );
         Ok(out)
     }
 
     fn name(&self) -> &'static str {
         "http"
     }
+}
+
+/// A URL with its query string removed, for logging.
+///
+/// §39 keeps credentials out of the URL and into a header, and nothing here ever
+/// logs a header. This is the belt to that braces: a provider that one day wants
+/// its key as `?token=` would otherwise put it in every log line, and a log is a
+/// file people paste into bug reports. The path is what identifies the request;
+/// the query is what it asked for, and this crate's own cache keys already record
+/// that where it matters.
+fn without_query(url: &str) -> &str {
+    url.split_once('?').map_or(url, |(before, _)| before)
 }
 
 /// Sorts a `ureq` failure into the three kinds a caller can act on.

@@ -563,6 +563,15 @@ pub fn recover(project: &mut Project, assessment: &Assessment, plan: Plan) -> Re
     )?;
     tx.commit()?;
 
+    // `warn`, not `info`. Recovery is a repair, and the fact that a project
+    // needed one is the interesting part of the story afterwards - "how much did
+    // I lose in that crash" is answered by these two numbers.
+    tracing::warn!(
+        capture_id = assessment.capture_id,
+        frames = outcome.frames,
+        blocks_removed = outcome.blocks_removed,
+        "recovered an unfinished capture"
+    );
     outcome.applied = true;
     Ok(outcome)
 }
@@ -576,6 +585,13 @@ pub fn recover(project: &mut Project, assessment: &Assessment, plan: Plan) -> Re
 /// project is better than none, and the ones that succeeded are now correct.
 pub fn recover_all(project: &mut Project, plan: Plan) -> Result<Vec<Recovered>> {
     let assessments = survey(project.conn())?;
+    if !assessments.is_empty() {
+        tracing::warn!(
+            captures = assessments.len(),
+            dry_run = plan == Plan::DryRun,
+            "the project holds captures that never finished"
+        );
+    }
     let mut done = Vec::with_capacity(assessments.len());
     for assessment in &assessments {
         done.push(recover(project, assessment, plan)?);

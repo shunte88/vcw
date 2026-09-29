@@ -199,6 +199,11 @@ pub struct Source<'a> {
 /// [`crate::audit()`] or [`crate::timeline`] can refuse, plus
 /// [`crate::Error::Project`] if the destination cannot be written.
 pub fn land(source: &Path, destination: &Path, options: &Options) -> Result<Landed> {
+    tracing::info!(
+        source = %source.display(),
+        destination = %destination.display(),
+        "importing an Audacity project"
+    );
     let (read_only, sniffed) = crate::sniff::open(source)?;
     let survey = crate::read::survey(&read_only, source)?;
     let document = Project::from_events(&survey.document.events)?;
@@ -289,6 +294,22 @@ pub fn land_from(source: &Source<'_>, destination: &Path, options: &Options) -> 
         landed.tags = adopt_tags(&mut project, &document.tags)?;
     }
     project.close()?;
+    tracing::info!(
+        destination = %landed.path.display(),
+        version = ?landed.version,
+        rate = landed.rate.hz(),
+        channels = landed.channels,
+        storage = ?landed.storage_format,
+        frames = landed.frames,
+        blocks = landed.blocks,
+        clips = landed.clips,
+        tracks = landed.tracks,
+        // Counted, not named. A skipped label is a track title, and a log is a
+        // file people paste into bug reports.
+        labels_skipped = landed.labels_skipped.len(),
+        tags = landed.tags,
+        "an Audacity project landed as a capture"
+    );
     Ok(landed)
 }
 

@@ -2,12 +2,12 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "VCW",
   "version": "0.1.0",
-  "identifier": "dev.vcw.app",
+  "identifier": "dev.vcw.workstation",
   "build": {
     "frontendDist": "../ui/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm --dir ../ui dev",
-    "beforeBuildCommand": "pnpm --dir ../ui build"
+    "beforeDevCommand": "pnpm --dir ui dev",
+    "beforeBuildCommand": "pnpm --dir ui build"
   },
   "app": {
     "windows": [
@@ -20,7 +20,54 @@
         "resizable": true
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-src 'none'"
+    }
   },
-  "bundle": { "active": false }
+  "bundle": {
+    "active": true,
+    "targets": [
+      "deb",
+      "appimage",
+      "msi",
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Music",
+    "shortDescription": "Capture, identify and export vinyl recordings.",
+    "longDescription": "VCW is a workstation for putting records onto a computer: a bit-perfect capture that commits continuously so a crash costs a quarter of a second, track detection you can correct, metadata from MusicBrainz and Discogs, and tagged WAV or FLAC out the other end. One project is one file. Audacity projects can be imported.",
+    "copyright": "(c) 2026 Stue Hunter",
+    "publisher": "Stue Hunter",
+    "licenseFile": "../../LICENSE",
+    "externalBin": [
+      "binaries/vcw"
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "libasound2"
+        ],
+        "files": {
+          "/usr/share/doc/vcw/copyright": "../../LICENSE"
+        }
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "wix": {
+        "language": [
+          "en-US"
+        ]
+      }
+    }
+  }
 }

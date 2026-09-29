@@ -71,6 +71,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
 thiserror = "2"
+# §42's structured logging. The libraries take the facade only: an event costs a
+# relaxed load and a branch when nothing has installed a subscriber, which is what
+# makes it acceptable to leave events in code the capture path calls into. The
+# binaries install the subscriber, and nothing else does - a library that
+# configures logging has taken a decision that belongs to whoever runs it.
+tracing = "0.1"
+# `env-filter` earns the regex it pulls in: per-target filtering is the whole
+# point of a log when diagnosing somebody else's machine, and "run it again with
+# VCW_LOG=vcw_audio=trace" is a far better instruction than "turn everything on".
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # D9's half of the Rust/TypeScript contract: the TS declarations in
 # `app/ui/src/bindings/` are generated from the `vcw-contract` types by a test,
 # and a drift check fails the build when the two disagree. Derive-only and
@@ -100,3 +110,11 @@ dbg_macro = "warn"
 opt-level = 3
 lto = true
 debug = 1
+
+# The CLI as it ships beside the shell in a package. Release, minus the debug
+# sections: the same trade `app/Cargo.toml` documents, in a separate profile so
+# a local `cargo build --release` keeps its line numbers for the soak.
+[profile.ship]
+inherits = "release"
+debug = 0
+strip = "debuginfo"

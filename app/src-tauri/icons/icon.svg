@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  icon.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  The application icon, as the source of record. Every PNG, ICO and ICNS beside
+  this file is rendered from it by tools/make-icons.sh, so the art is edited
+  here and nowhere else.
+
+  MIT License - see the header in any Rust source file for the full text.
+
+  It has to read at 16 px, which is one glyph wide, so there is one idea in it:
+  a record. The disc goes almost edge to edge, the label is a third of it in a
+  warm amber that survives being three pixels across, and the spindle hole is
+  punched out rather than drawn so it reads on a light background too. The
+  grooves are there for the large sizes and disappear politely at the small
+  ones.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="vinyl" cx="38%" cy="32%" r="78%">
+      <stop offset="0%" stop-color="#3a3a42"/>
+      <stop offset="42%" stop-color="#1d1d22"/>
+      <stop offset="100%" stop-color="#0b0b0e"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="12%" y1="4%" x2="74%" y2="96%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.26"/>
+      <stop offset="38%" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="62%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="label" cx="36%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#f0a640"/>
+      <stop offset="70%" stop-color="#d98324"/>
+      <stop offset="100%" stop-color="#a85f16"/>
+    </radialGradient>
+    <mask id="punch">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <circle cx="512" cy="512" r="34" fill="#000"/>
+    </mask>
+  </defs>
+
+  <g mask="url(#punch)">
+    <circle cx="512" cy="512" r="496" fill="url(#vinyl)"/>
+
+    <g fill="none" stroke="#ffffff" stroke-opacity="0.085">
+      <circle cx="512" cy="512" r="470" stroke-width="3"/>
+      <circle cx="512" cy="512" r="434" stroke-width="7"/>
+      <circle cx="512" cy="512" r="398" stroke-width="3"/>
+      <circle cx="512" cy="512" r="362" stroke-width="7"/>
+      <circle cx="512" cy="512" r="326" stroke-width="3"/>
+      <circle cx="512" cy="512" r="290" stroke-width="7"/>
+      <circle cx="512" cy="512" r="254" stroke-width="3"/>
+      <circle cx="512" cy="512" r="218" stroke-width="7"/>
+    </g>
+
+    <circle cx="512" cy="512" r="186" fill="url(#label)"/>
+    <circle cx="512" cy="512" r="186" fill="none" stroke="#000000" stroke-opacity="0.22" stroke-width="6"/>
+    <circle cx="512" cy="512" r="150" fill="none" stroke="#000000" stroke-opacity="0.14" stroke-width="4"/>
+
+    <circle cx="512" cy="512" r="496" fill="url(#sheen)"/>
+    <circle cx="512" cy="512" r="496" fill="none" stroke="#000000" stroke-opacity="0.5" stroke-width="10"/>
+  </g>
+</svg>

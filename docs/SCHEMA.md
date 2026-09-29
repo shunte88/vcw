@@ -33,13 +33,56 @@ Summaries match Audacity exactly - `(min, max, rms)` f32 triplets over 256 and 6
 
 Audacity's encoding, `(bytes_per_sample << 16) | type_code`, extended with the two formats it has no code for. Audacity never reads a `.vcw` file, so the extension costs nothing; §8 requires 32-bit integer capture and D4 stores 24-bit verbatim rather than padded.
 
-| code | format | bytes | origin |
-|---|---|---|---|
-| `0x00020001` | Int16 | 2 | Audacity, identical meaning |
-| `0x00030002` | Int24Packed | 3 | VCW |
-| `0x00040001` | Int24Padded | 4 | Audacity, identical meaning |
-| `0x00040002` | Int32 | 4 | VCW |
-| `0x0004000F` | Float32 | 4 | Audacity, identical meaning |
+| code | format | bytes | layout | full scale | origin |
+|---|---|---|---|---|---|
+| `0x00020001` | Int16 | 2 | little-endian `i16` | 32768 | Audacity, identical meaning |
+| `0x00030002` | Int24Packed | 3 | 3-byte little-endian two's complement | 8388608 | VCW |
+| `0x00040001` | Int24Padded | 4 | little-endian `i32`, value in +/-2^23 | 8388608 | Audacity, identical meaning |
+| `0x00040002` | Int32 | 4 | little-endian `i32` | 2147483648 | VCW |
+| `0x0004000F` | Float32 | 4 | little-endian IEEE-754 `f32` | 1.0 already | Audacity, identical meaning |
+
+**Every multi-byte value in a `.vcw` is little-endian**: samples, summary triplets, all of it. The schema comment on `sampleblocks.samples` says "native-endian, exactly as captured" because D4 forbids the write path from touching a sample, and that is accurate as far as it goes - but it is not something a third-party reader can act on, so the format *declares* little-endian and `vcw-project` refuses to compile on a big-endian target rather than write a file nobody can read. If VCW is ever wanted on a big-endian machine, the conversion belongs on the write path and this sentence is the contract that says so.
+
+`Int24Padded` is the one layout worth stating twice, because getting it wrong is easy and quiet: it is a four-byte little-endian integer holding a value in +/-2^23, **not** a 32-bit sample left-justified into four bytes. Decoding it as though the low byte were padding makes a waveform 256x too quiet. This was measured against Audacity's own `summin`/`summax`/`sumrms` over the whole corpus rather than assumed.
+
+## Reading a project
+
+§49 requires the format to be usable by a third-party tool without the GUI, and `tools/vcw-read.py` is the proof: a reader written from this document alone, in Python, with no VCW code in it. `crates/project/tests/third_party_spec.rs` runs it against a project the product wrote and compares the audio it extracts frame for frame. Everything a reader needs is below; where this document and the code disagree, the code is the bug.
+
+**Open it read-only, and open it with `mode=ro`.** A project is in WAL mode, so content that has not been checkpointed lives in the `-wal` sidecar. SQLite's `immutable=1` tells the library to ignore that file, which turns an unflushed project into a silently stale one. `mode=ro` honours the sidecar and costs only the creation of a `-shm`.
+
+**Identify it from the header, not from the name.** `application_id` and `user_version` are at offsets 68 and 60 of the first database page, big-endian, which means a reader can refuse a file it should not touch without opening a connection at all. An Audacity project answers `0x41554459` to the same question.
+
+**Then check `format_version` in `meta`.** `user_version` is the shape of the tables; the format version is what they mean. A future VCW may add tables without changing either, but it will not change the meaning of an existing column without changing this.
+
+### Required `meta` keys
+
+Every project carries these (§16). A file missing one is rejected on open rather than repaired, because a project that cannot say what wrote it cannot be reasoned about.
+
+| key | meaning |
+|---|---|
+| `created.at` | Unix seconds at creation. |
+| `created.by` | Crate name and version of the build that created the project. |
+| `created.format_version` | The format version at creation, which a migration never rewrites. |
+| `format_version` | The format version as last written: the one a reader must understand. |
+| `last_written.at` | Unix seconds at the last write. |
+| `last_written.by` | Crate name and version of the build that last wrote to it. |
+
+Every other key is a value some part of VCW stores because a column would be a worse trade, and a reader may ignore all of them. Two families are worth knowing about: `export.*` records what the last export was asked for, and `import.*` records where imported audio came from, including `import.tag.*`, which is every tag the source project carried, verbatim.
+
+### Getting the audio out
+
+Five steps, and none of them need anything outside this document.
+
+1. Pick a capture from `captures`. It gives the rate, the channel count and the `storage_format` code, and those three are fixed for the whole capture - a project never changes format mid-recording.
+2. For each channel `0..channels`, read its blocks: `SELECT start_frame, frame_count, samples FROM capture_blocks JOIN sampleblocks USING (blockid) WHERE capture_id = ? AND channel = ? ORDER BY sequence`. `sequence` is contiguous from zero with no gaps, so the ordering is total and needs no tie-break.
+3. **A block is one channel of audio, never interleaved.** Its `samples` blob holds exactly `frame_count` samples in the capture's format, so it is `frame_count * bytes_per_sample` bytes long. Anything else means a damaged block, and `validate()` says so.
+4. Interleave: frame *f* of the output is channel 0's sample *f* followed by channel 1's, and so on. That is the only transform between a `.vcw` and a WAV data chunk for the four integer formats - the bytes are already what WAV wants.
+5. `frames` on the capture row is the authoritative length per channel. It is updated as blocks land rather than at the end, so it is correct even on an interrupted capture.
+
+A **track** is a span of one capture: `tracks` points at two rows of `track_boundaries`, and `at_frame` on each is frames from the start of the side's capture. **The span is half-open, `[start, end)`** - a track of *n* frames runs from `start` to `start + n`, and the frame at `end` belongs to whatever comes next, or to nothing. A side is not a span: two sides may share one capture, and nothing in the schema says where one face ends.
+
+**`checksum` is a CRC-32** over the `samples` blob: the ordinary reflected IEEE 802.3 polynomial with an initial and final inversion, which is what `zlib.crc32`, `binascii.crc32` and Rust's `crc32fast` all compute. It is stored as a non-negative integer in `0..2^32`, so a reader whose SQLite bindings hand back a signed 64-bit value needs no sign correction. The column detects the bit rot SQLite's own integrity check cannot see: a corrupted blob is still a valid blob.
 
 ## Tables
 

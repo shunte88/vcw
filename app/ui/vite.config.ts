@@ -22,7 +22,10 @@ export default defineConfig({
   // WP-16's exit criterion.
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.ts"],
+    // `.tsx` as well since WP-19: the project browser earned a rendered test
+    // when a project created in the window turned out to be missing from the
+    // list until a restart, and that is not a question source text can answer.
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
   build: {
     outDir: "dist",

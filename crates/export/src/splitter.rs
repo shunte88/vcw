@@ -374,6 +374,14 @@ pub fn run(conn: &Connection, plan: &Plan, on: &mut dyn FnMut(Progress<'_>)) -> 
         tagging::write(&item.path, plan.container, &item.tags)?;
     }
 
+    tracing::info!(
+        files = report.files,
+        frames = report.frames,
+        bytes = report.bytes,
+        container = ?plan.container,
+        "wrote an export"
+    );
+
     if let Some(cover) = &plan.cover {
         for beside in &plan.covers {
             if let Some(directory) = beside.parent() {

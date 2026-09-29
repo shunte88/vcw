@@ -787,6 +787,10 @@ impl Writer {
             .conn()
             .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
         self.outcome.final_checkpoint_micros = started.elapsed().as_micros() as u64;
+        tracing::debug!(
+            micros = self.outcome.final_checkpoint_micros,
+            "folded the write-ahead log back into the project"
+        );
     }
 
     /// Splits one block's interleaved bytes per channel and summarises each.

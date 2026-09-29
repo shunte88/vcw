@@ -47,6 +47,11 @@ serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
 thiserror = "2"
+# §42's logging. The shell installs a subscriber for the same reason the CLI does
+# and with the same default: the versions match the product workspace, which is
+# the point of naming them here rather than in src-tauri/Cargo.toml.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Tests only. Every fixture a shell test needs is a project file on disk, and
 # WP-16a added the first of them.
@@ -69,4 +74,10 @@ dbg_macro = "warn"
 [profile.release]
 opt-level = 3
 lto = true
-debug = 1
+# No debuginfo in the shipped shell. Measured 2026-09-28: `debug = 1` put a
+# 95 MB binary in a 26 MB deb and a 104 MB AppImage; stripping the debug
+# sections leaves 16.4 MB and keeps the symbol table, so a panic backtrace still
+# names its frames - it loses the line numbers only. The CLI keeps its line
+# tables (root `Cargo.toml`), because the soak reads its backtraces.
+debug = 0
+strip = "debuginfo"

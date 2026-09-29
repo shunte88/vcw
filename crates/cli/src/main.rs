@@ -47,12 +47,14 @@
 //! that makes §21's gapless seek testable without a sound card. The editing and
 //! export verbs follow at WP-13 onwards.
 
+mod bundle;
 mod capture;
 mod contend;
 mod detect;
 mod devices;
 mod export;
 mod import;
+mod logging;
 mod metadata;
 mod play;
 mod recover;
@@ -74,6 +76,14 @@ use crate::soak::Wal;
 #[derive(Parser)]
 #[command(name = "vcw", version, about = "VCW - The Vinyl Capture Workstation")]
 struct Cli {
+    /// How much to log, to stderr: error, warn, info, debug or trace.
+    ///
+    /// Default is warn, which is silence unless something is wrong. The
+    /// VCW_LOG environment variable overrides this and takes a filter per
+    /// target, as in VCW_LOG=vcw_audio=trace.
+    #[arg(long, global = true, value_name = "LEVEL")]
+    log: Option<String>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -82,6 +92,32 @@ struct Cli {
 enum Command {
     /// Report what this build can see: host APIs, SQLite, supported rates.
     Doctor,
+
+    /// Write a diagnostic bundle: one JSON document, no audio in it (§42).
+    ///
+    /// Reports the version, the machine, the backend, the devices, and a
+    /// project's integrity and capture counters. Everything it says about a
+    /// project is a shape or a count: no samples, no titles, no credentials and
+    /// not even the project's path. A bundle is something a person sends to a
+    /// stranger, so it is built to be safe to send.
+    ///
+    /// The project argument is optional, because "no device appears" is a
+    /// report worth sending too.
+    Bundle {
+        project: Option<std::path::PathBuf>,
+        /// Write here instead of to stdout.
+        #[arg(short, long)]
+        out: Option<std::path::PathBuf>,
+        /// Skip the device survey, which opens every device.
+        #[arg(long)]
+        no_devices: bool,
+        /// Every advertised device configuration, not a summary. Megabytes.
+        #[arg(long)]
+        all_devices: bool,
+        /// Recompute every block checksum. Minutes on a full side.
+        #[arg(long)]
+        checksums: bool,
+    },
 
     /// List audio devices, their ids, and what each one will record (§7).
     Devices {
@@ -856,8 +892,23 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn run() -> anyhow::Result<()> {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    logging::install(cli.log.as_deref());
+    match cli.command {
         Command::Doctor => doctor(),
+        Command::Bundle {
+            project,
+            out,
+            no_devices,
+            all_devices,
+            checksums,
+        } => bundle::run(bundle::Args {
+            project,
+            out,
+            no_devices,
+            all_devices,
+            checksums,
+        }),
         Command::Devices {
             which,
             hardware,

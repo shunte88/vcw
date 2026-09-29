@@ -48,6 +48,7 @@ use std::fmt::Write as _;
 
 use vcw_types::StorageFormat;
 
+use crate::meta;
 use crate::migrate::MIGRATIONS;
 use crate::schema::{
     APPLICATION_ID, BLOCK_MILLIS, EXTENSION, FORMAT_VERSION, PAGE_SIZE, SCHEMA_VERSION,
@@ -188,6 +189,57 @@ fn cell(text: &str) -> String {
     text.replace('|', "\\|")
 }
 
+/// The keys §16 requires, with a one-line meaning each, for the document.
+///
+/// Kept here rather than in `meta` because the strings are the specification's
+/// prose rather than the module's API, but the keys themselves come from
+/// `meta`'s constants so the two cannot drift apart.
+const REQUIRED_META: [(&str, &str); 6] = [
+    (meta::CREATED_AT, "Unix seconds at creation."),
+    (
+        meta::CREATED_BY,
+        "Crate name and version of the build that created the project.",
+    ),
+    (
+        meta::CREATED_FORMAT_VERSION,
+        "The format version at creation, which a migration never rewrites.",
+    ),
+    (
+        meta::FORMAT_VERSION,
+        "The format version as last written: the one a reader must understand.",
+    ),
+    (meta::LAST_WRITTEN_AT, "Unix seconds at the last write."),
+    (
+        meta::LAST_WRITTEN_BY,
+        "Crate name and version of the build that last wrote to it.",
+    ),
+];
+
+/// How one sample of a format is laid out in the `samples` blob.
+///
+/// Part of the document rather than a doc comment because §49's promise is that
+/// a third party can read a project from the specification alone, and a byte
+/// width without a layout is not enough to decode anything.
+const fn layout_of(format: StorageFormat) -> &'static str {
+    match format {
+        StorageFormat::Int16 => "little-endian `i16`",
+        StorageFormat::Int24Packed => "3-byte little-endian two's complement",
+        StorageFormat::Int24Padded => "little-endian `i32`, value in +/-2^23",
+        StorageFormat::Int32 => "little-endian `i32`",
+        StorageFormat::Float32 => "little-endian IEEE-754 `f32`",
+    }
+}
+
+/// What divisor takes a stored sample to roughly -1.0..=1.0.
+const fn full_scale_of(format: StorageFormat) -> &'static str {
+    match format {
+        StorageFormat::Int16 => "32768",
+        StorageFormat::Int24Packed | StorageFormat::Int24Padded => "8388608",
+        StorageFormat::Int32 => "2147483648",
+        StorageFormat::Float32 => "1.0 already",
+    }
+}
+
 /// Renders the schema document.
 pub fn markdown() -> String {
     let mut out = String::new();
@@ -252,14 +304,17 @@ pub fn markdown() -> String {
          extension costs nothing; §8 requires 32-bit integer capture and D4 stores \
          24-bit verbatim rather than padded.\n\n",
     );
-    out.push_str("| code | format | bytes | origin |\n|---|---|---|---|\n");
+    out.push_str("| code | format | bytes | layout | full scale | origin |\n");
+    out.push_str("|---|---|---|---|---|---|\n");
     for s in StorageFormat::ALL {
         let _ = writeln!(
             out,
-            "| `0x{:08X}` | {:?} | {} | {} |",
+            "| `0x{:08X}` | {:?} | {} | {} | {} | {} |",
             s.code(),
             s,
             s.bytes_per_sample(),
+            layout_of(s),
+            full_scale_of(s),
             if s.is_audacity() {
                 "Audacity, identical meaning"
             } else {
@@ -268,6 +323,104 @@ pub fn markdown() -> String {
         );
     }
     out.push('\n');
+    out.push_str(
+        "**Every multi-byte value in a `.vcw` is little-endian**: samples, summary \
+         triplets, all of it. The schema comment on `sampleblocks.samples` says \
+         \"native-endian, exactly as captured\" because D4 forbids the write path from \
+         touching a sample, and that is accurate as far as it goes - but it is not \
+         something a third-party reader can act on, so the format *declares* \
+         little-endian and `vcw-project` refuses to compile on a big-endian target \
+         rather than write a file nobody can read. If VCW is ever wanted on a \
+         big-endian machine, the conversion belongs on the write path and this \
+         sentence is the contract that says so.\n\n\
+         `Int24Padded` is the one layout worth stating twice, because getting it \
+         wrong is easy and quiet: it is a four-byte little-endian integer holding a \
+         value in +/-2^23, **not** a 32-bit sample left-justified into four bytes. \
+         Decoding it as though the low byte were padding makes a waveform 256x too \
+         quiet. This was measured against Audacity's own `summin`/`summax`/`sumrms` \
+         over the whole corpus rather than assumed.\n\n",
+    );
+
+    out.push_str("## Reading a project\n\n");
+    out.push_str(
+        "§49 requires the format to be usable by a third-party tool without the GUI, \
+         and `tools/vcw-read.py` is the proof: a reader written from this document \
+         alone, in Python, with no VCW code in it. \
+         `crates/project/tests/third_party_spec.rs` runs it against a project the \
+         product wrote and compares the audio it extracts frame for frame. \
+         Everything a reader needs is below; where this document and the code \
+         disagree, the code is the bug.\n\n\
+         **Open it read-only, and open it with `mode=ro`.** A project is in WAL mode, \
+         so content that has not been checkpointed lives in the `-wal` sidecar. \
+         SQLite's `immutable=1` tells the library to ignore that file, which turns an \
+         unflushed project into a silently stale one. `mode=ro` honours the sidecar \
+         and costs only the creation of a `-shm`.\n\n\
+         **Identify it from the header, not from the name.** `application_id` and \
+         `user_version` are at offsets 68 and 60 of the first database page, \
+         big-endian, which means a reader can refuse a file it should not touch \
+         without opening a connection at all. An Audacity project answers \
+         `0x41554459` to the same question.\n\n\
+         **Then check `format_version` in `meta`.** `user_version` is the shape of \
+         the tables; the format version is what they mean. A future VCW may add \
+         tables without changing either, but it will not change the meaning of an \
+         existing column without changing this.\n\n",
+    );
+
+    out.push_str("### Required `meta` keys\n\n");
+    out.push_str(
+        "Every project carries these (§16). A file missing one is rejected on open \
+         rather than repaired, because a project that cannot say what wrote it \
+         cannot be reasoned about.\n\n",
+    );
+    out.push_str("| key | meaning |\n|---|---|\n");
+    for (key, meaning) in REQUIRED_META {
+        let _ = writeln!(out, "| `{key}` | {meaning} |");
+    }
+    out.push_str(
+        "\nEvery other key is a value some part of VCW stores because a column would \
+         be a worse trade, and a reader may ignore all of them. Two families are \
+         worth knowing about: `export.*` records what the last export was asked for, \
+         and `import.*` records where imported audio came from, including \
+         `import.tag.*`, which is every tag the source project carried, verbatim.\n\n",
+    );
+
+    out.push_str("### Getting the audio out\n\n");
+    out.push_str(
+        "Five steps, and none of them need anything outside this document.\n\n\
+         1. Pick a capture from `captures`. It gives the rate, the channel count and \
+            the `storage_format` code, and those three are fixed for the whole \
+            capture - a project never changes format mid-recording.\n\
+         2. For each channel `0..channels`, read its blocks: \
+            `SELECT start_frame, frame_count, samples FROM capture_blocks JOIN \
+            sampleblocks USING (blockid) WHERE capture_id = ? AND channel = ? ORDER \
+            BY sequence`. \
+            `sequence` is contiguous from zero with no gaps, so the ordering is total \
+            and needs no tie-break.\n\
+         3. **A block is one channel of audio, never interleaved.** Its `samples` \
+            blob holds exactly `frame_count` samples in the capture's format, so it \
+            is `frame_count * bytes_per_sample` bytes long. Anything else means a \
+            damaged block, and `validate()` says so.\n\
+         4. Interleave: frame *f* of the output is channel 0's sample *f* followed \
+            by channel 1's, and so on. That is the only transform between a `.vcw` \
+            and a WAV data chunk for the four integer formats - the bytes are \
+            already what WAV wants.\n\
+         5. `frames` on the capture row is the authoritative length per channel. It \
+            is updated as blocks land rather than at the end, so it is correct even \
+            on an interrupted capture.\n\n\
+         A **track** is a span of one capture: `tracks` points at two rows of \
+         `track_boundaries`, and `at_frame` on each is frames from the start of the \
+         side's capture. **The span is half-open, `[start, end)`** - a track of *n* \
+         frames runs from `start` to `start + n`, and the frame at `end` belongs to \
+         whatever comes next, or to nothing. A side is not a span: two sides may \
+         share one capture, and nothing in the schema says where one face ends.\n\n\
+         **`checksum` is a CRC-32** over the `samples` blob: the ordinary reflected \
+         IEEE 802.3 polynomial with an initial and final inversion, which is what \
+         `zlib.crc32`, `binascii.crc32` and Rust's `crc32fast` all compute. It is \
+         stored as a non-negative integer in `0..2^32`, so a reader whose SQLite \
+         bindings hand back a signed 64-bit value needs no sign correction. The \
+         column detects the bit rot SQLite's own integrity check cannot see: a \
+         corrupted blob is still a valid blob.\n\n",
+    );
 
     out.push_str("## Tables\n\n");
     for object in objects() {

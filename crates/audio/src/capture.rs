@@ -577,6 +577,7 @@ impl Capture {
 
         let mut sink = Sink::new(writer, Arc::clone(&counters), frame_bytes);
         let error_counters = Arc::clone(&counters);
+        let key_for_log = request.device.to_string();
         let stream = device.build_input_stream_raw(
             config,
             cpal_format,
@@ -584,11 +585,45 @@ impl Capture {
             move |err| {
                 // Not the audio thread. An allocation here is fine, and losing
                 // the one message that explains a failure would not be.
-                error_counters.record_error(&err.to_string());
+                let text = err.to_string();
+                // §42 forbids logging from a routine audio callback. This is the
+                // error callback, which is not routine: it fires once per fault,
+                // it is the only place the host's own words are available, and
+                // the line above already allocates. A capture that lost frames
+                // at 14:32 and a driver that complained at 14:32 are the same
+                // event, and a log is where anybody sees that.
+                tracing::error!(device = %key_for_log, error = %text, "capture stream error");
+                error_counters.record_error(&text);
             },
             None,
         )?;
         stream.play()?;
+        tracing::info!(
+            device = %request.device,
+            name = %report.name,
+            rate = negotiated.rate.hz(),
+            channels = negotiated.channels,
+            format = ?negotiated.format,
+            storage = ?negotiated.storage,
+            mode = %negotiated.mode.as_str(),
+            buffer = %negotiated.buffer,
+            "capture stream started"
+        );
+        if !negotiated.honoured() {
+            // A capture that is not what was asked for is the single most common
+            // cause of a rip that sounds wrong, and §9 says so out loud rather
+            // than quietly settling for less.
+            tracing::warn!(
+                device = %request.device,
+                divergences = %negotiated
+                    .divergences
+                    .iter()
+                    .map(|d| format!("{}: asked {}, got {}", d.field, d.requested, d.granted))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+                "the backend did not honour the request"
+            );
+        }
 
         // Ask the OS only once the stream is actually running: a PCM that has
         // not been prepared reports nothing to compare against.
@@ -602,6 +637,28 @@ impl Capture {
                 format: cpal_format,
             },
         );
+
+        match &verification {
+            Verification::Agrees(_) => tracing::info!(
+                device = %request.device,
+                report = %verification.evidence(),
+                "the OS confirmed the stream configuration"
+            ),
+            // The OS contradicting the backend is the one case that is not
+            // routine: it means the stream is not what the backend said it was.
+            Verification::Disagrees { .. } => tracing::warn!(
+                device = %request.device,
+                report = %verification.evidence(),
+                "the OS contradicted the stream configuration"
+            ),
+            // Not an error. Most hosts have nothing to ask, and §38's rule is
+            // that an unverified capture is recorded as unverified, not refused.
+            Verification::Unavailable { .. } => tracing::debug!(
+                device = %request.device,
+                report = %verification.evidence(),
+                "the OS had nothing to confirm"
+            ),
+        }
 
         Ok((
             Self {
@@ -667,7 +724,22 @@ impl Capture {
     /// the caller has somewhere to get the numbers from.
     pub fn stop(self) -> Diagnostics {
         let final_counts = self.counters.snapshot();
+        let level_matters = !final_counts.is_clean();
         drop(self.stream);
+        if level_matters {
+            // A lost frame is not a warning somewhere in a log, it is the reason
+            // the rip has to be done again, so it goes out at `warn`.
+            tracing::warn!(
+                device = %self.key,
+                overruns = final_counts.overruns,
+                underruns = final_counts.underruns,
+                dropped_frames = final_counts.dropped_frames,
+                stream_errors = final_counts.stream_errors,
+                "capture stream stopped with defects"
+            );
+        } else {
+            tracing::info!(device = %self.key, frames = self.counters.frames(), "capture stream stopped clean");
+        }
         final_counts
     }
 }

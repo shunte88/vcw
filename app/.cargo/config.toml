@@ -1,0 +1,29 @@
+#  config.toml
+#
+#  VCW - The Vinyl Capture Workstation
+#  (c) 2026 Stue Hunter
+#
+#  Link settings for the shell that cannot be expressed in Cargo.toml (WP-19).
+#
+#  MIT License - see the header in any Rust source file for the full text.
+
+# Windows reserves 1 MiB for a process's main thread where Linux and macOS give
+# 8 MiB, and the size comes from the executable header rather than a run-time
+# request. `vcw-cli` answers that by running everything on a thread it sizes
+# itself, and its `tests/startup.rs` reproduces the ceiling here with
+# `ulimit -s 1024`. The shell cannot use that answer: the GTK and Win32 event
+# loops have to own the process's main thread, so there is no thread to move the
+# work onto and the header is the only lever there is.
+#
+# This is not covering for a measured overflow. Measured on 2026-09-28, a debug
+# build of the shell starts, creates its window and enumerates ALSA inside
+# `ulimit -s 1024`, so 1 MiB was already enough on the one platform where that
+# can be checked. What the reserve buys is that Windows stops being the odd one
+# out: the same call depth that is fine on the two platforms VCW is developed on
+# is fine on the third, instead of being eight times closer to the edge on the
+# one nobody can run a debugger on today.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8388608"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8388608"]

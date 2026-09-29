@@ -115,7 +115,32 @@ pub(crate) const WIRED: [&str; 17] = [
     "save_settings",
 ];
 
+/// Installs the log subscriber for the window process (§42).
+///
+/// The same policy as the CLI's `logging` module, for the same reasons: stderr,
+/// `warn` by default so a packaged application is quiet, and `VCW_LOG` to turn
+/// it up per target. Kept as its own function rather than inlined so that "the
+/// binaries decide logging, the libraries do not" is visible in both binaries.
+///
+/// A failed install is ignored: something else having arranged logging is not a
+/// reason to refuse to open a window.
+fn install_logging() {
+    let filter = match std::env::var("VCW_LOG") {
+        Ok(text) if !text.trim().is_empty() => {
+            tracing_subscriber::EnvFilter::builder().parse_lossy(text)
+        }
+        _ => tracing_subscriber::EnvFilter::builder().parse_lossy("warn"),
+    };
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_target(true)
+        .try_init();
+}
+
 fn main() {
+    install_logging();
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), "the shell is starting");
     tauri::Builder::default()
         .manage(Shell::default())
         .invoke_handler(tauri::generate_handler![

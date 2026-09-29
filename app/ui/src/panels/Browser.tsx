@@ -108,7 +108,13 @@ export function Browser({
       .then(() => {
         setCreating(false);
         setSeed({ artist: "", album: "", catalog: "" });
+        // Both, and they are not the same thing: `reload` re-reads the project
+        // the shell has open, `onLibraryChanged` re-reads the directory it came
+        // from. Creating a project changes both, and for WP-19 only the first
+        // was called - so a project created in the window was open, on disk,
+        // and absent from the list until the application was restarted.
         store.reload();
+        onLibraryChanged();
       });
   };
 

@@ -37,6 +37,22 @@
 //! CI (`tests/aup4_shape.rs`) and rendered into `docs/SCHEMA.md` by
 //! [`crate::doc::markdown`], so there is one definition and two checks on it.
 
+/// The format is little-endian, and this is where that stops being an assumption.
+///
+/// D4 forbids the write path from converting a sample, so on a big-endian host a
+/// capture would land in the file big-endian and `docs/SCHEMA.md`'s promise to a
+/// third-party reader would be false. WP-18 made that promise explicit, so the
+/// build refuses rather than writing a file nobody else can read: every Tier 1
+/// and Tier 2 target is little-endian, so this costs nothing today and turns a
+/// silent corruption into a compile error if that ever changes.
+///
+/// The fix, if a big-endian port is ever wanted, is a byte swap on the write and
+/// read paths - not a relaxation of this line.
+const _: () = assert!(
+    cfg!(target_endian = "little"),
+    "the .vcw format is little-endian; see docs/SCHEMA.md, 'Sample format codes'"
+);
+
 /// SQLite `application_id` for a `.vcw` project: ASCII `"VCW\0"`.
 ///
 /// Distinct from Audacity's `0x41554459` (`"AUDY"`), which both AUP3 and AUP4 use.

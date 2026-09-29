@@ -39,6 +39,16 @@ import { useKeys } from "../keys";
 import { clock } from "../format";
 import type { Store } from "../store";
 
+/**
+ * The device the host itself would pick, if it offers one that can record.
+ *
+ * Not the same as "no device": `null` arms the simulated source, which is how
+ * the transport is driven with nothing plugged in.
+ */
+function defaultInput(devices: readonly Device[]): string | null {
+  return devices.find((row) => row.canCapture && row.isDefaultInput)?.id ?? null;
+}
+
 /** The capture workspace. */
 export function Capture({
   store,
@@ -60,13 +70,20 @@ export function Capture({
   // this runs once per settings load and not on every render: a person who
   // picked a device in this panel should not have it replaced by §39's when
   // something else causes a re-read.
+  //
+  // The fallback to the host's own default input is WP-19's: `device: null` is
+  // the *simulated source* in `contract::command::Arm`, so a first run with
+  // nothing pinned in §39 and nothing chosen here armed a synthetic tone and
+  // showed full-scale meters. Found by arming the packaged AppImage. The row
+  // said "simulated source" and the picker said "Host default", which is two
+  // names for one value and only one of them true.
   useEffect(() => {
     if (settings !== null) {
-      setDevice((held) => held ?? settings.audio.input);
+      setDevice((held) => held ?? settings.audio.input ?? defaultInput(devices));
       setRate((held) => held ?? settings.audio.rate);
       setFormat((held) => held ?? settings.audio.format);
     }
-  }, [settings]);
+  }, [settings, devices]);
 
   const chosen = devices.find((row) => row.id === device);
   const arm = () => {
@@ -115,7 +132,7 @@ export function Capture({
               setDevice(event.target.value === "" ? null : event.target.value)
             }
           >
-            <option value="">Host default</option>
+            <option value="">Simulated source (no device)</option>
             {devices
               .filter((row) => row.canCapture)
               .map((row) => (

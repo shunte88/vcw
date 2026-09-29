@@ -821,6 +821,17 @@ impl Playback {
             },
         );
 
+        tracing::info!(
+            device = %request.device,
+            name = %report.name,
+            rate = opened.rate.hz(),
+            channels = opened.channels,
+            format = ?opened.format,
+            identity = conversion.is_identity(),
+            losses = %conversion.losses().join("; "),
+            "playback stream opened"
+        );
+
         Ok((
             Self {
                 stream,
@@ -921,6 +932,26 @@ impl Playback {
         self.cursor.set_playing(false);
         let health = self.counters.snapshot();
         drop(self.stream);
+        // Playback underruns are audible and nothing else records them, so they
+        // go out at `warn`. Stale chunks do not: a seek discarding what it made
+        // obsolete is the mechanism working, not a fault.
+        if health.underruns > 0 || health.stream_errors > 0 {
+            tracing::warn!(
+                callbacks = health.callbacks,
+                frames = health.frames,
+                underruns = health.underruns,
+                silence_frames = health.silence_frames,
+                stream_errors = health.stream_errors,
+                "playback stream stopped with defects"
+            );
+        } else {
+            tracing::debug!(
+                callbacks = health.callbacks,
+                frames = health.frames,
+                stale_chunks = health.stale_chunks,
+                "playback stream stopped clean"
+            );
+        }
         health
     }
 }

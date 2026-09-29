@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # A tag is what turns the packaging job into a release. Nothing else does,
+    # so a tag is the only thing that publishes anything.
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
   # The nightly soak. §41's exit criterion asks for a scheduled job, because
@@ -284,3 +287,220 @@ jobs:
           name: soak-nightly-logs
           path: ${{ runner.temp }}/soak/*.log
           if-no-files-found: warn
+
+  # WP-19. Installable artifacts for every Tier 1 platform, their checksums, and
+  # on a tag, a release with all of it attached.
+  #
+  # Not on every push: four release builds with a frontend each is twenty
+  # minutes of runner time to prove something that only matters when a version
+  # is going out. Tags, the nightly, and a manual run.
+  package:
+    name: package (${{ matrix.name }})
+    if: >-
+      startsWith(github.ref, 'refs/tags/v')
+      || github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-latest, bundles: 'deb,appimage' }
+          - { name: linux-aarch64, os: ubuntu-24.04-arm, bundles: 'deb,appimage' }
+          - { name: windows-x86_64, os: windows-latest, bundles: 'msi' }
+          - { name: macos-aarch64, os: macos-latest, bundles: 'app,dmg' }
+    steps:
+      - uses: actions/checkout@v4
+      # The same webkit and gtk headers the shell job needs, plus ALSA, plus
+      # librsvg because the deb's icons are rendered at bundle time.
+      - name: Install Linux bundling dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev \
+            libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf desktop-file-utils
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+          key: package-${{ matrix.name }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/ui/pnpm-lock.yaml
+      - name: Install the tauri CLI
+        run: cargo install tauri-cli --locked --version '^2.11'
+      - name: Build the frontend
+        run: pnpm install --frozen-lockfile && pnpm build
+        working-directory: app/ui
+
+      # Signing, and the rule for it: the secrets come from the repository and
+      # nothing is ever read from a project file or written into one (§39). When
+      # a secret is absent the build carries on and produces an unsigned
+      # artifact, because a release that cannot be built without a certificate
+      # is a release nobody can reproduce. What it must not do is produce an
+      # unsigned artifact quietly, so both branches say which happened.
+      - name: Decide whether this build can be signed (macOS)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE" >> "$GITHUB_ENV"
+            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+            echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> "$GITHUB_ENV"
+            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "### macOS bundle will be signed and notarised" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### macOS bundle is UNSIGNED: no APPLE_CERTIFICATE secret" >> "$GITHUB_STEP_SUMMARY"
+            echo "Gatekeeper will refuse it until it is signed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The CLI travels inside the package: every workflow in USER-GUIDE.md is a
+      # `vcw ...` line, and `vcw bundle` is what a person is asked to send when
+      # something breaks. The bundler will not start without the sidecar the
+      # config names, so a failure here is loud.
+      - name: Stage the CLI beside the shell
+        shell: bash
+        run: bash tools/stage-cli.sh
+
+      - name: Build the bundles
+        run: cargo tauri build --bundles ${{ matrix.bundles }} --verbose
+        working-directory: app/src-tauri
+        env:
+          # The updater's signing key, which tauri uses only if it is set.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      # Authenticode, after the fact rather than through the config, so the
+      # absence of a certificate is a step that does not run rather than a
+      # build that fails.
+      - name: Sign the installer (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$WINDOWS_CERTIFICATE" ]; then
+            echo "### Windows installer is UNSIGNED: no WINDOWS_CERTIFICATE secret" >> "$GITHUB_STEP_SUMMARY"
+            echo "SmartScreen will warn about it until it is signed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "$WINDOWS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.pfx"
+          signtool=$(find "/c/Program Files (x86)/Windows Kits/10/bin" -name signtool.exe \
+            -path '*x64*' | sort | tail -1)
+          for installer in app/target/release/bundle/msi/*.msi; do
+            "$signtool" sign /f "$RUNNER_TEMP/cert.pfx" \
+              /p "$WINDOWS_CERTIFICATE_PASSWORD" \
+              /fd sha256 /tr http://timestamp.digicert.com /td sha256 "$installer"
+          done
+          rm -f "$RUNNER_TEMP/cert.pfx"
+          echo "### Windows installer signed" >> "$GITHUB_STEP_SUMMARY"
+
+      # Collect what was built into one flat directory and check it is not
+      # empty. An empty artifact upload is a green job that shipped nothing, and
+      # `if-no-files-found: error` catches it a step too late to say why.
+      - name: Collect the artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find app/target/release/bundle -type f \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*.msi' \
+               -o -name '*.dmg' -o -name '*.sig' \) \
+            -exec cp {} dist/ \;
+          # The .app is a directory, so it travels as a tarball or not at all.
+          for app in app/target/release/bundle/macos/*.app; do
+            [ -d "$app" ] || continue
+            tar -czf "dist/$(basename "$app" .app)-macos-aarch64.app.tar.gz" \
+              -C "$(dirname "$app")" "$(basename "$app")"
+          done
+          ls -la dist
+          [ -n "$(ls -A dist)" ] || { echo "::error::nothing was bundled"; exit 1; }
+
+      - name: Write the checksums
+        shell: bash
+        run: python3 tools/verify-release.py --write dist/SHA256SUMS
+
+      # And check them with the same tool a person downloading them will use,
+      # here, where a mistake in the tool is still cheap.
+      - name: Check them back
+        shell: bash
+        run: python3 tools/verify-release.py dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vcw-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  # The release itself. Only ever from a tag, and only after every platform has
+  # produced something, because a partial release is worse than a late one.
+  release:
+    name: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: staged
+      - name: Gather every platform's artifacts and merge the checksums
+        run: |
+          mkdir -p dist
+          find staged -type f ! -name SHA256SUMS -exec cp {} dist/ \;
+          # Rewritten rather than concatenated: one tool, one format, and a
+          # digest recomputed here cannot disagree with the bytes being
+          # attached to the release.
+          python3 tools/verify-release.py --write dist/SHA256SUMS
+          python3 tools/verify-release.py dist/SHA256SUMS
+      - name: Release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # The version's own section if the changelog has one, and
+          # `## Unreleased` only if it does not: a tag cut before that section
+          # is renamed should still carry its notes, and a tag cut after it
+          # must not carry them twice.
+          section() {
+            awk -v want="## $1" '
+              $0 ~ "^## " { keep = ($0 == want) }
+              keep { print }
+            ' CHANGELOG.md
+          }
+          section "$version" > notes.md
+          [ -s notes.md ] && from="the $version section" || from="the Unreleased section"
+          [ -s notes.md ] || section Unreleased > notes.md
+          [ -s notes.md ] || { echo "::error::CHANGELOG.md has no section for $version and no Unreleased section"; exit 1; }
+          echo "### Release notes taken from $from of CHANGELOG.md" >> "$GITHUB_STEP_SUMMARY"
+          cat >> notes.md <<'NOTE'
+
+          ## Verifying what you downloaded
+
+          Download `SHA256SUMS` beside the artifacts and run:
+
+          ```text
+          python3 tools/verify-release.py SHA256SUMS
+          ```
+
+          or, if you already have coreutils, `sha256sum -c SHA256SUMS`. Either
+          one tells you the bytes are intact. Neither tells you who built them.
+          NOTE
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body_path: notes.md
+          draft: true
+          fail_on_unmatched_files: true

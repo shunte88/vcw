@@ -121,11 +121,24 @@ pub fn apply(conn: &mut Connection, set: &[Migration]) -> Result<Vec<u32>> {
         match step {
             Ok(()) => {
                 tx.commit()?;
+                // At `info`, because a schema change is the one thing that
+                // happens to somebody's project without them asking for it.
+                tracing::info!(
+                    version = m.version,
+                    description = m.description,
+                    "applied a schema migration"
+                );
                 applied.push(m.version);
             }
             Err(source) => {
                 // Explicit, though the Drop impl would also roll back.
                 let _ = tx.rollback();
+                tracing::error!(
+                    version = m.version,
+                    description = m.description,
+                    error = %source,
+                    "a schema migration failed and was rolled back"
+                );
                 return Err(Error::Migration {
                     version: m.version,
                     description: m.description.to_owned(),
