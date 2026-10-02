@@ -12,18 +12,28 @@
   MIT License - see the header in any Rust source file for the full text.
 
   It has to read at 16 px, which is one glyph wide, so there is one idea in it:
-  a record. The disc goes almost edge to edge, the label is a third of it in a
-  warm amber that survives being three pixels across, and the spindle hole is
-  punched out rather than drawn so it reads on a light background too. The
-  grooves are there for the large sizes and disappear politely at the small
-  ones.
+  a record. The disc goes almost edge to edge, the label is a third of it, and
+  the spindle hole is punched out rather than drawn so it reads on a light
+  background too. The grooves are there for the large sizes and disappear
+  politely at the small ones.
+
+  The colours are the project logo's, sampled from assets/vcw_logo_main.webp:
+  the deep green vinyl, the white label and the red band across it. The band is
+  what makes this a VCW record rather than a record - a flat label is a dot at
+  16 px, and a dot is every music application there has ever been. The band
+  survives down to about three pixels, which is the size the dot would be.
+
+  The logo itself is not what gets rendered here. It is a turntable in
+  landscape, 1.3:1, with a snake across it, and a square crop of it is either
+  the record alone - which is this file, drawn to be legible - or a slice of
+  cabinet. An icon is a different drawing of the same idea, not a thumbnail.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
     <radialGradient id="vinyl" cx="38%" cy="32%" r="78%">
-      <stop offset="0%" stop-color="#3a3a42"/>
-      <stop offset="42%" stop-color="#1d1d22"/>
-      <stop offset="100%" stop-color="#0b0b0e"/>
+      <stop offset="0%" stop-color="#49806f"/>
+      <stop offset="42%" stop-color="#1f4a34"/>
+      <stop offset="100%" stop-color="#0c1c14"/>
     </radialGradient>
     <linearGradient id="sheen" x1="12%" y1="4%" x2="74%" y2="96%">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.26"/>
@@ -31,13 +41,16 @@
       <stop offset="62%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
     <radialGradient id="label" cx="36%" cy="30%" r="80%">
-      <stop offset="0%" stop-color="#f0a640"/>
-      <stop offset="70%" stop-color="#d98324"/>
-      <stop offset="100%" stop-color="#a85f16"/>
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="78%" stop-color="#f4f1e9"/>
+      <stop offset="100%" stop-color="#d8d3c6"/>
     </radialGradient>
+    <clipPath id="disc">
+      <circle cx="512" cy="512" r="186"/>
+    </clipPath>
     <mask id="punch">
       <rect width="1024" height="1024" fill="#fff"/>
-      <circle cx="512" cy="512" r="34" fill="#000"/>
+      <circle cx="512" cy="512" r="26" fill="#000"/>
     </mask>
   </defs>
 
@@ -56,8 +69,11 @@
     </g>
 
     <circle cx="512" cy="512" r="186" fill="url(#label)"/>
-    <circle cx="512" cy="512" r="186" fill="none" stroke="#000000" stroke-opacity="0.22" stroke-width="6"/>
-    <circle cx="512" cy="512" r="150" fill="none" stroke="#000000" stroke-opacity="0.14" stroke-width="4"/>
+    <g clip-path="url(#disc)">
+      <rect x="326" y="453" width="372" height="118" fill="#e0231c"
+            transform="rotate(-18 512 512)"/>
+    </g>
+    <circle cx="512" cy="512" r="186" fill="none" stroke="#000000" stroke-opacity="0.28" stroke-width="6"/>
 
     <circle cx="512" cy="512" r="496" fill="url(#sheen)"/>
     <circle cx="512" cy="512" r="496" fill="none" stroke="#000000" stroke-opacity="0.5" stroke-width="10"/>

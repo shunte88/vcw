@@ -132,7 +132,20 @@ impl Synthetic {
 
     /// Lands it, with options.
     fn land_with(&self, document: &Project, options: &Options) -> (vcw_import::Landed, PathBuf) {
-        let destination = self.path.with_extension("vcw");
+        self.land_into(document, options, "landed")
+    }
+
+    /// Lands it, with options, under a name of its own.
+    ///
+    /// One fixture, two destinations: the batching test has to land the *same*
+    /// document twice and compare, and two fixtures would compare two ramps.
+    fn land_into(
+        &self,
+        document: &Project,
+        options: &Options,
+        name: &str,
+    ) -> (vcw_import::Landed, PathBuf) {
+        let destination = self.path.with_file_name(format!("{name}.vcw"));
         let landed = land_from(
             &Source {
                 conn: &self.conn,
@@ -293,6 +306,92 @@ fn a_landed_capture_is_indistinguishable_from_a_recorded_one() {
         "an imported capture must validate clean: {:?}",
         report.findings
     );
+}
+
+#[test]
+fn an_import_batches_its_commits_without_changing_what_lands() {
+    // The knob and its safety property in one test. `Config::default()` is D3 -
+    // one block a transaction, which is the audio a power cut costs a live
+    // capture - and an import overrides it, because an import has every frame
+    // in hand and the fsyncs are then the runtime rather than free. What it may
+    // not do is change a single byte of what lands, so the two projects are
+    // compared frame for frame and only the transaction count is allowed to
+    // differ.
+    // Stated as an inequality against the live default, and deliberately not as
+    // `default().config.batch_blocks == BATCH_BLOCKS`: that reads like a check
+    // and is a tautology, because both halves of it move together when the
+    // constant changes. This fails if import is reverted to `Config::default()`
+    // *and* if `BATCH_BLOCKS` is ever set to a value that does not batch.
+    let live = vcw_project::persistence::Config::default().batch_blocks;
+    assert_eq!(live, 1, "D3 commits one block at a time");
+    assert!(
+        Options::default().config.batch_blocks > live,
+        "import must batch more than a live capture does, not {}",
+        Options::default().config.batch_blocks,
+    );
+    assert_eq!(
+        Options::default().config.batch_blocks,
+        vcw_import::land::BATCH_BLOCKS,
+        "and the constant is where it is set",
+    );
+
+    // Twelve writer blocks: 8 kHz at D3's 250 ms is 2000 frames, so 24,000
+    // frames is enough for a batch of four to be three transactions and not one.
+    const FRAMES: u64 = 24_000;
+    const BLOCK: u64 = 2_000;
+    let source = synthetic();
+    let left = vec![clip("L", 0.0, &[(0, source.ramp(1_000, FRAMES))], FRAMES)];
+    let right = vec![clip("R", 0.0, &[(0, source.ramp(5_000, FRAMES))], FRAMES)];
+    let document = project(vec![track(0, left), track(1, right)]);
+
+    let with = |batch: usize, name: &str| {
+        let options = Options {
+            config: vcw_project::persistence::Config {
+                batch_blocks: batch,
+                ..vcw_project::persistence::Config::default()
+            },
+            ..Options::default()
+        };
+        source.land_into(&document, &options, name)
+    };
+
+    let (one, one_path) = with(1, "one");
+    let (four, four_path) = with(4, "four");
+
+    assert_eq!(one.commits, FRAMES / BLOCK, "one transaction a block");
+    assert_eq!(
+        four.commits,
+        FRAMES / BLOCK / 4,
+        "four blocks a transaction"
+    );
+    assert_eq!(one.batch_blocks, 1);
+    assert_eq!(four.batch_blocks, 4);
+
+    // Everything else about the two is the same, including the block count: a
+    // batch is a transaction boundary and nothing else, so batching four blocks
+    // must not produce one block four times the size.
+    assert_eq!(one.blocks, four.blocks);
+    assert_eq!(one.frames, four.frames);
+    assert_eq!(one.frames, FRAMES);
+
+    let (one_layout, one_samples) = played_back(&one_path, one.capture_id);
+    let (four_layout, four_samples) = played_back(&four_path, four.capture_id);
+    assert_eq!(one_layout.frames, four_layout.frames);
+    assert_eq!(one_samples, four_samples, "the audio, frame for frame");
+
+    // And both validate, which is the check that would catch a half-written
+    // final batch.
+    for path in [&one_path, &four_path] {
+        let project = vcw_project::Project::open_read_only(path).expect("reopen");
+        let report =
+            vcw_project::validate(&project, vcw_project::Options::default()).expect("validate");
+        assert!(
+            report.findings.is_empty(),
+            "{}: {:?}",
+            path.display(),
+            report.findings
+        );
+    }
 }
 
 #[test]

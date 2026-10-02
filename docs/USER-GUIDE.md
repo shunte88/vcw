@@ -35,21 +35,28 @@ reachable from the tabs or from `Ctrl+1` to `Ctrl+6`:
 
 | Workspace | What it is for |
 | --- | --- |
-| **Projects** | Every project the library knows, with its album, artist, catalogue number, sides, track count and length. `n` creates one, `Enter` opens it. |
+| **Library** | Every project the library knows: its cover, album, artist, catalogue number, sides, track count, length, size and when it last changed. `n` creates one, `Enter` opens it. |
 | **Capture** | The device list, the configuration that was negotiated, and the captures the open project already holds with their state and length. |
-| **Tracks** | The track list and the boundary list side by side: title, artist, start and length above; confidence, how many detectors agreed, and whether a person has locked it below. |
+| **Tracks** | The track list over the boundary list: title, artist, start and length above; confidence, how many detectors agreed, and whether a person has locked it below. Both headers stay put as you scroll. |
 | **Metadata** | A provider search and its candidates, and the release the project settles on. |
 | **Export** | The plan, track by track, before any of it is written. |
 | **Settings** | Which credentials are configured, how many characters each is, and the environment variable each comes from - never the credential. |
 
-Across the top of every workspace is the transport - the same arm, record,
-pause, resume and stop the `vcw session` verb drives - with the meters and the
-waveform under it. **While a record is playing, watch the meters**: the waveform
-is drawn from what has been committed and it appears when the capture stops, not
-as the side goes by. Nothing is missing while it is blank - the audio is on disk
-within a quarter of a second of the stylus reading it either way. `Ctrl+d` opens
-the event log, which is every event the core published in this session and the
-first place to look when something did not do what you expected.
+Along the bottom of every workspace are the meters and the transport - the same
+arm, record, pause, resume and stop the `vcw session` verb drives - and under
+them a status line that says what the core last did, or what to do next if it
+has not done anything yet. **While a record is playing, watch the meters**: the
+waveform is drawn from what has been committed and it appears when the capture
+stops, not as the side goes by. Nothing is missing while it is blank - the audio
+is on disk within a quarter of a second of the stylus reading it either way.
+`Ctrl+d` opens the event log, which is every event the core published in this
+session and the first place to look when something did not do what you expected.
+
+The waveform sits above Capture, Tracks and Export, which are the three
+workspaces that point at positions in the recording, and not above Library,
+Metadata or Settings, which do not. Under it are the channel it is drawing - a
+stereo capture is two pictures and the picker chooses which - the range in view,
+and the zoom controls.
 
 When the application refuses something it says so in a banner and leaves the
 refusal there until you dismiss it with `Escape`. That is deliberate: a refusal
@@ -302,8 +309,12 @@ that claimed to cover them would be describing the wrong thing.
 | `p` | Pause or resume recording | `pause` | - |
 | `Shift+ArrowRight` | Skip to the next track | `skip` | - |
 | `Shift+ArrowLeft` | Skip to the previous track | `skip` | - |
+| `+` or `=` | Zoom the waveform in | `place-marker` | - |
+| `-` | Zoom the waveform out | `place-marker` | - |
+| `0` | Show the whole capture | `place-marker` | - |
+| `z` | Zoom to the selected marker, or the selected track | `move-marker` | - |
 | `?` or `F1` | Show the keyboard map | `help` | - |
-| `Ctrl+1` | Projects | `navigate` | - |
+| `Ctrl+1` | Library | `navigate` | - |
 | `Ctrl+2` | Capture | `navigate` | - |
 | `Ctrl+3` | Tracks | `navigate` | - |
 | `Ctrl+4` | Metadata | `navigate` | - |

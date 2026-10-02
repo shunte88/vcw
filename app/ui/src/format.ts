@@ -59,6 +59,26 @@ export function bytes(count: number): string {
 }
 
 /**
+ * A unix timestamp as a date a person can scan down a column.
+ *
+ * Date only, not a time: the column exists so somebody can find the rip they
+ * made last Tuesday, and a minute field makes the column wide for precision
+ * nobody is looking for. Zero is spelled rather than printed, because
+ * `summarise` uses it for a file whose metadata would not read, and 1970 in a
+ * library of vinyl rips reads as a bug.
+ */
+export function when(unix: number): string {
+  if (unix <= 0) {
+    return "-";
+  }
+  return new Date(unix * 1000).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/**
  * A level in dBFS, with silence spelled rather than printed.
  *
  * The meter sends `-inf` for a channel with nothing in it, and `-Infinity dB`

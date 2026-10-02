@@ -66,6 +66,25 @@
 //! change the user's intent if we dropped it, so a project carrying one is
 //! reported rather than half-honoured.
 //!
+//! # Why import commits in batches
+//!
+//! The writer's default is one block a transaction, which is D3's answer to a
+//! question import is not asking. A live capture commits every 250 ms because
+//! that is the audio a power cut costs, and the fsync is free there: the frames
+//! arrive in real time, so the writer is idle between them either way. An import
+//! has every frame in hand at once, and at `batch_blocks = 1` the fsyncs *are*
+//! the runtime. Measured on a 61-minute 48 kHz side (1.96 GB written): 2m30 in
+//! release, of which 47 s was CPU and 103 s was waiting, against a 5.1 s floor
+//! for writing the same bytes with `fdatasync` on the same disk.
+//!
+//! So import raises it to [`BATCH_BLOCKS`]. Nothing about the blocks changes -
+//! they are the same 250 ms blocks with the same summaries and the same
+//! checksums, and a reader cannot tell how many of them shared a transaction.
+//! What changes is what an interrupted import leaves behind, and the answer
+//! there is the whole file: the destination must not already exist, so a failed
+//! import is discarded and run again rather than resumed. There is no partial
+//! import to protect.
+//!
 //! # Which side
 //!
 //! Side A unless told otherwise, and one side per import. An Audacity project
@@ -101,13 +120,29 @@ pub const VERSION_KEY: &str = "import.audacity_format";
 /// `meta` key holding the Audacity build that last wrote the source.
 pub const WRITER_KEY: &str = "import.audacity_version";
 
+/// Blocks per transaction while importing.
+///
+/// Sixteen seconds of audio at D3's 250 ms block, which on the measured side
+/// turns 14.8k commits into 231 and removes almost all of the 103 s the import
+/// spent waiting on fsync. The blocks themselves are untouched.
+///
+/// Sixty-four and not larger for two reasons. The batch is held in memory until
+/// it commits, at roughly 100 KB a block for a 48 kHz stereo capture and four
+/// times that at 192 kHz, so the ceiling is a few MB here and not a few hundred.
+/// And the returns stop: past a few hundred commits the fsyncs are no longer
+/// what the import is doing, and the remaining time is the single-threaded pass
+/// over every sample.
+pub const BATCH_BLOCKS: usize = 64;
+
 /// How to land a project.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Options {
     /// Which side the capture is. Nothing in an Audacity project says.
     pub side: Side,
-    /// Writer tuning. The default is D3, the same as a live capture, so that an
-    /// imported project's blocks are the size everything else expects.
+    /// Writer tuning. D3 except for [`Config::batch_blocks`], which is
+    /// [`BATCH_BLOCKS`]: the block *size* is what everything else expects, so it
+    /// stays, but how many of them share a transaction is nobody's business
+    /// outside the import.
     pub config: Config,
     /// Whether to turn labels into tracks.
     pub labels: bool,
@@ -119,7 +154,10 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             side: Side::A,
-            config: Config::default(),
+            config: Config {
+                batch_blocks: BATCH_BLOCKS,
+                ..Config::default()
+            },
             labels: true,
             tags: true,
         }
@@ -147,6 +185,14 @@ pub struct Landed {
     pub frames: u64,
     /// Blocks written.
     pub blocks: u64,
+    /// Transactions they were written in.
+    ///
+    /// Reported because [`BATCH_BLOCKS`] is the one tuning knob an import has
+    /// and this is the number it moves. Without it the flag is a guess.
+    pub commits: u64,
+    /// The batch size that was in force, so a report says what it was tuned to
+    /// and not only what came out.
+    pub batch_blocks: usize,
     /// Clips the timeline was assembled from, across all channels.
     pub clips: usize,
     /// Tracks written from labels.
@@ -272,6 +318,8 @@ pub fn land_from(source: &Source<'_>, destination: &Path, options: &Options) -> 
         storage_format: timeline.storage_format(),
         frames: outcome.frames,
         blocks: outcome.blocks,
+        commits: outcome.commits,
+        batch_blocks: options.config.batch_blocks,
         clips: document.tracks.iter().map(|t| t.clips.len()).sum(),
         tracks: 0,
         labels_skipped: Vec::new(),

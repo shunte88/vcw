@@ -1037,6 +1037,17 @@ fileBytes: number,
  */
 modified: number,
 /**
+ * Whether the release has a front cover stored.
+ *
+ * A flag and not the image. A cover is a megabyte or two and a library is
+ * a hundred rows, so shipping the bytes with the listing would make
+ * opening the browser cost more than opening a project. The flag is what a
+ * table needs to decide between an image and a placeholder, and it is free
+ * here because the walk already has the file open: `length(bytes)` reads
+ * the row, not the blob.
+ */
+hasArtwork: boolean,
+/**
  * Why the file could not be read, where it could not.
  */
 problem: string | null, };

@@ -64,6 +64,8 @@ pub(crate) struct Args {
     pub(crate) no_labels: bool,
     /// Do not copy the tags onto the release.
     pub(crate) no_tags: bool,
+    /// Blocks per transaction. Defaults to [`vcw_import::land::BATCH_BLOCKS`].
+    pub(crate) batch_blocks: usize,
     /// Machine-readable output.
     pub(crate) json: bool,
 }
@@ -86,11 +88,19 @@ pub(crate) fn run(args: &Args) -> Result<()> {
         );
     }
 
+    // Every field named, which clippy insists on now that there are only four
+    // of them. The base is still `Options::default()`: the batch size is the
+    // import default unless the flag says otherwise, and zero is not refused
+    // here because the writer reads it as one - the slowest possible import,
+    // which is a thing somebody reproducing a timing might want.
     let options = Options {
         side,
         labels: !args.no_labels,
         tags: !args.no_tags,
-        ..Options::default()
+        config: vcw_project::persistence::Config {
+            batch_blocks: args.batch_blocks,
+            ..Options::default().config
+        },
     };
 
     if args.dry_run {
@@ -225,6 +235,10 @@ fn print_human(landed: &Landed, source: &Path) {
         landed.blocks
     );
     println!(
+        "              written in {} transaction(s) of up to {} block(s)",
+        landed.commits, landed.batch_blocks
+    );
+    println!(
         "              {} Hz, {} ch, {:?}, imported from {} clip(s)",
         landed.rate.hz(),
         landed.channels,
@@ -270,6 +284,8 @@ fn print_json(landed: &Landed, source: &Path) {
             "frames": landed.frames,
             "seconds": landed.seconds(),
             "blocks": landed.blocks,
+            "commits": landed.commits,
+            "batch_blocks": landed.batch_blocks,
             "clips": landed.clips,
             "tracks": landed.tracks,
             "labels_skipped": landed.labels_skipped.iter()

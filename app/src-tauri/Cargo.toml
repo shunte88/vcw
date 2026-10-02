@@ -24,6 +24,7 @@ vcw-metadata = { workspace = true }
 vcw-project = { workspace = true }
 vcw-signal = { workspace = true }
 vcw-types = { workspace = true }
+base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { workspace = true }

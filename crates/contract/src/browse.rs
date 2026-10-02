@@ -66,7 +66,7 @@
 use std::fs;
 use std::path::Path;
 
-use vcw_project::{Project, schema, session, side, track};
+use vcw_project::{Project, release, schema, session, side, track};
 
 use crate::view;
 
@@ -134,6 +134,7 @@ pub fn summarise(path: &Path) -> view::Project {
         seconds: 0.0,
         file_bytes: bytes,
         modified,
+        has_artwork: false,
         problem: None,
     };
 
@@ -175,6 +176,11 @@ fn contents(path: &Path) -> vcw_project::Result<impl FnOnce(&mut view::Project)>
         .map(|record| record.frames as f64 / f64::from(record.info.rate.hz()).max(1.0))
         .sum();
 
+    // `artwork_bytes` and not `artwork`: the former is `length(bytes)`, which
+    // reads the row, and the latter is the blob. The browser wants to know
+    // whether to draw a cover, not to be handed one per row.
+    let has_artwork = release::artwork_bytes(conn, release::Artwork::FRONT)?.is_some();
+
     Ok(move |row: &mut view::Project| {
         if let Some(release) = release {
             row.album = release.album;
@@ -186,6 +192,7 @@ fn contents(path: &Path) -> vcw_project::Result<impl FnOnce(&mut view::Project)>
         row.tracks = tracks;
         row.captures = captures;
         row.seconds = seconds;
+        row.has_artwork = has_artwork;
     })
 }
 
@@ -302,11 +309,11 @@ mod tests {
         let path = dir.path().join("kraftwerk.vcw");
         {
             let mut project = Project::create(&path).expect("creating the project");
-            let mut release = vcw_project::release::ensure(&mut project).expect("the release row");
+            let mut release = release::ensure(&mut project).expect("the release row");
             release.album = "Trans-Europe Express".to_owned();
             release.album_artist = "Kraftwerk".to_owned();
             release.catalog = "1C 064-82 306".to_owned();
-            vcw_project::release::store(&mut project, &release).expect("storing the release");
+            release::store(&mut project, &release).expect("storing the release");
         }
 
         let listed = library(dir.path());

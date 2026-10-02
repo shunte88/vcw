@@ -396,6 +396,11 @@ enum Command {
         /// Do not copy the tags onto the release.
         #[arg(long)]
         no_tags: bool,
+        /// Blocks per transaction. Import batches because it has every frame in
+        /// hand, so the fsyncs are the runtime rather than free; a live capture
+        /// uses 1. Lower it only to reproduce that timing.
+        #[arg(long, default_value_t = vcw_import::land::BATCH_BLOCKS)]
+        batch_blocks: usize,
         /// Machine-readable output.
         #[arg(long)]
         json: bool,
@@ -1062,6 +1067,7 @@ fn run() -> anyhow::Result<()> {
             dry_run,
             no_labels,
             no_tags,
+            batch_blocks,
             json,
         } => import::run(&import::Args {
             source,
@@ -1070,6 +1076,7 @@ fn run() -> anyhow::Result<()> {
             dry_run,
             no_labels,
             no_tags,
+            batch_blocks,
             json,
         }),
         Command::Export {

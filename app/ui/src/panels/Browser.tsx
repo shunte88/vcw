@@ -14,6 +14,18 @@
 // track count and `problem` all arrive on the row, because the CLI's `vcw list`
 // prints the same columns from the same view model.
 //
+// The leading cell is the cover, and it is a table with an icon column rather
+// than a grid of tiles. A tile grid makes the artwork the index, which is
+// Audacity 4.0's choice and the wrong one here: a vinyl library is indexed by
+// catalogue number and artist, most rips have no cover until a release is
+// assigned, and a wall of identical placeholders is a worse list than a list.
+// So the image rides beside the text at the height of one row, and a project
+// without one gets a sleeve mark in the same space - which keeps every row the
+// same height whether the cover has arrived or not.
+//
+// The covers are fetched one row at a time, lazily, and only for rows that say
+// they have one. See `api.artwork`.
+//
 // The create form is the helper the requirement asked for and nothing more.
 // Artist, title and catalogue number, none of them required, because the point
 // is to save typing them again later and a required field would make it a form
@@ -22,14 +34,82 @@
 // in, and asking would be asking a person to guess at the answer the
 // application is about to find.
 
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
 import type { Project } from "../bindings/vcw";
 import { useKeys } from "../keys";
 import { step } from "../select";
-import { bytes, clock } from "../format";
+import { bytes, clock, when } from "../format";
 import type { Store } from "../store";
+
+/**
+ * Covers already fetched, keyed by path *and* modification time.
+ *
+ * Module-level rather than state, because the panel unmounts every time a
+ * person switches to another tab and a cache that died with it would refetch
+ * the whole library on every Ctrl+1. Keyed by `modified` as well as `path` so
+ * that assigning a release - which rewrites the file, which moves its
+ * timestamp - invalidates the row's entry without anything having to remember
+ * to clear it.
+ *
+ * Unbounded, deliberately. The entries are the covers of projects a person has
+ * actually looked at in one sitting, and a library large enough for that to
+ * matter is one where the images are the small part of the problem.
+ */
+const COVERS = new Map<string, string | null>();
+
+/**
+ * One row's cover, fetched when the row first draws.
+ *
+ * A component rather than a prefetch pass over the list: a library of a hundred
+ * projects would otherwise fire a hundred `invoke`s on mount, each reading a
+ * megabyte blob, to draw maybe fifteen visible rows.
+ */
+function Cover({
+  project,
+}: {
+  project: Project;
+}): React.JSX.Element {
+  const key = `${project.path}\u0000${project.modified}`;
+  const [url, setUrl] = useState<string | null>(COVERS.get(key) ?? null);
+
+  useEffect(() => {
+    if (!project.hasArtwork || COVERS.has(key)) {
+      setUrl(COVERS.get(key) ?? null);
+      return;
+    }
+    // `gone` rather than an AbortController: `invoke` has nothing to abort, and
+    // the thing that actually matters is not calling `setUrl` on a row that has
+    // scrolled away or a panel that has closed.
+    let gone = false;
+    void api
+      .artwork(project.path)
+      .then((found) => {
+        COVERS.set(key, found);
+        if (!gone) {
+          setUrl(found);
+        }
+      })
+      .catch(() => {
+        // A cover that will not read is a placeholder, not an error banner.
+        // The row itself is fine; `problem` is where a broken file is reported.
+        COVERS.set(key, null);
+      });
+    return () => {
+      gone = true;
+    };
+  }, [key, project.hasArtwork, project.path]);
+
+  if (url === null) {
+    return (
+      <span className="sleeve" aria-hidden="true">
+        &#9834;
+      </span>
+    );
+  }
+  return <img className="cover" src={url} alt="" />;
+}
 
 /** The browser. */
 export function Browser({
@@ -121,7 +201,7 @@ export function Browser({
   return (
     <section className="panel browser">
       <header className="panel-head">
-        <h2>Projects</h2>
+        <h2>Library</h2>
         <button type="button" onClick={() => setCreating(!creating)}>
           {creating ? "Cancel" : "New project (n)"}
         </button>
@@ -175,13 +255,20 @@ export function Browser({
       )}
 
       {projects.length === 0 ? (
-        <p className="empty">
-          No projects. Set a library directory in Settings, or create one.
-        </p>
+        // The one screen with room for the logo, and the one that needs it:
+        // an empty library is the first thing a new installation shows, and
+        // the alternative is a sentence floating in a black rectangle. It is
+        // decoration, so it is `alt=""` and the sentence below it carries the
+        // meaning on its own.
+        <div className="empty start">
+          <img className="logo" src="/vcw-logo.webp" alt="" width={260} />
+          <p>No projects. Set a library directory in Settings, or create one.</p>
+        </div>
       ) : (
         <table className="rows">
           <thead>
             <tr>
+              <th className="art" />
               <th>Album</th>
               <th>Artist</th>
               <th>Catalogue</th>
@@ -189,6 +276,7 @@ export function Browser({
               <th className="n">Tracks</th>
               <th className="n">Length</th>
               <th className="n">Size</th>
+              <th className="n">Modified</th>
             </tr>
           </thead>
           <tbody>
@@ -209,6 +297,9 @@ export function Browser({
                   }
                   title={project.path}
                 >
+                  <td className="art">
+                    <Cover project={project} />
+                  </td>
                   <td>{project.album === "" ? project.name : project.album}</td>
                   <td>{project.albumArtist}</td>
                   <td>{project.catalog}</td>
@@ -216,6 +307,7 @@ export function Browser({
                   <td className="n">{project.tracks}</td>
                   <td className="n">{clock(project.seconds)}</td>
                   <td className="n">{bytes(project.fileBytes)}</td>
+                  <td className="n">{when(project.modified)}</td>
                 </tr>
                 {/*
                   On the row, not in a tooltip. `browse::summarise` promises
@@ -230,7 +322,7 @@ export function Browser({
                     className="problem-reason"
                     onClick={() => onSelect(project.path)}
                   >
-                    <td colSpan={7}>{project.problem}</td>
+                    <td colSpan={9}>{project.problem}</td>
                   </tr>
                 )}
               </Fragment>

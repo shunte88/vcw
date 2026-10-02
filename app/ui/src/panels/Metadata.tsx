@@ -51,6 +51,12 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
   const [candidates, setCandidates] = useState<readonly Candidate[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  // Whether a lookup has been run and come back, which is not the same as
+  // having no candidates. Without it the panel said "No candidates. Fill in at
+  // least one field" over a form with the album already in it, which is two
+  // wrong things at once: nothing had been looked up, and the field it asked
+  // for was filled.
+  const [searched, setSearched] = useState(false);
   const [accepted, setAccepted] = useState<Accepted | null>(null);
 
   // Seeded from the release row the first time the panel is opened, which is
@@ -70,6 +76,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
   const search = () => {
     const blank = (value: string) => (value.trim() === "" ? null : value.trim());
     setSearching(true);
+    setSearched(false);
     setAccepted(null);
     void run(async () => {
       const found = await api.searchMetadata({
@@ -81,6 +88,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
       });
       setCandidates(found);
       setChosen(found[0] === undefined ? null : key(found[0]));
+      setSearched(true);
     }).then(() => setSearching(false));
   };
 
@@ -185,9 +193,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
       </form>
 
       {candidates.length === 0 ? (
-        <p className="empty">
-          No candidates. Fill in at least one field and press <kbd>l</kbd>.
-        </p>
+        <p className="empty">{nothing(criteria, searching, searched)}</p>
       ) : (
         <table className="rows">
           <thead>
@@ -254,4 +260,30 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
 /** A candidate's identity, which is the provider *and* the id. */
 function key(candidate: Candidate): string {
   return `${candidate.provider}:${candidate.id}`;
+}
+
+/**
+ * What to say when the candidate list is empty, which is three situations.
+ *
+ * Nothing has been looked up and the form is blank; nothing has been looked up
+ * and the form is not blank, which is the usual case because the panel seeds
+ * itself from the release; and a lookup ran and matched nothing. The old text
+ * said the first of those regardless, so the common path read as a complaint
+ * about a field that was already filled.
+ */
+export function nothing(
+  criteria: { artist: string; album: string; catalog: string; barcode: string },
+  searching: boolean,
+  searched: boolean,
+): string {
+  if (searching) {
+    return "Looking.";
+  }
+  if (searched) {
+    return "Nothing matched. Widen the search: fewer fields find more.";
+  }
+  const filled = Object.values(criteria).some((value) => value.trim() !== "");
+  return filled
+    ? "Press l to look this up."
+    : "Fill in at least one field and press l.";
 }

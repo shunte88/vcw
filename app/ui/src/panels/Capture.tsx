@@ -113,9 +113,6 @@ export function Capture({
     <section className="panel capture">
       <header className="panel-head">
         <h2>Capture</h2>
-        <button type="button" disabled={project.path === null} onClick={arm}>
-          Arm (a)
-        </button>
       </header>
 
       {project.path === null && (
@@ -178,6 +175,16 @@ export function Capture({
             ))}
           </select>
         </label>
+
+        {/* With the three fields it acts on, and not in the panel header at
+            the far right of the window. Arming is the last thing a person does
+            in this row - pick a device, pick a rate, pick a format, arm - and
+            the button was a full screen width away from the last of them,
+            diagonally opposite Record. `.fields` aligns to the bottom of its
+            controls, so it lands on the same line as the selects. */}
+        <button type="button" disabled={project.path === null} onClick={arm}>
+          Arm (a)
+        </button>
       </div>
 
       {chosen !== undefined && chosen.problems.length > 0 && (

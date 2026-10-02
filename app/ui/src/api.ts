@@ -251,6 +251,17 @@ export function projects(): Promise<Project[]> {
   return invoke("projects");
 }
 
+/**
+ * One project's front cover as a `data:` URL, or null if it has none.
+ *
+ * By path, and asked for a row at a time. `projects()` reports `hasArtwork`
+ * and not the image: a cover is a megabyte or two and a library is a hundred
+ * rows, so a listing that carried them would cost more to open than a project.
+ */
+export function artwork(path: string): Promise<string | null> {
+  return invoke("artwork", { path });
+}
+
 /** §39's settings, or the defaults on first run. */
 export function settings(): Promise<Settings> {
   return invoke("settings");

@@ -4,7 +4,8 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  The capture drawn to the width of the panel, with the boundaries on it (§30).
+ *  The capture drawn across the top half of the project page: a time ruler on
+ *  both edges, the boundaries on it (§30), a playhead, and the track labels.
  *
  *  MIT License - see the header in any Rust source file for the full text.
  */
@@ -37,12 +38,99 @@
 // sees one element. It is also the reason `pixels` is sent to the shell: the
 // peaks come back already reduced to one column per pixel, so nothing here
 // walks a sample array.
+//
+// # Why the rulers are inside the canvas
+//
+// Two strips of `<div>`s with a tick per mark would be the obvious thing and
+// would be wrong twice. It would put hundreds of nodes back into the tree that
+// the paragraph above took out, and it would align the ticks to CSS pixels
+// while the peak columns are aligned to device pixels - so a mark at 8:00 and
+// the column at 8:00 would sit a fraction apart, which on a ruler is the one
+// thing that must not happen. One canvas, one coordinate system, and
+// `ruler.ts` holds the arithmetic so the only thing here is drawing.
+//
+// # Why device pixels
+//
+// The canvas is sized in device pixels and `pixels` asks the shell for that
+// many columns, because this window runs at a device pixel ratio above two.
+// Drawing 1600 columns into 3400 device pixels is a soft picture and 10px
+// ruler text in it is unreadable. The peaks come out of stored summaries, so
+// asking for twice as many columns is twice as many index rows and no decode.
+//
+// # Zooming, scrolling and scrubbing
+//
+// §20 requires horizontal zoom and pan, and the requirement is about the job
+// rather than about the feature. A whole side of vinyl across this canvas is
+// about half a second to the column, and the gap before a track's first groove
+// is not half a second wide. Setting a start point by eye means zooming in
+// until that gap is wider than a pixel, listening across it, and nudging - so
+// the visible range is something a person drives continuously, not something
+// the shell picks once.
+//
+// The arithmetic for it is in `zoom.ts`, where a window cannot leave the
+// capture or close past a sample and every one of those rules is asserted. What
+// is left here is three gestures and the one thing each has to get right:
+//
+//  - the wheel zooms about the pointer, so the peak under the cursor stays
+//    under the cursor. Shift, or a sideways wheel, pans instead;
+//  - the bar under the picture is the window's own position *and* width, so how
+//    far in a person is zoomed is something they can see rather than deduce;
+//  - dragging across the picture scrubs, and only while something is playing.
+//    §21's verbs are play, pause, stop, seek and skip - there is no "move the
+//    playhead" - so a drag on a stopped engine could only be a series of
+//    overlapping auditions, each one a round trip behind the pointer.
+//
+// # The playhead and the labels
+//
+// Both are on this canvas and both are there because of the same fact: a mark
+// that is a pixel away from the column it describes is worse than no mark. The
+// rulers are inside the canvas for that reason (above), and a playhead beside
+// the column it is playing, or a track name beside the boundary it starts at,
+// would be the same defect wearing a different hat.
+//
+// The playhead is drawn wherever the engine's position is, playing or stopped.
+// §20 requires "playhead and time ruler", and stopped is the state in which it
+// matters most: a person stops *because* they have just heard the boundary go
+// by, and the next thing they do is read where it fell. The handle in the top
+// ruler is Audacity's shape - a flat top narrowing to a point on the line -
+// because that is the shape people already read as "the playhead is here", and
+// because a line one device pixel wide is not something a pointer can aim at.
+//
+// It is a grab handle only while something is playing, and the cursor says so.
+// That is the same limit the scrub has and for the same reason: §21's verbs are
+// play, pause, stop, seek and skip, so a drag on a stopped engine could only be
+// a run of overlapping auditions. A *click* anywhere - picture, labels, either
+// ruler - still moves the position, which is what Audacity's ruler click does
+// and is the whole of what a stopped engine needs.
+//
+// The label lane is Audacity's label track: one strip under the picture, each
+// track's name across the stretch of time it covers, with a line at the frame
+// it starts on. It is the only thing on the page that says *which* track a peak
+// belongs to. The lane is only there when there are tracks, so a project with
+// nothing detected yet gives the picture the whole of its height.
+//
+// The bar drag is coalesced to one change a frame: a pointer reports faster than
+// the screen draws, each change asks the shell for a fresh set of columns, and
+// the positions a drag passed through are not something anybody asked to see.
+// The wheel is deliberately *not* coalesced, because a wheel is incremental -
+// dropping one report would be dropping a zoom step rather than an intermediate
+// position - and a browser already delivers it at about the frame rate. The
+// scrub is throttled harder than either, because a `SEEK` reserves a chunk in
+// the playback queue and sixty of those a second is an engine that spends the
+// drag re-cueing rather than playing.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import * as api from "../api";
-import type { Boundary, Capture, Waveform as Peaks } from "../bindings/vcw";
+import type {
+  Boundary,
+  Capture,
+  Track,
+  Waveform as Peaks,
+} from "../bindings/vcw";
 import { clock } from "../format";
+import { ticks } from "../ruler";
+import { STEP, type Span, fit, follow, pan, resolve, zoom } from "../zoom";
 
 /** How the waveform is drawn. Kept here because it is appearance, not policy. */
 const COLOURS = {
@@ -54,7 +142,78 @@ const COLOURS = {
   promoted: "#7ec46f",
   rejected: "#8a8f99",
   locked: "#f2874e",
+  ruler: "#191c22",
+  rulerLine: "#2a2f39",
+  rulerText: "#8a8f99",
+  lane: "#15161f",
+  laneFill: "#2f2a47",
+  laneLine: "#6a5ca8",
+  laneText: "#cfc9e8",
 } as const;
+
+/**
+ * The look of a ruler, in CSS pixels before the device ratio is applied.
+ *
+ * `HEIGHT` is what the strip costs the picture, twice: at 18 each a ruler pair
+ * takes 36 of the top half's height, which on a 1000-pixel window is 36 of
+ * about 460. Worth it for being able to read a time off either edge without
+ * tracking a line across the whole width.
+ */
+const RULER = {
+  HEIGHT: 18,
+  MAJOR: 6,
+  MINOR: 3,
+  TEXT: 10,
+  /** How far a label sits to the right of its own mark. */
+  GAP: 3,
+} as const;
+
+/**
+ * The label lane, in CSS pixels before the device ratio is applied.
+ *
+ * Twenty is a line of 10px text with a pixel of air above and below it, which
+ * is as little as a name can be given and still be read. With the two rulers
+ * that is 56 pixels of furniture around the picture, and only when a project
+ * has tracks to put in it.
+ */
+const LANE = {
+  HEIGHT: 20,
+  TEXT: 10,
+  /** How far a name sits inside its own block. */
+  PAD: 4,
+} as const;
+
+/**
+ * The playhead's grab handle, in CSS pixels.
+ *
+ * `WIDTH` is what a pointer has to hit: eleven pixels is about a mouse's worth
+ * of aim, against the one device pixel the line itself is. `HEIGHT` is capped
+ * at the ruler's own height when it is drawn, so the handle can never overhang
+ * the picture whatever the ratio.
+ */
+const HANDLE = { WIDTH: 11, HEIGHT: 14 } as const;
+
+/**
+ * The shortest gap between two scrub seeks, in milliseconds.
+ *
+ * A pointer drag reports several times faster than this, and every report would
+ * otherwise be a `SEEK` that reserves a chunk in the playback queue. Eleven a
+ * second is enough to hear where a drag has got to and few enough that the
+ * engine spends the drag playing.
+ */
+const SCRUB = 90;
+
+/**
+ * How much of the window a wheel notch pans.
+ *
+ * A tenth, so crossing a whole side takes ten flicks at any zoom - the same
+ * gesture whether the window is the side or a second of it. A notch is a
+ * hundred pixels of delta, hence the thousand.
+ */
+const PAN_PER_DELTA = 1 / 1000;
+
+/** The widest delta one wheel event is allowed to mean. */
+const MOST_DELTA = 300;
 
 /** What the panel is showing, which is view state and lives here. */
 export type View = {
@@ -75,19 +234,34 @@ export type View = {
  * audition takes seconds. Converting here would mean this component knowing the
  * rate for a reason other than drawing, which is the beginning of it knowing
  * things.
+ *
+ * `tracks` are the ones on a side this capture holds, which the caller decides
+ * for the same reason it decides which capture is current. This draws what it
+ * is given, in the seconds it is given them in.
+ *
+ * `view` is nullable so that the top half of the page has exactly one empty
+ * state. A project with nothing recorded has no capture and therefore no range
+ * to show, and the caller holds those as two pieces of state which are set one
+ * after the other - so either of them can be the missing one for a render. Both
+ * land here, on one branch, rather than the caller inventing a range for a
+ * capture that is not there.
  */
 export function Waveform({
   capture,
   view,
+  onView,
   boundaries,
+  tracks,
   playhead,
   playing,
   onSeek,
   generation,
 }: {
   capture: Capture | undefined;
-  view: View;
+  view: View | null;
+  onView: (view: View) => void;
   boundaries: readonly Boundary[];
+  tracks: readonly Track[];
   playhead: number;
   playing: boolean;
   onSeek: (seconds: number) => void;
@@ -95,32 +269,110 @@ export function Waveform({
 }): React.JSX.Element {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
+  const bar = useRef<HTMLDivElement | null>(null);
   const [peaks, setPeaks] = useState<Peaks | null>(null);
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0, scale: 1 });
   const [failed, setFailed] = useState<string | null>(null);
 
-  // The width the panel actually has. Measured rather than assumed, because
-  // `pixels` is what the shell reduces to and a wrong number is either a
-  // stretched picture or peaks computed for columns nobody can see.
+  /** Where on the thumb a bar drag took hold, as a fraction of the bar. */
+  const grabbed = useRef<number | null>(null);
+  /** Whether a drag across the picture is currently scrubbing. */
+  const scrubbing = useRef(false);
+  /** When the last scrub seek went out, on the monotonic clock. */
+  const scrubbed = useRef(0);
+  /** The work a drag has asked for and the next frame has not yet done. */
+  const queued = useRef<(() => void) | null>(null);
+
+  /**
+   * Do `work` on the next frame, dropping any earlier work still waiting.
+   *
+   * Dropping rather than queueing, which is safe only because the one caller
+   * asks for an *absolute* position: the last position of a drag is the only
+   * one still true when the frame is drawn, and each of the others would cost a
+   * set of columns from the shell. The wheel does not come through here for the
+   * opposite reason - see the header.
+   */
+  const soon = useCallback((work: () => void) => {
+    const idle = queued.current === null;
+    queued.current = work;
+    if (idle) {
+      requestAnimationFrame(() => {
+        const run = queued.current;
+        queued.current = null;
+        run?.();
+      });
+    }
+  }, []);
+
+  const frames = capture?.frames ?? 0;
+  const span: Span =
+    view === null
+      ? fit()
+      : { startFrame: view.startFrame, endFrame: view.endFrame };
+  const shown = resolve(span, frames);
+
+  /**
+   * Show a different range of the same capture.
+   *
+   * Guarded by value, not by identity: every gesture here ends in a `zoom.ts`
+   * function that returns a fresh object, and a pan already against the end of
+   * the capture returns the same two numbers in a new one. Without the guard
+   * that is a state change, a re-render and a summary read for every pointer
+   * report, drawing a picture that cannot move.
+   */
+  const show = useCallback(
+    (next: Span) => {
+      if (view === null) {
+        return;
+      }
+      if (
+        next.startFrame !== view.startFrame ||
+        next.endFrame !== view.endFrame
+      ) {
+        onView({ ...view, ...next });
+      }
+    },
+    [onView, view],
+  );
+
+  // The size the box actually has, in device pixels. Measured rather than
+  // assumed, because `pixels` is what the shell reduces to and a wrong number
+  // is either a stretched picture or peaks computed for columns nobody can
+  // see. The height is measured too, now that the box is half the page rather
+  // than a fixed strip.
   useEffect(() => {
     const element = box.current;
     if (element === null) {
       return;
     }
+    const measure = (css: { width: number; height: number }) => {
+      const scale = window.devicePixelRatio || 1;
+      setSize({
+        width: Math.max(1, Math.floor(css.width * scale)),
+        height: Math.max(1, Math.floor(css.height * scale)),
+        scale,
+      });
+    };
     const observer = new ResizeObserver((entries) => {
       const first = entries[0];
       if (first !== undefined) {
-        setWidth(Math.max(1, Math.floor(first.contentRect.width)));
+        measure(first.contentRect);
       }
     });
     observer.observe(element);
-    setWidth(Math.max(1, Math.floor(element.clientWidth)));
+    measure({
+      width: element.clientWidth,
+      height: element.clientHeight,
+    });
     return () => observer.disconnect();
   }, []);
 
-  // The fetch. Four dependencies and the generation, as argued above.
+  // The fetch. Four dependencies and the generation, as argued above. The
+  // height is not one of them: a taller picture is the same peaks drawn
+  // further, and refetching on a vertical resize would ask the shell for
+  // columns it has already answered.
   useEffect(() => {
-    if (capture === undefined || width < 8) {
+    if (capture === undefined || view === null || size.width < 8) {
       setPeaks(null);
       return;
     }
@@ -132,7 +384,7 @@ export function Waveform({
           channel: view.channel,
           startFrame: view.startFrame,
           endFrame: view.endFrame,
-          pixels: width,
+          pixels: size.width,
         });
         if (!cancelled) {
           setPeaks(drawn);
@@ -150,11 +402,11 @@ export function Waveform({
     };
   }, [
     capture,
-    view.captureId,
-    view.channel,
-    view.startFrame,
-    view.endFrame,
-    width,
+    view?.captureId,
+    view?.channel,
+    view?.startFrame,
+    view?.endFrame,
+    size.width,
     generation,
   ]);
 
@@ -169,12 +421,53 @@ export function Waveform({
     if (context === null) {
       return;
     }
+    const width = element.width;
     const height = element.height;
-    const middle = height / 2;
+    const scale = size.scale;
+    const rule = Math.round(RULER.HEIGHT * scale);
+
+    // One lane row per side, in the order the sides appear, and none at all
+    // when there are no tracks - an undetected project spends none of the
+    // picture's height on an empty strip.
+    //
+    // Per side rather than one row for everything, because §21 allows two
+    // faces on one capture and the first light project is exactly that: both
+    // its sides name capture 1. Stacked in a single row, side A's labels were
+    // drawn and then painted over by side B's, which is a lane that quietly
+    // shows half of what it was given. The positions already carry the letter
+    // (`A1`, `B1`), so a row needs no name of its own.
+    const rows = new Map<number, number>();
+    for (const track of tracks) {
+      if (!rows.has(track.sideId)) {
+        rows.set(track.sideId, rows.size);
+      }
+    }
+    const row = Math.round(LANE.HEIGHT * scale);
+    const lane = rows.size * row;
+
+    // The band the signal gets: what is left between the two rulers and the
+    // label lane. Floored at a pixel so a box briefly shorter than its own
+    // furniture during a layout pass draws something rather than dividing by
+    // zero.
+    const bandTop = rule;
+    const bandHeight = Math.max(1, height - rule * 2 - lane);
+    const middle = bandTop + bandHeight / 2;
+    const reach = bandHeight / 2;
+    const laneTop = bandTop + bandHeight;
+
+    // The visible window in seconds, which is what the labels, the playhead and
+    // the rulers are all placed by. The playhead arrives in seconds and the
+    // window carries both ends in seconds, so nothing in this file needs the
+    // rate - which is why `startSeconds` and `endSeconds` are on the view model
+    // at all. Multiplying a playhead by a rate here would be a unit conversion
+    // on the wrong side of the boundary, and it would be wrong the first time a
+    // project held two captures at different rates.
+    const visible = peaks.endSeconds - peaks.startSeconds;
+
     context.fillStyle = COLOURS.background;
-    context.fillRect(0, 0, element.width, height);
+    context.fillRect(0, 0, width, height);
     context.fillStyle = COLOURS.centre;
-    context.fillRect(0, Math.floor(middle), element.width, 1);
+    context.fillRect(0, Math.floor(middle), width, 1);
 
     const columns = Math.min(
       peaks.min.length,
@@ -186,22 +479,36 @@ export function Waveform({
       const high = peaks.max[x] ?? 0;
       const rms = peaks.rms[x] ?? 0;
       context.fillStyle = COLOURS.peak;
-      const top = middle - high * middle;
-      context.fillRect(x, top, 1, Math.max(1, (high - low) * middle));
+      context.fillRect(
+        x,
+        middle - high * reach,
+        1,
+        Math.max(1, (high - low) * reach),
+      );
       context.fillStyle = COLOURS.rms;
-      context.fillRect(x, middle - rms * middle, 1, Math.max(1, rms * height));
+      context.fillRect(
+        x,
+        middle - rms * reach,
+        1,
+        Math.max(1, rms * reach * 2),
+      );
     }
 
     // The boundaries, on top. A rejected one is drawn dimmer rather than left
     // out: WP-11 asked whether it should be visible at all, and it should -
     // §31 lets a person promote one by hand, and they cannot promote what the
     // picture does not show.
+    //
+    // Across the band only, not the whole canvas: a line through a ruler label
+    // makes the label unreadable, and the ruler is the reason a person can say
+    // where the boundary *is*. Nor down through the lane - a boundary belongs
+    // to one side, and a line across every row of a two-faced capture would
+    // claim it belongs to both. Each row draws its own starts instead.
     const span = peaks.endFrame - peaks.startFrame;
     if (span > 0) {
       for (const boundary of boundaries) {
-        const x =
-          ((boundary.atFrame - peaks.startFrame) / span) * element.width;
-        if (x < 0 || x > element.width) {
+        const x = ((boundary.atFrame - peaks.startFrame) / span) * width;
+        if (x < 0 || x > width) {
           continue;
         }
         context.fillStyle = boundary.locked
@@ -212,66 +519,447 @@ export function Waveform({
         // A rejected boundary gets a thin line and a promoted one a thick one,
         // so the difference survives a greyscale screenshot and a person who
         // does not distinguish the two colours.
-        context.fillRect(Math.floor(x), 0, boundary.promoted ? 2 : 1, height);
+        context.fillRect(
+          Math.floor(x),
+          bandTop,
+          Math.max(1, Math.round((boundary.promoted ? 2 : 1) * scale)),
+          bandHeight,
+        );
       }
     }
 
-    // The playhead comes in seconds and the window is also given in seconds,
-    // so nothing here needs the rate. That is the reason `startSeconds` and
-    // `endSeconds` are on the view model at all: multiplying a playhead by a
-    // rate in this file would be a unit conversion on the wrong side of the
-    // boundary, and it would be wrong the first time a project held two
-    // captures at different rates.
-    const window = peaks.endSeconds - peaks.startSeconds;
-    if (playing && window > 0) {
-      const at = (playhead - peaks.startSeconds) / window;
-      const x = at * element.width;
-      if (x >= 0 && x <= element.width) {
-        context.fillStyle = COLOURS.playhead;
-        context.fillRect(Math.floor(x), 0, 1, height);
+    // The label lane. Drawn after the boundaries so a boundary line and the
+    // edge of a block can be seen to be the same instant, and before the
+    // rulers, which own the two strips it cannot reach.
+    //
+    // Seconds throughout, because a track is stored in seconds and the window
+    // carries seconds - the same reason the playhead needs no rate.
+    if (lane > 0 && visible > 0) {
+      context.fillStyle = COLOURS.lane;
+      context.fillRect(0, laneTop, width, lane);
+      context.fillStyle = COLOURS.rulerLine;
+      context.fillRect(0, laneTop, width, 1);
+      const size = Math.round(LANE.TEXT * scale);
+      context.font = `${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+      context.textBaseline = "middle";
+      const pad = Math.round(LANE.PAD * scale);
+      for (const track of tracks) {
+        const from = ((track.start - peaks.startSeconds) / visible) * width;
+        const to = ((track.end - peaks.startSeconds) / visible) * width;
+        if (to < 0 || from > width) {
+          continue;
+        }
+        const top = laneTop + (rows.get(track.sideId) ?? 0) * row;
+        // Clipped to the canvas rather than dropped, and that is the case that
+        // matters: zooming in far enough to judge a boundary puts both ends of
+        // the track off screen, and it is exactly then that a person wants to
+        // be told which track they are inside.
+        const left = Math.max(0, Math.floor(from));
+        const right = Math.min(width, Math.ceil(to));
+        context.fillStyle = COLOURS.laneFill;
+        context.fillRect(left, top + 1, Math.max(1, right - left - 1), row - 1);
+        // The start edge, drawn only where the start is really on screen. A
+        // block clipped at the left edge with a line on it would claim the
+        // track starts where the window does.
+        if (from >= 0) {
+          context.fillStyle = COLOURS.laneLine;
+          context.fillRect(
+            Math.floor(from),
+            top + 1,
+            Math.max(1, Math.round(scale)),
+            row - 1,
+          );
+        }
+        const name =
+          track.title === ""
+            ? track.position
+            : `${track.position}  ${track.title}`;
+        context.save();
+        context.beginPath();
+        context.rect(left, top, Math.max(0, right - left), row);
+        context.clip();
+        context.fillStyle = COLOURS.laneText;
+        context.fillText(name, left + pad, top + row / 2);
+        context.restore();
       }
     }
-  }, [peaks, boundaries, playhead, playing]);
 
-  if (capture === undefined) {
-    return (
-      <section className="waveform empty">
-        <p>Nothing captured yet.</p>
-      </section>
-    );
-  }
+    // The playhead, in two parts because the rulers are drawn over everything
+    // above them: the line now, across the picture and the labels, and the
+    // handle after the rulers, since sitting in the top ruler is the whole
+    // point of it.
+    const stem = Math.max(1, Math.round(scale));
+    const playAt =
+      visible > 0 ? ((playhead - peaks.startSeconds) / visible) * width : -1;
+    const onScreen = playAt >= 0 && playAt <= width;
+    if (onScreen) {
+      context.fillStyle = COLOURS.playhead;
+      // Across the labels as well as the picture, because the playhead is a
+      // fact about the capture and every row of the lane is in that capture.
+      context.fillRect(Math.floor(playAt), bandTop, stem, bandHeight + lane);
+    }
 
+    // The rulers, last, so nothing drawn above can run into them.
+    context.fillStyle = COLOURS.ruler;
+    context.fillRect(0, 0, width, rule);
+    context.fillRect(0, height - rule, width, rule);
+    context.fillStyle = COLOURS.rulerLine;
+    context.fillRect(0, rule - 1, width, 1);
+    context.fillRect(0, height - rule, width, 1);
+
+    const text = Math.round(RULER.TEXT * scale);
+    context.font = `${text}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+    context.textBaseline = "top";
+    const gap = Math.round(RULER.GAP * scale);
+    const major = Math.round(RULER.MAJOR * scale);
+    const minor = Math.round(RULER.MINOR * scale);
+
+    // Both rulers, one pass, same marks: the answer to "which range is this"
+    // must be the same at both edges or they are two rulers and not one.
+    for (const tick of ticks(peaks.startSeconds, peaks.endSeconds, width)) {
+      const x = Math.floor(
+        ((tick.seconds - peaks.startSeconds) / visible) * width,
+      );
+      const length = tick.major ? major : minor;
+      context.fillStyle = COLOURS.rulerLine;
+      // Growing inwards from the picture on both sides, so a mark always
+      // points at the column it belongs to.
+      context.fillRect(x, rule - length, 1, length);
+      context.fillRect(x, height - rule, 1, length);
+      if (tick.label === "") {
+        continue;
+      }
+      // Dropped rather than clipped or pushed left: a label hanging off the
+      // right edge reads as a different number, and one shoved back inside
+      // would no longer sit beside its own mark.
+      if (x + gap + context.measureText(tick.label).width > width) {
+        continue;
+      }
+      context.fillStyle = COLOURS.rulerText;
+      context.fillText(tick.label, x + gap, Math.round(scale));
+      context.fillText(tick.label, x + gap, height - rule + major + Math.round(scale));
+    }
+
+    // The handle: a flat top in the ruler narrowing to a point on the line, so
+    // the thing a pointer aims at and the thing it points at are one object.
+    // Last of all, because the ruler strip above was just painted over it.
+    if (onScreen) {
+      const half = Math.round(HANDLE.WIDTH * scale) / 2;
+      const deep = Math.min(rule, Math.round(HANDLE.HEIGHT * scale));
+      const tip = Math.floor(playAt) + stem / 2;
+      const top = rule - deep;
+      context.fillStyle = COLOURS.playhead;
+      context.beginPath();
+      context.moveTo(tip - half, top);
+      context.lineTo(tip + half, top);
+      context.lineTo(tip + half, top + deep * 0.55);
+      context.lineTo(tip, top + deep);
+      context.lineTo(tip - half, top + deep * 0.55);
+      context.closePath();
+      context.fill();
+    }
+  }, [peaks, boundaries, tracks, playhead, size.height, size.scale]);
+
+  // The wheel, bound natively rather than as an `onWheel` prop. React attaches
+  // `wheel` at the root container as a *passive* listener, so `preventDefault`
+  // inside a JSX handler is ignored with a console warning and the gesture
+  // reaches the window as well as the canvas.
+  useEffect(() => {
+    const element = canvas.current;
+    if (element === null || frames <= 0) {
+      return;
+    }
+    const wheeled = (event: WheelEvent) => {
+      event.preventDefault();
+      const bounds = element.getBoundingClientRect();
+      if (bounds.width <= 0) {
+        return;
+      }
+      const at = (event.clientX - bounds.left) / bounds.width;
+      // A notch is a hundred pixels of delta in a browser and one *line* under
+      // GTK, and the two have to feel the same. Clamped, because one flick of a
+      // free-spinning wheel can report a thousand and that is a gesture nobody
+      // can aim.
+      const lines = event.deltaMode === 1;
+      const grip = (delta: number) =>
+        Math.max(-MOST_DELTA, Math.min(MOST_DELTA, lines ? delta * 16 : delta));
+      const up = grip(event.deltaY);
+      const sideways = grip(event.deltaX);
+      if (event.shiftKey || Math.abs(sideways) > Math.abs(up)) {
+        const by = (sideways !== 0 ? sideways : up) * PAN_PER_DELTA;
+        const width = shown.end - shown.start;
+        show(pan(span, frames, Math.round(width * by)));
+      } else {
+        // `STEP` per notch exactly, and the matching fraction of it for the
+        // fraction of a notch a trackpad reports - so a mouse click halves the
+        // window and a two-finger drag is smooth rather than stepped.
+        show(zoom(span, frames, STEP ** (up / 100), at));
+      }
+    };
+    element.addEventListener("wheel", wheeled, { passive: false });
+    return () => element.removeEventListener("wheel", wheeled);
+  }, [frames, shown.start, shown.end, span.startFrame, span.endFrame, show]);
+
+  // Page the window along while the audition plays, so a playhead that runs off
+  // the right edge takes the picture with it. `follow` decides whether anything
+  // moves at all; this only has to say where the playhead is.
+  //
+  // In frames, read off the window rather than off a sample rate. The peaks
+  // carry both ends in frames *and* in seconds, so the map between them is the
+  // window's own and this file still does not know what rate the capture was
+  // made at - which is what keeps it right for a project holding two captures
+  // at different rates. Linear, so it is exact for a playhead outside the
+  // window too, which is the case that matters here.
+  useEffect(() => {
+    if (!playing || peaks === null || frames <= 0) {
+      return;
+    }
+    const seconds = peaks.endSeconds - peaks.startSeconds;
+    if (seconds <= 0) {
+      return;
+    }
+    const perSecond = (peaks.endFrame - peaks.startFrame) / seconds;
+    const at = peaks.startFrame + (playhead - peaks.startSeconds) * perSecond;
+    show(follow(span, frames, Math.round(at)));
+  }, [playing, playhead, peaks, frames, span.startFrame, span.endFrame, show]);
+
+  /** Where a pointer is over the picture, in seconds of the capture. */
+  const secondsAt = (clientX: number, element: HTMLElement): number | null => {
+    if (peaks === null) {
+      return null;
+    }
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0) {
+      return null;
+    }
+    const at = (clientX - bounds.left) / bounds.width;
+    return peaks.startSeconds + at * (peaks.endSeconds - peaks.startSeconds);
+  };
+
+  /**
+   * Whether a pointer is on the playhead's handle, and so whether a drag from
+   * here would move it.
+   *
+   * In CSS pixels throughout, because a pointer reports in CSS pixels and the
+   * handle's size is declared in them - the device ratio belongs to the canvas
+   * and nowhere else. `playing`, because a handle is only a handle while there
+   * is something to drag; see the header.
+   */
+  const onHandle = (
+    clientX: number,
+    clientY: number,
+    element: HTMLElement,
+  ): boolean => {
+    if (!playing || peaks === null) {
+      return false;
+    }
+    const bounds = element.getBoundingClientRect();
+    const seconds = peaks.endSeconds - peaks.startSeconds;
+    if (bounds.width <= 0 || seconds <= 0) {
+      return false;
+    }
+    if (clientY - bounds.top > RULER.HEIGHT) {
+      return false;
+    }
+    const at = ((playhead - peaks.startSeconds) / seconds) * bounds.width;
+    return Math.abs(clientX - bounds.left - at) <= HANDLE.WIDTH;
+  };
+
+  /** Put the window's left edge where a drag on the bar has taken it. */
+  const slide = (clientX: number, offset: number) => {
+    const track = bar.current;
+    if (track === null || frames <= 0) {
+      return;
+    }
+    const bounds = track.getBoundingClientRect();
+    if (bounds.width <= 0) {
+      return;
+    }
+    const at = (clientX - bounds.left) / bounds.width - offset;
+    const start = shown.start;
+    soon(() => show(pan(span, frames, Math.round(at * frames) - start)));
+  };
+
+  // The bar, as two fractions of the capture. A floor on the thumb's width so
+  // that a window four thousand frames wide inside a whole side is still
+  // something a pointer can find, and the left edge pulled back off the end so
+  // the floor cannot push the thumb out of the bar.
+  const portion = frames > 0 ? (shown.end - shown.start) / frames : 1;
+  const leading = frames > 0 ? shown.start / frames : 0;
+  const thumbWide = Math.min(100, Math.max(portion * 100, 2));
+  const thumbLeft = Math.min(leading * 100, 100 - thumbWide);
+
+  // No early return for "nothing captured yet", and that is not tidiness. The
+  // size of the picture is measured by a `ResizeObserver` set up once on mount,
+  // so a render that leaves the box out of the tree gives that effect nothing
+  // to observe and it never runs again - the panel then draws zero columns
+  // forever. It did exactly that the first time, because this component used to
+  // live in the always-on strip where it was mounted once for the life of the
+  // window, and it now mounts and unmounts as a person moves between panels.
+  //
+  // So the box is always there and the empty state is a line in the foot. That
+  // is the better shape anyway: the top half of the page keeps its size whether
+  // or not a record has been played into it.
   return (
     <section className="waveform">
       <div className="waveform-box" ref={box}>
         <canvas
           ref={canvas}
-          width={width}
-          height={160}
-          onClick={(event) => {
-            if (peaks === null) {
+          width={size.width}
+          height={size.height}
+          onPointerDown={(event) => {
+            // Only while playing, for the reason in the header: a stopped
+            // engine has no playhead to drag.
+            if (!playing || peaks === null) {
               return;
             }
-            const bounds = event.currentTarget.getBoundingClientRect();
-            const fraction = (event.clientX - bounds.left) / bounds.width;
-            onSeek(
-              peaks.startSeconds +
-                fraction * (peaks.endSeconds - peaks.startSeconds),
-            );
+            scrubbing.current = true;
+            scrubbed.current = 0;
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            // The cursor, set on the element rather than held in state: a hint
+            // that re-rendered would cost a React pass per pointer report to
+            // change one string, and this is the whole of what it says - that
+            // a drag from here would take the playhead with it.
+            event.currentTarget.style.cursor = onHandle(
+              event.clientX,
+              event.clientY,
+              event.currentTarget,
+            )
+              ? "ew-resize"
+              : "crosshair";
+            if (!scrubbing.current) {
+              return;
+            }
+            const now = performance.now();
+            if (now - scrubbed.current < SCRUB) {
+              return;
+            }
+            const seconds = secondsAt(event.clientX, event.currentTarget);
+            if (seconds !== null) {
+              scrubbed.current = now;
+              onSeek(seconds);
+            }
+          }}
+          onPointerUp={() => {
+            scrubbing.current = false;
+          }}
+          onPointerCancel={() => {
+            scrubbing.current = false;
+          }}
+          onClick={(event) => {
+            // Kept as a click rather than folded into the pointer handlers
+            // above: a press with no drag is where a person wants to *start*,
+            // and that is the same act whether the engine is running or not.
+            // A drag that ends in a click seeks once more to where it was
+            // released, which is where it already is.
+            const seconds = secondsAt(event.clientX, event.currentTarget);
+            if (seconds !== null) {
+              onSeek(seconds);
+            }
           }}
         />
       </div>
+      <div
+        className="waveform-bar"
+        ref={bar}
+        onPointerDown={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (bounds.width <= 0 || frames <= 0) {
+            return;
+          }
+          const held = (event.clientX - bounds.left) / bounds.width;
+          // Taking hold of the thumb keeps the point under the pointer;
+          // pressing the bar either side of it puts the window's middle there,
+          // which is what a scrollbar does everywhere else.
+          const offset =
+            held >= leading && held <= leading + portion
+              ? held - leading
+              : portion / 2;
+          grabbed.current = offset;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          slide(event.clientX, offset);
+        }}
+        onPointerMove={(event) => {
+          if (grabbed.current !== null) {
+            slide(event.clientX, grabbed.current);
+          }
+        }}
+        onPointerUp={() => {
+          grabbed.current = null;
+        }}
+        onPointerCancel={() => {
+          grabbed.current = null;
+        }}
+      >
+        <div
+          className="waveform-thumb"
+          style={{ left: `${thumbLeft}%`, width: `${thumbWide}%` }}
+        />
+      </div>
       <div className="waveform-foot">
-        <span>
-          channel {view.channel + 1} of {capture.channels}
-        </span>
+        {capture === undefined || view === null ? (
+          <span>Nothing captured yet.</span>
+        ) : capture.channels < 2 ? (
+          <span>1 channel</span>
+        ) : (
+          // `view.channel` has existed since WP-09 and nothing ever wrote to
+          // it, so every stereo capture was drawn as its left channel with a
+          // footer saying "channel 1 of 2" and no way to see the other one.
+          // A select rather than a left/right pair of buttons because a
+          // four-channel interface is allowed by §8 and two buttons are not.
+          <label className="waveform-channel">
+            Channel
+            <select
+              value={view.channel}
+              onChange={(event) =>
+                onView({ ...view, channel: Number(event.target.value) })
+              }
+            >
+              {Array.from({ length: capture.channels }, (_, index) => (
+                <option key={index} value={index}>
+                  {capture.channels === 2
+                    ? ["Left", "Right"][index]
+                    : `${index + 1}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {peaks !== null && (
           <span>
             {clock(peaks.startSeconds)} to {clock(peaks.endSeconds)}
           </span>
         )}
-        <span>{width} column(s)</span>
+        <span>{size.width} column(s)</span>
         {failed !== null && <span className="clip">{failed}</span>}
+        <span className="waveform-zoom">
+          <button
+            type="button"
+            title="Zoom out (-)"
+            disabled={frames <= 0}
+            onClick={() => show(zoom(span, frames, STEP, 0.5))}
+          >
+            Out
+          </button>
+          <button
+            type="button"
+            title="Zoom in (+)"
+            disabled={frames <= 0}
+            onClick={() => show(zoom(span, frames, 1 / STEP, 0.5))}
+          >
+            In
+          </button>
+          <button
+            type="button"
+            title="Show the whole capture (0)"
+            disabled={frames <= 0}
+            onClick={() => show(fit())}
+          >
+            Fit
+          </button>
+        </span>
       </div>
     </section>
   );

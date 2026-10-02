@@ -78,6 +78,9 @@ body {
 }
 
 .titlebar h1 {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
   font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -104,9 +107,44 @@ body {
   color: #0c0e12;
 }
 
-/* --- The panel ----------------------------------------------------------- */
+/* --- The stage ----------------------------------------------------------- */
 
+/*
+ * Two shapes, and `App.tsx` argues which and why. The library is one thing - a
+ * table of records - and takes the whole height. Every other panel is a
+ * decision read against the picture of the audio, so those split in half.
+ *
+ * `minmax(0, 1fr)` rather than `1fr`, because a grid track's implicit minimum
+ * is `auto`: a track list taller than its half would push the waveform off the
+ * top of the window instead of scrolling inside its own row. The same fact is
+ * why every flex child down to the canvas carries a `min-height: 0`.
+ *
+ * The padding moved off `main` and onto `.stage-pane`. On `main` it would sit
+ * inside the grid, so the waveform would be inset from the window edges while
+ * its own ruler needs the full width to line up with the columns it labels.
+ */
 main {
+  display: grid;
+  overflow: hidden;
+  min-height: 0;
+}
+
+main.library {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+main.project {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.stage-top {
+  display: flex;
+  min-height: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.stage-pane {
+  min-height: 0;
   overflow: auto;
   padding: 0.75rem;
 }
@@ -148,6 +186,27 @@ h3 {
   margin: 0;
 }
 
+/* The empty library, which is what a new installation opens on. Centred in
+   the panel rather than pinned to the top left, because there is nothing else
+   on the screen for it to line up with. The logo is held well under its
+   natural size and dimmed a little: it is the backdrop to the sentence, not
+   the thing being read. */
+.empty.start {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: center;
+  padding: 3rem 1rem;
+}
+
+.empty.start .logo {
+  height: auto;
+  max-width: 50%;
+  opacity: 0.85;
+  width: 260px;
+}
+
 .hint {
   font-size: 0.9em;
   max-width: 62ch;
@@ -172,6 +231,11 @@ button,
 input,
 select,
 textarea {
+  /* Without this a tickbox is the platform's accent, which on this theme is a
+     saturated orange-red - the same colour the panel uses for a clip latch and
+     a locked boundary. Three ticked checkboxes in Metadata read as three
+     warnings. */
+  accent-color: var(--accent);
   font: inherit;
   color: var(--text);
   background: var(--sunken);
@@ -189,8 +253,16 @@ button:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
+/* A disabled control keeps its text and loses its box. The problem this
+   solves is not that the dim text was hard to read - it was legible - but that
+   a dim word in a bordered, raised box still looks pressable, so a row of
+   buttons gave no glanceable answer to "which of these can I use". Dropping
+   the fill and all but a trace of the border makes the boxes mean something:
+   the ones with an edge are the ones that do anything. */
 button:disabled {
   color: var(--dim);
+  background: transparent;
+  border-color: #22262e;
   cursor: default;
 }
 
@@ -295,7 +367,19 @@ legend {
   font-size: 0.8rem;
 }
 
-fieldset .hint,
+/* A note about a group of fields goes under the group, on its own line.
+   `flex-basis: 100%` alone did not do it: `.hint` also sets `max-width: 62ch`,
+   which clamps the item back to something that fits beside two controls, so
+   the commit-interval note had been sitting in the middle of the Library row
+   looking like a third field with a very long label. `order` is what puts it
+   last without the markup having to care where the note was written, and
+   dropping the measure is what makes it a row rather than a column. */
+fieldset .hint {
+  flex: 0 0 100%;
+  max-width: none;
+  order: 1;
+}
+
 fieldset table {
   flex-basis: 100%;
 }
@@ -326,7 +410,22 @@ code {
   border-collapse: collapse;
 }
 
+/* The header row stays put while the body scrolls. The Tracks panel is two
+   tables in one scroll region - seventeen tracks and then as many boundaries -
+   and once the second one is on screen there was nothing left to say which
+   list it was or what the columns meant. `.stage-pane` is the scroller, so
+   `top: 0` is the top of the panel; `background` is not inherited through a
+   sticky element, so it has to be named or the rows show through it. */
 .rows th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--ground);
+  /* `.stage-pane` pads 0.75rem and sticky offsets are measured from the
+     scrollport, which includes that padding, so rows were still visible in the
+     band above a stuck header. A zero-blur shadow offset upwards paints that
+     band in the pane's own colour without changing the header's height. */
+  box-shadow: 0 -0.75rem 0 var(--ground);
   text-align: left;
   font-weight: 600;
   color: var(--dim);
@@ -339,6 +438,52 @@ code {
   padding: 0.2rem 0.5rem;
   border-bottom: 1px solid #1d2128;
   white-space: nowrap;
+}
+
+/*
+ * The cover cell.
+ *
+ * Fixed width and fixed height on both the header and the body cell, so the
+ * column does not resize when the first cover arrives and the rows do not
+ * jump. The header cell is empty on purpose: a column of pictures labelled
+ * "Cover" is a label nobody needs, and the width has to come from somewhere.
+ */
+.rows th.art,
+.rows td.art {
+  width: 2.25rem;
+  padding-right: 0;
+}
+
+.rows td.art {
+  line-height: 0;
+}
+
+.rows .cover,
+.rows .sleeve {
+  display: inline-block;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.rows .cover {
+  object-fit: cover;
+  background: #0f1115;
+}
+
+/*
+ * The placeholder, which is most rows until a release is assigned. Quiet
+ * enough that a library of unidentified rips does not read as a wall of
+ * icons, and present enough that the column does not look broken.
+ */
+.rows .sleeve {
+  background: #1d2128;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 0.85rem;
+  line-height: 1.75rem;
+  text-align: center;
 }
 
 /* Right-aligned and tabular, so a column of numbers stays a column. */
@@ -451,15 +596,94 @@ code {
   flex-direction: column;
 }
 
+/* --- The waveform -------------------------------------------------------- */
+
+.waveform {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .waveform-box {
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: 160px;
   background: var(--sunken);
 }
 
+/*
+ * The canvas has its own `width` and `height` attributes in *device* pixels and
+ * is stretched to the box in CSS pixels. That is the whole point of the two
+ * numbers: the drawing happens at the resolution the screen has, and the
+ * element occupies the space the layout gives it.
+ */
 .waveform canvas {
   display: block;
+  width: 100%;
+  height: 100%;
   cursor: crosshair;
+}
+
+/*
+ * The window's own scrollbar, drawn rather than borrowed from `overflow: auto`.
+ * A native one has to be driven by writing `scrollLeft` and read back out of a
+ * scroll event, and those two disagree about rounding - so the thumb fights the
+ * zoom. This has one source of truth: the thumb *is* the visible range, stated
+ * as a percentage of the capture.
+ *
+ * `touch-action: none` so that a drag on it is a drag and not the platform's
+ * own pan gesture.
+ */
+.waveform-bar {
+  position: relative;
+  flex: none;
+  height: 10px;
+  background: var(--sunken);
+  border-top: 1px solid var(--line);
+  cursor: grab;
+  touch-action: none;
+}
+
+.waveform-thumb {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  min-width: 2px;
+  border-radius: 4px;
+  background: #3a4150;
+}
+
+.waveform-bar:hover .waveform-thumb {
+  background: var(--dim);
+}
+
+/* The channel picker sits in the footer strip, so it has to be the height of
+   the text beside it rather than the height of a form control. */
+.waveform-channel {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 0.35rem;
+}
+
+.waveform-channel select {
+  /* `label select` sets `min-width: 18ch`, which is written for the settings
+     form and is six times what "Left" needs in a footer strip. */
+  min-width: 0;
+  padding: 0 0.3rem;
+  font-size: 0.95em;
+}
+
+.waveform-zoom {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.waveform-zoom button {
+  padding: 0 0.4rem;
+  font-size: 0.95em;
 }
 
 .waveform-foot,
@@ -475,6 +699,15 @@ code {
 .meters.empty {
   padding: 0.5rem 0.75rem;
   color: var(--dim);
+}
+
+/* The idle meter bridge was 55 px tall to hold one sentence, which is the
+   browser's own 1em margins on a bare `p` and not anything anyone chose. The
+   bridge sits above the transport on every panel, so those margins were the
+   most expensive two declarations nobody wrote. */
+.waveform.empty p,
+.meters.empty p {
+  margin: 0;
 }
 
 .meters {

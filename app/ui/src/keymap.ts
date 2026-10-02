@@ -321,6 +321,52 @@ export const BINDINGS = {
     scope: "metadata",
     label: "Select the candidate below",
   },
+  // --- Seeing what you are about to mark -----------------------------------
+  //
+  // §20 requires horizontal zoom and pan and "zoom to selection/track", and
+  // the workflow they serve is §44's *marker editing*. A whole side of vinyl
+  // drawn across this canvas is about half a second to the column, and nobody
+  // places the start of a track to half a second - so zooming is not a
+  // convenience beside marker editing, it is what makes marker editing
+  // possible by eye. That is why these declare `place-marker` and
+  // `move-marker` rather than a `zoom` workflow of their own: §44 does not ask
+  // for zooming, and a `Workflow` member that no requirement names would make
+  // the coverage record describe something other than the requirement.
+  //
+  // Global scope, because the waveform is on five of the six panels and the
+  // visible range is one piece of state across all of them. In the library it
+  // does nothing, which is already true of every transport binding there.
+  //
+  // `+` and `-` as every viewer spells them, and `=` as well - `+` is a shifted
+  // key and `=` is the unshifted twin under the same finger, so a person who
+  // does not reach for Shift still zooms in. `+` is also the one chord the
+  // map's own `+`-joined spelling cannot be taken apart by splitting; see
+  // `spelt` in `keymap.test.ts`.
+  zoomIn: {
+    chord: "+",
+    also: "=",
+    workflow: "place-marker",
+    scope: "global",
+    label: "Zoom the waveform in",
+  },
+  zoomOut: {
+    chord: "-",
+    workflow: "place-marker",
+    scope: "global",
+    label: "Zoom the waveform out",
+  },
+  zoomFit: {
+    chord: "0",
+    workflow: "place-marker",
+    scope: "global",
+    label: "Show the whole capture",
+  },
+  zoomSelection: {
+    chord: "z",
+    workflow: "move-marker",
+    scope: "global",
+    label: "Zoom to the selected marker, or the selected track",
+  },
   help: {
     chord: "?",
     also: "F1",
@@ -344,7 +390,7 @@ export const BINDINGS = {
     chord: "Ctrl+1",
     workflow: "navigate",
     scope: "global",
-    label: "Projects",
+    label: "Library",
   },
   gotoCapture: {
     chord: "Ctrl+2",
@@ -410,12 +456,13 @@ export const COVERAGE: Record<Workflow, readonly Action[]> = {
   play: ["play"],
   seek: ["seekBack", "seekForward"],
   skip: ["skipBack", "skipForward"],
-  "place-marker": ["marker"],
+  "place-marker": ["marker", "zoomIn", "zoomOut", "zoomFit"],
   "move-marker": [
     "nudgeBack",
     "nudgeForward",
     "previousBoundary",
     "nextBoundary",
+    "zoomSelection",
   ],
   "delete-marker": ["deleteMarker"],
   "detect-tracks": ["detect"],

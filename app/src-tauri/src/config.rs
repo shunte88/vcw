@@ -70,6 +70,7 @@ use vcw_contract::command::NewProject;
 use vcw_contract::settings::{Credential, Settings};
 use vcw_contract::view::Project as ProjectRow;
 use vcw_project::Project;
+use vcw_project::release::{self, Artwork};
 
 use crate::state::{Error, Shell};
 
@@ -186,11 +187,11 @@ pub(crate) fn new_project(app: AppHandle, seed: NewProject) -> Result<ProjectRow
         // the difference a metadata panel uses to decide whether to offer a
         // lookup or show what is already known.
         if seed.artist.is_some() || seed.album.is_some() || seed.catalog.is_some() {
-            let mut release = vcw_project::release::ensure(&mut project)?;
+            let mut release = release::ensure(&mut project)?;
             release.album = seed.album.clone().unwrap_or_default();
             release.album_artist = seed.artist.clone().unwrap_or_default();
             release.catalog = seed.catalog.clone().unwrap_or_default();
-            vcw_project::release::store(&mut project, &release)?;
+            release::store(&mut project, &release)?;
         }
         project.close()?;
     }
@@ -209,6 +210,44 @@ pub(crate) fn new_project(app: AppHandle, seed: NewProject) -> Result<ProjectRow
 #[tauri::command]
 pub(crate) fn library_root(app: AppHandle) -> Result<Option<String>, Error> {
     Ok(load(&app)?.recording.library)
+}
+
+/// The front cover of one project in the library, as a `data:` URL (§34).
+///
+/// By path and not from the open project, because the browser draws a hundred
+/// rows and has none of them open. Each call opens that file read-only, reads
+/// one blob and closes, which is the same bargain every read command in
+/// [`crate::library`] makes and for the same reason.
+///
+/// # Why this is not on the listing
+///
+/// [`projects`] reports `has_artwork`, a flag, and this returns the image.
+/// Splitting them is the whole design: a cover is a megabyte or two, a library
+/// is a hundred rows, and a listing that carried the images would cost more to
+/// open than a project does. The table asks for the covers it is about to
+/// draw, one row at a time, and a row with `has_artwork: false` never asks.
+///
+/// Base64 and a `data:` URL rather than a second asset protocol, because the
+/// alternative is a URL scheme, a handler and a cache-invalidation question for
+/// an image that changes when a person assigns a release. The encoding costs
+/// about a third again in size on a payload that is already in memory.
+///
+/// # Errors
+///
+/// [`Error::Project`] if the file will not open or will not read. A project
+/// with no front cover is `None`, which is an answer and not a failure.
+#[tauri::command]
+pub(crate) fn artwork(path: String) -> Result<Option<String>, Error> {
+    use base64::Engine as _;
+
+    let project = Project::open_read_only(Path::new(&path))?;
+    let Some(image) = release::artwork(project.conn(), Artwork::FRONT)? else {
+        return Ok(None);
+    };
+    // The stored MIME and not a guess: `put_artwork` sniffed it when the image
+    // arrived, so the one thing that knows is the row.
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&image.bytes);
+    Ok(Some(format!("data:{};base64,{encoded}", image.mime)))
 }
 
 /// The project the shell currently has open, if any.

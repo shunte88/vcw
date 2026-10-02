@@ -28,18 +28,45 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
+import type { Project } from "../bindings/vcw";
 import type { Store } from "../store";
 import { Browser } from "./Browser";
 
 vi.mock("../api", () => ({
   newProject: vi.fn(async () => ({ path: "/library/new.vcw" })),
   openProject: vi.fn(async () => undefined),
+  artwork: vi.fn(async () => "data:image/jpeg;base64,/9j/"),
 }));
+
+/** A library row, with only the fields the table draws filled in. */
+function row(over: Partial<Project> = {}): Project {
+  return {
+    path: "/library/a.vcw",
+    name: "a",
+    album: "Tomorrow's Harvest",
+    albumArtist: "Boards Of Canada",
+    catalog: "WARPLP252",
+    year: 2013,
+    sides: 1,
+    tracks: 17,
+    captures: 1,
+    seconds: 3692,
+    fileBytes: 1_961_099_264,
+    modified: 1_759_000_000,
+    hasArtwork: false,
+    problem: null,
+    ...over,
+  };
+}
 
 /** Everything the panel touches, and nothing it does not. */
 function fakeStore(): { store: Store; reloaded: () => number } {
   let reloads = 0;
   const store = {
+    // The open project, which the row class list reads to mark it. Needed from
+    // the moment this fixture renders a row at all: the first test here passed
+    // an empty list, so nothing touched it.
+    project: { path: null },
     run: async (what: () => Promise<unknown>) => {
       await what();
     },
@@ -103,6 +130,106 @@ describe("the project browser", () => {
     // changes both, and only one of them was being asked again.
     expect(reloaded()).toBe(1);
     expect(onLibraryChanged).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  // The split the whole cover design rests on: the listing carries a flag and
+  // the image is asked for separately. A row that says it has no cover must
+  // never make the call, because a hundred-row library would otherwise read a
+  // hundred blobs to draw a column of placeholders.
+  it("asks for a cover only for the rows that have one", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const { store } = fakeStore();
+
+    await act(async () => {
+      root.render(
+        <Browser
+          store={store}
+          projects={[
+            row({ path: "/library/with.vcw", hasArtwork: true }),
+            row({ path: "/library/without.vcw", hasArtwork: false }),
+          ]}
+          selected={null}
+          onSelect={() => {}}
+          onLibraryChanged={() => {}}
+        />,
+      );
+    });
+
+    expect(api.artwork).toHaveBeenCalledTimes(1);
+    expect(api.artwork).toHaveBeenCalledWith("/library/with.vcw");
+
+    // The one with a cover draws an image; the one without draws the sleeve
+    // mark, and both cells exist so the rows are the same height either way.
+    expect(container.querySelectorAll("img.cover")).toHaveLength(1);
+    expect(container.querySelectorAll(".sleeve")).toHaveLength(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  // The panel unmounts on every tab switch, so a cache that died with it would
+  // refetch the library on every Ctrl+1.
+  it("does not fetch a cover it has already read", async () => {
+    const project = row({ path: "/library/cached.vcw", hasArtwork: true });
+    for (const pass of [1, 2]) {
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const { store } = fakeStore();
+      await act(async () => {
+        root.render(
+          <Browser
+            store={store}
+            projects={[project]}
+            selected={null}
+            onSelect={() => {}}
+            onLibraryChanged={() => {}}
+          />,
+        );
+      });
+      expect(api.artwork, `pass ${pass}`).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  // Keyed by `modified` as well as by path, so assigning a release - which
+  // rewrites the file and moves its timestamp - shows the new cover without
+  // anything having to remember to clear a cache.
+  it("fetches again when the file has changed underneath the row", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const { store } = fakeStore();
+    const draw = async (modified: number) => {
+      await act(async () => {
+        root.render(
+          <Browser
+            store={store}
+            projects={[row({ path: "/library/moved.vcw", hasArtwork: true, modified })]}
+            selected={null}
+            onSelect={() => {}}
+            onLibraryChanged={() => {}}
+          />,
+        );
+      });
+    };
+
+    await draw(1_759_000_000);
+    expect(api.artwork).toHaveBeenCalledTimes(1);
+    await draw(1_759_000_001);
+    expect(api.artwork).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       root.unmount();

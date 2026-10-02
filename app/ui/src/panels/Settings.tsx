@@ -31,19 +31,36 @@
 import { useEffect, useState } from "react";
 
 import * as api from "../api";
-import type { Credential, Settings as Values } from "../bindings/vcw";
+import type { Credential, Device, Settings as Values } from "../bindings/vcw";
 import type { Store } from "../store";
+
+/**
+ * The sample formats the contract accepts, which are `parse_format`'s.
+ *
+ * Four of them, fixed, and not read from a device: this is the §39 default
+ * applied before a device is chosen, so there is nothing to ask. It was a text
+ * input, which meant a person could save `float32` - an alias the CLI takes
+ * and this field does not - and find out at arming time.
+ */
+const FORMATS: readonly { value: string; label: string }[] = [
+  { value: "s16", label: "s16 (16-bit integer)" },
+  { value: "s24", label: "s24 (24-bit integer)" },
+  { value: "s32", label: "s32 (32-bit integer)" },
+  { value: "f32", label: "f32 (32-bit float)" },
+];
 
 /** The settings panel. */
 export function Settings({
   store,
   settings,
   credentials,
+  devices,
   onSaved,
 }: {
   store: Store;
   settings: Values | null;
   credentials: readonly Credential[];
+  devices: readonly Device[];
   onSaved: () => void;
 }): React.JSX.Element {
   const [draft, setDraft] = useState<Values | null>(settings);
@@ -94,7 +111,7 @@ export function Settings({
           Where projects are kept
           <input
             value={draft.recording.library ?? ""}
-            placeholder="unset: the browser is empty until you choose one"
+            placeholder="unset - no library"
             onChange={(event) =>
               recording({ library: text(event.target.value) })
             }
@@ -106,6 +123,7 @@ export function Settings({
             type="number"
             min="1"
             value={draft.recording.checkpointSeconds ?? ""}
+            placeholder="unset - built-in"
             onChange={(event) =>
               recording({ checkpointSeconds: number(event.target.value) })
             }
@@ -133,28 +151,49 @@ export function Settings({
         <legend>Audio</legend>
         <label>
           Host API
-          <input
+          {/* The hosts this build enumerated, not the five that exist. A text
+              input here accepted "pulse" on a machine with no such host and
+              said nothing until something tried to open a device. */}
+          <select
             value={draft.audio.backend ?? ""}
-            placeholder="alsa, jack, coreaudio, wasapi, asio"
             onChange={(event) => audio({ backend: text(event.target.value) })}
-          />
+          >
+            <option value="">Whatever the build picks</option>
+            {hosts(devices).map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+            {draft.audio.backend !== null &&
+              !hosts(devices).includes(draft.audio.backend) && (
+                <option value={draft.audio.backend}>
+                  {draft.audio.backend} (not on this machine)
+                </option>
+              )}
+          </select>
         </label>
         <label>
           Rate (Hz)
           <input
             type="number"
             value={draft.audio.rate ?? ""}
-            placeholder="device default"
+            placeholder="unset - device"
             onChange={(event) => audio({ rate: number(event.target.value) })}
           />
         </label>
         <label>
           Format
-          <input
+          <select
             value={draft.audio.format ?? ""}
-            placeholder="device default"
             onChange={(event) => audio({ format: text(event.target.value) })}
-          />
+          >
+            <option value="">Whatever the device offers</option>
+            {FORMATS.map((row) => (
+              <option key={row.value} value={row.value}>
+                {row.label}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Exclusivity
@@ -172,7 +211,7 @@ export function Settings({
           <input
             type="number"
             value={draft.audio.ringMillis ?? ""}
-            placeholder="default"
+            placeholder="unset - built-in"
             onChange={(event) =>
               audio({ ringMillis: number(event.target.value) })
             }
@@ -287,7 +326,7 @@ export function Settings({
           Genre map
           <input
             value={draft.metadata.genreMap ?? ""}
-            placeholder="a genre.dat, or blank for the built-in table"
+            placeholder="unset - built-in"
             onChange={(event) =>
               metadata({ genreMap: text(event.target.value) })
             }
@@ -374,4 +413,16 @@ export function Settings({
       </fieldset>
     </section>
   );
+}
+
+/**
+ * The host APIs this build enumerated, in the order they were reported.
+ *
+ * Taken from the device list rather than from a fixed list of CPAL's hosts,
+ * because §39's `backend` is a filter applied to what the build can see and a
+ * name it cannot see is a setting that does nothing. A machine with no devices
+ * at all offers only "whatever the build picks", which is the honest answer.
+ */
+function hosts(devices: readonly Device[]): readonly string[] {
+  return [...new Set(devices.map((row) => row.host))];
 }

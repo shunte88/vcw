@@ -72,6 +72,8 @@ mod pump;
 mod state;
 mod transport;
 
+use tauri::Manager;
+
 use state::Shell;
 
 /// The commands in [`vcw_contract::Request`] that this shell honours.
@@ -143,6 +145,34 @@ fn main() {
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "the shell is starting");
     tauri::Builder::default()
         .manage(Shell::default())
+        .setup(|app| {
+            // The shell's own bus, forwarded for the life of the window.
+            //
+            // Nothing did this, and nothing said so. `Bus::publish` counts its
+            // subscribers and reports zero without complaining, which is what
+            // it has to do - §36's isolation means a webview that has gone
+            // must never take a capture down with it - so every event an
+            // audition published went into an empty room. The window really
+            // did play the record, with a `cpal` output stream open and audio
+            // coming out of it, and the transport read `0:00.00 IDLE` the
+            // whole way through: no `auditioning`, so nothing was playing as
+            // far as the frontend knew, and no `playback-position`, so the
+            // playhead never left zero. A device that refused a rate published
+            // `playback-refused` into the same empty room, which is the half
+            // of this that was a silent failure rather than a missing picture.
+            //
+            // Here rather than in `play`, and before the first command can
+            // arrive, for the reason `arm` gives about the engine's bus: a
+            // subscription taken out when an audition starts would miss
+            // whatever that audition published before the reader was attached.
+            // One pump, from startup, and it also carries the refusals.
+            pump::forward(
+                &app.handle().clone(),
+                app.state::<Shell>().bus.subscribe(),
+                "shell",
+            );
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             transport::arm,
             transport::transport,
@@ -161,6 +191,7 @@ fn main() {
             config::projects,
             config::new_project,
             config::library_root,
+            config::artwork,
             config::open_path,
             edit::move_marker,
             edit::place_marker,

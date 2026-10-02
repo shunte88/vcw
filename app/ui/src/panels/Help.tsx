@@ -29,7 +29,7 @@ import type { Scope } from "../keymap";
 /** What each scope is called in front of a person. */
 const NAMES: Record<Scope, string> = {
   global: "Everywhere",
-  browser: "Projects",
+  browser: "Library",
   capture: "Capture",
   tracks: "Tracks",
   metadata: "Metadata",

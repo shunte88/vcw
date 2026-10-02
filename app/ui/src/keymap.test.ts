@@ -45,6 +45,27 @@ function press(
   } as unknown as KeyboardEvent;
 }
 
+/**
+ * A spelling split back into its modifiers and its key.
+ *
+ * `split("+")` alone is not enough, and the zoom keys are why. `chord()` joins
+ * with `+`, so the chord for the plus key is the one-character string `"+"` and
+ * splitting that gives two empty strings - which the assertions below would
+ * read as a modifier named `""`. A trailing empty segment means the key *is*
+ * the separator, which is exactly what a browser reports for Shift and the
+ * equals key.
+ */
+function spelt(spelling: string): { modifiers: string[]; key: string } {
+  const split = spelling.split("+");
+  if (split[split.length - 1] === "") {
+    return { modifiers: split.slice(0, -2), key: "+" };
+  }
+  return {
+    modifiers: split.slice(0, -1),
+    key: split[split.length - 1] ?? "",
+  };
+}
+
 describe("the keyboard map", () => {
   it("claims coverage only of bindings that declare the workflow", () => {
     for (const [workflow, actions] of Object.entries(COVERAGE)) {
@@ -95,9 +116,7 @@ describe("the keyboard map", () => {
     // overlay and never fire, which is worse than not having it.
     for (const [action, binding] of entries()) {
       for (const spelling of spellings(binding)) {
-        const parts = spelling.split("+");
-        const key = parts[parts.length - 1] ?? "";
-        const modifiers = parts.slice(0, -1);
+        const { modifiers, key } = spelt(spelling);
         expect(
           modifiers.every((m: string) => ["Ctrl", "Alt", "Shift"].includes(m)),
           `${action}: ${spelling} has a modifier that is not Ctrl, Alt or Shift`,
@@ -118,6 +137,20 @@ describe("the keyboard map", () => {
         }
       }
     }
+  });
+
+  // The plus key, which is the one chord the `+`-joined spelling cannot say by
+  // splitting. Both ends: that `chord()` really does report `"+"` for Shift and
+  // the equals key, so the binding is reachable, and that the reader above
+  // takes it apart the way it was put together.
+  it("can spell the key that is also the separator", () => {
+    expect(chord(press("+", { shift: true }))).toBe("+");
+    expect(spelt("+")).toEqual({ modifiers: [], key: "+" });
+    expect(spelt("Ctrl++")).toEqual({ modifiers: ["Ctrl"], key: "+" });
+    expect(spelt("Ctrl+ArrowLeft")).toEqual({
+      modifiers: ["Ctrl"],
+      key: "ArrowLeft",
+    });
   });
 
   it("keeps every chord §43 suggests", () => {
