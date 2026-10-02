@@ -3,10 +3,12 @@
 Capture, identify, edit, catalogue and export vinyl recordings. Bit-perfect from the
 converter to the file, in one self-contained application.
 
-VCW is the successor to [VRipr](https://github.com/shunte88/vripr), which analysed rips
-Audacity had already made. VCW does the recording itself: the capture path, the project
-store and the export are all its own, and Audacity becomes something it reads rather than
-something it depends on.
+VCW is part of the VRipr family and the successor to
+[VRipr](https://github.com/shunte88/vripr), which analysed rips Audacity had already
+made. VCW does the recording itself: the capture path, the project store and the export
+are all its own, and Audacity becomes something it reads rather than something it depends
+on. The family is why the label on the record in the application's own artwork is printed
+VCW / VRipr.
 
 - **Requirements:** [REQUIREMENTS.md](REQUIREMENTS.md)
 - **Delivery plan:** [PROJECT_PLAN.md](PROJECT_PLAN.md)

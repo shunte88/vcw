@@ -89,7 +89,7 @@ fn a_candidates_track_count_is_the_whole_release() {
     // Every medium, not the vinyl one: the count is there to tell two pressings
     // apart at a glance, and a release with a bonus disc has more tracks than
     // one without.
-    assert_eq!(Candidate::of("discogs", &release()).tracks, 3);
+    assert_eq!(Candidate::of("discogs", &release()).tracks, Some(3));
 }
 
 #[test]
@@ -103,7 +103,12 @@ fn a_release_with_no_media_still_makes_a_candidate() {
         candidate.format, "",
         "an unknown format is empty, not a guess"
     );
-    assert_eq!(candidate.tracks, 0);
+    assert_eq!(
+        candidate.tracks,
+        Some(0),
+        "a fetched release with no media really does list no tracks, which is \
+         not the same as a search hit that was never asked"
+    );
 }
 
 #[test]

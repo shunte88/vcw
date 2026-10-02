@@ -58,6 +58,26 @@ Metadata or Settings, which do not. Under it are the channel it is drawing - a
 stereo capture is two pictures and the picker chooses which - the range in view,
 and the zoom controls.
 
+Five things you can do to the picture with a pointer. **Click** anywhere on it,
+on the rulers or on the track labels to move the playhead there. **Drag** across
+it to select a stretch: the stretch lights up as you go and stays lit when you
+let go. **Drag either ruler** to scroll, and the picture follows your hand the
+way a map does. **Shift and drag** to scrub, which only does anything while
+something is playing - the cursor turns into a hand when it will work.
+**Wheel** to zoom about the pointer, so the peak under the cursor stays under
+it, or hold `Shift` and wheel to pan instead.
+
+A selection is what Play plays. Press `Space` or the Play button with a stretch
+selected and the audition starts at the left edge of it and stops at the right
+edge, which is how you listen to a track before there is a track - draw a band
+around one, play it, move an edge, play it again. Clicking anywhere on the
+picture puts the selection away again, and `z` zooms to it while it is there.
+
+The bar under the picture is both where you are in the recording and how much of
+it you can see, and you can drag it like a scrollbar. `-` zooms out, `+` zooms
+in, and `z` zooms to the selection, or to the selected marker or track when
+there is no selection.
+
 When the application refuses something it says so in a banner and leaves the
 refusal there until you dismiss it with `Escape`. That is deliberate: a refusal
 that disappears on its own is a refusal nobody read.
@@ -219,6 +239,29 @@ One thing that catches people searching by hand: a provider's `format:` field is
 an exact medium-name match, so `format:vinyl` finds nothing. Vinyl is spelled
 four different ways across the catalogue, and VCW's own search asks for all four.
 
+### The release decides how the record is cut
+
+Accepting a candidate in the Metadata panel does three things: it writes the
+release row, it names the tracks, and it downloads the front cover into the
+project. The cover is stored in the `.vcw` file, so it is backed up with
+everything else and an export can embed it without going back to the network.
+
+It also lays the sides out. Capture writes one side because one capture is one
+take, so recording a double album in a single pass leaves you with seventeen
+tracks all called `A`-something - a layout the record cannot have, since a
+12-inch side holds about twenty-two minutes. When the release you accepted
+lists exactly as many tracks as the project holds, its layout is adopted: the
+sides it names are created against the capture your tracks are already in, and
+each track moves to the face it is really on. The panel says how many moved.
+
+No audio moves. The boundaries are frames of the same recording either way, and
+two faces sharing one capture is what the project format was built for. If the
+tracklist has a different number of tracks it is not this pressing, and nothing
+is touched - you get the mismatch reported instead.
+
+A track you have confirmed keeps its title through all of this. Confirming a
+title is not the same as knowing which side it is on.
+
 ## Exporting
 
 ```text
@@ -312,7 +355,7 @@ that claimed to cover them would be describing the wrong thing.
 | `+` or `=` | Zoom the waveform in | `place-marker` | - |
 | `-` | Zoom the waveform out | `place-marker` | - |
 | `0` | Show the whole capture | `place-marker` | - |
-| `z` | Zoom to the selected marker, or the selected track | `move-marker` | - |
+| `z` | Zoom to the selection, the selected marker, or the selected track | `move-marker` | - |
 | `?` or `F1` | Show the keyboard map | `help` | - |
 | `Ctrl+1` | Library | `navigate` | - |
 | `Ctrl+2` | Capture | `navigate` | - |

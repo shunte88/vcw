@@ -319,8 +319,13 @@ pub struct Candidate {
     /// Format, as the provider describes the medium.
     pub format: String,
     /// How many tracks it lists, which is the first thing to compare against
-    /// what was detected.
-    pub tracks: u32,
+    /// what was detected, or `None` where the provider did not say.
+    ///
+    /// Discogs is the reason this is optional. Its search endpoint returns no
+    /// tracklist at all - only a release fetch has one - so a count of zero
+    /// would be the panel saying "this pressing has no tracks" when what it
+    /// means is "ask again and I will know".
+    pub tracks: Option<u32>,
 }
 
 /// A window of the waveform, ready to draw (§19).
@@ -515,7 +520,9 @@ impl Candidate {
             catalog: candidate.catalog.clone(),
             country: candidate.country.clone(),
             format: candidate.format.clone(),
-            tracks: candidate.tracks.unwrap_or(0).try_into().unwrap_or(u32::MAX),
+            tracks: candidate
+                .tracks
+                .map(|n| u32::try_from(n).unwrap_or(u32::MAX)),
         }
     }
 
@@ -534,13 +541,15 @@ impl Candidate {
             catalog: release.catalog.clone(),
             country: release.country.clone(),
             format: medium.map(|m| m.format.clone()).unwrap_or_default(),
-            tracks: release
-                .media
-                .iter()
-                .map(|m| m.tracks.len())
-                .sum::<usize>()
-                .try_into()
-                .unwrap_or(u32::MAX),
+            tracks: Some(
+                release
+                    .media
+                    .iter()
+                    .map(|m| m.tracks.len())
+                    .sum::<usize>()
+                    .try_into()
+                    .unwrap_or(u32::MAX),
+            ),
         }
     }
 }
@@ -822,6 +831,11 @@ pub struct Accepted {
     pub unmatched: Vec<String>,
     /// Project tracks the tracklist did not cover, as §29 positions.
     pub unnamed: Vec<String>,
+    /// Tracks the release's layout moved to another side, as their new
+    /// positions, when the project's own layout was not the record's.
+    pub relaid: Vec<String>,
+    /// Bytes of cover art stored with the release, or zero if none arrived.
+    pub artwork: u32,
 }
 
 impl Accepted {
@@ -835,6 +849,19 @@ impl Accepted {
             kept: u32::try_from(applied.confirmed.len()).unwrap_or(u32::MAX),
             unmatched: applied.unmatched.clone(),
             unnamed: applied.unnamed.clone(),
+            relaid: applied.relaid.clone(),
+            artwork: 0,
         }
+    }
+
+    /// Records that a cover of this size was stored with the release.
+    ///
+    /// Separate from [`Accepted::of`] because the cover is downloaded by the
+    /// caller rather than by `accept`: it is a second network round trip and
+    /// one that is allowed to fail without losing the release.
+    #[must_use]
+    pub fn with_artwork(mut self, bytes: usize) -> Self {
+        self.artwork = u32::try_from(bytes).unwrap_or(u32::MAX);
+        self
     }
 }

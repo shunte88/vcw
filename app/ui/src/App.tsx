@@ -80,9 +80,9 @@ import { Metadata } from "./panels/Metadata";
 import { Settings } from "./panels/Settings";
 import { Tracks } from "./panels/Tracks";
 import { Transport } from "./panels/Transport";
-import { Waveform, type View } from "./panels/Waveform";
+import { Waveform, type Region, type View } from "./panels/Waveform";
 import type { Chosen } from "./panels/Tracks";
-import { STEP, type Span, fit, toRange, zoom } from "./zoom";
+import { STEP, type Span, fit, toRange, toSelection, zoom } from "./zoom";
 
 /**
  * The panels a person can be in, in the order the work happens.
@@ -252,7 +252,19 @@ export function App(): React.JSX.Element {
   const labels = project.tracks.filter((row) => held.has(row.sideId));
   const marks = project.boundaries.filter((row) => held.has(row.sideId));
   const [view, setView] = useState<View | null>(null);
+  // # The selection
+  //
+  // Here rather than in the waveform, because the waveform is where it is
+  // drawn and the transport is where it is used: a band means "play this",
+  // and §21's region audition is a transport verb. Two panels, one fact, so
+  // it belongs to the thing that holds both.
+  //
+  // In seconds, because that is what `api.play` takes and what the waveform
+  // is given; and cleared with the capture, because a stretch of one
+  // recording means nothing in another.
+  const [selection, setSelection] = useState<Region | null>(null);
   useEffect(() => {
+    setSelection(null);
     if (capture !== undefined) {
       setView({
         captureId: capture.id,
@@ -298,6 +310,20 @@ export function App(): React.JSX.Element {
     zoomFit: () => reframe(fit()),
     zoomSelection: () => {
       if (capture === undefined) {
+        return;
+      }
+      // A band on the waveform before either of the others. It is the only
+      // one of the three a person drew by hand, and they drew it a moment
+      // ago: "zoom to the selection" can hardly mean anything else while
+      // there is one. Seconds to frames here, like the track below.
+      if (selection !== null) {
+        reframe(
+          toSelection(
+            Math.round(selection.from * capture.rate),
+            Math.round(selection.to * capture.rate),
+            capture.frames,
+          ),
+        );
         return;
       }
       // The boundary before the track, because choosing one is the finer act:
@@ -382,6 +408,8 @@ export function App(): React.JSX.Element {
               tracks={labels}
               playhead={engine.playhead}
               playing={engine.playing}
+              selection={selection}
+              onSelect={setSelection}
               generation={generation}
               onSeek={(seconds) => {
                 if (engine.playing) {
@@ -433,7 +461,12 @@ export function App(): React.JSX.Element {
 
       <aside className="always">
         <Meters meter={engine.meter} />
-        <Transport store={store} capture={capture} side={side} />
+        <Transport
+          store={store}
+          capture={capture}
+          side={side}
+          selection={selection}
+        />
       </aside>
 
       <footer className="status">

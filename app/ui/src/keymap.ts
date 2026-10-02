@@ -365,7 +365,7 @@ export const BINDINGS = {
     chord: "z",
     workflow: "move-marker",
     scope: "global",
-    label: "Zoom to the selected marker, or the selected track",
+    label: "Zoom to the selection, the selected marker, or the selected track",
   },
   help: {
     chord: "?",

@@ -1153,9 +1153,14 @@ country: string,
 format: string,
 /**
  * How many tracks it lists, which is the first thing to compare against
- * what was detected.
+ * what was detected, or `None` where the provider did not say.
+ *
+ * Discogs is the reason this is optional. Its search endpoint returns no
+ * tracklist at all - only a release fetch has one - so a count of zero
+ * would be the panel saying "this pressing has no tracks" when what it
+ * means is "ask again and I will know".
  */
-tracks: number, };
+tracks: number | null, };
 
 export type Accepted = {
 /**
@@ -1181,7 +1186,16 @@ unmatched: Array<string>,
 /**
  * Project tracks the tracklist did not cover, as §29 positions.
  */
-unnamed: Array<string>, };
+unnamed: Array<string>,
+/**
+ * Tracks the release's layout moved to another side, as their new
+ * positions, when the project's own layout was not the record's.
+ */
+relaid: Array<string>,
+/**
+ * Bytes of cover art stored with the release, or zero if none arrived.
+ */
+artwork: number, };
 
 export type Waveform = {
 /**

@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
+<!--
+  pause.svg
 
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  The pause key.
+
+  A key cap rather than a bare glyph, because the transport is the one control
+  group a person hits by feel. The cap is #2d3340, one clear step above the
+  panel so that it reads as raised, with the inner band along the left and the
+  bottom in #13161b, which puts the light at the top right. The glyph is the
+  interface text colour, except record, which takes the band red from the logo:
+  red is what a record key is on every deck ever made, and it is the only
+  saturated thing in the row, so it is also the first thing the eye finds.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
 <svg
    width="37.157028mm"
    height="22.570187mm"
@@ -17,7 +34,7 @@
        transform="translate(0,-86.254178)"><g
          id="g14"
          transform="translate(0,86.254172)"><rect
-           style="fill:#f7e4a9;fill-opacity:1;stroke-width:1;stroke-linecap:round"
+           style="fill:#2d3340;fill-opacity:1;stroke-width:1;stroke-linecap:round"
            id="rect13"
            width="37.157028"
            height="22.570187"
@@ -25,8 +42,8 @@
            y="57.706745"
            rx="6.1999998" /><path
            id="path13"
-           style="fill:#cbbb88;fill-opacity:0.727083;stroke-width:1;stroke-linecap:round"
+           style="fill:#13161b;fill-opacity:0.727083;stroke-width:1;stroke-linecap:round"
            d="m 91.766689,59.021393 c -1.446617,1.133062 -2.372982,2.897249 -2.372982,4.88549 v 10.169922 c 0,3.4348 2.765338,6.200139 6.200138,6.200139 h 24.757145 c 1.98824,0 3.75191,-0.926366 4.88497,-2.372982 -1.05249,0.824366 -2.38008,1.314648 -3.82664,1.314648 H 96.652179 c -3.4348,0 -6.200139,-2.765338 -6.200139,-6.200138 V 62.84855 c 0,-1.446558 0.490282,-2.774661 1.314649,-3.827157 z" /></g><path
          id="rect5"
-         style="fill:#000000;fill-opacity:1;stroke-width:0.577953;stroke-linecap:round"
+         style="fill:#d8dee9;fill-opacity:1;stroke-width:0.577953;stroke-linecap:round"
          d="m 103.44433,149.82516 c -0.44719,0 -0.80718,0.36 -0.80718,0.80719 v 9.22734 c 0,0.44719 0.35999,0.80719 0.80718,0.80719 h 2.70578 c 0.44719,0 0.80719,-0.36 0.80719,-0.80719 v -9.22734 c 0,-0.44719 -0.36,-0.80719 -0.80719,-0.80719 z m 6.35,0 c -0.44719,0 -0.80718,0.36 -0.80718,0.80719 v 9.22734 c 0,0.44719 0.35999,0.80719 0.80718,0.80719 h 2.70578 c 0.44719,0 0.80719,-0.36 0.80719,-0.80719 v -9.22734 c 0,-0.44719 -0.36,-0.80719 -0.80719,-0.80719 z" /></g></g></svg>

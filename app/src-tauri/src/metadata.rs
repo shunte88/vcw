@@ -51,6 +51,20 @@
 //!   the only command that reports on credentials is
 //!   [`crate::config::credentials`], which reports a length.
 //!
+//! # The contact is a setting, and the settings file is where a person put it
+//!
+//! §40 asks the application to identify itself and MusicBrainz rate limits
+//! harder, and sometimes refuses outright, when it does not. A contact address
+//! is public by design, so unlike a token it is allowed in the settings file -
+//! and [`crate::config`] has had a field for it since WP-16. Nothing read it:
+//! the user agent was built from [`Credentials::from_env`] alone, so typing an
+//! address into the settings panel changed nothing and the only way to be
+//! identified was an environment variable nobody is told about.
+//!
+//! [`credentials`] is where the two meet. The settings file wins where it has
+//! an address, because it is the one a person can see and change from inside
+//! the window; `VCW_CONTACT` is the fallback, and is what the CLI runs on.
+//!
 //! # Why these two are async and the rest are not
 //!
 //! A search is a network round trip, and §40 boxes it at ten seconds. A
@@ -62,6 +76,21 @@
 //! filled itself in from an event would have to cope with an answer to a
 //! question it had already replaced.
 //!
+//! # The cover comes back with the release
+//!
+//! §28 says a release has artwork and the project has had somewhere to put it
+//! since WP-05, but nothing fetched it: `vcw release artwork` took a file off
+//! disk and the window had no path at all, so accepting a release gave you the
+//! title, the label and the catalogue number and left the cover behind.
+//! [`select_release`] now downloads the front cover on the same thread as the
+//! release fetch and stores it in the project, where it is part of the
+//! document and gets backed up with it.
+//!
+//! A cover that will not download is not an error. The release is right either
+//! way, and losing a confirmed identification because an image host returned a
+//! 404 would be the tail wagging the dog. [`Accepted::artwork`] reports zero
+//! bytes and the panel says so.
+//!
 //! # Cancellation
 //!
 //! [`Shell::searching`] holds the in-flight [`Cancel`]. Starting a search
@@ -72,11 +101,12 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Manager, State};
 use vcw_contract::command::{Search, Selection};
+use vcw_contract::settings::Metadata;
 use vcw_contract::view::{Accepted, Candidate};
 use vcw_core::identity;
 use vcw_metadata::credentials::Credentials;
-use vcw_metadata::{Cancel, ProviderId, Query, Setup};
-use vcw_project::Project;
+use vcw_metadata::{Cancel, ProviderId, Query, Setup, artwork};
+use vcw_project::{Project, release};
 
 use crate::config;
 use crate::state::{Error, Shell};
@@ -102,6 +132,7 @@ pub(crate) async fn search_metadata(
     let (musicbrainz, discogs) = which(&search, settings.musicbrainz, settings.discogs)?;
 
     let query = query(&search)?;
+    let identified = credentials(&settings);
     let mut setup = Setup::new()
         .online(settings.online)
         .only(musicbrainz, discogs);
@@ -123,8 +154,7 @@ pub(crate) async fn search_metadata(
     }
 
     let found = tauri::async_runtime::spawn_blocking(move || {
-        let credentials = Credentials::from_env();
-        let providers = setup.providers(&credentials);
+        let providers = setup.providers(&identified);
         let mut candidates = Vec::new();
         let mut refusals = Vec::new();
         for provider in &providers {
@@ -178,16 +208,29 @@ pub(crate) async fn select_release(
     }
 
     let id = selection.id.clone();
-    let found = tauri::async_runtime::spawn_blocking(move || {
-        let credentials = Credentials::from_env();
-        let providers = setup.providers(&credentials);
+    let identified = credentials(&settings);
+    let (found, cover) = tauri::async_runtime::spawn_blocking(move || {
+        let providers = setup.providers(&identified);
         let Some(one) = providers.first() else {
             // Unreachable through `provider_id`, which only returns a provider
             // `Setup` will then build. Said out loud rather than unwrapped,
             // because the two would drift silently if a third provider arrived.
             return Err(vcw_metadata::Error::NothingToSearch { provider });
         };
-        one.fetch(&id, &Cancel::new())
+        let cancel = Cancel::new();
+        let found = one.fetch(&id, &cancel)?;
+        // Through the provider's own client, so the download is counted
+        // against the rate limit the release fetch just used and goes out
+        // under the same user agent. Discarded on failure for the reason in
+        // the module header.
+        let cover = artwork::fetch_front(
+            &setup.client(provider, &identified),
+            &found.artwork,
+            &cancel,
+        )
+        .ok()
+        .flatten();
+        Ok((found, cover))
     })
     .await
     .map_err(|why| Error::Invalid {
@@ -199,8 +242,37 @@ pub(crate) async fn select_release(
     // out does not hold a write lock on the project for ten seconds.
     let mut project = Project::open(&path)?;
     let applied = identity::accept(&mut project, &found)?;
+    let stored = match &cover {
+        Some(image) => {
+            release::put_artwork(
+                &mut project,
+                release::Artwork::FRONT,
+                image.format.mime(),
+                &image.bytes,
+                Some(&image.url),
+            )?;
+            image.len()
+        }
+        None => 0,
+    };
     project.close()?;
-    Ok(Accepted::of(&found, &applied))
+    Ok(Accepted::of(&found, &applied).with_artwork(stored))
+}
+
+/// The credentials a provider call runs with: §39's environment, plus the
+/// contact §39's settings file is allowed to hold.
+///
+/// Only the contact. A token in a settings file is the thing §39 forbids and
+/// [`vcw_metadata::credentials::Credentials`] is not serialisable so that one
+/// cannot arrive there by accident; an address is public by design - it is
+/// sent in a header to every provider on every request - and so it is a
+/// setting like any other.
+fn credentials(settings: &Metadata) -> Credentials {
+    let environment = Credentials::from_env();
+    match settings.contact.as_deref().map(str::trim) {
+        Some(contact) if !contact.is_empty() => environment.with_contact(contact),
+        _ => environment,
+    }
 }
 
 /// Where provider answers are cached (§40).
@@ -305,6 +377,46 @@ mod tests {
             ..Search::default()
         };
         assert_eq!(which(&search, true, false).expect("which"), (false, true));
+    }
+
+    #[test]
+    fn the_settings_contact_reaches_the_user_agent() {
+        // The defect this exists to keep fixed: the field was in the settings
+        // panel, the panel saved it, and every request still went out saying
+        // only where VCW lives. A test on `credentials` rather than on the
+        // command, because the command needs a window.
+        let settings = Metadata {
+            contact: Some("  someone@example.invalid  ".to_owned()),
+            ..Metadata::default()
+        };
+        let agent = vcw_metadata::net::user_agent(credentials(&settings).contact());
+        assert!(
+            agent.contains("someone@example.invalid"),
+            "the settings contact should identify us: {agent}"
+        );
+        assert!(
+            !agent.contains("  someone"),
+            "and should be trimmed on the way: {agent}"
+        );
+    }
+
+    #[test]
+    fn a_blank_settings_contact_leaves_the_environment_alone() {
+        // Blank rather than absent, which is what an input a person typed into
+        // and then emptied leaves behind. Overriding with it would make the
+        // panel able to *unset* `VCW_CONTACT`, which is not what clearing a
+        // field means.
+        for blank in [None, Some(String::new()), Some("   ".to_owned())] {
+            let settings = Metadata {
+                contact: blank.clone(),
+                ..Metadata::default()
+            };
+            assert_eq!(
+                credentials(&settings).contact(),
+                Credentials::from_env().contact(),
+                "a blank contact should change nothing: {blank:?}"
+            );
+        }
     }
 
     #[test]

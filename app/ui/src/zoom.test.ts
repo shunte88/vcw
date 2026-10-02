@@ -19,8 +19,11 @@ import {
   fit,
   follow,
   pan,
+  region,
   resolve,
+  toBand,
   toRange,
+  toSelection,
   zoom,
 } from "./zoom";
 
@@ -244,5 +247,103 @@ describe("following a playhead", () => {
     const after = follow(window, SIDE, SIDE);
     expect(resolve(after, SIDE).end).toBe(SIDE);
     expect(wide(after)).toBe(1_000_000);
+  });
+});
+
+// A plain drag across the picture draws a band, and the band is what the zoom
+// key then zooms to. The gesture is tested here rather than in the panel
+// because what can go wrong with it is arithmetic: a backwards drag, a drag
+// that leaves the picture under pointer capture, and a drag so short it asks
+// for a window narrower than the panel can draw.
+describe("zooming to a selection", () => {
+  it("becomes exactly the frames it covered, with no margin", () => {
+    const after = toSelection(40_000_000, 60_000_000, SIDE);
+    expect(resolve(after, SIDE)).toEqual({ start: 40_000_000, end: 60_000_000 });
+  });
+
+  it("does not pad the way zooming to a track does", () => {
+    // The one difference between the two, stated as a test so that a later
+    // tidy-up cannot quietly make them the same function.
+    expect(wide(toSelection(40_000_000, 60_000_000, SIDE))).toBe(20_000_000);
+    expect(wide(toRange(40_000_000, 60_000_000, SIDE))).toBeGreaterThan(20_000_000);
+  });
+
+  it("reads a backwards drag the same as a forwards one", () => {
+    expect(toSelection(60_000_000, 40_000_000, SIDE)).toEqual(
+      toSelection(40_000_000, 60_000_000, SIDE),
+    );
+  });
+
+  it("widens a drag too short to draw, about its own middle", () => {
+    const after = toSelection(100_000, 100_010, SIDE);
+    expect(wide(after)).toBe(CLOSEST);
+    const { start, end } = resolve(after, SIDE);
+    expect((start + end) / 2).toBeCloseTo(100_005, -1);
+  });
+
+  it("keeps a drag against the end inside the capture", () => {
+    const after = toSelection(SIDE - 1000, SIDE + 5_000_000, SIDE);
+    const { start, end } = resolve(after, SIDE);
+    expect(end).toBe(SIDE);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end - start).toBe(CLOSEST);
+  });
+
+  it("gives back the whole capture when there is none", () => {
+    expect(toSelection(10, 20, 0)).toEqual(fit());
+    expect(toSelection(Number.NaN, 20, SIDE)).toEqual(fit());
+  });
+});
+
+// What a drag leaves behind, which is a region in seconds because the next
+// thing to happen to it is `api.play`. Clamping is the whole job: pointer
+// capture reports past both ends of the capture, and a region that asks to
+// play from -3 seconds is a refusal from the shell rather than a selection.
+describe("the region a drag selects", () => {
+  const SECONDS = 1800;
+
+  it("is the two seconds it was drawn between", () => {
+    expect(region(300.5, 420.25, SECONDS)).toEqual({ from: 300.5, to: 420.25 });
+  });
+
+  it("reads a backwards drag the same as a forwards one", () => {
+    expect(region(420.25, 300.5, SECONDS)).toEqual(region(300.5, 420.25, SECONDS));
+  });
+
+  it("stops at both ends of the capture", () => {
+    expect(region(-30, 90, SECONDS)).toEqual({ from: 0, to: 90 });
+    expect(region(1700, 9000, SECONDS)).toEqual({ from: 1700, to: SECONDS });
+  });
+
+  it("is nothing when a drag selected nothing", () => {
+    // A press and release in one place, which is a click: the panel seeks and
+    // clears the selection, and must not be handed a region to play.
+    expect(region(90, 90, SECONDS)).toBeNull();
+    expect(region(-30, -20, SECONDS)).toBeNull();
+    expect(region(10, 20, 0)).toBeNull();
+    expect(region(Number.NaN, 20, SECONDS)).toBeNull();
+  });
+});
+
+describe("the band a drag paints", () => {
+  it("is the fraction of the window the drag covers", () => {
+    expect(toBand(250, 500, 0, 1000)).toEqual({ left: 25, width: 25 });
+  });
+
+  it("stops at the edges when a drag runs off the picture", () => {
+    // Pointer capture keeps the reports coming after the pointer has left the
+    // canvas, which is the ordinary way to select up to the edge.
+    expect(toBand(-4000, 500, 0, 1000)).toEqual({ left: 0, width: 50 });
+    expect(toBand(500, 9000, 0, 1000)).toEqual({ left: 50, width: 50 });
+  });
+
+  it("is nothing when the selection is off the window entirely", () => {
+    expect(toBand(2000, 3000, 0, 1000)).toBeNull();
+    expect(toBand(-3000, -2000, 0, 1000)).toBeNull();
+  });
+
+  it("is nothing when the drag has not moved, and nothing to divide by", () => {
+    expect(toBand(500, 500, 0, 1000)).toBeNull();
+    expect(toBand(250, 500, 1000, 1000)).toBeNull();
   });
 });

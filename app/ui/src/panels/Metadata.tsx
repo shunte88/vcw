@@ -223,7 +223,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
                 <td>{row.label}</td>
                 <td>{row.catalog}</td>
                 <td>{row.format}</td>
-                <td className="n">{row.tracks}</td>
+                <td className="n">{row.tracks ?? "-"}</td>
                 <td>{row.provider}</td>
               </tr>
             ))}
@@ -251,10 +251,47 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
               track editor.
             </p>
           )}
+          {accepted.relaid.length > 0 && (
+            <p className="hint">
+              The release is cut over {sides(accepted.relaid)}, so{" "}
+              {accepted.relaid.length} track(s) moved to the side they are
+              actually on. The audio did not move: every boundary is the same
+              frame of the same capture.
+            </p>
+          )}
+          <p className="hint">
+            {accepted.artwork > 0
+              ? `Cover art stored with the release, ${kb(accepted.artwork)}.`
+              : "No cover art: the provider named none, or it would not download."}
+          </p>
         </div>
       )}
     </section>
   );
+}
+
+/**
+ * The side letters a list of positions touches, as English.
+ *
+ * `["B1", "B2", "C1"]` is "sides B and C". Read off the positions rather than
+ * taken from the release, because what matters to a person reading the line is
+ * where their tracks went.
+ */
+export function sides(positions: readonly string[]): string {
+  const letters = [...new Set(positions.map((at) => at.slice(0, 1)))].sort();
+  if (letters.length === 0) {
+    return "no sides";
+  }
+  if (letters.length === 1) {
+    return `side ${letters[0]}`;
+  }
+  const last = letters[letters.length - 1];
+  return `sides ${letters.slice(0, -1).join(", ")} and ${last}`;
+}
+
+/** A byte count as kilobytes, for a line about a cover. */
+export function kb(bytes: number): string {
+  return `${Math.round(bytes / 1024)} KB`;
 }
 
 /** A candidate's identity, which is the provider *and* the id. */

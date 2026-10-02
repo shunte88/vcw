@@ -47,13 +47,41 @@
 //! because that is what §29 makes it. So the match is exact: `A3` names the
 //! third track on side A, and nothing else.
 //!
-//! No duration matching, no fuzzy titles, no reordering. §26's confidence-
-//! weighted identification is Phase 2 and lives in `vcw-identify`; what this
-//! does is the part that is not a guess. The cost of the dull rule is visible
-//! rather than hidden: [`Applied::unmatched`] lists the provider's positions
-//! that named no track, and [`Applied::unnamed`] lists the project's tracks the
-//! provider did not cover, so a tracklist that does not line up is reported
-//! instead of being forced.
+//! No duration matching, no fuzzy titles. §26's confidence-weighted
+//! identification is Phase 2 and lives in `vcw-identify`; what this does is the
+//! part that is not a guess. The cost of the dull rule is visible rather than
+//! hidden: [`Applied::unmatched`] lists the provider's positions that named no
+//! track, and [`Applied::unnamed`] lists the project's tracks the provider did
+//! not cover, so a tracklist that does not line up is reported instead of being
+//! forced.
+//!
+//! # Where the sides come from, and why the release wins
+//!
+//! The exact rule above is only honest if the project's side letters mean
+//! something, and until a release is accepted they very often do not. Capture
+//! writes one side because one capture is one take, so a person who recorded a
+//! double album in a single pass has seventeen tracks called `A1` to `A17`.
+//! That is not a layout the record could have: a 12-inch side holds about
+//! twenty-two minutes, and seventeen tracks over an hour do not fit on one
+//! face. The old behaviour matched `A1` to `A4` against a `A`/`B`/`C`/`D`
+//! tracklist, named four tracks, and reported the other thirteen as a
+//! disappointment - which blamed the provider for being right.
+//!
+//! So `relay` runs first. When the release's tracklist has exactly as many
+//! tracks as the project does and every one of them resolved to a position, the
+//! release's layout is adopted: the sides it names are created against the
+//! capture the tracks already live on, and each track is moved to the side its
+//! ordinal falls on. §31 allows this because two faces sharing one capture is
+//! the case the schema was built for - `sides.capture_id` is deliberately not
+//! unique - and [`vcw_project::track::move_to_side`] carries the boundaries
+//! across unchanged, because they are frames of the same audio either way.
+//!
+//! A person chose this release from a list of candidates, which is §26's
+//! confirmation. Having confirmed it, its tracklist is the better authority on
+//! how many faces this record has than a side letter nothing has yet had cause
+//! to set. Equal counts is the whole condition, and it is a strong one: a
+//! tracklist that does not have the same number of tracks is not this pressing,
+//! and nothing moves.
 //!
 //! # What accepting does not overwrite
 //!
@@ -82,6 +110,12 @@ pub struct Applied {
     pub unmatched: Vec<String>,
     /// Project tracks the provider's tracklist did not cover, as §29 positions.
     pub unnamed: Vec<String>,
+    /// Tracks the release's own layout moved to another side, as their new
+    /// §29 positions.
+    ///
+    /// Empty when the project was already laid out the way the release
+    /// describes, which is the case once a release has been accepted once.
+    pub relaid: Vec<String>,
 }
 
 impl Applied {
@@ -132,7 +166,101 @@ pub fn accept(project: &mut Project, found: &Release) -> Result<Applied> {
         updated_at: existing.updated_at,
     };
     release::store(project, &record)?;
-    name_tracks(project, found)
+    let relaid = relay(project, found)?;
+    let mut applied = name_tracks(project, found)?;
+    applied.relaid = relaid;
+    Ok(applied)
+}
+
+/// Lays the project's tracks out the way the release says the record is cut.
+///
+/// Returns the new positions of the tracks that moved, and an empty vector
+/// when nothing did - which covers every case the condition does not hold for,
+/// because this is a correction and not a demand. See the module header for
+/// why the release is the authority on the layout.
+///
+/// Nothing moves unless all of:
+///
+/// - every provider track resolved to a position, so there is a full layout to
+///   adopt rather than a partial one;
+/// - the release lists exactly as many tracks as the project holds;
+/// - the project is not already laid out that way;
+/// - every side holding tracks points at the same capture, since a track's
+///   boundaries are frames into its side's audio and §31 only lets it move
+///   within one recording;
+/// - no side the release names is already attached to a *different* capture,
+///   which would mean that face was recorded separately and the counts lining
+///   up was a coincidence.
+fn relay(project: &mut Project, found: &Release) -> Result<Vec<String>> {
+    let mut wanted: Vec<vcw_types::vinyl::Position> = Vec::new();
+    for medium in &found.media {
+        for entry in &medium.tracks {
+            let Some(position) = entry.resolved else {
+                return Ok(Vec::new());
+            };
+            wanted.push(position);
+        }
+    }
+    let have = track::listing(project.conn())?;
+    if wanted.is_empty() || wanted.len() != have.len() {
+        return Ok(Vec::new());
+    }
+    if have
+        .iter()
+        .zip(&wanted)
+        .all(|((side, row), want)| *side == want.side && row.number == want.number)
+    {
+        return Ok(Vec::new());
+    }
+
+    // One capture under every track, and no side the release names already
+    // spoken for by another.
+    let sides = side::list(project.conn())?;
+    let mut capture: Option<i64> = None;
+    for record in &sides {
+        if track::tracks_of(project.conn(), record.id)?.is_empty() {
+            continue;
+        }
+        match (capture, record.capture) {
+            (_, None) => return Ok(Vec::new()),
+            (None, Some(id)) => capture = Some(id),
+            (Some(already), Some(id)) if already == id => {}
+            _ => return Ok(Vec::new()),
+        }
+    }
+    let Some(capture) = capture else {
+        return Ok(Vec::new());
+    };
+    for record in &sides {
+        if wanted.iter().any(|want| want.side == record.side)
+            && record.capture.is_some_and(|id| id != capture)
+        {
+            return Ok(Vec::new());
+        }
+    }
+
+    // Create the faces before moving anything on to them. Attaching a side
+    // that already points at this capture is the same row written twice.
+    let mut faces: Vec<vcw_types::vinyl::Side> = wanted.iter().map(|want| want.side).collect();
+    faces.sort_unstable();
+    faces.dedup();
+    for face in faces {
+        side::attach(project, face, capture)?;
+    }
+
+    // In tracklist order, which is timeline order, which is the order
+    // `move_to_side` renumbers each face into. The number therefore does not
+    // need setting: moving the first five tracks of side B on to it in turn
+    // numbers them one to five.
+    let mut relaid = Vec::new();
+    for ((side, row), want) in have.iter().zip(&wanted) {
+        if *side == want.side {
+            continue;
+        }
+        track::move_to_side(project, row.id, want.side)?;
+        relaid.push(want.alpha());
+    }
+    Ok(relaid)
 }
 
 /// The tracklist half: match on side and number, write titles.

@@ -64,7 +64,10 @@ export function Diagnostics({
           </button>
         </header>
         {shown.length === 0 ? (
-          <p className="empty">Nothing yet.</p>
+          <p className="empty">
+            Nothing yet. Meter and position ticks are not kept - see UNLOGGED
+            in the store.
+          </p>
         ) : (
           <table className="rows log">
             <tbody>

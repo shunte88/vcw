@@ -52,6 +52,36 @@ import type {
 /** How many events the diagnostics log keeps. Older ones are dropped. */
 export const LOG_LIMIT = 500;
 
+/**
+ * Event kinds the log does not keep, because they are a stream and not events.
+ *
+ * `meter-update` arrives at 60 Hz and `playback-position` at about 12.5, so
+ * between them they wrote the log's whole 500-line capacity in roughly eight
+ * seconds of playback. Everything that mattered - a refusal, a warning, the
+ * end of a capture - was off the end of the buffer before a person could open
+ * the panel, which made the one tool for seeing what the engine did useless at
+ * exactly the moment it was needed.
+ *
+ * Dropping them loses nothing. A meter tick's content is a level that is
+ * already drawn on the meters and a position is already on the transport
+ * clock, and neither carries anything the next one does not. What they are is
+ * telemetry sampled continuously, and a log is for things that happened once.
+ *
+ * `logged` is still folded into the engine state first, so the meters and the
+ * clock see every one of them: this is about what is *kept*, not about what is
+ * delivered.
+ */
+export const UNLOGGED: ReadonlySet<string> = new Set([
+  "meter-update",
+  "playback-position",
+  "recording-position",
+]);
+
+/** Whether an event is worth a line in the log. */
+export function logged(event: Wire): boolean {
+  return !UNLOGGED.has(event.kind);
+}
+
 /** One line in the event log. */
 export type Line = {
   /** Wall-clock arrival, for the log's own timestamp column. */
@@ -350,7 +380,9 @@ export function useEngine(): Store {
         }
         setEngine((previous) => ({
           ...fold(previous, event),
-          log: [...previous.log, { at: Date.now(), event }].slice(-LOG_LIMIT),
+          log: logged(event)
+            ? [...previous.log, { at: Date.now(), event }].slice(-LOG_LIMIT)
+            : previous.log,
         }));
         // Which events mean "the rows on disk moved". Listed rather than
         // reloading on everything, because `meter-update` arrives at 60 Hz and

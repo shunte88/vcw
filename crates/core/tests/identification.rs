@@ -44,8 +44,10 @@
 
 use vcw_core::identity::{self, Applied};
 use vcw_metadata::release::{Medium, Release, TrackEntry};
+use vcw_project::session::Session;
 use vcw_project::{Project, release, side, track};
 use vcw_types::vinyl::{Position, Side};
+use vcw_types::{CaptureInfo, CaptureMode, SampleRate, StorageFormat};
 
 /// Side B. `Side` names only `A` as a constant, because every other side is
 /// derived from a letter or an index rather than written down.
@@ -273,4 +275,190 @@ fn what_no_provider_reports_is_left_alone() {
     assert_eq!(record.composer, "Booth / Brown");
     assert_eq!(record.comments, "warped near the label");
     assert_eq!(record.album, "Amber", "the provider's fields did land");
+}
+
+/// A side letter as a [`Side`], for the sides that have no constant.
+fn side_of(letter: char) -> Side {
+    Side::from_letter(letter).expect("a side letter")
+}
+
+/// A project holding one capture and one side of `tracks` tracks on it.
+///
+/// This is what a double album looks like straight out of a single-pass
+/// capture: one take, one side row, and every track called `A`-something
+/// because nothing has yet had cause to say otherwise.
+fn one_long_side(dir: &tempfile::TempDir, tracks: u64) -> Project {
+    let mut project = Project::create(dir.path().join("long.vcw")).expect("create");
+    let session = Session::begin(
+        &mut project,
+        &CaptureInfo::unverified(
+            SampleRate(44_100),
+            2,
+            StorageFormat::Int16,
+            CaptureMode::Shared,
+        ),
+    )
+    .expect("session");
+    side::attach(&mut project, Side::A, session.id()).expect("attach");
+    for n in 0..tracks {
+        let start = n * 200_000;
+        track::add_track(&mut project, Side::A, start, start + 150_000).expect("track");
+    }
+    project
+}
+
+/// A release cut over four sides, `counts` tracks on each, titled `t1`, `t2`...
+fn cut_over_sides(counts: &[u32]) -> Release {
+    let mut entries = Vec::new();
+    let mut ordinal = 0;
+    for (index, count) in counts.iter().enumerate() {
+        let side = side_of((b'A' + u8::try_from(index).expect("few sides")) as char);
+        for number in 1..=*count {
+            ordinal += 1;
+            entries.push(entry(
+                &format!("{}{number}", side.letter()),
+                side,
+                number,
+                &format!("t{ordinal}"),
+            ));
+        }
+    }
+    Release {
+        album: "Tomorrow's Harvest".to_owned(),
+        album_artist: "Boards of Canada".to_owned(),
+        media: vec![Medium {
+            position: 1,
+            format: "2 x 12\" Vinyl".to_owned(),
+            tracks: entries,
+        }],
+        ..Release::default()
+    }
+}
+
+#[test]
+fn a_release_cut_over_four_sides_relays_a_single_pass_capture() {
+    // The defect this is here for: seventeen tracks captured in one pass are
+    // all on side A, the release says 4/5/5/3, and the old exact match named
+    // the first four and called the other thirteen a disappointment. An hour
+    // of audio is not one twelve-inch side, and the release a person chose
+    // from a list knows how the record is cut.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut project = one_long_side(&dir, 17);
+    let found = cut_over_sides(&[4, 5, 5, 3]);
+
+    let applied = identity::accept(&mut project, &found).expect("accept");
+
+    assert_eq!(applied.tracks.len(), 17, "every track named");
+    assert!(
+        applied.is_exact(),
+        "nothing should be left over once the sides are right: {applied:?}"
+    );
+    assert_eq!(
+        applied.relaid.len(),
+        13,
+        "the four on side A were already where they belong"
+    );
+    assert_eq!(applied.relaid.first().map(String::as_str), Some("B1"));
+    assert_eq!(applied.relaid.last().map(String::as_str), Some("D3"));
+
+    let listing = track::listing(project.conn()).expect("listing");
+    let positions: Vec<String> = listing
+        .iter()
+        .map(|(side, row)| format!("{}{}", side.letter(), row.number))
+        .collect();
+    assert_eq!(positions.first().map(String::as_str), Some("A1"));
+    assert_eq!(positions[4], "B1", "the fifth track opens side B");
+    assert_eq!(positions[9], "C1");
+    assert_eq!(positions[14], "D1");
+    assert_eq!(positions.last().map(String::as_str), Some("D3"));
+    let titles: Vec<&str> = listing.iter().map(|(_, row)| row.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        (1..=17).map(|n| format!("t{n}")).collect::<Vec<_>>(),
+        "and the names follow the tracklist in order"
+    );
+}
+
+#[test]
+fn relaying_moves_the_boundaries_with_the_track() {
+    // §31: the sides share one capture, so a track's frames are the same
+    // frames whichever face it is filed under. If the boundaries did not
+    // follow, every moved track would play the wrong audio.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut project = one_long_side(&dir, 6);
+    let before: Vec<(u64, u64)> = track::listing(project.conn())
+        .expect("listing")
+        .iter()
+        .map(|(_, row)| (row.start, row.end))
+        .collect();
+
+    identity::accept(&mut project, &cut_over_sides(&[3, 3])).expect("accept");
+
+    let after: Vec<(u64, u64)> = track::listing(project.conn())
+        .expect("listing")
+        .iter()
+        .map(|(_, row)| (row.start, row.end))
+        .collect();
+    assert_eq!(before, after, "not one frame moved");
+    assert_eq!(
+        side::load(project.conn(), side_of('B'))
+            .expect("load")
+            .and_then(|row| row.capture),
+        side::load(project.conn(), Side::A)
+            .expect("load")
+            .and_then(|row| row.capture),
+        "the new face points at the capture the audio is in"
+    );
+}
+
+#[test]
+fn a_tracklist_of_a_different_length_moves_nothing() {
+    // The whole of the condition. A release with a different number of tracks
+    // is not this pressing, and guessing which thirteen of its twenty go where
+    // is §26's confidence-weighted matching, which is Phase 2.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut project = one_long_side(&dir, 17);
+
+    let applied = identity::accept(&mut project, &cut_over_sides(&[5, 5, 5, 5])).expect("accept");
+
+    assert!(applied.relaid.is_empty(), "nothing moved: {applied:?}");
+    let listing = track::listing(project.conn()).expect("listing");
+    assert!(
+        listing.iter().all(|(side, _)| *side == Side::A),
+        "every track is where the capture put it"
+    );
+    assert_eq!(applied.unnamed.len(), 12, "and the mismatch is reported");
+}
+
+#[test]
+fn a_project_already_laid_out_that_way_relays_nothing() {
+    // Accepting the same release twice is an ordinary thing to do - a person
+    // re-running a lookup after fixing a boundary - and the second pass must
+    // be a no-op on the layout rather than a second round of moves.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut project = one_long_side(&dir, 8);
+    let found = cut_over_sides(&[4, 4]);
+
+    let first = identity::accept(&mut project, &found).expect("first");
+    assert_eq!(first.relaid.len(), 4);
+
+    let again = identity::accept(&mut project, &found).expect("second");
+    assert!(
+        again.relaid.is_empty(),
+        "the layout was already the release's: {again:?}"
+    );
+    assert!(again.is_exact());
+}
+
+#[test]
+fn a_side_with_no_capture_is_left_alone() {
+    // `a_record` has two sides and no audio at all, which is the fixture the
+    // rest of this file uses. A track whose side points at no capture cannot
+    // move, because §31's rule is about frames of one recording.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut project = a_record(&dir);
+
+    let applied = identity::accept(&mut project, &cut_over_sides(&[2, 2, 2])).expect("accept");
+
+    assert!(applied.relaid.is_empty(), "nothing moved: {applied:?}");
 }

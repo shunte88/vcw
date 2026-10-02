@@ -193,7 +193,14 @@ impl Setup {
     }
 
     /// A client for one provider, with that provider's own published rate.
-    fn client(&self, provider: ProviderId, credentials: &Credentials) -> Client {
+    ///
+    /// Public because cover art is fetched outside a [`Provider`]: §28's
+    /// images come from a host the provider named rather than from the
+    /// provider's own API, and a caller downloading one still owes that
+    /// provider its rate limit and its user agent. Building a bare
+    /// [`Client`] instead would owe neither.
+    #[must_use]
+    pub fn client(&self, provider: ProviderId, credentials: &Credentials) -> Client {
         let mut client = Client::new(provider, self.transport())
             // From the library rather than restated here: a limit written down
             // twice is a limit that will disagree.

@@ -236,3 +236,101 @@ export function follow(current: Span, frames: number, atFrame: number): Span {
   }
   return span(from, from + wide, frames);
 }
+
+/**
+ * Exactly the frames a selection covers, and no more.
+ *
+ * What the zoom key does with a band drawn on the waveform. The difference
+ * from [`toRange`] is the margin, and it is not an oversight. `toRange`
+ * answers "show me this track", where the point is to see the ground on both
+ * sides of its boundaries, so it pads. This answers "show me *that*", where a
+ * person has just drawn the two edges by hand - and a window wider than the
+ * one they drew is the picture disagreeing with the gesture.
+ *
+ * A drag narrower than [`CLOSEST`] is widened about its own middle rather than
+ * refused. A pointer cannot know where the floor is, and the alternative is a
+ * drag that selects something and then does nothing.
+ */
+export function toSelection(
+  fromFrame: number,
+  toFrame: number,
+  frames: number,
+): Span {
+  if (frames <= 0 || !Number.isFinite(fromFrame) || !Number.isFinite(toFrame)) {
+    return fit();
+  }
+  // Clamped to the capture before the width is taken, not after. A drag that
+  // runs off the right edge under pointer capture reports frames that do not
+  // exist, and measuring those would zoom to a window as wide as the overshoot
+  // - so dragging the last second of a side would show the last five minutes.
+  const inside = (frame: number) => Math.min(Math.max(0, frame), frames);
+  const low = inside(Math.min(fromFrame, toFrame));
+  const high = inside(Math.max(fromFrame, toFrame));
+  const wide = width(high - low, frames);
+  const middle = (low + high) / 2;
+  const from = Math.min(Math.max(0, middle - wide / 2), frames - wide);
+  return span(from, from + wide, frames);
+}
+
+/**
+ * A selection a drag asked for, brought inside the thing it was drawn on.
+ *
+ * In seconds, which is the one place in this module that is not in frames, and
+ * deliberately: a selection's whole purpose is to be played, §35's audition
+ * takes a region in seconds, and the waveform is given seconds for the same
+ * reason - see its header. Frames would mean converting twice, in both
+ * directions, to arrive back where we started.
+ *
+ * Clamped rather than refused, because a drag under pointer capture reports
+ * positions off both ends of the capture and "to the end" is what running off
+ * the right edge means. Null when what is left has no width: a drag that
+ * started and finished in the same place is a click, and a click is not a
+ * selection of nothing.
+ */
+export function region(
+  from: number,
+  to: number,
+  length: number,
+): { from: number; to: number } | null {
+  if (length <= 0 || !Number.isFinite(from) || !Number.isFinite(to)) {
+    return null;
+  }
+  const inside = (at: number) => Math.min(Math.max(0, at), length);
+  const low = inside(Math.min(from, to));
+  const high = inside(Math.max(from, to));
+  return high <= low ? null : { from: low, to: high };
+}
+
+/**
+ * Where a selection falls across the visible window, as percentages of it.
+ *
+ * Percentages rather than pixels because the band is a `div` over the canvas
+ * and not something drawn into it: the canvas is sized in device pixels and
+ * laid out in CSS pixels, and a band that had to know the ratio would be one
+ * more place for the two to drift apart. A percentage is correct in both.
+ *
+ * In whatever unit the caller has, as long as all four agree - the only
+ * arithmetic here is a ratio. The waveform calls it in seconds, because that
+ * is what a selection is kept in; it used to be called in frames and both are
+ * right.
+ *
+ * Returns null when there is nothing to paint, which includes a selection
+ * entirely off one side of the window - a drag that left the picture under
+ * pointer capture, which is a normal way to finish one.
+ */
+export function toBand(
+  from: number,
+  to: number,
+  start: number,
+  end: number,
+): { left: number; width: number } | null {
+  const across = end - start;
+  if (across <= 0 || !Number.isFinite(from) || !Number.isFinite(to)) {
+    return null;
+  }
+  const low = Math.min(from, to);
+  const high = Math.max(from, to);
+  const left = Math.max(0, ((low - start) / across) * 100);
+  const right = Math.min(100, ((high - start) / across) * 100);
+  return right <= left ? null : { left, width: right - left };
+}

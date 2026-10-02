@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
+<!--
+  ffwd.svg
 
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  The fast-forward key.
+
+  A key cap rather than a bare glyph, because the transport is the one control
+  group a person hits by feel. The cap is #2d3340, one clear step above the
+  panel so that it reads as raised, with the inner band along the left and the
+  bottom in #13161b, which puts the light at the top right. The glyph is the
+  interface text colour, except record, which takes the band red from the logo:
+  red is what a record key is on every deck ever made, and it is the only
+  saturated thing in the row, so it is also the first thing the eye finds.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
 <svg
    width="37.157028mm"
    height="22.570187mm"
@@ -18,7 +35,7 @@
          id="g17"><g
            id="g15"
            transform="translate(0,113.77085)"><rect
-             style="fill:#f7e4a9;fill-opacity:1;stroke-width:1;stroke-linecap:round"
+             style="fill:#2d3340;fill-opacity:1;stroke-width:1;stroke-linecap:round"
              id="rect14"
              width="37.157028"
              height="22.570187"
@@ -26,8 +43,8 @@
              y="57.706745"
              rx="6.1999998" /><path
              id="path14"
-             style="fill:#cbbb88;fill-opacity:0.727083;stroke-width:1;stroke-linecap:round"
+             style="fill:#13161b;fill-opacity:0.727083;stroke-width:1;stroke-linecap:round"
              d="m 91.766689,59.021393 c -1.446617,1.133062 -2.372982,2.897249 -2.372982,4.88549 v 10.169922 c 0,3.4348 2.765338,6.200139 6.200138,6.200139 h 24.757145 c 1.98824,0 3.75191,-0.926366 4.88497,-2.372982 -1.05249,0.824366 -2.38008,1.314648 -3.82664,1.314648 H 96.652179 c -3.4348,0 -6.200139,-2.765338 -6.200139,-6.200138 V 62.84855 c 0,-1.446558 0.490282,-2.774661 1.314649,-3.827157 z" /></g><path
            id="path10"
-           style="fill:#000000;fill-opacity:1;stroke-width:1.23504;stroke-linecap:round"
+           style="fill:#d8dee9;fill-opacity:1;stroke-width:1.23504;stroke-linecap:round"
            d="m 101.67148,177.5088 a 0.75465075,0.75465075 0 0 0 -0.72864,0.75396 l -0.003,5.80688 -0.002,3.19257 a 0.75465075,0.75465075 0 0 0 1.13171,0.65422 l 3.63182,-2.09444 -10e-4,1.44022 a 0.75465075,0.75465075 0 0 0 1.13171,0.65422 l 5.0307,-2.90111 2.76573,-1.59474 a 0.75465075,0.75465075 0 0 0 5.1e-4,-1.3069 l -5.0276,-2.90628 -2.76365,-1.59783 a 0.75465075,0.75465075 0 0 0 -1.13275,0.65319 l -5.2e-4,1.44487 -0.86558,-0.50023 -2.76417,-1.59783 a 0.75465075,0.75465075 0 0 0 -0.40359,-0.10077 z" /></g></g></g></svg>

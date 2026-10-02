@@ -610,6 +610,26 @@ code {
   min-height: 0;
   width: 100%;
   background: var(--sunken);
+  /* So the selection band can be laid over the canvas. */
+  position: relative;
+}
+
+/* The band a drag paints across the picture, which on release becomes the
+   window. A wash rather than a fill, because the point of selecting a stretch
+   of audio is to look at the audio: a band you cannot see the peaks through is
+   a band that hides the thing it is asking about. The two edges are solid so
+   that where the window will land is readable to the pixel. */
+.waveform-selection {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(79 140 201 / 16%);
+  border-left: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+  box-sizing: border-box;
+  /* The drag is handled by the canvas underneath, and this is drawn during
+     it - without this the band would take the pointer off its own gesture. */
+  pointer-events: none;
 }
 
 /*
@@ -623,6 +643,44 @@ code {
   width: 100%;
   height: 100%;
   cursor: crosshair;
+}
+
+/*
+ * What a drag from here would do, said as a cursor. The panel sets the
+ * attribute and the three cursors live here, so the only place that names the
+ * drawing in `public/` is the stylesheet - which is also the only place that
+ * can ask for the right one of the two pixel ratios.
+ *
+ * Select is drawn: two arrows pointing out of a line, which is the gesture.
+ * The other two are the platform's hand, because a hand for "take hold of
+ * this and move it" is a thing every pointer already knows and a drawing of
+ * our own would be a worse copy of it - and because a scrub and a ruler
+ * scroll are the same act in two places, so they say so with the same cursor.
+ *
+ * The plain `url()` first and `image-set()` second is not a duplicate. A
+ * renderer that does not take `image-set` with a hotspot drops that whole
+ * declaration and keeps the one above it, so the cursor is right everywhere
+ * and sharp where it can be. The hotspot is the middle of the 24x24 drawing,
+ * which is the line the two arrows open out from; `tools/make-cursors.sh` is
+ * where that size is decided.
+ */
+.waveform canvas[data-gesture="select"] {
+  cursor: url("/cursor-select.png") 12 12, crosshair;
+  cursor:
+    image-set(
+        url("/cursor-select.png") 1x,
+        url("/cursor-select@2x.png") 2x
+      )
+      12 12,
+    crosshair;
+}
+
+.waveform canvas[data-gesture="grab"] {
+  cursor: grab;
+}
+
+.waveform canvas[data-gesture="dragging"] {
+  cursor: grabbing;
 }
 
 /*

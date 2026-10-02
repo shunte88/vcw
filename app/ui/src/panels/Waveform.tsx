@@ -75,10 +75,39 @@
 //    under the cursor. Shift, or a sideways wheel, pans instead;
 //  - the bar under the picture is the window's own position *and* width, so how
 //    far in a person is zoomed is something they can see rather than deduce;
-//  - dragging across the picture scrubs, and only while something is playing.
-//    §21's verbs are play, pause, stop, seek and skip - there is no "move the
-//    playhead" - so a drag on a stopped engine could only be a series of
-//    overlapping auditions, each one a round trip behind the pointer.
+//  - dragging across the picture selects, and the selection *stays*. This is
+//    the gesture a person reaches for first and the one the first draft did
+//    not have: the thing you want to say is "that bit". What "that bit" then
+//    means is play it - the selection is handed up to `App`, the transport
+//    plays it as a region and the engine stops at the end of it, which is the
+//    whole of auditioning a track before there is a track. Zooming to it is
+//    the `z` key, where every other zoom already lives;
+//
+//  - dragging either ruler scrolls, and the picture follows the hand the way
+//    a map does. A ruler is the one strip with no audio drawn on it, so it is
+//    the one place a drag can mean "move the paper" without taking a gesture
+//    away from the waveform;
+//
+//    The first draft made a release zoom to the band instead, and the band
+//    went away with it. That is one gesture doing two jobs - choosing a
+//    stretch and magnifying it - and it made the common case impossible: you
+//    cannot hear what you selected, because by the time you let go there is
+//    nothing selected.
+//
+//    Shift turns a drag on the picture into a scrub, with a hand for a cursor.
+//    Scrubbing is the narrower act and so it takes the modifier: it only means
+//    anything while something is playing, where a selection means something
+//    always. Shift on a stopped engine therefore selects, rather than doing
+//    nothing - a modifier that silently kills a gesture is worse than one that
+//    is ignored. §21's verbs are play, pause, stop, seek and skip; there is no
+//    "move the playhead", so a scrub on a stopped engine could only be a run
+//    of overlapping auditions, each one a round trip behind the pointer.
+//
+//    A press that does not travel [`SLOP`] pixels is a click and still seeks,
+//    which is what it always did - and it clears the selection, because a
+//    click is how a person says "not that bit after all". A press that does
+//    travel must not seek when it comes up, or choosing a stretch would move
+//    the playhead out of it every time.
 //
 // # The playhead and the labels
 //
@@ -96,10 +125,10 @@
 // because that is the shape people already read as "the playhead is here", and
 // because a line one device pixel wide is not something a pointer can aim at.
 //
-// It is a grab handle only while something is playing, and the cursor says so.
-// That is the same limit the scrub has and for the same reason: §21's verbs are
-// play, pause, stop, seek and skip, so a drag on a stopped engine could only be
-// a run of overlapping auditions. A *click* anywhere - picture, labels, either
+// It is a grab handle only while something is playing, and the cursor says so:
+// the handle is the one place a scrub needs no Shift, because a thing shaped
+// like a grip is already the modifier. That is the same limit the scrub has and
+// for the same reason, above. A *click* anywhere - picture, labels, either
 // ruler - still moves the position, which is what Audacity's ruler click does
 // and is the whole of what a stopped engine needs.
 //
@@ -130,7 +159,17 @@ import type {
 } from "../bindings/vcw";
 import { clock } from "../format";
 import { ticks } from "../ruler";
-import { STEP, type Span, fit, follow, pan, resolve, zoom } from "../zoom";
+import {
+  STEP,
+  type Span,
+  fit,
+  follow,
+  pan,
+  region,
+  resolve,
+  toBand,
+  zoom,
+} from "../zoom";
 
 /** How the waveform is drawn. Kept here because it is appearance, not policy. */
 const COLOURS = {
@@ -204,6 +243,16 @@ const HANDLE = { WIDTH: 11, HEIGHT: 14 } as const;
 const SCRUB = 90;
 
 /**
+ * How far a pointer must travel before a press becomes a drag, in CSS pixels.
+ *
+ * Without it there is no such thing as a click: a mouse moves a pixel or two
+ * under the force of the button going down, and every attempt to put the
+ * playhead somewhere would instead select two pixels of audio and zoom to
+ * them. Three is the figure a scrollbar uses for the same reason.
+ */
+const SLOP = 3;
+
+/**
  * How much of the window a wheel notch pans.
  *
  * A tenth, so crossing a whole side takes ten flicks at any zoom - the same
@@ -226,6 +275,17 @@ export type View = {
   /** Last frame shown, or null for the end of the capture. */
   readonly endFrame: number | null;
 };
+
+/**
+ * A stretch of the capture a person has chosen, in seconds.
+ *
+ * Seconds, and held by the caller rather than here, for one reason each. In
+ * seconds because the only thing that happens to a selection is that it gets
+ * played, and §35's audition takes a region in seconds; in the caller because
+ * the transport plays it and the transport is not inside this panel. This
+ * draws the band and reports the drag.
+ */
+export type Region = { readonly from: number; readonly to: number };
 
 /**
  * Draws one channel of one capture.
@@ -255,6 +315,8 @@ export function Waveform({
   playhead,
   playing,
   onSeek,
+  selection,
+  onSelect,
   generation,
 }: {
   capture: Capture | undefined;
@@ -265,6 +327,8 @@ export function Waveform({
   playhead: number;
   playing: boolean;
   onSeek: (seconds: number) => void;
+  selection: Region | null;
+  onSelect: (selection: Region | null) => void;
   generation: number;
 }): React.JSX.Element {
   const canvas = useRef<HTMLCanvasElement | null>(null);
@@ -280,6 +344,47 @@ export function Waveform({
   const scrubbing = useRef(false);
   /** When the last scrub seek went out, on the monotonic clock. */
   const scrubbed = useRef(0);
+  /**
+   * Where a selection drag took hold: the second, and the client x it started
+   * at so that [`SLOP`] can be measured from somewhere.
+   */
+  const selecting = useRef<{ x: number; from: number } | null>(null);
+  /**
+   * Where a scroll drag on a ruler took hold: the client x, and the first
+   * frame of the window at the moment of the press.
+   *
+   * The window start is remembered rather than the drag being applied one
+   * report at a time, for the reason the scrollbar drag works the same way: a
+   * relative pan accumulates the rounding of every intermediate position, and
+   * a drag out to the end of the capture and back would not come home.
+   */
+  const scrolling = useRef<{ x: number; start: number } | null>(null);
+  /**
+   * Whether the press in progress has travelled far enough to be a drag.
+   *
+   * Read by the click handler, which fires after the pointer is up and must
+   * not also seek: the end of a selection is a zoom, not a position.
+   */
+  const dragged = useRef(false);
+  /**
+   * The last place the pointer was over the picture, in client coordinates.
+   *
+   * Kept so that pressing or releasing Shift can change the cursor without
+   * waiting for the pointer to move. It has to: the whole sequence is hover,
+   * press Shift, press the button, drag - so a cursor that only updated on
+   * movement would show the scrub hand for the first time once the scrub was
+   * already under way, which is the one moment it is no longer a hint.
+   */
+  const hover = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * The band a drag in progress is painting, or null when none is.
+   *
+   * Local, where the finished selection is the caller's. A pointer reports
+   * several times a frame and every report would otherwise be a state change
+   * in `App` and a render of every panel, to move one edge of one `div`. The
+   * caller hears once, when the pointer comes up.
+   */
+  const [drafting, setDrafting] = useState<Region | null>(null);
   /** The work a drag has asked for and the next frame has not yet done. */
   const queued = useRef<(() => void) | null>(null);
 
@@ -737,6 +842,44 @@ export function Waveform({
   };
 
   /**
+   * Whether a pointer is on one of the two rulers, and so whether a drag from
+   * here would scroll.
+   *
+   * Either ruler, because there are two and a gesture that worked on one of
+   * them would be a gesture a person had to remember the location of. In CSS
+   * pixels, like [`onHandle`] and for the same reason.
+   */
+  const onRuler = (clientY: number, element: HTMLElement): boolean => {
+    const bounds = element.getBoundingClientRect();
+    if (bounds.height <= RULER.HEIGHT * 2) {
+      return false;
+    }
+    const at = clientY - bounds.top;
+    return at <= RULER.HEIGHT || at >= bounds.height - RULER.HEIGHT;
+  };
+
+  /** Put the window where a drag on a ruler has carried it. */
+  const scroll = (clientX: number, element: HTMLElement) => {
+    const held = scrolling.current;
+    if (held === null || peaks === null) {
+      return;
+    }
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0) {
+      return;
+    }
+    // The picture follows the hand, which is why the travel is subtracted:
+    // dragging a ruler to the right pulls earlier audio into view, the way
+    // dragging a map does. Scrolling the window the same way as the pointer
+    // instead would be correct for a scrollbar and wrong for the thing being
+    // scrolled - and the scrollbar is six pixels below, doing exactly that.
+    const perPixel = (peaks.endFrame - peaks.startFrame) / bounds.width;
+    const want = Math.round(held.start - (clientX - held.x) * perPixel);
+    const start = shown.start;
+    soon(() => show(pan(span, frames, want - start)));
+  };
+
+  /**
    * Whether a pointer is on the playhead's handle, and so whether a drag from
    * here would move it.
    *
@@ -765,6 +908,62 @@ export function Waveform({
     return Math.abs(clientX - bounds.left - at) <= HANDLE.WIDTH;
   };
 
+  /**
+   * Say what a drag from here would do, which the stylesheet turns into a
+   * cursor.
+   *
+   * Written straight onto the element rather than held in state, which is the
+   * same choice the first draft made and for the same reason: a hint that
+   * re-rendered would cost a React pass per pointer report to change one
+   * string.
+   *
+   * Three answers for four gestures, and that is the point rather than a
+   * shortfall: a scrub and a ruler scroll are both "take hold of this and
+   * move it", so both get the hand, and what a hand means in each place is
+   * obvious from where it is. Only selecting looks different, because it is
+   * the one that draws rather than drags.
+   *
+   * An attribute rather than `style.cursor`, which is what it used to set. The
+   * select cursor is a drawing in `public/`, and a component that had to name
+   * that file would be the one place in the UI where an asset path lives in
+   * TypeScript - and it would have to name it twice, once per pixel ratio.
+   */
+  const dress = (shift: boolean) => {
+    const element = canvas.current;
+    const at = hover.current;
+    if (element === null || at === null) {
+      return;
+    }
+    element.dataset.gesture =
+      scrubbing.current || scrolling.current !== null
+        ? "dragging"
+        : (shift && playing) || onHandle(at.x, at.y, element) || onRuler(at.y, element)
+          ? "grab"
+          : "select";
+  };
+
+  // Through a ref so the listener below can be attached once. An effect that
+  // depended on `dress` would detach and reattach on every render, and `dress`
+  // closes over `playing` and `peaks`, so that is every render there is.
+  const dresser = useRef(dress);
+  dresser.current = dress;
+
+  // Shift changes what a press means, so it has to change the cursor, and a
+  // key press is not a pointer event - nothing else here would notice it.
+  useEffect(() => {
+    const onShift = (event: KeyboardEvent) => {
+      if (event.key === "Shift") {
+        dresser.current(event.type === "keydown");
+      }
+    };
+    window.addEventListener("keydown", onShift);
+    window.addEventListener("keyup", onShift);
+    return () => {
+      window.removeEventListener("keydown", onShift);
+      window.removeEventListener("keyup", onShift);
+    };
+  }, []);
+
   /** Put the window's left edge where a drag on the bar has taken it. */
   const slide = (clientX: number, offset: number) => {
     const track = bar.current;
@@ -789,6 +988,23 @@ export function Waveform({
   const thumbWide = Math.min(100, Math.max(portion * 100, 2));
   const thumbLeft = Math.min(leading * 100, 100 - thumbWide);
 
+  // The selection band, in percentages of the picture: the drag in progress
+  // if there is one, and otherwise what was chosen last. Computed against the
+  // peaks rather than against the span, because the peaks are what is actually
+  // drawn: a window that has just changed has a render where the two disagree,
+  // and a band a few pixels off the audio it covers is the one thing it must
+  // never be.
+  //
+  // Which also makes a selection survive zooming and scrolling for free, and
+  // it has to: choosing a stretch and then looking more closely at it is one
+  // act, and a band that vanished at the first wheel notch would make the
+  // selection something a person had to redo rather than keep.
+  const chosen = drafting ?? selection;
+  const band =
+    chosen === null || peaks === null
+      ? null
+      : toBand(chosen.from, chosen.to, peaks.startSeconds, peaks.endSeconds);
+
   // No early return for "nothing captured yet", and that is not tidiness. The
   // size of the picture is measured by a `ResizeObserver` set up once on mount,
   // so a render that leaves the box out of the tree gives that effect nothing
@@ -807,59 +1023,158 @@ export function Waveform({
           ref={canvas}
           width={size.width}
           height={size.height}
+          data-gesture="select"
           onPointerDown={(event) => {
-            // Only while playing, for the reason in the header: a stopped
-            // engine has no playhead to drag.
-            if (!playing || peaks === null) {
+            if (peaks === null || event.button !== 0) {
               return;
             }
-            scrubbing.current = true;
-            scrubbed.current = 0;
+            dragged.current = false;
+            // Shift, or the playhead's own handle, and only while something is
+            // playing - see the header. Everything else is a selection, so a
+            // held Shift on a stopped engine selects rather than doing
+            // nothing: a modifier that silently disables a gesture is worse
+            // than one that is ignored.
+            if (
+              playing &&
+              (event.shiftKey ||
+                onHandle(event.clientX, event.clientY, event.currentTarget))
+            ) {
+              scrubbing.current = true;
+              scrubbed.current = 0;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              dress(event.shiftKey);
+              return;
+            }
+            // A ruler scrolls. Checked after the handle, which lives in the
+            // top ruler: the handle is the smaller target and the more
+            // specific thing to be pointing at, so it wins where they overlap.
+            if (onRuler(event.clientY, event.currentTarget)) {
+              scrolling.current = { x: event.clientX, start: shown.start };
+              event.currentTarget.setPointerCapture(event.pointerId);
+              dress(event.shiftKey);
+              return;
+            }
+            const from = secondsAt(event.clientX, event.currentTarget);
+            if (from === null) {
+              return;
+            }
+            selecting.current = { x: event.clientX, from };
             event.currentTarget.setPointerCapture(event.pointerId);
           }}
           onPointerMove={(event) => {
-            // The cursor, set on the element rather than held in state: a hint
-            // that re-rendered would cost a React pass per pointer report to
-            // change one string, and this is the whole of what it says - that
-            // a drag from here would take the playhead with it.
-            event.currentTarget.style.cursor = onHandle(
-              event.clientX,
-              event.clientY,
-              event.currentTarget,
-            )
-              ? "ew-resize"
-              : "crosshair";
-            if (!scrubbing.current) {
+            hover.current = { x: event.clientX, y: event.clientY };
+            dress(event.shiftKey);
+            if (scrubbing.current) {
+              const now = performance.now();
+              if (now - scrubbed.current < SCRUB) {
+                return;
+              }
+              const seconds = secondsAt(event.clientX, event.currentTarget);
+              if (seconds !== null) {
+                scrubbed.current = now;
+                onSeek(seconds);
+              }
               return;
             }
-            const now = performance.now();
-            if (now - scrubbed.current < SCRUB) {
+            if (scrolling.current !== null) {
+              if (
+                !dragged.current &&
+                Math.abs(event.clientX - scrolling.current.x) < SLOP
+              ) {
+                return;
+              }
+              dragged.current = true;
+              scroll(event.clientX, event.currentTarget);
               return;
             }
-            const seconds = secondsAt(event.clientX, event.currentTarget);
-            if (seconds !== null) {
-              scrubbed.current = now;
-              onSeek(seconds);
+            const held = selecting.current;
+            if (held === null) {
+              return;
+            }
+            if (!dragged.current && Math.abs(event.clientX - held.x) < SLOP) {
+              return;
+            }
+            dragged.current = true;
+            const to = secondsAt(event.clientX, event.currentTarget);
+            if (to !== null) {
+              // Through `soon` for the reason the bar drag is: a pointer
+              // reports faster than the screen draws, and every report but the
+              // last describes a band nobody will ever see.
+              soon(() => setDrafting({ from: held.from, to }));
             }
           }}
-          onPointerUp={() => {
+          onPointerUp={(event) => {
             scrubbing.current = false;
+            scrolling.current = null;
+            const held = selecting.current;
+            selecting.current = null;
+            setDrafting(null);
+            dress(event.shiftKey);
+            if (held === null || !dragged.current) {
+              return;
+            }
+            // The one place a selection is published, and the reason the
+            // panel keeps a draft of its own. `region` clamps it: pointer
+            // capture reports past both ends of the capture, and "to the end"
+            // is what running off the right edge of the picture means.
+            const to = secondsAt(event.clientX, event.currentTarget);
+            if (to !== null && capture !== undefined) {
+              onSelect(region(held.from, to, capture.seconds));
+            }
           }}
           onPointerCancel={() => {
+            // Cancelled, so nothing is chosen and nothing has moved: the draft
+            // band goes away and the selection that was there before - if any
+            // - is left alone. A gesture the system took away is not a gesture
+            // a person finished.
             scrubbing.current = false;
+            scrolling.current = null;
+            selecting.current = null;
+            dragged.current = false;
+            setDrafting(null);
+          }}
+          onPointerLeave={() => {
+            hover.current = null;
           }}
           onClick={(event) => {
             // Kept as a click rather than folded into the pointer handlers
             // above: a press with no drag is where a person wants to *start*,
             // and that is the same act whether the engine is running or not.
-            // A drag that ends in a click seeks once more to where it was
+            // A scrub that ends in a click seeks once more to where it was
             // released, which is where it already is.
+            //
+            // A drag must not seek, which is the whole job of `dragged`: a
+            // person who has just drawn a band around a track has said where
+            // the interesting part is, and moving the playhead off it would
+            // undo that in the same gesture.
+            if (dragged.current) {
+              dragged.current = false;
+              return;
+            }
             const seconds = secondsAt(event.clientX, event.currentTarget);
             if (seconds !== null) {
               onSeek(seconds);
             }
+            // And a click puts the selection away. Nothing else can: the band
+            // outlives the gesture that drew it, so there has to be a way to
+            // say "not that bit" that is as cheap as saying "that bit" was,
+            // and a click is already the gesture for "here, not there".
+            if (selection !== null) {
+              onSelect(null);
+            }
           }}
         />
+        {band !== null && (
+          // A div over the canvas, not a rectangle drawn into it. The canvas
+          // is redrawn from a fetch of peaks, so painting the band there would
+          // put a pointer-rate redraw on the same path as a shell round trip;
+          // and the band is wanted over the rulers and the label lane as well,
+          // which are the same canvas but not the same drawing.
+          <div
+            className="waveform-selection"
+            style={{ left: `${band.left}%`, width: `${band.width}%` }}
+          />
+        )}
       </div>
       <div
         className="waveform-bar"

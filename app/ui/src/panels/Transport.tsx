@@ -30,7 +30,8 @@
 // answer is `null` the marker key does nothing rather than picking a side.
 
 import * as api from "../api";
-import type { Capture, Side } from "../bindings/vcw";
+import type { Audition, Capture, Side } from "../bindings/vcw";
+import type { Region } from "./Waveform";
 import { useKeys } from "../keys";
 import type { Store } from "../store";
 import { clock } from "../format";
@@ -40,14 +41,23 @@ export function Transport({
   store,
   capture,
   side,
+  selection,
 }: {
   store: Store;
   capture: Capture | undefined;
   side: Side | null;
+  selection: Region | null;
 }): React.JSX.Element {
   const { engine, run } = store;
   const recording = engine.phase === "recording";
   const armed = engine.phase !== "idle";
+
+  /** Start the audition, on whatever [`scopeOf`] says Play means now. */
+  const audition = () => {
+    if (capture !== undefined) {
+      void run(() => api.play(capture.id, scopeOf(selection)));
+    }
+  };
 
   // §43 does not say how far a seek key moves, so the panel does: one second,
   // which is a little less than a groove revolution and small enough that
@@ -61,8 +71,8 @@ export function Transport({
         void run(() => api.playback({ verb: "pause" }));
       } else if (engine.auditioning !== null) {
         void run(() => api.playback({ verb: "play" }));
-      } else if (capture !== undefined) {
-        void run(() => api.play(capture.id, { scope: "whole" }));
+      } else {
+        audition();
       }
     },
     record: () => void run(() => api.transport("record")),
@@ -142,11 +152,15 @@ export function Transport({
           onClick={() => {
             if (engine.playing) {
               void run(() => api.playback({ verb: "pause" }));
-            } else if (capture !== undefined) {
-              void run(() => api.play(capture.id, { scope: "whole" }));
+            } else {
+              audition();
             }
           }}
-          title="Play or pause the audition (space)"
+          title={
+            selection === null
+              ? "Play or pause the audition (space)"
+              : "Play the selection (space)"
+          }
         >
           {engine.playing ? "Pause" : "Play"}
         </button>
@@ -171,4 +185,20 @@ export function Transport({
       </div>
     </div>
   );
+}
+
+/**
+ * What Play plays: the band on the waveform if there is one, and the whole
+ * capture if there is not.
+ *
+ * Its own function, exported, for two reasons. The key and the button must not
+ * disagree, which is this file's rule from the top; and this is the sentence
+ * the gesture rework turned on, so it is the sentence worth a test. §21's
+ * region scope already stops at the end of what it is given, which is why
+ * there is nothing here about stopping.
+ */
+export function scopeOf(selection: Region | null): Audition {
+  return selection === null
+    ? { scope: "whole" }
+    : { scope: "region", start: selection.from, end: selection.to };
 }

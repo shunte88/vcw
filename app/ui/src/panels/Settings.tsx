@@ -319,6 +319,7 @@ export function Settings({
           Contact address for the user agent
           <input
             value={draft.metadata.contact ?? ""}
+            placeholder="unset - VCW_CONTACT, or nothing"
             onChange={(event) => metadata({ contact: text(event.target.value) })}
           />
         </label>
@@ -332,6 +333,15 @@ export function Settings({
             }
           />
         </label>
+        <p className="hint">
+          MusicBrainz needs no account, but it does ask who is calling: an
+          address here is sent in the user agent on every request, and without
+          one the rate limit is harder and a lookup can be refused outright. An
+          email address or a URL, and public by design. Discogs needs a token,
+          which is a secret and so is never kept here - export
+          VCW_DISCOGS_TOKEN before starting VCW, and the Credentials table
+          below says whether it arrived.
+        </p>
       </fieldset>
 
       <fieldset>
