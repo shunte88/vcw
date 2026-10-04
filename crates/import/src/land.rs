@@ -101,7 +101,7 @@ use rusqlite::Connection;
 use vcw_project::persistence::{Config, Writer};
 use vcw_project::{Project as Destination, meta, release, side, track};
 use vcw_types::vinyl::Side;
-use vcw_types::{CaptureInfo, CaptureMode, CaptureState, SampleRate, StorageFormat};
+use vcw_types::{CaptureEq, CaptureInfo, CaptureMode, CaptureState, SampleRate, StorageFormat};
 
 use crate::error::Result;
 use crate::model::{Label, Project};
@@ -292,6 +292,12 @@ pub fn land_from(source: &Source<'_>, destination: &Path, options: &Options) -> 
         device_name: None,
         os_verified: false,
         os_report: None,
+        // §51 requires this for an import, and requires it to be `Unknown`: the
+        // audio came out of another application, which recorded nothing about the
+        // signal chain ahead of it. The person importing may well know what their
+        // phono stage was doing in 2014, but they are not being asked here and a
+        // value nobody stated is not one to invent.
+        eq: CaptureEq::Unknown,
     };
 
     let project = Destination::create(destination)?;

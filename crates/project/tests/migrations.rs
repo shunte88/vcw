@@ -253,3 +253,60 @@ fn the_real_migration_set_builds_the_real_schema() {
     assert_eq!(from_migration, from_ddl);
     assert_eq!(version(&migrated), vcw_project::SCHEMA_VERSION);
 }
+
+/// A project captured before v3 keeps its audio and gains `capture_eq` as 'unknown'.
+///
+/// §16's promise is that a newer build opens an older project, and §51's is that
+/// the equalisation is never guessed. A row written at v2 by definition says
+/// nothing about the curve, so the only honest value for it is 'unknown' - and the
+/// column arriving must not touch a byte of what was already there.
+#[test]
+fn an_older_project_gains_the_equalisation_column_as_unknown() {
+    let mut conn = db();
+    let upto_v2 = &vcw_project::MIGRATIONS
+        .iter()
+        .filter(|m| m.version <= 2)
+        .copied()
+        .collect::<Vec<_>>()[..];
+    assert_eq!(migrate::apply(&mut conn, upto_v2).unwrap(), vec![1, 2]);
+    assert_eq!(version(&conn), 2);
+
+    // The insert a v2 build would have written: no capture_eq, because there is no
+    // such column to write.
+    conn.execute(
+        "INSERT INTO captures
+            (capture_id, sample_rate, channels, storage_format, capture_mode,
+             started_at, finished_at, frames, state)
+         VALUES (1, 96000, 2, 262148, 'Exclusive', 1700000000, 1700003600, 345600000,
+                 'finalised')",
+        [],
+    )
+    .unwrap();
+    assert!(
+        conn.prepare("SELECT capture_eq FROM captures").is_err(),
+        "the column cannot exist before the migration that adds it"
+    );
+
+    assert_eq!(
+        migrate::apply(&mut conn, vcw_project::MIGRATIONS).unwrap(),
+        vec![3]
+    );
+    assert_eq!(version(&conn), vcw_project::SCHEMA_VERSION);
+
+    let (eq, frames, state): (String, i64, String) = conn
+        .query_row(
+            "SELECT capture_eq, frames, state FROM captures WHERE capture_id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        eq, "unknown",
+        "a v2 row said nothing, so it still says nothing"
+    );
+    assert_eq!(
+        frames, 345_600_000,
+        "the migration rewrote a row it should not have"
+    );
+    assert_eq!(state, "finalised");
+}

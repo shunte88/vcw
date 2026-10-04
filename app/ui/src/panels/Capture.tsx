@@ -98,6 +98,7 @@ export function Capture({
         channels: null,
         format,
         mode: settings?.audio.mode ?? null,
+        eq: settings?.audio.eq ?? null,
         ringMillis: settings?.audio.ringMillis ?? null,
       }),
     );

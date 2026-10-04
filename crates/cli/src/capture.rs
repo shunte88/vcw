@@ -55,7 +55,7 @@ use anyhow::{Context, Result};
 use vcw_audio::capture::{BitPerfect, Capture, Request};
 use vcw_audio::devices::{self, Direction};
 use vcw_project::{Project, Session, persistence};
-use vcw_types::{CaptureMode, CaptureState, SampleFormat, SampleRate};
+use vcw_types::{CaptureEq, CaptureMode, CaptureState, SampleFormat, SampleRate};
 
 /// Sample formats selectable on the command line (§8).
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -98,6 +98,33 @@ impl From<Mode> for CaptureMode {
             Mode::Exclusive => Self::Exclusive,
             Mode::Native => Self::Native,
             Mode::Shared => Self::Shared,
+        }
+    }
+}
+
+/// Equalisation provenance selectable on the command line (§51).
+///
+/// A flag rather than a prompt, and with no default beyond `unknown`, because the
+/// answer is a property of the operator's hifi and not of this run: it is the same
+/// for every rip they will ever make, and the place it eventually belongs is the
+/// settings file. Until then, stating it per session is better than guessing it
+/// once.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub(crate) enum Eq {
+    /// Nothing applied upstream: a flat transfer.
+    Flat,
+    /// An ordinary phono stage applied the RIAA curve.
+    Riaa,
+    /// Not stated. What a capture gets when nobody says.
+    Unknown,
+}
+
+impl From<Eq> for CaptureEq {
+    fn from(eq: Eq) -> Self {
+        match eq {
+            Eq::Flat => Self::Flat,
+            Eq::Riaa => Self::Riaa,
+            Eq::Unknown => Self::Unknown,
         }
     }
 }

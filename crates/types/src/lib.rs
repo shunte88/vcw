@@ -50,7 +50,7 @@ pub mod summary;
 pub mod vinyl;
 
 pub use capture::{CaptureInfo, CaptureState, Diagnostics, PcmSource};
-pub use format::{CaptureMode, SampleFormat, StorageFormat};
+pub use format::{CaptureEq, CaptureMode, SampleFormat, StorageFormat};
 pub use observation::{AudioObservation, BoundaryObservation, Edge, Evidence, Provenance};
 pub use rate::{STANDARD_RATES, SampleRate};
 pub use span::Span;

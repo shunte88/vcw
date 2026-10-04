@@ -42,7 +42,7 @@ import wave
 
 # From the spec's "Identity" table.
 APPLICATION_ID = 0x56435700  # 'VCW\0'
-SUPPORTED_USER_VERSIONS = (1, 2)
+SUPPORTED_USER_VERSIONS = (1, 2, 3)
 SUPPORTED_FORMAT_VERSION = 1
 
 # Audacity's, for the one case a reader has to recognise and refuse.
@@ -272,6 +272,9 @@ def identify(conn, user_version, path, as_json):
                 "bytes_per_sample": width,
                 "capture_mode": row["capture_mode"],
                 "state": row["state"],
+                # v3's addition. A v1 or v2 project predates the column and says
+                # nothing about the curve, which is what 'unknown' means anyway.
+                "capture_eq": row["capture_eq"] if user_version >= 3 else "unknown",
                 "frames": row["frames"],
                 "seconds": row["frames"] / row["sample_rate"],
                 "blocks": blocks,
@@ -312,7 +315,7 @@ def identify(conn, user_version, path, as_json):
             f"  capture {cap['capture_id']:<3} {cap['sample_rate']} Hz, "
             f"{cap['channels']} ch, {cap['storage_format']}, "
             f"{cap['frames']} frames ({cap['seconds']:.3f} s), "
-            f"{cap['blocks']} blocks, {cap['state']}"
+            f"{cap['blocks']} blocks, {cap['state']}, eq {cap['capture_eq']}"
         )
     for side in report["sides"]:
         print(f"  side {side['side']}      capture {side['capture_id']}")

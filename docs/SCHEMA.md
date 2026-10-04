@@ -16,7 +16,7 @@ no rewriting, and everything else is what Audacity has nowhere to put. See
 |---|---|
 | extension | `.vcw` |
 | `application_id` | `0x56435700` (ASCII `VCW\0`) - Audacity's is `0x41554459`, `AUDY`, for *both* AUP3 and AUP4 |
-| `user_version` | 2 - the schema version, a plain ascending integer |
+| `user_version` | 3 - the schema version, a plain ascending integer |
 | format version | 1 - the *meaning* of the schema, in `meta` |
 | page size | 65536 bytes, set at creation |
 | journal mode | WAL, `synchronous=FULL` (D3) |
@@ -121,6 +121,7 @@ One row per capture session (§13, §15). A session is unfinished exactly when f
 | `finished_at` | `INTEGER` | Unix seconds at clean stop. NULL means interrupted: recovery's signal. |
 | `frames` | `INTEGER NOT NULL DEFAULT 0` | Frames committed per channel. Updated as blocks land, so it survives a crash. |
 | `state` | `TEXT NOT NULL DEFAULT 'recording'` | 'recording', 'finalised' or 'interrupted'. validate() rejects anything else. |
+| `capture_eq` | `TEXT NOT NULL DEFAULT 'unknown'` | Equalisation the signal already carried when it reached the sound card (§51): 'flat' for a preamp that applied no curve, 'riaa' for one that applied RIAA, 'unknown' when nobody said. Playback equalisation needs it and it cannot be recovered from the audio, so it is recorded from the first capture, years before the curves ship. |
 
 ### `capture_blocks`
 

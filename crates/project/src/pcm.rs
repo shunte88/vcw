@@ -442,7 +442,7 @@ mod tests {
     use super::*;
     use crate::persistence::{Config, Writer};
     use crate::sqlite::Project;
-    use vcw_types::{CaptureInfo, CaptureMode, CaptureState};
+    use vcw_types::{CaptureEq, CaptureInfo, CaptureMode, CaptureState};
 
     const RATE: SampleRate = SampleRate(96_000);
     const WIDTH: usize = 4;
@@ -460,6 +460,7 @@ mod tests {
             device_name: Some("Cirrus Analog".into()),
             os_verified: false,
             os_report: None,
+            eq: CaptureEq::Unknown,
         }
     }
 

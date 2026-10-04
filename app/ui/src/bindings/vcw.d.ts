@@ -375,7 +375,13 @@ mode: string | null,
 /**
  * Ring capacity in milliseconds. `null` takes §10's default.
  */
-ringMillis: number | null, };
+ringMillis: number | null,
+/**
+ * What equalisation the hardware upstream already applied (§51): `flat`,
+ * `riaa` or `unknown`. `null` means unknown, which is what it stays until
+ * somebody says otherwise.
+ */
+eq: string | null, };
 
 export type Transport = "disarm" | "record" | "pause" | "resume" | "stop" | "reset" | "poll" | "shutdown";
 
@@ -1345,7 +1351,17 @@ ringMillis: number | null,
 /**
  * `shared`, `native` or `exclusive` (§8).
  */
-mode: string | null, };
+mode: string | null,
+/**
+ * Equalisation the signal carries when it arrives: `flat`, `riaa` or
+ * `unknown` (§51). `None` means the same as `unknown`.
+ *
+ * A setting rather than a per-capture field because it describes the
+ * operator's preamp, which does not change between records. It cannot be
+ * recovered from the audio afterwards, which is why it is asked for here
+ * instead of when the curves ship.
+ */
+eq: string | null, };
 
 export type RecordingSettings = {
 /**

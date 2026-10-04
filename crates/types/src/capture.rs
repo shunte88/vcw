@@ -44,7 +44,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CaptureMode, SampleRate, StorageFormat};
+use crate::{CaptureEq, CaptureMode, SampleRate, StorageFormat};
 
 /// How far a capture session got. Mirrors the `state` column, and `validate()`
 /// rejects any value outside this set.
@@ -192,6 +192,13 @@ pub struct CaptureInfo {
     /// What the OS reported, verbatim, so the claim can be audited rather than
     /// believed.
     pub os_report: Option<String>,
+    /// What equalisation the hardware upstream had already applied (§51).
+    ///
+    /// Provenance, like the three fields above it, and the one piece of
+    /// provenance VCW cannot observe for itself: a phono stage does not announce
+    /// its curve over USB. It is whatever the operator said, and
+    /// [`CaptureEq::Unknown`] where they said nothing.
+    pub eq: CaptureEq,
 }
 
 impl CaptureInfo {
@@ -217,7 +224,22 @@ impl CaptureInfo {
             device_name: None,
             os_verified: false,
             os_report: None,
+            // Unverified provenance is unknown provenance, which is the same rule
+            // `os_verified: false` follows one line up.
+            eq: CaptureEq::Unknown,
         }
+    }
+
+    /// The same record with the operator's stated equalisation on it.
+    ///
+    /// Separate from [`CaptureInfo::unverified`] so that stating the provenance is
+    /// a visible act at the call site. §51 wants it stated rather than defaulted,
+    /// and a fifth positional argument of an enum whose common value is `Unknown`
+    /// is how it would end up defaulted in practice.
+    #[must_use]
+    pub const fn with_eq(mut self, eq: CaptureEq) -> Self {
+        self.eq = eq;
+        self
     }
 
     /// Bytes one frame occupies: one sample per channel, at the storage width.

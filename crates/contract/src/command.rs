@@ -62,7 +62,7 @@ use ts_rs::TS;
 
 use vcw_core::commands::{Command, Setup};
 use vcw_core::playback::Scope;
-use vcw_types::{CaptureMode, SampleFormat, Span};
+use vcw_types::{CaptureEq, CaptureMode, SampleFormat, Span};
 
 /// A request this contract could not turn into something the core accepts.
 ///
@@ -156,6 +156,10 @@ pub struct Arm {
     pub mode: Option<String>,
     /// Ring capacity in milliseconds. `null` takes §10's default.
     pub ring_millis: Option<u32>,
+    /// What equalisation the hardware upstream already applied (§51): `flat`,
+    /// `riaa` or `unknown`. `null` means unknown, which is what it stays until
+    /// somebody says otherwise.
+    pub eq: Option<String>,
 }
 
 impl TryFrom<Arm> for Setup {
@@ -179,6 +183,21 @@ impl TryFrom<Arm> for Setup {
                 ));
             }
         };
+        // Named rather than silently defaulted: a typo in a provenance field is
+        // exactly the kind of mistake that must not be resolved by falling back
+        // to a plausible value, because nothing downstream can tell a stated
+        // `unknown` from a misspelled `riaa` once it is a row in the database.
+        let eq = match arm.eq.as_deref() {
+            None => CaptureEq::Unknown,
+            Some(text) => CaptureEq::parse(text).ok_or_else(|| {
+                Invalid::new(
+                    "eq",
+                    format!(
+                        "{text:?} is not an equalisation provenance; use flat, riaa or unknown"
+                    ),
+                )
+            })?,
+        };
         Ok(Self {
             device: arm.device,
             project: PathBuf::from(arm.project),
@@ -187,6 +206,7 @@ impl TryFrom<Arm> for Setup {
             format,
             mode,
             ring_millis: arm.ring_millis,
+            eq,
         })
     }
 }

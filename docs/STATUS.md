@@ -5180,6 +5180,61 @@ real project the two outputs differ only in the last line.
 **Parallel export is on hold** by instruction. The measurement that prompted the
 question stands in the record above: the Ogg run spent 2:00 of wall clock on one core.
 
+### Captures now record what equalisation they arrived with
+
+§51 was drafted this session and specifies playback equalisation curves for Phase 3.
+Almost all of it can wait. One part cannot: **which curve the hardware already
+applied** is a fact about the capture that is gone the moment the capture ends.
+Nothing in the audio distinguishes a flat transfer from an RIAA one with enough
+confidence to act on, and a project full of captures that say nothing can never be
+equalised without a guess. So the provenance field ships now, years before the curves
+it exists for.
+
+`CaptureEq` is three cases - `Flat`, `Riaa`, `Unknown` - and `Unknown` is the
+`#[default]`. Deliberately not `Riaa`, even though an RIAA phono stage is
+overwhelmingly the common case: a plausible default is exactly what a later processing
+chain would read as a measurement. §51 already says an `Unknown` capture is refused
+rather than assumed, and that only works if `Unknown` means nobody said.
+
+Schema v3 is one statement:
+
+```sql
+ALTER TABLE captures ADD COLUMN capture_eq TEXT NOT NULL DEFAULT 'unknown';
+```
+
+`FORMAT_VERSION` stays 1 - nothing an existing column means has changed. `ADD COLUMN`
+with a `NOT NULL DEFAULT` is metadata-only in SQLite: it rewrites no rows, so the
+migration is free on the 2.33 GiB test project and can run on open rather than being
+offered as a job. `the_equalisation_migration_only_adds_a_column` pins that by
+forbidding every other verb in the DDL, and
+`an_older_project_gains_the_equalisation_column_as_unknown` builds a database at v2,
+writes the insert a v2 build would have written, upgrades, and checks both halves: the
+column reads `unknown` and the row's frames are untouched.
+
+The path runs `--capture-eq` / **Settings -> Audio -> Equalisation on input** ->
+`Arm.eq` -> `Setup.eq` -> `CaptureInfo::with_eq` -> the column, and a typo is
+**refused** at the contract rather than defaulted: somebody who typed `raia` believes
+they have recorded RIAA. The settings home is the right one because the field
+describes the operator's preamp, which does not change between records - asking once is
+asking as often as the answer changes.
+
+Two generators had to learn the new shape. `doc.rs` parsed `CREATE` only and panicked
+on the `ALTER`; it now folds an added column onto the table that created it, last,
+which is where SQLite puts it - and `every_documented_column_exists_with_the_type_it_claims`
+already cross-checked column order against `PRAGMA table_info`, so the fold is verified
+against a real database rather than against the parser's own opinion. `tools/vcw-read.py`
+refused a v3 file outright; it now reads v3 and reports the curve, which is the §49
+claim under test: a third party can read what VCW writes, including the parts VCW added
+after the spec was published.
+
+Nine mutations, all caught: dropping the column from the `SELECT`, making the default
+`Riaa`, letting a typo become `Unknown`, parsing the CLI flag and discarding it,
+folding the documented column at the front, removing the DDL comment, skipping
+migration 3, and - on the frontend - the Capture panel dropping the setting or
+assuming `riaa`. That last pair matters most: the panel is the only thing that can put
+the field on an `arm` from the window, and a panel that silently dropped it would make
+every GUI capture permanently `Unknown`.
+
 ## Next up
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**,

@@ -82,6 +82,7 @@ fn info() -> CaptureInfo {
         device_name: None,
         os_verified: false,
         os_report: None,
+        eq: vcw_types::CaptureEq::Unknown,
     }
 }
 

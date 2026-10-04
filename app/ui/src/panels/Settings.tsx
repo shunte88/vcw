@@ -207,6 +207,17 @@ export function Settings({
           </select>
         </label>
         <label>
+          Equalisation on input
+          <select
+            value={draft.audio.eq ?? "unknown"}
+            onChange={(event) => audio({ eq: event.target.value })}
+          >
+            <option value="unknown">Not stated</option>
+            <option value="riaa">RIAA, from a phono stage</option>
+            <option value="flat">Flat, no curve applied</option>
+          </select>
+        </label>
+        <label>
           Ring (milliseconds)
           <input
             type="number"

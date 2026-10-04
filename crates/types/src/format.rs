@@ -175,6 +175,74 @@ impl CaptureMode {
     pub const ALL: [Self; 3] = [Self::Exclusive, Self::Native, Self::Shared];
 }
 
+/// What playback equalisation the hardware upstream of the capture had already
+/// applied (§51).
+///
+/// Here because applying a curve later is only meaningful if what was captured is
+/// known. A flat transfer wants a curve applied; a capture that has already been
+/// through a RIAA phono stage wants RIAA *undone* before another curve goes on,
+/// which amplifies noise and is not a thing to do on a guess.
+///
+/// The field cannot be recovered afterwards, which is why §51 requires it from the
+/// first capture-capable release rather than from the Phase 3 processing chain that
+/// will consume it: a rip whose provenance was never recorded is one nobody can
+/// correctly re-equalise, however good the filter is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum CaptureEq {
+    /// No equalisation was applied upstream: a flat transfer, from a flat preamp
+    /// or a phono stage with its curve defeated. The case a curve can simply be
+    /// applied to.
+    Flat,
+    /// The RIAA curve was applied upstream, by an ordinary phono stage. Playing it
+    /// back as-is is correct for anything cut to RIAA, and anything else requires
+    /// inverting this first.
+    Riaa,
+    /// Nobody said, and VCW did not get to see. **The default**, and deliberately
+    /// not `Riaa`: a RIAA phono stage is overwhelmingly the common case, and that
+    /// is exactly what makes guessing it dangerous - a plausible default here would
+    /// be read later as a measurement by a processing chain that cannot tell the
+    /// difference. §51 requires an operator to state the provenance rather than
+    /// have one assumed.
+    ///
+    /// What every imported project gets (§12): the audio came out of another
+    /// application, which recorded nothing about the signal chain ahead of it.
+    #[default]
+    Unknown,
+}
+
+impl CaptureEq {
+    /// The `capture_eq` column's spelling.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Flat => "flat",
+            Self::Riaa => "riaa",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    /// Reads the `capture_eq` column. `None` for a value no version of VCW wrote.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "flat" => Some(Self::Flat),
+            "riaa" => Some(Self::Riaa),
+            "unknown" => Some(Self::Unknown),
+            _ => None,
+        }
+    }
+
+    /// Whether a curve can be applied to this capture without first undoing one.
+    ///
+    /// False for [`CaptureEq::Unknown`] as well as for [`CaptureEq::Riaa`], for the
+    /// same reason [`CaptureMode::could_be_bit_perfect`] is false for an import:
+    /// unknown provenance is reported as "no" rather than inherited.
+    pub const fn is_flat(self) -> bool {
+        matches!(self, Self::Flat)
+    }
+
+    /// Every value, for a UI that offers the choice and a test that covers it.
+    pub const ALL: [Self; 3] = [Self::Flat, Self::Riaa, Self::Unknown];
+}
+
 /// How a block of samples is laid out on disk, and the `sampleformat` code that
 /// records it.
 ///
@@ -345,6 +413,30 @@ mod tests {
         }
         assert_eq!(CaptureMode::parse("Exclusive"), None);
         assert_eq!(CaptureMode::parse("unknown"), None);
+    }
+
+    #[test]
+    fn equalisation_round_trips_and_rejects_nonsense() {
+        for eq in CaptureEq::ALL {
+            assert_eq!(CaptureEq::parse(eq.as_str()), Some(eq));
+        }
+        // The spellings are the stored ones, lower case. A reader that accepted
+        // both cases would let two spellings of one fact into the column.
+        assert_eq!(CaptureEq::parse("RIAA"), None);
+        assert_eq!(CaptureEq::parse("Flat"), None);
+        assert_eq!(CaptureEq::parse(""), None);
+        assert_eq!(CaptureEq::parse("riaa-inverse"), None);
+    }
+
+    #[test]
+    fn an_unstated_curve_is_unknown_and_never_riaa() {
+        // §51: RIAA is overwhelmingly the common case, which is exactly why it
+        // must not be the default. Assuming it would silently claim a fact about
+        // somebody's preamp, and the claim is unrecoverable from the audio.
+        assert_eq!(CaptureEq::default(), CaptureEq::Unknown);
+        assert!(!CaptureEq::default().is_flat());
+        assert!(CaptureEq::Flat.is_flat());
+        assert!(!CaptureEq::Riaa.is_flat());
     }
 
     #[test]

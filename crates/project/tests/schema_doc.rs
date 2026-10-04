@@ -224,3 +224,54 @@ fn nothing_is_documented_by_its_name_alone() {
         }
     }
 }
+
+/// An added column is documented on the table it was added to, last, and not as
+/// an object of its own.
+///
+/// The parser reads the whole migration history, so a column added at v3 has to
+/// find its way onto a table created at v1. Getting that wrong would be quiet: a
+/// stray `ADD COLUMN` section, or a column documented nowhere.
+#[test]
+fn a_column_added_by_a_migration_joins_the_table_that_has_it() {
+    let parsed = doc::parse(
+        "-- Why the column is here.\n\
+         ALTER TABLE captures ADD COLUMN capture_eq TEXT NOT NULL DEFAULT 'unknown';\n",
+    );
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0].kind, doc::ADDED_COLUMN);
+    assert_eq!(parsed[0].name, "captures");
+    assert_eq!(parsed[0].columns.len(), 1);
+    assert_eq!(parsed[0].columns[0].name, "capture_eq");
+    assert_eq!(
+        parsed[0].columns[0].declaration, "TEXT NOT NULL DEFAULT 'unknown'",
+        "the declaration is what the document prints, semicolon excluded"
+    );
+    assert_eq!(
+        parsed[0].columns[0].comment, "Why the column is here.",
+        "the block above an ALTER describes the column, there being nothing else"
+    );
+
+    let objects = doc::objects();
+    assert!(
+        objects.iter().all(|o| o.kind != doc::ADDED_COLUMN),
+        "an added column is folded in, so nothing of this kind survives objects()"
+    );
+    let captures = objects
+        .iter()
+        .find(|o| o.kind == "TABLE" && o.name == "captures")
+        .expect("the captures table is documented");
+    assert_eq!(
+        captures.columns.last().map(|c| c.name.as_str()),
+        Some("capture_eq"),
+        "SQLite appends an added column, so the document has to as well"
+    );
+    assert_eq!(
+        captures
+            .columns
+            .iter()
+            .filter(|c| c.name == "capture_eq")
+            .count(),
+        1,
+        "folded once, not once per migration parsed"
+    );
+}

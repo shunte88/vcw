@@ -219,6 +219,10 @@ enum Command {
         /// Ring capacity in milliseconds. Raised to the 500 ms floor if lower.
         #[arg(long)]
         ring_millis: Option<u32>,
+        /// What equalisation your hardware already applied (§51). Recorded with
+        /// the capture and not recoverable later, so state it if you know it.
+        #[arg(long, value_enum, default_value_t = capture::Eq::Unknown)]
+        capture_eq: capture::Eq,
         /// A whole session on one line: --script "arm,record,sleep 2,stop".
         #[arg(long)]
         script: Option<String>,
@@ -969,6 +973,7 @@ fn run() -> anyhow::Result<()> {
             format,
             mode,
             ring_millis,
+            capture_eq,
             script,
             json,
             meters,
@@ -980,6 +985,7 @@ fn run() -> anyhow::Result<()> {
             format,
             mode,
             ring_millis,
+            capture_eq,
             script,
             json,
             meters,

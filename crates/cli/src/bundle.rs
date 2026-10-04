@@ -500,6 +500,7 @@ fn captures(project: &Project) -> Value {
                     "channels": record.info.channels,
                     "storage_format": format!("{:?}", record.info.storage_format),
                     "capture_mode": record.info.capture_mode.as_str(),
+                    "capture_eq": record.info.eq.as_str(),
                     "host_api": record.info.host_api,
                     "device_id": record.info.device_id,
                     "device_name": record.info.device_name,

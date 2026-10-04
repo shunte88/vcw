@@ -56,7 +56,7 @@ use std::process::Command;
 use vcw_project::persistence::{Config, Writer};
 use vcw_project::{Project, meta, release, side, track};
 use vcw_types::vinyl::Side;
-use vcw_types::{CaptureInfo, CaptureMode, CaptureState, SampleRate, StorageFormat};
+use vcw_types::{CaptureEq, CaptureInfo, CaptureMode, CaptureState, SampleRate, StorageFormat};
 
 const VCW: &str = env!("CARGO_BIN_EXE_vcw");
 
@@ -106,7 +106,8 @@ fn project_with_audio(dir: &Path, state: CaptureState) -> PathBuf {
         2,
         StorageFormat::Int16,
         CaptureMode::Exclusive,
-    );
+    )
+    .with_eq(CaptureEq::Flat);
 
     // The marker has to survive being *stored*, not just being pushed. Blocks
     // are per channel and never interleaved, so a marker written straight into
@@ -230,6 +231,10 @@ fn a_bundle_reports_what_section_42_asks_for() {
     assert_eq!(capture["channels"], 2);
     assert_eq!(capture["storage_format"], "Int16");
     assert_eq!(capture["capture_mode"], "exclusive");
+    // §42's bundle is what somebody reading a support report has. A rip that
+    // sounds wrong because it was equalised twice is diagnosable from this line
+    // and from nothing else in the file.
+    assert_eq!(capture["capture_eq"], "flat");
     assert_eq!(capture["state"], "finalised");
     assert_eq!(capture["clean"], true);
     for counter in ["overruns", "underruns", "dropped_frames", "stream_errors"] {

@@ -55,7 +55,7 @@ use std::process::Command;
 use vcw_project::persistence::{Config, Writer};
 use vcw_project::{Project, pcm, release, side, track};
 use vcw_types::vinyl::Side;
-use vcw_types::{CaptureInfo, CaptureMode, CaptureState, SampleRate, StorageFormat};
+use vcw_types::{CaptureEq, CaptureInfo, CaptureMode, CaptureState, SampleRate, StorageFormat};
 
 /// The tool under test, found relative to the crate rather than to the cwd.
 fn reader() -> PathBuf {
@@ -182,7 +182,10 @@ fn written(format: StorageFormat, frames: u32) -> Written {
     let path = dir.path().join("spec.vcw");
     let project = Project::create(&path).expect("create");
 
-    let info = CaptureInfo::unverified(SampleRate(48_000), 2, format, CaptureMode::Shared);
+    // Riaa rather than the default, so a reader that drops the v3 column or reads
+    // the wrong one of the two states fails instead of agreeing by accident.
+    let info = CaptureInfo::unverified(SampleRate(48_000), 2, format, CaptureMode::Shared)
+        .with_eq(CaptureEq::Riaa);
     let audio = ramp(format, frames, 2);
     let mut writer = Writer::begin(project, &info, Config::default()).expect("begin");
     writer.push(&audio).expect("push");
@@ -266,6 +269,7 @@ fn a_third_party_reader_agrees_about_what_the_project_holds() {
     assert_eq!(said["captures"][0]["bytes_per_sample"], 3);
     assert_eq!(said["captures"][0]["frames"], project.frames);
     assert_eq!(said["captures"][0]["state"], "finalised");
+    assert_eq!(said["captures"][0]["capture_eq"], "riaa");
     assert_eq!(said["captures"][0]["interrupted"], false);
 
     // The record over the audio, which is the half a third party cannot guess.

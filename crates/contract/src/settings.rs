@@ -133,6 +133,14 @@ pub struct Audio {
     pub ring_millis: Option<u32>,
     /// `shared`, `native` or `exclusive` (§8).
     pub mode: Option<String>,
+    /// Equalisation the signal carries when it arrives: `flat`, `riaa` or
+    /// `unknown` (§51). `None` means the same as `unknown`.
+    ///
+    /// A setting rather than a per-capture field because it describes the
+    /// operator's preamp, which does not change between records. It cannot be
+    /// recovered from the audio afterwards, which is why it is asked for here
+    /// instead of when the curves ship.
+    pub eq: Option<String>,
 }
 
 /// §39's recording group.

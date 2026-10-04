@@ -61,7 +61,7 @@
 
 use std::path::PathBuf;
 
-use vcw_types::{CaptureMode, SampleFormat};
+use vcw_types::{CaptureEq, CaptureMode, SampleFormat};
 
 /// What to open, described rather than held.
 ///
@@ -86,6 +86,12 @@ pub struct Setup {
     pub mode: CaptureMode,
     /// Ring capacity in milliseconds. `None` takes the default from §10.
     pub ring_millis: Option<u32>,
+    /// What equalisation the hardware upstream has already applied (§51).
+    ///
+    /// Not a request, unlike every field above it: nothing is asked of the
+    /// device and nothing can be negotiated. It is the operator telling VCW what
+    /// their signal chain is doing, and [`CaptureEq::Unknown`] when they have not.
+    pub eq: CaptureEq,
 }
 
 impl Setup {
@@ -103,6 +109,7 @@ impl Setup {
             format: None,
             mode: CaptureMode::Exclusive,
             ring_millis: None,
+            eq: CaptureEq::Unknown,
         }
     }
 
@@ -140,6 +147,13 @@ impl Setup {
     #[must_use]
     pub const fn mode(mut self, mode: CaptureMode) -> Self {
         self.mode = mode;
+        self
+    }
+
+    /// States the capture's equalisation provenance (§51).
+    #[must_use]
+    pub const fn eq(mut self, eq: CaptureEq) -> Self {
+        self.eq = eq;
         self
     }
 

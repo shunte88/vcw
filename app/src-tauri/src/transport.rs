@@ -207,22 +207,44 @@ mod tests {
     use super::*;
 
     /// Winds a project back to the v1 it would have been before WP-13.
+    ///
+    /// **Every migration after 1 has to be undone here.** The fixture is a current
+    /// project with its history removed, so a migration that is added and not
+    /// subtracted here leaves its own work in place and then fails re-applying it -
+    /// which reads as a migration bug (`duplicate column name`) when it is a stale
+    /// fixture. The assertions at the end are there to say which it is.
     fn wind_back_to_v1(path: &Path) {
         let project = vcw_project::Project::open(path).expect("opening the project");
         project
             .conn()
             .execute_batch(
                 // Everything migration 2 creates, dropped in the order the
-                // foreign keys point, then the bookkeeping that says it ran.
+                // foreign keys point; then migration 3's column; then the
+                // bookkeeping that says either of them ran.
                 "DROP TABLE IF EXISTS tracks;
                  DROP TABLE IF EXISTS track_boundaries;
                  DROP TABLE IF EXISTS sides;
                  DROP TABLE IF EXISTS release_artwork;
                  DROP TABLE IF EXISTS releases;
+                 ALTER TABLE captures DROP COLUMN capture_eq;
                  DELETE FROM schema_migrations WHERE version >= 2;
                  PRAGMA user_version = 1;",
             )
             .expect("winding the schema back");
+        assert!(
+            project
+                .conn()
+                .prepare("SELECT capture_eq FROM captures")
+                .is_err(),
+            "the fixture still has v3's column, so it is not a v1 project"
+        );
+        assert!(
+            project
+                .conn()
+                .prepare("SELECT release_id FROM releases")
+                .is_err(),
+            "the fixture still has v2's tables, so it is not a v1 project"
+        );
         project.close().expect("closing it again");
     }
 

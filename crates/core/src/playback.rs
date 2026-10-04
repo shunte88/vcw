@@ -1322,6 +1322,7 @@ mod tests {
             device_name: Some("Cirrus Analog".into()),
             os_verified: false,
             os_report: None,
+            eq: vcw_types::CaptureEq::Unknown,
         }
     }
 

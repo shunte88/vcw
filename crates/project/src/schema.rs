@@ -64,9 +64,12 @@ pub const APPLICATION_ID: u32 = 0x5643_5700;
 /// Audacity's packed dotted quad - we have one number to express and no reason to
 /// pack four into it.
 ///
-/// v1 is capture; v2 adds the §29 vinyl data model. [`FORMAT_VERSION`] did not move
-/// with it, because nothing v1 wrote means anything different now.
-pub const SCHEMA_VERSION: u32 = 2;
+/// v1 is capture; v2 adds the §29 vinyl data model; v3 adds `captures.capture_eq`
+/// (§51). [`FORMAT_VERSION`] has not moved with any of them, because nothing an
+/// older version wrote means anything different now - a v1 or v2 capture has an
+/// unrecorded equalisation provenance, and `'unknown'` is what that is, not a
+/// changed meaning for a column that already existed.
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// The project-format version: the *meaning* of the schema, as opposed to its shape.
 ///
@@ -175,6 +178,10 @@ CREATE TABLE captures (
     frames         INTEGER NOT NULL DEFAULT 0,
     -- 'recording', 'finalised' or 'interrupted'. validate() rejects anything else.
     state          TEXT    NOT NULL DEFAULT 'recording'
+    -- Schema v3 adds capture_eq here: 'flat', 'riaa' or 'unknown' (§51), the
+    -- equalisation applied by the hardware upstream. Added by migration rather
+    -- than written into this statement, because migration 1 *is* this text and a
+    -- fresh project has to take the same path an upgrade does.
 );
 
 -- The superset half: where each sample block came from and how to find it again.
@@ -488,6 +495,26 @@ CREATE TABLE tracks (
     UNIQUE (start_boundary),
     UNIQUE (end_boundary)
 );
+"#;
+
+/// Schema v3: the capture's equalisation provenance (§51).
+///
+/// One column, and the whole of its design is the default. `'unknown'` is what a
+/// capture written by v1 or v2 gets, which is the truth about those rows: nobody was
+/// asked and nothing was recorded. Defaulting to `'riaa'` would have been the
+/// plausible choice - an ordinary phono stage is overwhelmingly the common case - and
+/// would have silently fabricated provenance for every project already on disk,
+/// which a Phase 3 processing chain would then read as a fact and invert.
+///
+/// `ALTER TABLE ... ADD COLUMN` with a `NOT NULL DEFAULT` is a metadata-only change
+/// in SQLite: it rewrites no rows and so costs nothing on a 2.33 GiB project, which
+/// is the only reason a migration can be run on open rather than offered as a job.
+pub const SCHEMA_V3: &str = r#"
+-- Equalisation the signal already carried when it reached the sound card (§51):
+-- 'flat' for a preamp that applied no curve, 'riaa' for one that applied RIAA,
+-- 'unknown' when nobody said. Playback equalisation needs it and it cannot be recovered
+-- from the audio, so it is recorded from the first capture, years before the curves ship.
+ALTER TABLE captures ADD COLUMN capture_eq TEXT NOT NULL DEFAULT 'unknown';
 "#;
 
 /// Tables the current schema must contain. Checked on open, so a truncated or

@@ -104,6 +104,7 @@ fn recorded_at(
         device_name: Some("Cirrus Analog".into()),
         os_verified: false,
         os_report: None,
+        eq: vcw_types::CaptureEq::Unknown,
     };
     let frame_bytes = format.bytes_per_sample() * channels as usize;
     let project = Project::create(dir.join("export.vcw")).expect("create");

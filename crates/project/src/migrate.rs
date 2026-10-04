@@ -44,7 +44,7 @@
 use rusqlite::Connection;
 
 use crate::error::{Error, Result};
-use crate::schema::{SCHEMA_V1, SCHEMA_V2};
+use crate::schema::{SCHEMA_V1, SCHEMA_V2, SCHEMA_V3};
 
 /// One step from schema version `version - 1` to `version`.
 #[derive(Debug, Clone, Copy)]
@@ -71,6 +71,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 2,
         description: "vinyl data model: releases, artwork, sides, boundaries, tracks",
         sql: SCHEMA_V2,
+    },
+    Migration {
+        version: 3,
+        description: "capture equalisation provenance: captures.capture_eq",
+        sql: SCHEMA_V3,
     },
 ];
 
@@ -177,6 +182,30 @@ mod tests {
                 "migration 2 contains {forbidden}, so it is not purely additive"
             );
         }
+    }
+
+    #[test]
+    fn the_equalisation_migration_only_adds_a_column() {
+        // Same promise as migration 2, kept a different way: this one has to ALTER,
+        // so the check is that the ALTER is the additive kind. ADD COLUMN with a
+        // NOT NULL DEFAULT is metadata-only in SQLite - it rewrites no rows, which
+        // is what makes it safe to run on open against a 2 GiB project. DROP COLUMN
+        // and RENAME COLUMN rewrite the table and would not be.
+        let sql = SCHEMA_V3
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("--"))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .to_ascii_uppercase();
+        for forbidden in [
+            "UPDATE ", "DROP ", "DELETE ", "INSERT ", "RENAME ", "CREATE ",
+        ] {
+            assert!(
+                !sql.contains(forbidden),
+                "migration 3 contains {forbidden}, so it is not purely additive"
+            );
+        }
+        assert!(sql.contains("ALTER TABLE CAPTURES ADD COLUMN"));
     }
 
     #[test]

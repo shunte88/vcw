@@ -70,7 +70,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, bail};
 use vcw_core::{Command, Engine, Event, Setup};
 
-use crate::capture::{Format, Mode};
+use crate::capture::{Eq, Format, Mode};
 
 /// Everything the verb was asked to do.
 pub(crate) struct Args {
@@ -89,6 +89,8 @@ pub(crate) struct Args {
     pub(crate) mode: Mode,
     /// Ring capacity in milliseconds.
     pub(crate) ring_millis: Option<u32>,
+    /// What equalisation the hardware upstream already applied (§51).
+    pub(crate) capture_eq: Eq,
     /// A whole session on one line, verbs separated by commas.
     pub(crate) script: Option<String>,
     /// Machine-readable output: one JSON object per event, one per line.
@@ -111,6 +113,7 @@ impl Args {
         setup.format = self.format.map(Into::into);
         setup.mode = self.mode.into();
         setup.ring_millis = self.ring_millis;
+        setup.eq = self.capture_eq.into();
         setup
     }
 }

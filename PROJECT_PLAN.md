@@ -758,7 +758,8 @@ nobody can hear that it is close. The exit criterion is therefore a measurement 
 a known signal through each curve and check the response against the published one
 within a stated tolerance - which is a condition that can fail on purpose.
 
-**One half of it cannot wait for Phase 3.** Applying a curve is only meaningful if what
+**One half of it cannot wait for Phase 3, and did not: `CaptureEq` shipped
+2026-10-04.** Applying a curve is only meaningful if what
 was captured is known: a flat transfer wants the curve applied, and a capture that has
 already been through a RIAA phono stage wants RIAA *undone* first, which amplifies
 noise and is not something to do by guesswork. So the capture has to **record what
@@ -769,6 +770,11 @@ Audacity projects. A field at capture time, an honest `unknown` as the default f
 imports, and the curve itself as a **stored decision in the processing chain** rather
 than anything baked into the blocks, which is the architecture §33 and the edit
 instructions already have.
+
+That field now exists: schema v3 adds `captures.capture_eq`, the operator states it
+once in Settings or per run with `--capture-eq`, imports land `unknown`, and a typo is
+refused rather than defaulted. The curves themselves remain Phase 3 work - what is
+done is the part that could not be done later.
 
 Specified as **§51, drafted 2026-10-04**, and listed in §46 with the rest of Phase 3.
 It was numbered after §50 rather than inserted near §33 where it belongs thematically,

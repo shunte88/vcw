@@ -1151,7 +1151,7 @@ fn read_evidence(text: &str) -> Vec<Evidence> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vcw_types::{CaptureInfo, CaptureMode, SampleRate, StorageFormat};
+    use vcw_types::{CaptureEq, CaptureInfo, CaptureMode, SampleRate, StorageFormat};
 
     fn project(dir: &tempfile::TempDir, name: &str) -> Project {
         Project::create(dir.path().join(name)).expect("create")
@@ -1168,6 +1168,7 @@ mod tests {
             device_name: None,
             os_verified: false,
             os_report: None,
+            eq: CaptureEq::Unknown,
         };
         crate::session::Session::begin(project, &info)
             .expect("begin")

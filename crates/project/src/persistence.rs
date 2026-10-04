@@ -1261,7 +1261,7 @@ mod tests {
     use super::*;
     use crate::validate::{Options, validate};
     use rusqlite::Connection;
-    use vcw_types::{CaptureMode, SampleRate};
+    use vcw_types::{CaptureEq, CaptureMode, SampleRate};
 
     const RATE: u32 = 96_000;
 
@@ -1276,6 +1276,7 @@ mod tests {
             device_name: Some("Cirrus Analog".into()),
             os_verified: false,
             os_report: None,
+            eq: CaptureEq::Unknown,
         }
     }
 

@@ -42,7 +42,7 @@ use vcw_contract::Request;
 use vcw_contract::command::{Arm, Audition, Invalid, Region, Transport};
 use vcw_core::Command;
 use vcw_core::playback::Scope;
-use vcw_types::SampleFormat;
+use vcw_types::{CaptureEq, SampleFormat};
 
 /// Parses a request the way the shell will.
 fn request(json: &str) -> Request {
@@ -128,6 +128,51 @@ fn a_refusal_names_the_field_and_says_what_was_wrong() {
     assert!(
         error.to_string().contains("format"),
         "{error} does not name the field"
+    );
+}
+
+#[test]
+fn an_equalisation_a_frontend_sends_is_taken_or_refused_by_name() {
+    for (text, expected) in [
+        ("flat", CaptureEq::Flat),
+        ("riaa", CaptureEq::Riaa),
+        ("unknown", CaptureEq::Unknown),
+    ] {
+        let arm = Arm {
+            project: "demo.vcw".to_owned(),
+            eq: Some(text.to_owned()),
+            ..Arm::default()
+        };
+        let setup = vcw_core::Setup::try_from(arm).unwrap_or_else(|e| panic!("{text}: {e}"));
+        assert_eq!(setup.eq, expected, "{text}");
+    }
+
+    // Saying nothing is Unknown, which is the honest reading of saying nothing -
+    // but a *typo* is refused rather than quietly becoming Unknown, because the
+    // operator who typed `raia` believes they have recorded RIAA and §51 says the
+    // curve cannot be recovered from the audio later.
+    let silent = Arm {
+        project: "demo.vcw".to_owned(),
+        ..Arm::default()
+    };
+    assert_eq!(
+        vcw_core::Setup::try_from(silent)
+            .expect("saying nothing is allowed")
+            .eq,
+        CaptureEq::Unknown
+    );
+
+    let arm = Arm {
+        project: "demo.vcw".to_owned(),
+        eq: Some("raia".to_owned()),
+        ..Arm::default()
+    };
+    let error = vcw_core::Setup::try_from(arm).expect_err("raia is not a curve");
+    assert_eq!(error.field, "eq");
+    assert!(
+        error.why.contains("riaa"),
+        "{} does not say what is allowed",
+        error.why
     );
 }
 

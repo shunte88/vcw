@@ -48,7 +48,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 use vcw_project::{Options, Project, recovery, session, validate};
-use vcw_types::CaptureState;
+use vcw_types::{CaptureEq, CaptureState};
 
 const VCW: &str = env!("CARGO_BIN_EXE_vcw");
 
@@ -322,4 +322,68 @@ fn the_meters_are_quiet_unless_asked_for_and_measured_when_they_are() {
         );
         assert!(channel["peak_db"].as_f64().expect("peak_db") > -0.1);
     }
+}
+
+/// What the operator says about their preamp reaches the capture row.
+///
+/// §51 records the equalisation the signal already carried, and the only thing
+/// that knows it is the person who wired the turntable up. It cannot be measured
+/// from the audio afterwards, so the flag is the whole mechanism - and a flag
+/// that is accepted and dropped would be worse than no flag, because the project
+/// would then claim 'unknown' about a capture somebody described.
+#[test]
+fn the_operator_can_state_the_equalisation_and_it_is_what_the_project_keeps() {
+    for (flag, expected) in [
+        ("flat", CaptureEq::Flat),
+        ("riaa", CaptureEq::Riaa),
+        ("unknown", CaptureEq::Unknown),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join(format!("{flag}.vcw"));
+        let out = Command::new(VCW)
+            .args([
+                "session",
+                &path.display().to_string(),
+                "--capture-eq",
+                flag,
+                "--script",
+                "arm,record,sleep 0.3,stop",
+            ])
+            .output()
+            .expect("run vcw session");
+        let transcript = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "{flag}: {transcript}");
+
+        let record = only_capture(&path);
+        assert_eq!(record.info.eq, expected, "{flag}");
+    }
+
+    // Unstated is Unknown. Not an assumption - the absence of a statement.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("silent.vcw");
+    let (ok, transcript) = script(&path, "arm,record,sleep 0.3,stop");
+    assert!(ok, "{transcript}");
+    assert_eq!(only_capture(&path).info.eq, CaptureEq::Unknown);
+
+    // A curve nobody has heard of fails the run rather than becoming Unknown.
+    let path = dir.path().join("typo.vcw");
+    let out = Command::new(VCW)
+        .args([
+            "session",
+            &path.display().to_string(),
+            "--capture-eq",
+            "columbia",
+            "--script",
+            "arm,record,sleep 0.3,stop",
+        ])
+        .output()
+        .expect("run vcw session");
+    assert!(
+        !out.status.success(),
+        "a curve VCW cannot apply must not be recorded as if it could"
+    );
+    assert!(
+        !path.exists(),
+        "a refused flag must not leave a project behind"
+    );
 }

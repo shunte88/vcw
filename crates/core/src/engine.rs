@@ -216,7 +216,9 @@ impl Recorder {
             }
         };
 
-        let info = source.info();
+        // The device's negotiated facts, plus the one fact the device cannot
+        // report: §51's equalisation provenance, which only the operator knows.
+        let info = source.info().with_eq(setup.eq);
         let mut project = open_or_create(&setup.project)?;
         // The session row goes down before a single frame is drained, so a
         // process killed in the next second still leaves evidence that a

@@ -135,6 +135,28 @@ A capture is committed continuously, not at the end. There is no "save": every
 250 ms of audio is written and fsynced as it arrives, so the worst a crash can
 cost is the last block plus whatever the driver was still holding.
 
+### Say what your preamp does, once
+
+Almost every phono stage applies the RIAA curve before the signal reaches the
+sound card. A few do not: a flat transfer from a cartridge into a flat preamp,
+or a phono stage with its curve defeated. VCW records which, per capture, because
+nothing in the audio can tell you afterwards and the answer decides what
+playback equalisation is allowed to do with it later (§51).
+
+Set it once in **Settings -> Audio -> Equalisation on input**, and every capture
+the window takes carries it. From the command line it is a flag:
+
+```text
+vcw session side-a.vcw --capture-eq riaa      # an ordinary phono stage
+vcw session side-a.vcw --capture-eq flat      # flat transfer, no curve applied
+```
+
+Saying nothing records `unknown`, which is the honest answer and is what every
+capture taken before this existed says. `unknown` is not a broken capture - it
+plays back exactly as it did before - but a curve cannot be applied to it
+without a guess, so VCW will refuse rather than guess. If you know what your
+chain does, state it now; it costs a flag and cannot be reconstructed later.
+
 ## When something goes wrong mid-capture
 
 If the process died, the machine lost power, or the device vanished, the project

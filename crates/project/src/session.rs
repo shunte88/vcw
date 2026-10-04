@@ -53,7 +53,9 @@
 //! forge.
 
 use rusqlite::{Connection, OptionalExtension, params};
-use vcw_types::{CaptureInfo, CaptureMode, CaptureState, Diagnostics, SampleRate, StorageFormat};
+use vcw_types::{
+    CaptureEq, CaptureInfo, CaptureMode, CaptureState, Diagnostics, SampleRate, StorageFormat,
+};
 
 use crate::error::Result;
 use crate::sqlite::Project;
@@ -121,8 +123,8 @@ impl Session {
             "INSERT INTO captures (
                  sample_rate, channels, storage_format, capture_mode, host_api,
                  device_id, device_name, os_verified, os_report, started_at,
-                 finished_at, frames, state
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, 0, ?11)",
+                 finished_at, frames, state, capture_eq
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, 0, ?11, ?12)",
             params![
                 info.rate.hz(),
                 info.channels,
@@ -135,6 +137,7 @@ impl Session {
                 info.os_report,
                 started,
                 CaptureState::Recording.as_str(),
+                info.eq.as_str(),
             ],
         )?;
         let id = tx.last_insert_rowid();
@@ -310,7 +313,8 @@ const SELECT: &str = "SELECT c.capture_id, c.sample_rate, c.channels, c.storage_
         c.capture_mode, c.host_api, c.device_id, c.device_name, c.os_verified,
         c.os_report, c.state, c.started_at, c.finished_at, c.frames,
         COALESCE(d.overruns, 0), COALESCE(d.underruns, 0),
-        COALESCE(d.dropped_frames, 0), COALESCE(d.stream_errors, 0)
+        COALESCE(d.dropped_frames, 0), COALESCE(d.stream_errors, 0),
+        c.capture_eq
    FROM captures c LEFT JOIN capture_diagnostics d ON d.capture_id = c.capture_id";
 
 /// SQLite integers are signed, and every counter here is a `u64`. Saturating
@@ -336,6 +340,7 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
     let storage_code: u32 = r.get(3)?;
     let mode: String = r.get(4)?;
     let state: String = r.get(10)?;
+    let eq: String = r.get(18)?;
     Ok(Record {
         id: r.get(0)?,
         info: CaptureInfo {
@@ -347,6 +352,10 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
             // widest integer is the least destructive guess to carry forward.
             storage_format: StorageFormat::from_code(storage_code).unwrap_or(StorageFormat::Int32),
             capture_mode: CaptureMode::parse(&mode).unwrap_or(CaptureMode::Shared),
+            // A spelling no version of VCW wrote reads as unknown, which is both
+            // the safe answer and the honest one: the column says something this
+            // build cannot interpret, so the provenance is not known to it.
+            eq: CaptureEq::parse(&eq).unwrap_or_default(),
             host_api: r.get(5)?,
             device_id: r.get(6)?,
             device_name: r.get(7)?,
@@ -389,6 +398,11 @@ mod tests {
             device_name: Some("Cirrus Analog".into()),
             os_verified: false,
             os_report: None,
+            // Deliberately not the default. Every test below that round-trips
+            // this record through SQLite would pass with `capture_eq` never
+            // written at all if this said `Unknown`, because `Unknown` is what
+            // the column defaults to and what a parse failure reads as.
+            eq: CaptureEq::Riaa,
         }
     }
 

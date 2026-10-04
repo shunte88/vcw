@@ -67,7 +67,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, StreamTrait};
-use vcw_types::{CaptureInfo, CaptureMode, Diagnostics, SampleFormat, SampleRate, StorageFormat};
+use vcw_types::{
+    CaptureEq, CaptureInfo, CaptureMode, Diagnostics, SampleFormat, SampleRate, StorageFormat,
+};
 
 use crate::buffers::{self, RingReader, RingWriter};
 use crate::devices::{self, DeviceKey, DeviceReport, Direction, Transport};
@@ -715,6 +717,10 @@ impl Capture {
             device_name: Some(self.name.clone()),
             os_verified: self.verification.confirms(),
             os_report: Some(self.verification.evidence()),
+            // Not a negotiated fact: a phono stage does not announce its curve
+            // over USB. The caller that knows what the operator declared puts it
+            // on with `with_eq`; unknown until somebody says otherwise (§51).
+            eq: CaptureEq::Unknown,
         }
     }
 

@@ -633,7 +633,7 @@ mod tests {
     use crate::persistence::{Config, Writer};
     use crate::session::Session;
     use crate::validate::{Options, validate};
-    use vcw_types::{CaptureMode, SampleRate, StorageFormat};
+    use vcw_types::{CaptureEq, CaptureMode, SampleRate, StorageFormat};
 
     const RATE: u32 = 48_000;
     const WIDTH: usize = 4;
@@ -650,6 +650,7 @@ mod tests {
             device_name: Some("Cirrus Analog".into()),
             os_verified: false,
             os_report: None,
+            eq: CaptureEq::Unknown,
         }
     }
 

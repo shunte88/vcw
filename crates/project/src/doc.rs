@@ -69,7 +69,7 @@ pub struct Column {
 /// A parsed schema object.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Object {
-    /// `TABLE` or `INDEX`.
+    /// `TABLE` or `INDEX`, or [`ADDED_COLUMN`] for an `ALTER TABLE ... ADD COLUMN`.
     pub kind: String,
     /// Object name.
     pub name: String,
@@ -81,14 +81,48 @@ pub struct Object {
     pub sql: String,
 }
 
+/// The kind [`parse`] gives an `ALTER TABLE ... ADD COLUMN`.
+///
+/// It is not an object of its own - [`objects`] folds it into the table that was
+/// created earlier, and nothing with this kind survives that call.
+pub const ADDED_COLUMN: &str = "ADD COLUMN";
+
 /// Every object the current schema has, in the order the migrations create them.
 ///
 /// The document describes what a project *is*, and what a project is, is the result
 /// of running every migration. Parsing one version's DDL would document the file
 /// VCW used to write.
+///
+/// A column a later migration adds is folded onto the table that created it, last,
+/// which is where SQLite puts it and so where `PRAGMA table_info` reports it. The
+/// alternative - a section per migration - would document the history rather than
+/// the format, and a reader wanting the history has the migrations.
+///
+/// # Panics
+///
+/// If a migration alters a table no earlier migration created.
 #[must_use]
 pub fn objects() -> Vec<Object> {
-    MIGRATIONS.iter().flat_map(|m| parse(m.sql)).collect()
+    let mut objects: Vec<Object> = Vec::new();
+    for migration in MIGRATIONS {
+        for object in parse(migration.sql) {
+            if object.kind == ADDED_COLUMN {
+                let table = objects
+                    .iter_mut()
+                    .find(|t| t.kind == "TABLE" && t.name == object.name)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "migration {} adds a column to `{}`, which nothing creates",
+                            migration.version, object.name
+                        )
+                    });
+                table.columns.extend(object.columns);
+                continue;
+            }
+            objects.push(object);
+        }
+    }
+    objects
 }
 
 /// Parses DDL into objects, carrying the comments across.
@@ -132,12 +166,37 @@ pub fn parse(ddl: &str) -> Vec<Object> {
 
 fn parse_statement(sql: &str, comment: &str) -> Object {
     let head = sql.split_whitespace().take(3).collect::<Vec<_>>();
-    assert_eq!(head.first(), Some(&"CREATE"), "unexpected statement: {sql}");
-    let kind = head[1].to_owned();
+    assert!(
+        matches!(head.first(), Some(&"CREATE" | &"ALTER")),
+        "unexpected statement: {sql}"
+    );
+    // Both shapes name the kind second and the object third: `CREATE TABLE captures`
+    // and `ALTER TABLE captures` agree as far as the name.
+    let kind = if head[0] == "ALTER" {
+        ADDED_COLUMN.to_owned()
+    } else {
+        head[1].to_owned()
+    };
     let name = head[2].trim_end_matches('(').to_owned();
 
     let mut columns = Vec::new();
-    if kind == "TABLE" {
+    if kind == ADDED_COLUMN {
+        let added = sql
+            .split_once("ADD COLUMN")
+            .expect("ALTER TABLE adds a column")
+            .1
+            .trim()
+            .trim_end_matches(';')
+            .trim();
+        let (col, declaration) = added.split_once(char::is_whitespace).unwrap_or((added, ""));
+        columns.push(Column {
+            name: col.to_owned(),
+            declaration: declaration.split_whitespace().collect::<Vec<_>>().join(" "),
+            // The block above the statement describes the column, there being nothing
+            // else in the statement for it to describe.
+            comment: comment.to_owned(),
+        });
+    } else if kind == "TABLE" {
         let body = sql
             .split_once('(')
             .expect("CREATE TABLE has a body")
