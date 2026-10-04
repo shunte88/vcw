@@ -1284,6 +1284,80 @@ title: string,
  */
 frames: number, };
 
+export type About = {
+/**
+ * The product's name.
+ */
+product: string,
+/**
+ * The release this is.
+ */
+version: string,
+/**
+ * `debug` or `release`. A timing complaint against a debug build is a
+ * different conversation, and this is the field that ends it early.
+ */
+profile: string,
+/**
+ * Where the source is.
+ */
+repository: string,
+/**
+ * Whoever holds the copyright on VCW's own code.
+ */
+authors: Array<string>,
+/**
+ * The SPDX expression VCW's own code is under.
+ */
+licence: string,
+/**
+ * The operating system the binary was built for.
+ */
+os: string,
+/**
+ * The processor architecture.
+ */
+arch: string,
+/**
+ * The bundled SQLite, as the library reports itself at run time.
+ */
+sqlite: string,
+/**
+ * The project schema this build writes.
+ */
+schemaVersion: number,
+/**
+ * The audio format version this build writes.
+ */
+formatVersion: number,
+/**
+ * Every third-party component this build owes a notice for.
+ */
+notices: Array<Notice>, };
+
+export type Notice = {
+/**
+ * The crate, or the library it vendors.
+ */
+component: string,
+/**
+ * The SPDX expression the crate declares.
+ */
+licence: string,
+/**
+ * What VCW can do because it is linked.
+ */
+provides: string,
+/**
+ * Where the complete corresponding source is published.
+ */
+source: string,
+/**
+ * Whether the licence grants the right to modify the component and relink
+ * it into VCW, which is the sentence LGPL-3.0 §4 requires be offered.
+ */
+copyleft: boolean, };
+
 // ----------------------------------------------------------------------
 // Settings (§39)
 //

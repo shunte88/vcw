@@ -53,6 +53,7 @@ mod contend;
 mod detect;
 mod devices;
 mod export;
+mod fingerprint;
 mod import;
 mod logging;
 mod metadata;
@@ -314,6 +315,35 @@ enum Command {
         /// Print every measurement behind every boundary (§24).
         #[arg(long)]
         evidence: bool,
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Fingerprint a span of a capture, or every track in it (§25).
+    ///
+    /// The offline twin of what a capture does for itself while it runs: same
+    /// algorithm, same answer, any span. Writes nothing and looks nothing up -
+    /// a fingerprint becomes a candidate recording in the identification work,
+    /// and this is the question it asks.
+    Fingerprint {
+        /// Project to read.
+        project: std::path::PathBuf,
+        /// Capture to fingerprint. Omit for the most recent.
+        #[arg(long)]
+        capture: Option<i64>,
+        /// Where to start, in seconds.
+        #[arg(long)]
+        from: Option<f64>,
+        /// How much to fingerprint, in seconds. Omit for the rest of the side.
+        #[arg(long)]
+        length: Option<f64>,
+        /// Fingerprint each track the detectors imply, rather than one span.
+        #[arg(long, conflicts_with_all = ["from", "length"])]
+        tracks: bool,
+        /// With --tracks, use only boundaries this many detectors reported.
+        #[arg(long, default_value_t = 1)]
+        min_sources: usize,
         /// Machine-readable output.
         #[arg(long)]
         json: bool,
@@ -1038,6 +1068,23 @@ fn run() -> anyhow::Result<()> {
             evidence,
             json,
         }),
+        Command::Fingerprint {
+            project,
+            capture,
+            from,
+            length,
+            tracks,
+            min_sources,
+            json,
+        } => fingerprint::run(&fingerprint::Args {
+            project,
+            capture,
+            from,
+            length,
+            tracks,
+            min_sources,
+            json,
+        }),
         Command::Waveform {
             project,
             capture,
@@ -1326,6 +1373,25 @@ fn doctor() -> anyhow::Result<()> {
 
     let rates: Vec<String> = STANDARD_RATES.iter().map(|r| r.hz().to_string()).collect();
     println!("rates (§8)  {}", rates.join(", "));
+
+    // WP-28's other half. The window has a dialog; this binary is redistributed
+    // in the same package and links the same encoders, and a person who only
+    // ever runs the CLI should not have to open the repository to find out that
+    // their copy contains LGPL-3.0 object code. Derived from `vcw-export`'s
+    // cargo features, exactly as the dialog's list is - see
+    // `vcw_export::notices`.
+    println!("licence     {} (VCW's own code)", env!("CARGO_PKG_LICENSE"));
+    let notices = vcw_export::notices::notices();
+    for notice in &notices {
+        println!(
+            "            {} - {} - {} - {}",
+            notice.licence, notice.component, notice.provides, notice.source
+        );
+    }
+    if notices.iter().any(|notice| notice.copyleft) {
+        println!("            Weak copyleft above: you may modify those components and");
+        println!("            relink them into VCW. See THIRD-PARTY-NOTICES.md.");
+    }
 
     Ok(())
 }

@@ -132,4 +132,44 @@ fn a_real_subcommand_runs_in_a_windows_sized_stack() {
         "vcw doctor aborted in {WINDOWS_STACK_KIB} KiB of stack:\n{}",
         String::from_utf8_lossy(&out.stderr),
     );
+
+    // WP-28: the CLI is redistributed in the same package as the window and
+    // links the same encoders, so it carries the same notice obligation. The
+    // list itself is `vcw_export::notices`' business and tested there in all
+    // four feature combinations; what this asserts is that `doctor` prints it
+    // at all. It said nothing for three work packages.
+    let said = String::from_utf8_lossy(&out.stdout);
+    let notices = vcw_export::notices::notices();
+    assert!(
+        !notices.is_empty(),
+        "FLAC is unconditional, so this cannot be empty"
+    );
+    for notice in &notices {
+        // Against the library's own answer rather than against a literal:
+        // `cfg!(feature = "mp3")` written in this file would be asking about
+        // `vcw-cli`'s features, and `vcw-cli` has none. A hard-coded "LGPL-3.0"
+        // here would be a check that cannot fail for the wrong reason.
+        assert!(
+            said.contains(notice.component),
+            "vcw doctor does not name {}:\n{said}",
+            notice.component
+        );
+        assert!(
+            said.contains(notice.licence),
+            "vcw doctor does not say {} is {}:\n{said}",
+            notice.component,
+            notice.licence
+        );
+    }
+    assert!(
+        said.contains(env!("CARGO_PKG_LICENSE")),
+        "vcw doctor does not say what VCW itself is licensed under:\n{said}"
+    );
+    if notices.iter().any(|notice| notice.copyleft) {
+        assert!(
+            said.contains("relink"),
+            "this build links weak copyleft code and `doctor` makes no relink \
+             offer:\n{said}"
+        );
+    }
 }

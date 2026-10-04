@@ -427,22 +427,22 @@ fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
     let (recording_since, progress) = wait_until_recording(&mut child);
 
     // Sleep in slices and keep reading, because one number on the writer's own
-    // progress line is what makes the floor below hold on a busy machine: the
-    // real-time factor, audio produced over clock elapsed. The simulated source
-    // is paced by a clock it does not own, so on a host that is compiling the
-    // rest of the gate it falls behind, and a floor that treats wall-clock
-    // seconds as seconds of audio fails by a few milliseconds for reasons that
-    // have nothing to do with recovery. That is not hypothetical: 3.255 s of
-    // clock against 3.000 s of audio, on this host, with the gate running.
-    let mut rtf: Option<f64> = None;
+    // progress line is what the floor below is built from: the audio it has
+    // *committed*, which `Progress::frames` counts and this line prints as
+    // "N.N s written". It is the only statement about this capture that is not
+    // an estimate, and the floor needs one - the simulated source is paced by a
+    // clock it does not own, so on a host that is compiling the rest of the gate
+    // it falls behind, and a floor that treats wall-clock seconds as seconds of
+    // audio fails for reasons that have nothing to do with recovery.
+    let mut committed: Option<f64> = None;
     let until = Instant::now() + after;
     while Instant::now() < until {
         let slice = (until - Instant::now()).min(Duration::from_millis(50));
         if let Ok(line) = progress.recv_timeout(slice)
-            && let Some((_, after_rtf)) = line.split_once("rtf ")
+            && let Some((before, _)) = line.split_once(" s written")
         {
-            rtf = after_rtf
-                .split(',')
+            committed = before
+                .rsplit(' ')
                 .next()
                 .and_then(|number| number.parse().ok());
         }
@@ -580,37 +580,49 @@ fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
         ran_for.as_secs_f64()
     );
 
-    // Three: the floor, against the audio that existed rather than against the
-    // clock. `ran_for * rtf` is how much the source had produced by the kill,
-    // taking the pacing the writer itself last reported; rtf is clamped at 1.0
-    // because a source cannot outrun real time and a rounded 1.00001 should not
-    // buy the product any slack. On an idle host rtf is 0.9999-something and
-    // this is the tight bound the fifty-kill run established. On a starved one
-    // it relaxes by exactly the amount of audio that was never made, which is
-    // the only part of the failure that was ever about the scheduler.
+    // Three: the floor, and the one thing here that is not an estimate. The
+    // writer prints the audio it has committed, so recovery is required to come
+    // back with all of it: anything less is audio that reached the database and
+    // was then truncated away, which is the failure this whole file exists to
+    // rule out. Nothing is subtracted for the block that was in flight at the
+    // kill, because an uncommitted block was never announced.
+    //
+    // The earlier form was `ran_for * rtf - block_secs`, and it was unsound in
+    // both directions. `rtf` is committed audio over the *soak's* elapsed time,
+    // which starts at the project rather than at the banner `ran_for` measures
+    // from, so the two were an apples-to-oranges ratio: on this host it read
+    // 0.749 on a run that recovered 1.750 s of 1.750 s, a floor 0.44 s below
+    // where it belonged. And on the one random kill point in six where the
+    // startup offset happened to be small it read 0.9985, putting the floor at
+    // 1.5004 s against a recovery of 1.500 s - a failure by 0.4 ms on a block
+    // that had filled a hair before the kill and was genuinely still
+    // committing. A bound that tight on an estimate that loose is two bugs that
+    // cancelled.
+    //
+    // What is given up with the estimate is tightness: the line lands once a
+    // second, so a kill can be up to that much past the last announcement. The
+    // *magnitude* of crash loss is not claimed here at all - check one claims
+    // the shape of it, and `recovery_survives_twenty_kills` is the sign-off run.
     //
     // `--every 1` and a kill no earlier than 1.6 s in mean a progress line
     // always lands. If one did not, this check would silently not run, and a
     // check that turns itself off is not a check.
-    let pacing = rtf
-        .expect(
-            "the writer printed no progress line before it was killed, so the \
-             pacing-corrected floor could not be applied",
-        )
-        .min(1.0);
-    let produced = ran_for.as_secs_f64() * pacing;
-    // Audio the device dropped was produced and never offered, so it is not
-    // recovery's loss and the floor has to allow for it by exactly the amount
-    // the audit measured - not by a tolerance. On every run that lost nothing,
-    // which is every run on an idle host, this term is zero and the bound is
-    // the tight one the fifty-kill run established.
+    let announced = committed.expect(
+        "the writer printed no progress line before it was killed, so there is \
+         no committed figure to hold recovery to",
+    );
+    // Audio the device dropped never reached the writer, so it is not in the
+    // figure the writer printed and nothing is owed for it here. It is reported
+    // because a run that lost frames is the run this floor is read on.
     let lost_secs = lost as f64 / f64::from(RATE);
+    // One decimal on the line, so the truth is within 50 ms of it and the floor
+    // takes the low end. This is the only tolerance in the check and it is the
+    // print format, not a fudge.
     assert!(
-        recovered_secs >= produced - block_secs - lost_secs,
-        "recovered {recovered_secs:.3} s of the {produced:.3} s the source had \
-         produced ({:.3} s of clock at rtf {pacing:.5}); the floor allows \
-         {block_secs:.3} s of loss, one commit block, plus the {lost_secs:.3} s \
-         the device dropped",
+        recovered_secs >= announced - 0.05,
+        "recovered {recovered_secs:.3} s, but the writer had already announced \
+         {announced:.1} s committed before it was killed {:.3} s in, with \
+         {lost_secs:.3} s dropped by the device",
         ran_for.as_secs_f64()
     );
 

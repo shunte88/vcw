@@ -11,5 +11,8 @@ authors.workspace = true
 [dependencies]
 vcw-types = { workspace = true }
 
+chromaprint-next = { workspace = true }
+thiserror = { workspace = true }
+
 [lints]
 workspace = true

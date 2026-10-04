@@ -183,6 +183,8 @@ fn main() {
             transport::transport,
             transport::poll,
             transport::open_project,
+            library::about,
+            library::support,
             library::devices,
             library::release,
             library::sides,

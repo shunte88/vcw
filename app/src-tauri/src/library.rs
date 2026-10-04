@@ -48,10 +48,12 @@
 //! waveform's three arrays are one float per drawn column, which is a few
 //! thousand numbers for a screen-width of a two-hour side.
 
+use std::process::Command;
+
 use tauri::State;
 use vcw_contract::command::Zoom;
 use vcw_contract::read;
-use vcw_contract::view::{Boundary, Capture, Device, Release, Side, Track, Waveform};
+use vcw_contract::view::{About, Boundary, Capture, Device, Release, Side, Track, Waveform};
 use vcw_project::{Project, session};
 
 use crate::state::{Error, Shell};
@@ -76,6 +78,103 @@ pub(crate) fn devices() -> Vec<Device> {
         .iter()
         .map(Device::from)
         .collect()
+}
+
+/// Which build this is, and what it links (WP-28).
+///
+/// No project, like [`devices`], and nothing to ask: every field is a
+/// compile-time constant of the crate that owns the fact. The notices in
+/// particular are derived from `vcw-export`'s cargo features, which is the only
+/// place that question can be answered - `cfg!(feature = "mp3")` written here
+/// would be asking about *this* crate's features.
+#[tauri::command]
+pub(crate) fn about() -> About {
+    About::current()
+}
+
+/// Every page this product can send the operator to, by the name a frontend
+/// asks for.
+///
+/// A table and not two commands, because the refusal below has to name what
+/// exists: a hand-written "try coffee or shirts" is a sentence that goes stale
+/// the day a third page is added.
+const PAGES: [(&str, &str); 2] = [
+    ("coffee", "https://www.buymeacoffee.com/shunte88"),
+    (
+        "shirts",
+        "https://www.zazzle.com/team_badger_t_shirt-235604841593837420",
+    ),
+];
+
+/// Opens one of [`PAGES`] in the operator's own browser (WP-28).
+///
+/// The frontend names a page and not an address, which is the whole security
+/// story: a command that takes a URL opens whatever the webview asks for, and
+/// the two links in this product that leave it are known at compile time.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] if the name is not one of [`PAGES`], or if the platform's
+/// opener could not be started - a headless box, or a desktop with nothing
+/// registered for `https`. Starting it is as far as this goes: the opener exits
+/// as soon as it has handed the URL on, so what the browser does next is not
+/// VCW's to report.
+#[tauri::command]
+pub(crate) fn support(page: String) -> Result<(), Error> {
+    let url = PAGES
+        .iter()
+        .find(|(name, _)| *name == page)
+        .map(|(_, url)| *url)
+        .ok_or_else(|| Error::Invalid {
+            field: "page".to_owned(),
+            why: format!("no page called {page:?} - this build offers {}", named()),
+        })?;
+
+    // ponytail: not reaped, so a click leaves one zombie until the app exits.
+    // `status()` would reap it and block the window while the browser starts -
+    // see the module note on sync commands - and a thread per click to call
+    // `wait` is more machinery than a short-lived `xdg-open` is worth.
+    opener(url).spawn().map(drop).map_err(|why| Error::Invalid {
+        field: "page".to_owned(),
+        why: format!("no browser could be started for {url}: {why}"),
+    })
+}
+
+/// The page names, for a refusal that cannot go stale.
+fn named() -> String {
+    PAGES
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The platform's "open this with whatever handles it", built but not run.
+///
+/// Separate from [`support`] so a test can read the program and its arguments
+/// without a browser window opening on whoever ran the gate.
+fn opener(url: &str) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        // `start` is a cmd builtin rather than a program, and the first quoted
+        // argument it takes is the window title - hence the empty one, or a URL
+        // containing a space becomes the title and nothing opens.
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", url]);
+        command
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = Command::new("open");
+        command.arg(url);
+        command
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        command
+    }
 }
 
 /// The release, or `null` in a project that has not had one filled in.
@@ -193,4 +292,48 @@ where
     let read = reader(project.conn());
     project.close()?;
     Ok(read?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The point of the table: whatever the webview sends, the URL that reaches
+    /// the platform's opener is one of ours.
+    #[test]
+    fn every_page_offered_is_a_page_of_the_authors() {
+        for (name, url) in PAGES {
+            let args: Vec<String> = opener(url)
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+
+            assert!(
+                url.starts_with("https://"),
+                "{name} is not an https address: {url}"
+            );
+            assert!(
+                args.contains(&url.to_owned()),
+                "the opener must be handed {url}, got {args:?}"
+            );
+            assert_eq!(args.len(), expected_args(), "no argument but the URL");
+        }
+    }
+
+    /// A name nobody offers is refused, and the refusal lists the names that
+    /// are offered rather than a sentence somebody has to remember to edit.
+    #[test]
+    fn a_page_nobody_offers_is_refused_and_the_refusal_names_the_ones_that_exist() {
+        let refused = support("merch".to_owned()).expect_err("no page is called merch");
+        let said = refused.to_string();
+
+        for (name, _) in PAGES {
+            assert!(said.contains(name), "{said:?} does not mention {name}");
+        }
+    }
+
+    /// How many arguments the platform's opener is given, the URL included.
+    const fn expected_args() -> usize {
+        if cfg!(target_os = "windows") { 4 } else { 1 }
+    }
 }

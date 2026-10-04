@@ -90,7 +90,11 @@ Check that VCW can see the machine:
 vcw doctor
 ```
 
-That prints the version, the platform, the SQLite build and the host APIs found.
+That prints the version, the platform, the SQLite build, the host APIs found, and
+the licences of the encoders this build was compiled with - the same list the
+window's **About** dialog shows, and the place to look if you are redistributing
+a VCW binary and need to know what travels with it.
+
 Then look at what is attached:
 
 ```text
@@ -236,6 +240,35 @@ one mistake by hand.
 A track is the span between two boundaries, half-open: it starts at one and stops
 just before the next, so adjacent tracks share an edge and there is no gap and no
 overlap.
+
+## Fingerprinting what you captured
+
+```text
+vcw fingerprint side-a.vcw                       # the whole side, as one fingerprint
+vcw fingerprint side-a.vcw --from 120 --length 60   # one minute, starting at two
+vcw fingerprint side-a.vcw --tracks              # one per track the detectors imply
+vcw fingerprint side-a.vcw --tracks --json       # the same, for a script
+```
+
+An acoustic fingerprint is a compact description of what a piece of audio *sounds*
+like, and it is what identification is built on: two pressings of the same recording
+produce fingerprints that agree on most of their bits, even though the files share no
+bytes. This prints them and writes nothing. Looking one up is identification, which is
+the next thing being built.
+
+A capture does this for itself while it runs: as the live detectors announce
+boundaries, the regions between them are fingerprinted off the capture stream, with no
+temporary file and nothing re-read. `vcw fingerprint` is the same code over audio that
+has already been committed, so it is also how to fingerprint a side recorded before any
+of this existed.
+
+Two things to expect. A region shorter than about three seconds is **refused** rather
+than fingerprinted - the algorithm needs a couple of seconds before it has anything to
+say, and a run-out groove between two tracks does not qualify - and `--tracks` reports
+that per region rather than giving up on the side. And the fingerprinter is
+`chromaprint-next`, which is **LGPL-2.1-or-later**: see `THIRD-PARTY-NOTICES.md`, the
+About dialog, or `vcw doctor`, all of which name it and the relink offer that goes with
+it.
 
 ## Naming the record
 

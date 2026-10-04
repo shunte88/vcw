@@ -89,14 +89,14 @@ allow = ["LGPL-3.0"]
 name = "mp3lame-sys"
 allow = ["LGPL-3.0"]
 
-# Phase 2 will add one more, deliberately and with the relink obligation
-# documented alongside the two above. Uncomment when chromaprint-next actually
-# lands in the dependency graph, and not before - an allowance carried ahead of
-# the dependency is an allowance nobody reviews.
-#
-# [[licenses.exceptions]]
-# name = "chromaprint-next"
-# allow = ["LGPL-2.1-or-later"]
+# The third, and the one Phase 2 was holding this spot for: WP-21 put
+# chromaprint-next in the graph, so §25's fingerprinting adds a second relink
+# obligation beside libmp3lame's. Unlike the encoders it is behind no cargo
+# feature, because §25 is not optional and there is no second fingerprinter to
+# fall back to - a build without it could not identify anything.
+[[licenses.exceptions]]
+name = "chromaprint-next"
+allow = ["LGPL-2.1-or-later"]
 
 [bans]
 multiple-versions = "warn"

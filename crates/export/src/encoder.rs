@@ -258,6 +258,24 @@ impl Container {
         }
     }
 
+    /// Whether this build can write it.
+    ///
+    /// The feature question, answered in the crate the features belong to.
+    /// `cfg!(feature = "mp3")` written anywhere else asks about *that* crate's
+    /// features, and in `app/src-tauri` the answer would be about the shell.
+    ///
+    /// Matched on the variant rather than on [`feature`](Self::feature)'s
+    /// string, so a container added later cannot compile until it says which
+    /// way it goes.
+    #[must_use]
+    pub const fn compiled_in(self) -> bool {
+        match self {
+            Self::Wav | Self::Flac => true,
+            Self::Mp3(_) => cfg!(feature = "mp3"),
+            Self::OggVorbis(_) => cfg!(feature = "ogg"),
+        }
+    }
+
     /// The quality this will be written at, where the container has one.
     #[must_use]
     pub const fn quality(self) -> Option<Quality> {
@@ -1664,6 +1682,14 @@ mod tests {
                 Some("ogg") => cfg!(feature = "ogg"),
                 Some(other) => panic!("{container} names a feature nothing knows: {other:?}"),
             };
+            // The same answer `compiled_in` gives, derived independently - it
+            // is the accessor the About dialog's notices are filtered by, and
+            // a cfg typo there would be invisible to anything else.
+            assert_eq!(
+                container.compiled_in(),
+                available,
+                "{container}: compiled_in disagrees with the cargo features"
+            );
             let answer = Writer::vet(container, &layout);
             assert_eq!(answer.is_ok(), available, "{container}: {answer:?}");
             if let Err(why) = answer {

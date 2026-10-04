@@ -43,6 +43,7 @@ pub mod encoder;
 pub mod error;
 pub mod lossy;
 pub mod naming;
+pub mod notices;
 pub mod splitter;
 pub mod tagging;
 

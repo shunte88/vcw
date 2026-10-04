@@ -20,8 +20,10 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.90"
 description = "VCW - The Vinyl Capture Workstation"
-# MIT today. Becomes "MIT AND LGPL-2.1-or-later" when chromaprint-next lands in
-# Phase 2 - see THIRD-PARTY-NOTICES.md and the relink obligation it documents.
+# VCW's own code is MIT. A built binary is "MIT AND LGPL-2.1-or-later AND
+# LGPL-3.0" as of WP-21 (chromaprint-next) and WP-25 (libmp3lame) - see
+# THIRD-PARTY-NOTICES.md and the relink obligation it documents, and the About
+# dialog, which derives what *this* build links from the cargo features.
 license = "MIT"
 repository = "https://github.com/shunte88/vcw"
 authors = ["Stue Hunter"]
@@ -63,6 +65,15 @@ mp3lame-encoder = { version = "0.2", features = ["std"] }
 # it is not, so Ogg export adds no copyleft obligation at all and nothing to
 # `deny.toml`'s exception list.
 vorbis_rs = "0.5"
+# Chromaprint, behind `vcw-fingerprint` (§25, WP-21). Pure Rust, which is the whole
+# point: §25 forbids an external fpcalc, a subprocess and a temporary WAV, and this
+# crate takes `&[i16]` straight off the capture tap. **LGPL-2.1-or-later**, so it is
+# the second relink obligation in the binary after libmp3lame and `deny.toml` names
+# it. The released crate is the dependency of record - the local checkout at
+# /data2/chromaprint-next sits two SIMD commits ahead and was verified
+# fingerprint-neutral out of tree rather than patched in. See
+# docs/spikes/S4-chromaprint-streaming.md.
+chromaprint-next = "0.1"
 # 0.18.2 or newer is a hard floor, not a preference: 0.16 mis-reported ALSA formats
 # and could not select a device by PCM id. See docs/spikes/S1-cpal-capture.md.
 cpal = "0.18.2"

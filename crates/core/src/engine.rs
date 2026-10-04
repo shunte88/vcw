@@ -95,6 +95,7 @@ use vcw_types::{BoundaryObservation, CaptureInfo, CaptureState, Diagnostics, Sam
 use crate::commands::{Command, Setup};
 use crate::detection::{self, Detectors};
 use crate::events::{Bus, Event, Events};
+use crate::fingerprinting::{self, Fingerprinted, Fingerprints};
 use crate::metering::{self, Meters};
 use crate::state::{Deck, Machine, Phase, Reply, Step, Yield};
 
@@ -151,13 +152,17 @@ pub struct Recorded {
 /// is what makes §50's "set the level" step possible before anything is being
 /// recorded. The live detector starts on a second tap of the same stream, for
 /// §22's provisional markers, and is as droppable as the meter is: everything
-/// either of them sees, the refine pass can see again in the project.
+/// either of them sees, the refine pass can see again in the project. The
+/// fingerprint worker starts on a third tap and listens to the detector over
+/// the bus, which is §25's progressive regions.
 pub struct Recorder {
     source: Box<dyn Source>,
     writer: Option<Handle>,
     meters: Option<Meters>,
     detectors: Option<Detectors>,
+    fingerprints: Option<Fingerprints>,
     detected: Vec<BoundaryObservation>,
+    fingerprinted: Fingerprinted,
     path: PathBuf,
     capture_id: i64,
     info: CaptureInfo,
@@ -235,6 +240,24 @@ impl Recorder {
         // reader of the device has to exist.
         let mut tee = Tee::new(reader);
         let meters = Meters::spawn(tee.tap(metering::tap_bytes(&info)), &info, bus.clone());
+        // Before the detector, and not after: the fingerprint worker takes its
+        // regions from `track-detected` on the bus, and a subscriber that
+        // appears after a publish has missed it. §25 is not optional, but a
+        // capture is worth more than an identification, so a format
+        // chromaprint will not take costs the side its fingerprints and not
+        // its audio - and says so on the bus rather than in a log nobody has.
+        let fingerprints = match fingerprinting::accepts(&info) {
+            Ok(()) => {
+                Fingerprints::spawn(tee.tap(fingerprinting::tap_bytes(&info)), &info, bus).ok()
+            }
+            Err(error) => {
+                bus.publish(&Event::Warning {
+                    code: "fingerprint-unavailable",
+                    detail: format!("this capture will not be fingerprinted: {error}"),
+                });
+                None
+            }
+        };
         let detectors = Detectors::spawn(tee.tap(detection::tap_bytes(&info)), &info, bus.clone());
         let writer = persistence::spawn_on(project, session, &info, config, tee)?;
 
@@ -243,7 +266,9 @@ impl Recorder {
             writer: Some(writer),
             meters: Some(meters),
             detectors: Some(detectors),
+            fingerprints,
             detected: Vec::new(),
+            fingerprinted: Fingerprinted::default(),
             path: setup.project.clone(),
             capture_id,
             info,
@@ -334,6 +359,19 @@ impl Recorder {
         &self.detected
     }
 
+    /// What the live fingerprint pass came to.
+    ///
+    /// Empty until the capture has been stopped, for the same reason
+    /// [`Recorder::detected`] is: the worker owns its regions until then.
+    /// Nothing is persisted - §25's regions are evidence for WP-22's lookup,
+    /// and re-fingerprinting committed audio is cheap enough (S4: 0.6% of a
+    /// core) that a cache with nothing to serve would be a schema change
+    /// nobody can use yet.
+    #[must_use]
+    pub const fn fingerprinted(&self) -> &Fingerprinted {
+        &self.fingerprinted
+    }
+
     /// Stops the writer and the device and reports the result.
     fn halt(&mut self, state: CaptureState) -> Result<Outcome, Error> {
         // The meter goes before the writer, so the last `meter-update` is on
@@ -348,6 +386,13 @@ impl Recorder {
         // than discarded - see `Recorder::detected`.
         if let Some(detectors) = self.detectors.take() {
             self.detected = detectors.stop();
+        }
+        // The fingerprint worker after the detector, because it is the
+        // detector's last publish that closes the last region it can see - and
+        // before the writer, because `capture-finished` should still be the
+        // final word on a capture.
+        if let Some(fingerprints) = self.fingerprints.take() {
+            self.fingerprinted = fingerprints.stop();
         }
         let Some(writer) = self.writer.take() else {
             return Err(Error::Project(vcw_project::Error::WriterLost));

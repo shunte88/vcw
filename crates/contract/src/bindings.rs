@@ -232,6 +232,8 @@ pub fn typescript() -> String {
             decl::<crate::view::Waveform>(),
             decl::<crate::view::ExportPlan>(),
             decl::<crate::view::ExportFile>(),
+            decl::<crate::view::About>(),
+            decl::<crate::view::Notice>(),
         ],
     );
 

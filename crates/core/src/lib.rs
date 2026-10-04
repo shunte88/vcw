@@ -51,6 +51,7 @@ pub mod commands;
 pub mod detection;
 pub mod engine;
 pub mod events;
+pub mod fingerprinting;
 pub mod identity;
 pub mod metering;
 pub mod playback;

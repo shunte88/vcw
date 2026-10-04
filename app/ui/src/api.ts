@@ -22,6 +22,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  About,
   Accepted,
   Arm,
   Audition,
@@ -210,6 +211,21 @@ export function saveSettings(settings: Settings): Promise<void> {
 }
 
 // --- Commands that read (not in §35's list, because they change nothing) ---
+
+/** Which build this is, and what it links. Constant for the life of the app. */
+export function about(): Promise<About> {
+  return invoke("about");
+}
+
+/**
+ * Opens one of the author's pages in the operator's own browser.
+ *
+ * A name and not a URL: the addresses are a table in the shell, so this side
+ * can ask for a page and cannot ask for an address.
+ */
+export function support(page: "coffee" | "shirts"): Promise<void> {
+  return invoke("support", { page });
+}
 
 /** Every audio device the host offers. */
 export function devices(): Promise<Device[]> {

@@ -364,6 +364,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
+name = "chromaprint-next"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7771e0c40a406beee6f6e1104448c8d4d87c83e59808c689c19b0db6d14ed201"
+dependencies = [
+ "base64 0.22.1",
+ "realfft",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2836,6 +2847,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
 
 [[package]]
+name = "realfft"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f821338fddb99d089116342c46e9f1fbf3828dba077674613e734e01d6ea8677"
+dependencies = [
+ "rustfft",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4558,6 +4578,8 @@ dependencies = [
 name = "vcw-fingerprint"
 version = "0.1.0"
 dependencies = [
+ "chromaprint-next",
+ "thiserror 2.0.21",
  "vcw-types",
 ]
 

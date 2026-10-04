@@ -5235,14 +5235,223 @@ assuming `riaa`. That last pair matters most: the panel is the only thing that c
 the field on an `arm` from the window, and a panel that silently dropped it would make
 every GUI capture permanently `Unknown`.
 
+## Phase 2 - WP-28, the About dialog
+
+**2026-10-04.** The compliance gap WP-25 opened is closed. Shipping `mp3lame-sys`
+compiles **libmp3lame into the binary** under LGPL-3.0, inside a product whose own code
+is MIT. The paperwork was already done and correct - `THIRD-PARTY-NOTICES.md` names the
+component and the obligation, `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` are in the tree,
+`deny.toml` carries the allowance - but **nothing in the running application pointed at
+any of it**. Someone who installed the `.deb` and never opened the repository was told
+nothing, and the shell wrote its own version to stderr at startup and showed it to
+nobody.
+
+The dialog now carries, in that order of importance: the version and build identity,
+the MIT line for VCW itself with the copyright holder, the third-party components with
+the LGPL-3.0 one named and its source offer, and the credits.
+
+**Nothing in it is prose.** Every field is read from the crate that owns the fact:
+`CARGO_PKG_VERSION`, `CARGO_PKG_LICENSE`, `CARGO_PKG_AUTHORS` and
+`CARGO_PKG_REPOSITORY` from the manifest, `SCHEMA_VERSION` and `FORMAT_VERSION` from
+`vcw-project`, SQLite's own run-time version string, and the notices from
+`vcw_export::notices`. That last one is the whole design. A build compiled without
+`mp3` **has no LGPL component to declare**, so the one place the question can be
+answered is the crate the cargo features belong to - `cfg!(feature = "mp3")` written in
+`app/src-tauri` asks about the *shell's* features, and written in a webview cannot ask
+at all. `Container::compiled_in` answers it on the variant rather than on
+`feature()`'s string, so a fifth container cannot compile until it says which way it
+goes, and `Container::notice` hangs the licence facts off the same enum. The two are
+deliberately separate: what obligation a container *would* bring is a fact about the
+container, and which ones this build *does* bring is `notices()`' filter - which is
+what lets the test check the filter rather than check itself.
+
+This is the rule `encoder::alternatives` arrived at the hard way in WP-25, applied
+before the drift rather than after it. Refusal advice written as a string literal
+drifted four separate ways in one work package. A notice is worse when it is wrong: it
+is either a claim about a licence that does not apply or silence about one that does.
+
+The exit criterion is a test and not a screenshot, and it can fail on purpose:
+**the notices the binary reports agree with the features it was compiled with**,
+asserted in `vcw-export` so the gate's `features` leg runs it in all four combinations.
+Removing the `compiled_in` filter passes in the default build - every container is
+compiled in there - and fails in the other three, which is precisely why the leg exists.
+Making `compiled_in` lie about MP3 fails both the new test and WP-25's own
+`a_build_without_an_encoder_refuses_at_plan_time_and_not_at_write_time`, which now
+cross-checks the accessor against an independently derived answer.
+
+**The CLI carries the same obligation and now says so.** `vcw doctor` prints the licence
+list from the same generator, because the command-line binary is redistributed in the
+same package and links the same encoders; a person who only ever runs the CLI should not
+have to open the repository to find out their copy contains LGPL-3.0 object code. The
+test for it asserts the printed text against `notices()`' own answer rather than against
+a hard-coded "LGPL-3.0" - `vcw-cli` declares no features of its own, so a
+`cfg!(feature = "mp3")` written there would have been a check that could never fail.
+
+Three mutations, all caught: `notices()` without its feature filter (fails in three of
+four combinations), `compiled_in` returning `true` for MP3 unconditionally, and
+`doctor` dropping the relink offer. On the frontend, rendering the relink paragraph
+unconditionally fails `makes no relink offer when nothing linked is copyleft` - both
+directions matter, because a build with no copyleft component that printed the offer
+anyway would be claiming an obligation it does not have.
+
+The credits are the one part of the dialog that is written out, because there is no
+fact to derive them from.
+
+Skipped: a keyboard chord for the dialog. It is a header button and `Escape` closes it,
+and §44's workflows do not include reading a licence. Add one if it is ever wanted.
+
+### What first light found in it, and the two things it can now open
+
+The dialog was built green and looked wrong, which is the `first-light` lesson again:
+the tests say the panel renders what it was handed, and only a screenshot says where it
+landed on the glass.
+
+**The Library's sticky header painted through every overlay in the application.**
+`.rows th` is `position: sticky` with a `z-index` of its own and `.overlay` had none, so
+the table header's text appeared *inside* the dialog and hid its first line. The About
+masthead is simply where it was first noticed - the keyboard map and every other overlay
+had the same defect. `.overlay` now carries `z-index: 10`.
+
+**The panel is a fixed head over a scrolling body**, so `Close (Esc)` cannot scroll out
+of reach of a mouse: `.overlay-box.about` is a column flex box and `.about-scroll` takes
+`overflow-y: auto` with `min-height: 0`, which is the part that makes a flex child
+actually scroll rather than grow.
+
+**Two CSS measures were wrong, and the second was invisible without the first fix.**
+`.about-group p` carried a 60ch measure, which read as a ragged strip down the middle of
+a panel whose tables run full width; the override written as a bare `.about-relink`
+never applied, because `.about-group p` is the more specific selector. The measure is
+gone rather than overridden, the prose is justified, and the art now sits *beside* the
+build table in a two-track grid (`auto minmax(0, 1fr)`) rather than above it - which,
+with the product name across the top as the masthead, brought the whole dialog inside
+one panel height with nothing left to scroll to.
+
+**The dialog is also the product's only outward door**, and no URL crosses the boundary
+to open it. `library::support(page)` takes a *name* - `"coffee"` or `"shirts"` - and
+looks it up in a two-entry `PAGES` table in Rust, so the webview can ask for a page and
+cannot ask for an address. No new dependency and no capability change: the platform's
+own handler (`xdg-open`, `open`, `cmd /C start`) is spawned and deliberately not reaped,
+because `status()` would block the window while a browser starts. A page nobody offers
+is refused with a message that **generates** the list of ones that exist, which is
+`encoder::alternatives`' rule applied a third time; the frontend shows that refusal
+rather than looking like a dead button. Proven end to end, once, by clicking it on a
+real display: the page opened in the author's own browser.
+
+## Phase 2 - WP-21, fingerprinting off the capture stream
+
+**2026-10-04.** §25's two halves are built: the live worker that fingerprints candidate
+regions while the record turns, and the offline path that fingerprints any span of
+committed audio. `chromaprint-next 0.1.0` is in the graph as the dependency of record,
+which makes **LGPL-2.1-or-later** the second relink obligation in the binary after
+libmp3lame's LGPL-3.0, and `deny.toml`'s exception for it is no longer commented out.
+
+**`vcw_fingerprint::chromaprint::Builder` is the whole of the algorithm's surface**, and
+its one real job is frame alignment. S4 found that `AudioProcessor::consume` only
+`debug_assert!`s that it was handed whole frames, so a release build fed a part-frame
+swaps the channels from that point on and reports nothing - and the thing feeding it is
+a **tap**, which hands over whatever happened to be in the ring when it was read. So
+`push` takes bytes in any quantity and carries a part-frame to the next call. The test
+is the shape of the proof: the same eight seconds fed in chunks of 3, 777, 4,099 and
+65,536 bytes must produce one identical fingerprint, where 3 is smaller than a frame
+and 777 and 4,099 are not multiples of one. Removing the carry buffer fails it.
+
+**Measured, because the first version of the tests asserted a number that was wrong:**
+the algorithm emits **8.08 sub-fingerprints a second after a 2.65 s warm-up**. Five
+seconds of audio gives 19 items, not the ~40 a flat rate predicts. That number is now in
+a comment rather than in anybody's head, and it is also why a region shorter than about
+three seconds is **refused** rather than returned as an empty fingerprint that would
+match everything: `Error::TooShort` names the frame count it was given.
+
+**The live worker is `vcw_core::fingerprinting::Fingerprints`**, a third consumer of
+§10's tee in the shape of `detection::Detectors`, and it is the only worker in the
+engine that **listens** as well as reads: its regions come from `Event::Detected` on the
+bus, which is what makes §25's "progressively rather than repeatedly fingerprinting the
+entire recording" true without the detector knowing anything about fingerprints. It is
+spawned *before* `Detectors` for one reason - a subscriber that appears after a publish
+has missed it - and stopped *after* it in `halt`, because the detector's last publish is
+what closes the last region it can see.
+
+Three decisions in it are worth having written down:
+
+- **A region starts late and that is fine.** The detector announces a boundary only once
+  nothing later can move it, about 1.2 s after the fact, by which time the tap has handed
+  that audio over and forgotten it. So a region's audio begins at the worker's cursor and
+  `Region` carries both numbers. S4 measured the cost: region-boundary error is bounded
+  at **~0.064 BER against 0.47-0.49 for unrelated audio**, so a late start cannot break a
+  match, and buffering 1.2 s of every stream to avoid it would cost 6.5 MiB at 192 kHz
+  for nothing.
+- **A holed region is thrown away, not published.** §10's rule is that no consumer may
+  cost the recording a sample, so the tap is lossy. A meter that misses 200 ms shows a
+  stale needle; a fingerprint that misses 200 ms is **shifted from that point on** and
+  matches nothing, while looking exactly like one that works. `Tap::dropped_bytes` is
+  read when a region opens and again when it closes, and a region that lost audio is
+  counted in `Fingerprinted::holed`. Defeating that check fails
+  `a_region_the_tap_lost_audio_from_is_thrown_away_rather_than_published`.
+- **Nothing is persisted.** There is no schema change in WP-21. A fingerprint is evidence
+  for a lookup, and there is no lookup until WP-22; re-fingerprinting committed audio
+  costs 0.6% of a core (S4), so a cache with nothing to serve would be a migration
+  nobody can use. The regions are held in the `Recorder` the way `detected` is.
+
+**The exit criterion is S4's claim, asserted rather than quoted:** the fingerprint a
+region produces off the tap is **bit for bit** the fingerprint the same audio produces
+offline, in `crates/core/tests/fingerprint_live.rs`. The test makes timing irrelevant
+instead of tuning it - the tap is sized to hold the whole stream so no scheduling
+accident can drop audio, and audio is pumped only after the boundary is published so the
+cursor cannot have moved - which leaves the worker's logic as the only thing it can fail
+on. A second test proves an end boundary closes a region and that nothing after it is
+inside, by fingerprinting the exact prefix the region reports and comparing; making
+`Edge::End` not close fails it with "the region ran 768000 frames past the 384000 the
+boundary allowed".
+
+**`vcw fingerprint` is the offline twin, and §4.5's reason for it.** It takes a span
+(`--from`, `--length`) or every track the detectors imply (`--tracks`), prints items,
+the simhash and the base64, and writes nothing. Driven on a real ten-minute side - 600 s
+of a 48 kHz 32-bit rip pushed through the writer - it found what no test had: **the
+implied-track pairing left the first region open to the end of the side**. `vcw detect`
+pairs a start with the next end and tolerates two starts in a row, which is honest for a
+list a person reads; for fingerprinting it meant region 1 was 0 s to 600 s and overlapped
+all thirteen regions after it, at 4,825 items of fingerprint for nothing. A start now
+closes whatever was open, which is the live worker's rule, and the regions came out
+contiguous: fourteen of them, three refused as too short to say anything, the longest
+1,581 items over 198 s. Real music also confirmed the rate - 4,825 items over 600 s is
+8.04 a second against the 8.08 measured in the unit tests.
+
+Skipped: the live regions have no CLI surface, because §35 declares no event for them -
+`fingerprint-match` is a *match*, which is WP-22. They are reachable from
+`Recorder::fingerprinted()` and covered by the integration test. Skipped too: a cap on
+the offline path. The live worker stops a region at 120 s, which is `fpcalc`'s default
+and AcoustID's indexing length, but a span the operator asked for is a span they get.
+
 ## Next up
 
-**Where to pick up.** **Every work package in Phase 1 is built and committed**,
-through WP-19 at `9d1daa4`, which is the tip of `main`. The gate is green across
-fifteen legs. What is uncommitted is a day's work: the playback refusal event,
-the five CI repairs, the two-sided naming fix, the first timed export, and
-§37's waveform-latency measurement and gate - every section under *closing the
-loose ends* above.
+**Where to pick up.** **Every work package in Phase 1 is built and committed**, and so
+are the two Phase 2 packages taken out of order: WP-25's lossy encoders and schema v3's
+`capture_eq` at `85acd44`, which was the tip of `main`. On top of that, uncommitted:
+**WP-28's About dialog** and **WP-21's fingerprinting**, both built, both green.
+
+**WP-22 is next, and WP-21 handed it everything it needs.** A fingerprint and its
+duration are what AcoustID's `/lookup` wants, `vcw_core::fingerprinting::of_span` will
+produce one for any span, and §35's `fingerprint-match` is still the event nothing
+publishes - that event is WP-22's to publish, because a match is an answer and WP-21
+only asks the question. The first thing to decide there is what gets persisted: WP-21
+deliberately left the schema alone, and a lookup result is the first thing in this area
+worth a table.
+
+**The gate now runs in two places, and WP-21's final run was split across both.**
+media2026 takes thirteen of the sixteen legs, including the `toolchain` check this box
+can never make; `spikes`, `appclippy` and `apptest` stay here, because the bench box has
+no GTK or dbus development headers and no sudo to add them. `gate.sh` takes `VCW_ROOT`
+for the second tree. The WP-21 result: **thirteen legs green on media2026 at 1071 Rust
+tests and 135 frontend tests**, the three local-only legs green here, doctests green
+here, and the em-dash sweep clean - all sixteen covered, on an rsync verified identical
+by checksum before the run.
+
+Two things came out of the split. The first is a real regression the single-box gate had
+been calibrating away, and it is written up above. The second is smaller: the frontend
+count silently disappeared from the tally on the bench box, because vitest colourises
+its summary there even off a tty and the tally's `sed` matched the uncoloured line only.
+The escapes are now stripped and a missing count prints `UNKNOWN` instead of nothing, so
+the tally cannot quietly lose half of itself again.
 
 **Phase 1's loose ends are closed.** The pile was three items: the
 playback-refused event, a decision on the two unemitted events, and the first

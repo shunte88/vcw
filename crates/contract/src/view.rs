@@ -865,3 +865,147 @@ impl Accepted {
         self
     }
 }
+
+/// One third-party component the binary links, as a UI shows it.
+///
+/// The TypeScript-facing mirror of [`vcw_export::notices::Notice`], which is
+/// where the facts live: the list is derived from `vcw-export`'s cargo features
+/// and a build without `mp3` has no LGPL component to declare. Mirrored rather
+/// than exported directly because `vcw-export` has no business depending on
+/// `serde` or `ts-rs` for one struct.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Notice {
+    /// The crate, or the library it vendors.
+    pub component: String,
+    /// The SPDX expression the crate declares.
+    pub licence: String,
+    /// What VCW can do because it is linked.
+    pub provides: String,
+    /// Where the complete corresponding source is published.
+    pub source: String,
+    /// Whether the licence grants the right to modify the component and relink
+    /// it into VCW, which is the sentence LGPL-3.0 §4 requires be offered.
+    pub copyleft: bool,
+}
+
+impl From<&vcw_export::notices::Notice> for Notice {
+    fn from(notice: &vcw_export::notices::Notice) -> Self {
+        Self {
+            component: notice.component.to_owned(),
+            licence: notice.licence.to_owned(),
+            provides: notice.provides.to_owned(),
+            source: notice.source.to_owned(),
+            copyleft: notice.copyleft,
+        }
+    }
+}
+
+/// Which build of VCW this is, and what it links (WP-28).
+///
+/// Two things at once, and on purpose. The identity is the first thing anyone
+/// asks for in a bug report, and the notices are a licence obligation: shipping
+/// `mp3lame-sys` compiles libmp3lame into the binary under LGPL-3.0, inside a
+/// product whose own code is MIT, and someone who installs the package and
+/// never opens the repository is otherwise told nothing about it.
+///
+/// **Nothing here is written out as prose.** Every field is read from the crate
+/// that owns the fact - the manifest, the features, the schema - which is the
+/// rule [`ExportPlan`]'s refusal advice arrived at the hard way. A dialog with a
+/// licence sentence typed into it is a dialog that is wrong about a build nobody
+/// rebuilt it for.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct About {
+    /// The product's name.
+    pub product: String,
+    /// The release this is.
+    pub version: String,
+    /// `debug` or `release`. A timing complaint against a debug build is a
+    /// different conversation, and this is the field that ends it early.
+    pub profile: String,
+    /// Where the source is.
+    pub repository: String,
+    /// Whoever holds the copyright on VCW's own code.
+    pub authors: Vec<String>,
+    /// The SPDX expression VCW's own code is under.
+    pub licence: String,
+    /// The operating system the binary was built for.
+    pub os: String,
+    /// The processor architecture.
+    pub arch: String,
+    /// The bundled SQLite, as the library reports itself at run time.
+    pub sqlite: String,
+    /// The project schema this build writes.
+    pub schema_version: u32,
+    /// The audio format version this build writes.
+    pub format_version: u32,
+    /// Every third-party component this build owes a notice for.
+    pub notices: Vec<Notice>,
+}
+
+impl About {
+    /// This build, described.
+    ///
+    /// A free function's worth of work with no inputs, because there is nothing
+    /// to ask: every answer is a compile-time constant of the crate it is read
+    /// from, or a string the bundled SQLite hands back.
+    #[must_use]
+    pub fn current() -> Self {
+        Self {
+            // Named, not read. `CARGO_PKG_DESCRIPTION` is *this* crate's
+            // description - first light found "The typed command, event and
+            // view-model surface between the Rust core and any UI" at the top
+            // of the dialog - and the workspace's description, which is the
+            // product's name, is inherited by no crate. `tests` below checks
+            // this literal against the workspace manifest.
+            product: "VCW - The Vinyl Capture Workstation".to_owned(),
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            profile: if cfg!(debug_assertions) {
+                "debug".to_owned()
+            } else {
+                "release".to_owned()
+            },
+            repository: env!("CARGO_PKG_REPOSITORY").to_owned(),
+            authors: env!("CARGO_PKG_AUTHORS")
+                .split(':')
+                .filter(|who| !who.is_empty())
+                .map(str::to_owned)
+                .collect(),
+            licence: env!("CARGO_PKG_LICENSE").to_owned(),
+            os: std::env::consts::OS.to_owned(),
+            arch: std::env::consts::ARCH.to_owned(),
+            sqlite: vcw_project::sqlite::runtime_version().to_owned(),
+            schema_version: vcw_project::SCHEMA_VERSION,
+            format_version: vcw_project::FORMAT_VERSION,
+            notices: vcw_export::notices::notices()
+                .iter()
+                .map(Notice::from)
+                .collect(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::About;
+
+    /// The one field of [`About`] that is a literal, so the one field that can
+    /// drift. Everything else is a constant of the crate it is read from.
+    #[test]
+    fn the_product_is_what_the_workspace_calls_it() {
+        let manifest = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml"),
+        )
+        .expect("the workspace manifest is two directories above this crate");
+        let declared = manifest
+            .lines()
+            .find_map(|line| line.strip_prefix("description = "))
+            .expect("[workspace.package] declares a description");
+        assert_eq!(
+            format!("\"{}\"", About::current().product),
+            declared,
+            "the dialog's product name is not the one the workspace declares"
+        );
+    }
+}

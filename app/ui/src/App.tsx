@@ -74,6 +74,7 @@ import { Browser } from "./panels/Browser";
 import { Capture } from "./panels/Capture";
 import { Diagnostics } from "./panels/Diagnostics";
 import { Export } from "./panels/Export";
+import { About } from "./panels/About";
 import { Help } from "./panels/Help";
 import { Meters } from "./panels/Meters";
 import { Metadata } from "./panels/Metadata";
@@ -172,6 +173,7 @@ export function App(): React.JSX.Element {
 
   const [panel, setPanel] = useState<Scope>("browser");
   const [help, setHelp] = useState(false);
+  const [about, setAbout] = useState(false);
   const [log, setLog] = useState(false);
 
   const [devices, setDevices] = useState<readonly Device[]>([]);
@@ -356,7 +358,9 @@ export function App(): React.JSX.Element {
     dismiss: () => {
       // One key, three things it could mean, in the order a person expects:
       // close what is on top, then clear the refusal, then nothing.
-      if (help) {
+      if (about) {
+        setAbout(false);
+      } else if (help) {
         setHelp(false);
       } else if (log) {
         setLog(false);
@@ -394,6 +398,9 @@ export function App(): React.JSX.Element {
         </button>
         <button type="button" onClick={() => setHelp(true)} title="?">
           Keys
+        </button>
+        <button type="button" onClick={() => setAbout(true)}>
+          About
         </button>
       </header>
 
@@ -488,6 +495,7 @@ export function App(): React.JSX.Element {
       </footer>
 
       {help && <Help scope={panel} onClose={() => setHelp(false)} />}
+      {about && <About onClose={() => setAbout(false)} />}
       {log && (
         <Diagnostics log={engine.log} onClose={() => setLog(false)} />
       )}

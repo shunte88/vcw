@@ -141,7 +141,7 @@ Four are written: D1, D2, D7+D10, and the workspace layout WP-01 had to settle.
 | **D4** | Sample representation at rest | Store the device's bytes **verbatim** plus a format tag. §9 forbids conversion; converting to f32 at rest would silently break the bit-perfect claim. | WP-02 |
 | **D5** | Encoder stack | WAV: own writer (trivial, avoids `hound`'s format limits). FLAC: `flacenc` (pure Rust, Apache-2.0). MP3: `mp3lame-encoder`, which links a vendored libmp3lame. Ogg Vorbis: `vorbis_rs`, over aoTuV-Lancer libvorbis and libogg. **Two licences here were recorded wrong and are corrected from the registry (2026-10-04):** `mp3lame-encoder` and `mp3lame-sys` declare **LGPL-3.0**, not LGPL-2.1 - libmp3lame's own `COPYING` is the GNU *Library* GPL v2 "or any later version" and the wrapper exercises the later-version option, so `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` both ship and `deny.toml` names an exception the `chromaprint-next` one does not cover. `vorbis_rs` and both its `-sys` crates are **BSD-3-Clause**, not LGPL, so **Ogg export adds no copyleft obligation at all**. Licensing consequence: MP3 alone extends the relink obligation, under LGPL-3.0 §4. | WP-14 (FLAC/WAV), WP-25 (MP3/OGG) |
 | **D6** | High-rate IPC transport *and* waveform rendering | **Revised from S3 (2026-09-24); the original wording was wrong in two of its three clauses.** Channels for meter/waveform/position - chosen for API shape (typed, per-invocation, no global event namespace), *not* throughput, which is indistinguishable from the event bus at §35 payload sizes. Hand-built compact JSON; **never** `InvokeResponseBody::Raw` for small frames - under Tauri's 1024-byte direct-execute threshold it is eval'd as a decimal JSON array, 42% *larger* than the JSON it replaces. **Do not coalesce sends**: the webview absorbed the full 750 Hz worker rate with zero loss, no added main-thread cost and a quarter of the delivery latency. Coalesce *paints* instead - one read of latest state per `rAF`. **Draw the waveform incrementally, in an `OffscreenCanvas` worker**: full-canvas main-thread redraw costs 29% of the main thread against 0.5% in a worker. Acceptance metric is **main-thread occupancy, not fps** - WebKitGTK does not pace `rAF` to vsync. See `docs/spikes/S3-tauri-ipc.md` | G0 (met on Linux) |
-| **D7** | Licence posture | **Locked 2026-09-25, [ADR-0004](docs/adr/0004-licence-and-toolchain.md).** MIT core; `THIRD-PARTY-NOTICES.md` and `LICENSE-LGPL-2.1` in the repository, written ahead of the Phase 2 obligation. **No longer permissive-only as of 2026-10-04:** WP-25 shipped `mp3lame-sys`, so an **LGPL-3.0** component is compiled into the default build and `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` are carried too. The notices file is current; WP-28 is what puts it in front of a user. `deny.toml` carries the allowlist and `cargo deny check` runs on every push. The LGPL exception stays commented out until `chromaprint-next` actually lands: an allowance carried ahead of its dependency is one nobody reviews. | Locked |
+| **D7** | Licence posture | **Locked 2026-09-25, [ADR-0004](docs/adr/0004-licence-and-toolchain.md).** MIT core; `THIRD-PARTY-NOTICES.md` and `LICENSE-LGPL-2.1` in the repository, written ahead of the Phase 2 obligation. **No longer permissive-only as of 2026-10-04:** WP-25 shipped `mp3lame-sys`, so an **LGPL-3.0** component is compiled into the default build and `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` are carried too. The notices file is current and **WP-28 now puts it in front of a user**, in the window and in `vcw doctor`, generated from the cargo features rather than written out. `deny.toml` carries the allowlist and `cargo deny check` runs on every push. **WP-21 landed `chromaprint-next` on 2026-10-04**, so the LGPL-2.1-or-later exception that was deliberately held commented out until its dependency existed is now live, and a built binary is "MIT AND LGPL-2.1-or-later AND LGPL-3.0": two relink obligations, one of them behind no cargo feature, because §25 is not optional and there is no second fingerprinter to fall back to. | Locked |
 | **D8** | Concurrency model | **Locked 2026-09-25, [ADR-0005](docs/adr/0005-concurrency-model.md).** Dedicated OS threads on the capture path - device callback, writer, engine - with `mpsc` between them and no async runtime anywhere near audio or SQLite. **No async runtime anywhere, as it turned out**: WP-12 was where tokio was expected to enter and did not, because metadata networking is a handful of blocking `ureq` calls behind a `Transport` trait, and a thread that is waiting on an HTTP response is a thread doing exactly what it should. The workspace still has no `tokio` dependency. Two clauses of the original wording changed on contact with the work: the engine thread is not a matter of taste, because `cpal`'s stream handle is **`!Send`** and the thread that opens a device must be the thread that keeps it; and **elevated priority is not implemented**, because WP-05's 192 kHz soak showed no overruns at ordinary priority on any rig tested. It stays available for a platform that needs it rather than applied speculatively. | Locked |
 | **D9** | Typed Rust↔TS contract | **Locked 2026-09-27, [ADR-0007](docs/adr/0007-rust-typescript-contract.md).** `ts-rs` 12, one generated and committed declaration file, a drift test that reports the first differing line, and `git diff --exit-code` over it in CI. `specta` was the other candidate and lost on the exit criterion rather than on merit: its Tauri half generates bindings *from the command definitions*, which requires the crate declaring them to depend on Tauri - and that crate is a core crate. Two settings had to be corrected from the defaults: `u64` renders as `bigint`, which typechecks and is wrong at run time, so it is `number` with a 2^53 frame ceiling; and `rename_all` renames variants only, so fields need `rename_all_fields` as well. The surface is a core crate (`vcw-contract`) with every unit resolved on the Rust side, which is most of WP-16's *no business logic in TS* gate discharged before the gate is reached | WP-15 |
 | **D10** | Toolchain floor | **Locked 2026-09-25, [ADR-0004](docs/adr/0004-licence-and-toolchain.md).** Rust edition 2024, MSRV **1.90** declared in `[workspace.package]` and enforced by a CI job pinned to 1.90 - an untested floor is not a floor. `rust-toolchain.toml` stays on `stable` so daily work gets current diagnostics. Node 22 LTS in `.nvmrc`; pnpm. | Locked |
@@ -608,14 +608,14 @@ early, because each one belongs to a package that is not built yet.
 
 | WP | Scope | Sess |
 |----|-------|------|
-| 21 | `fingerprint/chromaprint-next` integration: progressive region fingerprinting fed from capture tap | 6 |
+| 21 | `fingerprint/chromaprint-next` integration: progressive region fingerprinting fed from capture tap - **built 2026-10-04**. See the note below | 6 |
 | 22 | `fingerprint/acoustid` + MusicBrainz recording resolution | 5 |
 | 23 | `identify`: evidence/candidate/confidence/resolver - combining fingerprint, timing, metadata and signal evidence (§26, §27) | 12 |
 | 24 | Metadata-assisted boundaries; release/side topology inference constraining detection | 7 |
 | 25 | MP3 + Ogg export (D5 licensing consequences) - **built 2026-10-04**, ahead of its gate, while the export code was open. See the note below | 5 |
 | 26 | Advanced capture diagnostics + diagnostic bundle export | 4 |
 | 27 | UI: identification review, candidate comparison, confidence surfacing | 8 |
-| 28 | About dialog: version, build and the third-party notices, MP3's LGPL-3.0 obligation named in the running app | 1 |
+| 28 | About dialog: version, build and the third-party notices, MP3's LGPL-3.0 obligation named in the running app - **built 2026-10-04**, out of order because it was a live compliance gap. See the note below | 1 |
 
 **Total ≈ 48 sessions.** The resolver (WP-23) is the intellectually hardest
 piece in the whole project and deserves a design document before code.
@@ -734,6 +734,48 @@ hand. That makes the natural exit criterion a test rather than a screenshot:
 with**, asserted in each feature combination, which is a condition that can fail
 on purpose. One session, and it wants doing before anything is handed to a person
 who is not the author.
+
+**Built 2026-10-04.** The notices are generated: `vcw_export::notices` hangs a licence
+record off `Container` and filters it through a new `Container::compiled_in`, which is
+the only place the feature question can be answered - `cfg!(feature = "mp3")` written in
+`app/src-tauri` asks about the shell's features and written in a webview cannot ask at
+all. The dialog reads `CARGO_PKG_VERSION`, `CARGO_PKG_LICENSE`, `CARGO_PKG_AUTHORS` and
+`CARGO_PKG_REPOSITORY` from the manifest, the two format versions from `vcw-project`
+and SQLite's run-time string from the bundled library, and contains no licence prose of
+its own. `vcw doctor` prints the same list, because the CLI is redistributed in the same
+package and links the same encoders. The exit criterion holds as written: the notices
+agree with the features, asserted in `vcw-export` so the `features` leg runs it in all
+four combinations, and removing the filter passes in the default build and fails in the
+other three - which is the condition failing on purpose.
+
+**WP-21, built 2026-10-04.** §25's two halves, and neither of them is the
+algorithm: `chromaprint-next` does that. The work was the two seams around it.
+
+The first is **frame alignment**. S4 found `AudioProcessor::consume` only
+`debug_assert!`s that it was given whole frames, and the thing feeding it is a tap,
+which hands over whatever was in the ring when it was read - so a release build would
+swap the channels from the first ragged read onwards and report nothing.
+`chromaprint::Builder` carries a part-frame to the next `push`, and the test feeds the
+same eight seconds in chunks of 3, 777, 4,099 and 65,536 bytes and demands one identical
+fingerprint.
+
+The second is **what a region is**. The live worker takes its regions from
+`Event::Detected` on the bus, so §25's "progressively rather than repeatedly
+fingerprinting the entire recording" comes out of the detector that already exists
+rather than out of a second analysis. It is spawned before `Detectors` so its
+subscription predates the first publish, and stopped after it so the detector's last
+boundary still lands. A region whose tap dropped a byte while it was open is **counted
+and thrown away**, because a fingerprint with a hole in it is shifted from the hole
+onwards and matches nothing while looking exactly like one that works. Nothing is
+persisted: a fingerprint is evidence for a lookup, WP-22 is the lookup, and
+re-fingerprinting committed audio costs 0.6% of a core.
+
+The exit criterion is S4's claim asserted rather than quoted - a region off the tap is
+**bit for bit** what the same audio fingerprints to offline - and `vcw fingerprint` is
+the offline twin at the command line, by span or by implied track. Driving it on a real
+ten-minute side found the one defect the suite could not: the implied-track pairing left
+the first region open to the end of the side, overlapping every region after it. A start
+now closes whatever was open, which is the live worker's rule.
 
 ## 7. Phase 3 (§46) - Gate G4
 

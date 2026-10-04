@@ -911,6 +911,11 @@ code {
 .overlay {
   position: fixed;
   inset: 0;
+  /* Above every sticky header in the app. Without this the Library's own
+     header row - `position: sticky` with a `z-index` of its own - paints
+     through the dialog, which is what hid the first line of About's masthead
+     behind a table it is not part of. */
+  z-index: 10;
   background: #0a0b0ecc;
   display: flex;
   align-items: center;
@@ -939,4 +944,134 @@ code {
 
 .help-group .chord {
   width: 20ch;
+}
+
+/* About is the one overlay taller than the window it opens in, so its body
+   scrolls under a head that does not: the box is a column, the head keeps its
+   own height and Close stays reachable at the 700px minimum the window allows.
+   `min-height: 0` is what lets the body shrink - a flex item defaults to its
+   content's height, and without it the box grows past the overlay's padding
+   and the scrollbar never appears. */
+.overlay-box.about {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+}
+
+/* A rule under the head, because the body slides beneath it: without one the
+   logo appears to be cut off by nothing. */
+.overlay-box.about .panel-head {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.5rem;
+}
+
+.about-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  padding-bottom: 1rem;
+}
+
+/* The product name is the masthead, across the full width and above the art:
+   it is the line a person reads, and the art is what they recognise.
+   Everything below is a table or a paragraph and stays left, where a reader's
+   eye already is. */
+.about-title {
+  margin-top: 0.25rem;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+/* The art and the build facts share one band. The logo is as tall as the five
+   rows beside it, so an `auto` track for the art and the rest for the table
+   fills the band with no column of air either side - which is what stacking
+   them cost. Centred across the band because the table is the shorter of the
+   two by a row's worth. */
+.about-masthead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+/* The section in the band carries the band's own top margin, not its usual
+   one, or the table would sit a row lower than the art it is beside. */
+.about-masthead .about-group {
+  margin-top: 0;
+}
+
+.about-logo {
+  display: block;
+  height: auto;
+}
+
+/* The About overlay's sections. Same rhythm as the keyboard map's groups. */
+.about-group {
+  margin-top: 1rem;
+}
+
+/* The prose fills the panel as a block rather than sitting in a column of its
+   own: these are paragraphs of licence text beside full-width tables, and a
+   measure narrower than the tables above them read as a ragged strip down the
+   middle. No `max-width`, and justified so both edges line up with the table
+   rules. */
+.about-group p {
+  text-align: justify;
+}
+
+/* Buy me a coffee, and the shirts. The bug carries its own colour, so the
+   button around it is only a hit area: no border, no background, and the label
+   beside it rather than inside the artwork, where it would have to be part of
+   the image and could not be read out. */
+.bmc {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.bmc img {
+  height: auto;
+  border-radius: 6px;
+}
+
+.bmc:hover img {
+  filter: brightness(1.08);
+}
+
+/* A button that reads as the link it is: the shirts live at an address, and the
+   thing that opens it has to be a button for the same reason the coffee one is.
+   */
+.as-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The notices table carries a component name, a licence, a purpose and a URL in
+   56rem. The names and the URL have to wrap or the table pushes the overlay
+   wider than the window, but "Apache-2.0" broken after its hyphen reads as a
+   version number, so the two short columns are held on one line. */
+.about-group .notices td {
+  white-space: normal;
+}
+
+.about-group .notices td:nth-child(2),
+.about-group .notices td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.about-group .notices td:last-child {
+  overflow-wrap: anywhere;
 }

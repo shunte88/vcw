@@ -32,12 +32,17 @@
 
 //! Acoustic fingerprinting and AcoustID lookup.
 //!
-//! Requirements: §25 (fingerprinting), §26, §27 (lookup). Phase 2 - the crate exists
-//! now so the dependency direction is fixed before there is code to misplace.
+//! Requirements: §25 (fingerprinting), §26, §27 (lookup).
+//!
+//! [`chromaprint`] is built (WP-21): bytes off a capture in, a fingerprint out, and
+//! nothing else - no project, no signal analysis, no network. What a *region* is lives
+//! in `vcw_core::fingerprinting`, because deciding where a track starts is the
+//! detector's job and this crate has no business knowing one exists. [`acoustid`] is
+//! WP-22, and `vcw-identify` stays separate from both of them, which is §27.
 //!
 //! S4 settled how fingerprinting attaches to capture: it runs off the capture stream
-//! at the capture rate with plain `>> 16` narrowing to `i16`. Rate, gain and
-//! narrowing all proved free, so there is no staging file and no pre-decimation.
+//! at the capture rate with plain narrowing to `i16`. Rate, gain and narrowing all
+//! proved free, so there is no staging file and no pre-decimation.
 
 pub mod acoustid;
 pub mod chromaprint;
