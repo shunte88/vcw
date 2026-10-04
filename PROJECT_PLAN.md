@@ -141,7 +141,7 @@ Four are written: D1, D2, D7+D10, and the workspace layout WP-01 had to settle.
 | **D4** | Sample representation at rest | Store the device's bytes **verbatim** plus a format tag. §9 forbids conversion; converting to f32 at rest would silently break the bit-perfect claim. | WP-02 |
 | **D5** | Encoder stack | WAV: own writer (trivial, avoids `hound`'s format limits). FLAC: `flacenc` (pure Rust, Apache-2.0). MP3: `mp3lame-encoder`, which links a vendored libmp3lame. Ogg Vorbis: `vorbis_rs`, over aoTuV-Lancer libvorbis and libogg. **Two licences here were recorded wrong and are corrected from the registry (2026-10-04):** `mp3lame-encoder` and `mp3lame-sys` declare **LGPL-3.0**, not LGPL-2.1 - libmp3lame's own `COPYING` is the GNU *Library* GPL v2 "or any later version" and the wrapper exercises the later-version option, so `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` both ship and `deny.toml` names an exception the `chromaprint-next` one does not cover. `vorbis_rs` and both its `-sys` crates are **BSD-3-Clause**, not LGPL, so **Ogg export adds no copyleft obligation at all**. Licensing consequence: MP3 alone extends the relink obligation, under LGPL-3.0 §4. | WP-14 (FLAC/WAV), WP-25 (MP3/OGG) |
 | **D6** | High-rate IPC transport *and* waveform rendering | **Revised from S3 (2026-09-24); the original wording was wrong in two of its three clauses.** Channels for meter/waveform/position - chosen for API shape (typed, per-invocation, no global event namespace), *not* throughput, which is indistinguishable from the event bus at §35 payload sizes. Hand-built compact JSON; **never** `InvokeResponseBody::Raw` for small frames - under Tauri's 1024-byte direct-execute threshold it is eval'd as a decimal JSON array, 42% *larger* than the JSON it replaces. **Do not coalesce sends**: the webview absorbed the full 750 Hz worker rate with zero loss, no added main-thread cost and a quarter of the delivery latency. Coalesce *paints* instead - one read of latest state per `rAF`. **Draw the waveform incrementally, in an `OffscreenCanvas` worker**: full-canvas main-thread redraw costs 29% of the main thread against 0.5% in a worker. Acceptance metric is **main-thread occupancy, not fps** - WebKitGTK does not pace `rAF` to vsync. See `docs/spikes/S3-tauri-ipc.md` | G0 (met on Linux) |
-| **D7** | Licence posture | **Locked 2026-09-25, [ADR-0004](docs/adr/0004-licence-and-toolchain.md).** MIT core; `THIRD-PARTY-NOTICES.md` and `LICENSE-LGPL-2.1` in the repository, written ahead of the Phase 2 obligation and describing the present position honestly - permissive dependencies only today. `deny.toml` carries the allowlist and `cargo deny check` runs on every push. The LGPL exception stays commented out until `chromaprint-next` actually lands: an allowance carried ahead of its dependency is one nobody reviews. | Locked |
+| **D7** | Licence posture | **Locked 2026-09-25, [ADR-0004](docs/adr/0004-licence-and-toolchain.md).** MIT core; `THIRD-PARTY-NOTICES.md` and `LICENSE-LGPL-2.1` in the repository, written ahead of the Phase 2 obligation. **No longer permissive-only as of 2026-10-04:** WP-25 shipped `mp3lame-sys`, so an **LGPL-3.0** component is compiled into the default build and `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` are carried too. The notices file is current; WP-28 is what puts it in front of a user. `deny.toml` carries the allowlist and `cargo deny check` runs on every push. The LGPL exception stays commented out until `chromaprint-next` actually lands: an allowance carried ahead of its dependency is one nobody reviews. | Locked |
 | **D8** | Concurrency model | **Locked 2026-09-25, [ADR-0005](docs/adr/0005-concurrency-model.md).** Dedicated OS threads on the capture path - device callback, writer, engine - with `mpsc` between them and no async runtime anywhere near audio or SQLite. **No async runtime anywhere, as it turned out**: WP-12 was where tokio was expected to enter and did not, because metadata networking is a handful of blocking `ureq` calls behind a `Transport` trait, and a thread that is waiting on an HTTP response is a thread doing exactly what it should. The workspace still has no `tokio` dependency. Two clauses of the original wording changed on contact with the work: the engine thread is not a matter of taste, because `cpal`'s stream handle is **`!Send`** and the thread that opens a device must be the thread that keeps it; and **elevated priority is not implemented**, because WP-05's 192 kHz soak showed no overruns at ordinary priority on any rig tested. It stays available for a platform that needs it rather than applied speculatively. | Locked |
 | **D9** | Typed Rust↔TS contract | **Locked 2026-09-27, [ADR-0007](docs/adr/0007-rust-typescript-contract.md).** `ts-rs` 12, one generated and committed declaration file, a drift test that reports the first differing line, and `git diff --exit-code` over it in CI. `specta` was the other candidate and lost on the exit criterion rather than on merit: its Tauri half generates bindings *from the command definitions*, which requires the crate declaring them to depend on Tauri - and that crate is a core crate. Two settings had to be corrected from the defaults: `u64` renders as `bigint`, which typechecks and is wrong at run time, so it is `number` with a 2^53 frame ceiling; and `rename_all` renames variants only, so fields need `rename_all_fields` as well. The surface is a core crate (`vcw-contract`) with every unit resolved on the Rust side, which is most of WP-16's *no business logic in TS* gate discharged before the gate is reached | WP-15 |
 | **D10** | Toolchain floor | **Locked 2026-09-25, [ADR-0004](docs/adr/0004-licence-and-toolchain.md).** Rust edition 2024, MSRV **1.90** declared in `[workspace.package]` and enforced by a CI job pinned to 1.90 - an untested floor is not a floor. `rust-toolchain.toml` stays on `stable` so daily work gets current diagnostics. Node 22 LTS in `.nvmrc`; pnpm. | Locked |
@@ -615,8 +615,9 @@ early, because each one belongs to a package that is not built yet.
 | 25 | MP3 + Ogg export (D5 licensing consequences) - **built 2026-10-04**, ahead of its gate, while the export code was open. See the note below | 5 |
 | 26 | Advanced capture diagnostics + diagnostic bundle export | 4 |
 | 27 | UI: identification review, candidate comparison, confidence surfacing | 8 |
+| 28 | About dialog: version, build and the third-party notices, MP3's LGPL-3.0 obligation named in the running app | 1 |
 
-**Total ≈ 47 sessions.** The resolver (WP-23) is the intellectually hardest
+**Total ≈ 48 sessions.** The resolver (WP-23) is the intellectually hardest
 piece in the whole project and deserves a design document before code.
 
 **WP-25, built 2026-10-04.** Taken out of order because WP-14's export code was
@@ -708,12 +709,76 @@ VBR patch each failed exactly the test that exists for it, and nothing else.
 `cargo test`, `cargo clippy --all-targets -- -D warnings` and the whole suite
 pass in **all four feature combinations**.
 
+**WP-28, the About dialog, is a licence obligation and not a credits panel.**
+WP-25 changed D7's position: shipping `mp3lame-sys` compiles **libmp3lame into
+the binary** under LGPL-3.0, inside a product whose own code is MIT. The
+paperwork is done and correct - `THIRD-PARTY-NOTICES.md` names the component and
+the obligation, `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` are in the tree, and
+`deny.toml` has the allowance - but **nothing in the running application points
+at any of it**. Someone who installs the `.deb` and never opens the repository is
+told nothing, and the shell knows its own version well enough to write it to
+stderr at startup and never shows it to anyone.
+
+So the dialog carries, in this order of importance: the version and build
+identity (which is also the first thing wanted in a bug report), the MIT line for
+VCW itself, and the third-party notices with the LGPL-3.0 component named and its
+source offer. The credits belong there too, and they are the part that is a
+courtesy.
+
+It pairs with the cargo features by construction: a build compiled without `mp3`
+has **no LGPL component to declare**, so what the dialog says has to be derived
+from the features rather than written as prose - the same rule WP-25 arrived at
+for refusal advice, which drifted four ways precisely because it was written by
+hand. That makes the natural exit criterion a test rather than a screenshot:
+**the notices the dialog shows agree with the features the binary was built
+with**, asserted in each feature combination, which is a condition that can fail
+on purpose. One session, and it wants doing before anything is handed to a person
+who is not the author.
+
 ## 7. Phase 3 (§46) - Gate G4
 
-Non-destructive processing chain · click/pop detection and removal · optional
-normalization · ONNX detector revival · advanced archival metadata · improved multi-disc
-workflow · plugin/provider architecture · Android (AAudio, the largest single unknown -
-needs its own feasibility spike). Not estimated; re-plan at G3.
+Non-destructive processing chain · **selectable playback equalisation curves** ·
+click/pop detection and removal · optional normalization · ONNX detector revival ·
+advanced archival metadata · improved multi-disc workflow · plugin/provider architecture ·
+Android (AAudio, the largest single unknown - needs its own feasibility spike). Not
+estimated; re-plan at G3.
+
+**Playback equalisation curves, for the people who care most.** RIAA has only been
+the standard since 1954. Records cut before it - and a good many 78s after it - were
+cut to the label's own curve: Columbia LP, Decca FFRR, EMI, HMV, AES, NAB/NARTB,
+Teldec, and others besides. Played back through a RIAA stage they are audibly wrong in
+the bass and the treble, and the listener who owns those records is exactly the
+listener who will notice. Each curve is three numbers - a bass turnover, a treble
+rolloff, and in RIAA's case a bass shelf, with the IEC amendment's rumble filter as a
+separate option - so the implementation is a small parameterised filter and a table.
+**The table has to be sourced from a citable reference and the filter's response
+measured against it, not transcribed from memory**: the per-label numbers are widely
+repeated and widely wrong, and a curve that is close is worse than no curve because
+nobody can hear that it is close. The exit criterion is therefore a measurement - sweep
+a known signal through each curve and check the response against the published one
+within a stated tolerance - which is a condition that can fail on purpose.
+
+**One half of it cannot wait for Phase 3.** Applying a curve is only meaningful if what
+was captured is known: a flat transfer wants the curve applied, and a capture that has
+already been through a RIAA phono stage wants RIAA *undone* first, which amplifies
+noise and is not something to do by guesswork. So the capture has to **record what
+equalisation the hardware applied** - flat, RIAA, or unknown - as part of the capture
+row, and that is cheap now and impossible later: every rip made without it is a rip
+nobody can correctly re-equalise, including the 62 in `/data2/source_rips` and the 25
+Audacity projects. A field at capture time, an honest `unknown` as the default for
+imports, and the curve itself as a **stored decision in the processing chain** rather
+than anything baked into the blocks, which is the architecture §33 and the edit
+instructions already have.
+
+Specified as **§51, drafted 2026-10-04**, and listed in §46 with the rest of Phase 3.
+It was numbered after §50 rather than inserted near §33 where it belongs thematically,
+because the section numbers are cited from source files, tests and this plan, and
+renumbering a spec to tidy its order is how a citation silently starts pointing at the
+wrong requirement. §51 settles three things the discussion above only raised: the
+**±0.5 dB from 20 Hz to 20 kHz** tolerance that makes the measurement a pass or a fail,
+that an `Unknown` provenance is **refused rather than guessed**, and that the curve in
+force is written into exported metadata - an archival file whose equalisation is
+unrecorded cannot be reproduced.
 
 ---
 

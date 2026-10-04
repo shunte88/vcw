@@ -407,7 +407,7 @@ Add:
 Required: `chromaprint-next`; AcoustID; progressive identification; evidence resolver; metadata-assisted boundaries; album/release inference; MP3/OGG export; advanced capture diagnostics.
 ## 46. Phase 3
 Add:
-Required: non-destructive processing; click detection/removal; optional normalization; advanced archival metadata; improved multi-disc workflow; Android support; plugin/provider architecture.
+Required: non-destructive processing; playback equalisation curves (§51); click detection/removal; optional normalization; advanced archival metadata; improved multi-disc workflow; Android support; plugin/provider architecture.
 ## 47. Initial Engineering Spike
 Before significant UI development, create a Rust `vinyl-audio-test` utility that:
 1. lists devices
@@ -438,3 +438,56 @@ The internals can be sophisticated.
 The user's experience should not be.
 
 One bit I particularly want to prototype early is **24/192 stereo → bounded buffer → batched SQLite BLOB writes → simultaneous analysis reads**. If that stays rock-solid under deliberate abuse and simulated crashes, we've got the foundation nailed.
+
+## 51. Playback Equalisation
+Numbered after §50 so that no existing section is renumbered: the numbers are cited
+from source files, tests and the delivery plan.
+
+RIAA has been the standard only since 1954. Records cut before it, and many 78s after
+it, were cut to the issuing label's own curve, and played back through a RIAA stage
+they are wrong in both the bass and the treble.
+
+The application shall support selectable playback equalisation.
+Equalisation shall be a **non-destructive stored decision**, held with the project's
+other edit instructions and applied on playback, render and export.
+Equalisation shall never be applied in the capture path, and §9 continues to govern
+capture unchanged: a captured block is what the device supplied.
+
+Every capture shall record the equalisation already applied by the hardware upstream
+of it:
+```rust
+enum CaptureEq {
+    Flat,
+    Riaa,
+    Unknown,
+}
+```
+`Unknown` shall be the recorded value for imported projects and for any capture whose
+provenance was not stated.
+This field shall be recorded from the first release that supports capture, ahead of the
+processing chain that consumes it: a capture whose provenance is unknown cannot afterwards
+be correctly re-equalised, and the field cannot be recovered later.
+
+Curves shall include:
+Required: flat (none); RIAA; Columbia LP; Decca FFRR; EMI; HMV; AES; NAB/NARTB; Teldec.
+The application shall additionally accept a user-defined curve stated in the same terms.
+Each curve is defined by a bass turnover, a treble rolloff, and where it has one a bass
+shelf. The IEC amendment's rumble filter shall be selectable independently of the curve.
+
+Every curve's parameters shall carry a citation to the published source they came from.
+The implemented response shall be measured against that source and shall be within
+**±0.5 dB from 20 Hz to 20 kHz**, at every sample rate §8 requires.
+A curve that is approximately right is worse than none, because a listener cannot hear
+that it is approximately right.
+
+Where a capture is `Riaa` and a different curve is selected, the application shall apply
+the inverse of RIAA before the chosen curve, and shall state that doing so amplifies
+noise.
+Where a capture is `Unknown`, the application shall require the operator to state the
+provenance rather than assume one.
+
+A curve shall be selectable per side, because a box set may mix them, and overridable
+per track.
+The curve in force shall be visible wherever audio is auditioned, shall be recorded in
+the project, and shall be written into exported metadata, because an archival file whose
+equalisation is unrecorded is one that cannot be reproduced.
