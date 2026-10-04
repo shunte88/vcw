@@ -588,9 +588,16 @@ export type Export = {
  */
 into: string,
 /**
- * `wav` or `flac`.
+ * `flac`, `wav`, `mp3` or `ogg`.
  */
 format: string,
+/**
+ * `transparent`, `high` or `compact`, or `null` for `high`.
+ *
+ * Ignored by the lossless containers rather than refused by them, so a
+ * panel can keep one value while the format changes under it.
+ */
+quality: string | null,
 /**
  * A naming template, or `null` for the default.
  */
@@ -1424,9 +1431,18 @@ online: boolean, };
 
 export type ExportSettings = {
 /**
- * `wav` or `flac`.
+ * `flac`, `wav`, `mp3` or `ogg`.
  */
 format: string,
+/**
+ * What a lossy container is written at: `transparent`, `high` or
+ * `compact`.
+ *
+ * Kept even while the format is lossless, deliberately: a person who sets
+ * a quality, switches to FLAC for an archival copy and switches back
+ * should find their choice still there.
+ */
+quality: string,
 /**
  * Where to write, or `null` to be asked each time.
  */

@@ -144,6 +144,11 @@ fn main() {
     install_logging();
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "the shell is starting");
     tauri::Builder::default()
+        // The one plugin VCW installs. Every other capability is a command in
+        // this crate, which is why `capabilities/default.json` asked for
+        // nothing until now: a native directory picker is the exception,
+        // because no Rust command can draw the host's own file chooser.
+        .plugin(tauri_plugin_dialog::init())
         .manage(Shell::default())
         .setup(|app| {
             // The shell's own bus, forwarded for the life of the window.

@@ -35,8 +35,15 @@
 //! WP-14's exit criterion says tags are validated by third-party readers, and
 //! the same argument applies to the containers: a WAV we can read back with our
 //! own parser proves only that we are consistently wrong. Everything here shells
-//! out to a tool somebody else wrote - `ffprobe`, `flac`, `metaflac`, `sox` -
-//! and believes it over us.
+//! out to a tool somebody else wrote - `ffprobe`, `flac`, `metaflac`, `sox`,
+//! `ogginfo`, `ffmpeg` and mutagen - and believes it over us.
+//!
+//! The lossy containers need this more than the lossless ones, not less. A FLAC
+//! we got wrong fails our own digest check; an MP3 we got wrong is still a file
+//! a player opens, and the ways it can be wrong - a swapped channel pair, a
+//! duration taken from a bitrate guess because the VBR header never got patched,
+//! a quality setting that was parsed and then ignored - all survive every test
+//! that only asks whether bytes came out.
 //!
 //! A missing tool skips its test rather than failing it, because these have to
 //! pass on a CI runner with nothing installed. That would make an empty run look
@@ -47,6 +54,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use vcw_export::encoder::{Container, Spec, Writer};
+// Quality is only named where a lossy container is, and every one of those is
+// behind a feature.
+#[cfg(any(feature = "mp3", feature = "ogg"))]
+use vcw_export::encoder::Quality;
 use vcw_export::tagging::{self, Cover, Tags};
 use vcw_types::StorageFormat;
 
@@ -125,7 +136,7 @@ fn data_chunk(path: &Path) -> Vec<u8> {
 
 #[test]
 fn at_least_one_verifier_is_installed() {
-    let found: Vec<&str> = ["ffprobe", "flac", "metaflac", "sox"]
+    let found: Vec<&str> = ["ffprobe", "ffmpeg", "flac", "metaflac", "sox", "ogginfo"]
         .into_iter()
         .filter(|name| tool(name).is_some())
         .collect();
@@ -448,18 +459,50 @@ fn tags() -> Tags {
     }
 }
 
-/// Writes a short file and tags it, returning the path.
-fn tagged(dir: &Path, container: Container) -> PathBuf {
-    let spec = Spec {
+/// A short 44.1 kHz stereo spec - the one every container here accepts.
+fn short() -> Spec {
+    Spec {
         rate: 44_100,
         channels: 2,
         format: StorageFormat::Int16,
         frames: 12_000,
-    };
+    }
+}
+
+/// Writes a short file and tags it, returning the path.
+fn tagged(dir: &Path, container: Container) -> PathBuf {
+    let spec = short();
     let path = dir.join(format!("tagged.{}", container.extension()));
     write(&path, container, spec);
     tagging::write(&path, container, &tags()).expect("tag");
     path
+}
+
+/// Every container this build can write, as the thing that can write them says.
+///
+/// Derived from `Container::ALL` and `Writer::vet` rather than written out,
+/// which is the point: a container added to the enum and not to a list here
+/// would ship untagged and unverified while every test in this file stayed
+/// green. A build without the `mp3` feature drops MP3 from the list by the same
+/// mechanism that refuses it at plan time.
+fn tag_cases() -> Vec<Container> {
+    Container::ALL
+        .into_iter()
+        .filter(|container| Writer::vet(*container, &short()).is_ok())
+        .collect()
+}
+
+#[test]
+fn this_build_writes_the_containers_it_is_supposed_to() {
+    // The other end of `tag_cases`: a derived list cannot drift from the enum,
+    // but it can quietly shrink if a feature stops being default. Both lossless
+    // containers are unconditional, and a default build has all four.
+    let cases = tag_cases();
+    assert!(cases.contains(&Container::Flac), "{cases:?}");
+    assert!(cases.contains(&Container::Wav), "{cases:?}");
+    if cfg!(all(feature = "mp3", feature = "ogg")) {
+        assert_eq!(cases.len(), Container::ALL.len(), "{cases:?}");
+    }
 }
 
 #[test]
@@ -586,23 +629,18 @@ fn ffprobe_reads_the_tags_we_wrote() {
     };
     let dir = tempfile::tempdir().unwrap();
 
-    // Both containers, and both must at least carry the fields a player puts on
-    // screen. FLAC carries the full set; WAV's ID3v2 carries what ID3 has frames
-    // for, which is why only the common fields are asserted for it.
-    for container in [Container::Flac, Container::Wav] {
+    // Every container we write, and each must at least carry the fields a player
+    // puts on screen. FLAC and Ogg carry the full set as Vorbis comments; WAV and
+    // MP3 carry ID3v2, which has frames for fewer of them, so only the common
+    // fields are asserted across all four.
+    for container in tag_cases() {
         let path = tagged(dir.path(), container);
-        let said = run(
-            &ffprobe,
-            &[
-                "-v",
-                "error",
-                "-show_entries",
-                "format_tags",
-                "-of",
-                "default=nw=1",
-                path.to_str().unwrap(),
-            ],
-        );
+        // Both, because where ffprobe files a comment depends on the container
+        // and not on us: RIFF, ID3 and FLAC land on the format, and an Ogg
+        // stream's comment header lands on the stream. Asking for one of the
+        // two reports an empty set for the other, which reads as a tagging
+        // failure for a file mutagen can see every field in.
+        let said = probe(&ffprobe, &path, "format_tags:stream_tags");
         let lower = said.to_lowercase();
         for expected in [
             "l'enfant sauvage",
@@ -680,4 +718,384 @@ fn the_cover_comes_back_out_byte_for_byte() {
         PNG,
         "the embedded cover is not what went in"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The lossy containers (§33, D5, WP-25). Nothing below reads the audio with our
+// own code: a lossy encoder's output is only meaningful to a decoder, and the
+// decoders here are ffmpeg's and Xiph's.
+// ---------------------------------------------------------------------------
+
+/// A stereo tone: `left` Hz in the left channel, `right` Hz in the right.
+///
+/// Int16 at half scale. Two different frequencies on purpose - it is the only
+/// thing in the file that tells the channels apart, and a planar fan-out is
+/// exactly the kind of code that swaps them and still produces a file every
+/// player will happily play.
+fn tone(rate: u32, seconds: u32, left: f64, right: f64) -> (Spec, Vec<u8>) {
+    let frames = u64::from(rate) * u64::from(seconds);
+    let spec = Spec {
+        rate,
+        channels: 2,
+        format: StorageFormat::Int16,
+        frames,
+    };
+    let mut stored = Vec::with_capacity(frames as usize * 4);
+    for frame in 0..frames {
+        let at = frame as f64 / f64::from(rate);
+        for hz in [left, right] {
+            let sample = (std::f64::consts::TAU * hz * at).sin() * 16_000.0;
+            stored.extend_from_slice(&(sample as i16).to_le_bytes());
+        }
+    }
+    (spec, stored)
+}
+
+/// Writes a tone through a container and returns the file's size.
+fn write_tone(path: &Path, container: Container, rate: u32, left: f64, right: f64) -> u64 {
+    let (spec, stored) = tone(rate, 3, left, right);
+    let mut writer = Writer::create(path, container, spec).expect("create");
+    for piece in stored.chunks(997 * spec.stored_frame_bytes()) {
+        writer.write(piece).expect("write");
+    }
+    let bytes = writer.finish().expect("finish");
+    assert_eq!(
+        bytes,
+        std::fs::metadata(path).expect("stat").len(),
+        "{container} reported a byte count that is not the size of the file it wrote"
+    );
+    bytes
+}
+
+/// What ffprobe says about a stream, as one string of `key=value` lines.
+fn probe(ffprobe: &Path, path: &Path, entries: &str) -> String {
+    run(
+        ffprobe,
+        &[
+            "-v",
+            "error",
+            "-show_entries",
+            entries,
+            "-of",
+            "default=nw=1",
+            path.to_str().unwrap(),
+        ],
+    )
+}
+
+/// The rough pitch of one channel of a file, by way of ffmpeg and sox.
+///
+/// ffmpeg decodes and downmixes the one channel to a WAV - `pan` rather than
+/// `-map_channel`, which silently produced an empty file - and `sox -n stat`
+/// reports a "Rough frequency" by counting zero crossings. Rough is enough:
+/// the question is 1 kHz against 3 kHz, not a cent of tuning.
+fn pitch(ffmpeg: &Path, sox: &Path, path: &Path, channel: &str) -> f64 {
+    let mono = path.with_extension(format!("{channel}.wav"));
+    run(
+        ffmpeg,
+        &[
+            "-v",
+            "error",
+            "-y",
+            "-i",
+            path.to_str().unwrap(),
+            "-af",
+            &format!("pan=mono|c0={channel}"),
+            mono.to_str().unwrap(),
+        ],
+    );
+    let said = run(sox, &[mono.to_str().unwrap(), "-n", "stat"]);
+    let line = said
+        .lines()
+        .find(|line| line.contains("frequency"))
+        .unwrap_or_else(|| panic!("sox said nothing about frequency:\n{said}"));
+    line.rsplit(':')
+        .next()
+        .and_then(|number| number.trim().parse().ok())
+        .unwrap_or_else(|| panic!("could not read a frequency out of {line:?}"))
+}
+
+#[test]
+#[cfg(feature = "mp3")]
+fn ffprobe_agrees_about_the_mp3_we_write() {
+    let Some(ffprobe) = tool("ffprobe") else {
+        eprintln!("skipped: no ffprobe");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+
+    // The three rates a rip plausibly arrives at that MPEG also defines. The
+    // five 192 kHz rips in the corpus are refused rather than resampled, which
+    // is `lossy::mp3_limits`' job and tested there.
+    for rate in [32_000, 44_100, 48_000] {
+        let path = dir.path().join(format!("{rate}.mp3"));
+        write_tone(&path, Container::Mp3(Quality::High), rate, 1_000.0, 3_000.0);
+        let said = probe(
+            &ffprobe,
+            &path,
+            "stream=codec_name,sample_rate,channels:format=duration",
+        );
+        assert!(said.contains("codec_name=mp3"), "{rate}: {said}");
+        assert!(
+            said.contains(&format!("sample_rate={rate}")),
+            "{rate}: {said}"
+        );
+        assert!(said.contains("channels=2"), "{rate}: {said}");
+
+        // The duration is the test of the VBR header. Without a patched Xing
+        // frame a decoder has to guess the length from the file size and the
+        // first frame's bitrate, and for variable-bitrate audio that guess is
+        // wrong - which is the whole reason `finish` seeks back to byte zero.
+        let duration: f64 = said
+            .lines()
+            .find_map(|line| line.strip_prefix("duration="))
+            .and_then(|value| value.parse().ok())
+            .unwrap_or_else(|| panic!("{rate}: no duration in {said}"));
+        assert!(
+            (duration - 3.0).abs() < 0.1,
+            "{rate} Hz: three seconds of audio came back as {duration} s"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "mp3")]
+fn the_vbr_header_is_a_real_one_and_not_the_placeholder() {
+    // What the seek-back in `finish` writes over. libmp3lame emits a blank
+    // frame at the top of the first encode call and expects it to be replaced
+    // once the whole file is known; if the replacement never happens the frame
+    // stays zeroed and nothing complains, so the string is worth looking for
+    // directly rather than only through a decoder's duration.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("vbr.mp3");
+    write_tone(
+        &path,
+        Container::Mp3(Quality::High),
+        44_100,
+        1_000.0,
+        3_000.0,
+    );
+    let head = std::fs::read(&path).expect("read");
+    let head = &head[..2_000.min(head.len())];
+    let found = |needle: &[u8]| head.windows(needle.len()).any(|at| at == needle);
+    assert!(found(b"Xing"), "no Xing frame in the first 2 kB");
+    assert!(found(b"LAME"), "no LAME version string in the first 2 kB");
+}
+
+#[test]
+#[cfg(feature = "ogg")]
+fn ffprobe_agrees_about_the_ogg_we_write() {
+    let Some(ffprobe) = tool("ffprobe") else {
+        eprintln!("skipped: no ffprobe");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+
+    // Including 192 kHz, which is the point of having Ogg at all: it is the only
+    // container besides WAV that takes a 192 kHz capture, and the only one that
+    // takes one and also makes it small.
+    for rate in [44_100, 48_000, 192_000] {
+        let path = dir.path().join(format!("{rate}.ogg"));
+        write_tone(
+            &path,
+            Container::OggVorbis(Quality::High),
+            rate,
+            1_000.0,
+            3_000.0,
+        );
+        let said = probe(
+            &ffprobe,
+            &path,
+            "stream=codec_name,sample_rate,channels:format=duration",
+        );
+        assert!(said.contains("codec_name=vorbis"), "{rate}: {said}");
+        assert!(
+            said.contains(&format!("sample_rate={rate}")),
+            "{rate}: {said}"
+        );
+        assert!(said.contains("channels=2"), "{rate}: {said}");
+        let duration: f64 = said
+            .lines()
+            .find_map(|line| line.strip_prefix("duration="))
+            .and_then(|value| value.parse().ok())
+            .unwrap_or_else(|| panic!("{rate}: no duration in {said}"));
+        assert!(
+            (duration - 3.0).abs() < 0.05,
+            "{rate} Hz: three seconds of audio came back as {duration} s"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "ogg")]
+fn ogginfo_finds_nothing_wrong_with_our_ogg() {
+    // Xiph's own validator, and the one reader that checks the page structure
+    // rather than just decoding what it can. A stream with a bad granule
+    // position or a missing end-of-stream flag plays fine and fails here.
+    let Some(ogginfo) = tool("ogginfo") else {
+        eprintln!("skipped: no ogginfo");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("clean.ogg");
+    write_tone(
+        &path,
+        Container::OggVorbis(Quality::High),
+        44_100,
+        1_000.0,
+        3_000.0,
+    );
+
+    let said = run(&ogginfo, &[path.to_str().unwrap()]);
+    assert!(
+        !said.to_lowercase().contains("warning"),
+        "ogginfo complained:\n{said}"
+    );
+    assert!(said.contains("Channels: 2"), "{said}");
+    assert!(said.contains("Rate: 44100"), "{said}");
+}
+
+#[test]
+fn the_channels_survive_a_lossy_encoder_in_the_order_they_went_in() {
+    let (Some(ffmpeg), Some(sox)) = (tool("ffmpeg"), tool("sox")) else {
+        eprintln!("skipped: needs both ffmpeg and sox");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+
+    // FLAC as the control. If the fan-out were swapping channels this would
+    // still pass, which is exactly why it is here: it says the tone generator
+    // and the two measuring tools agree about which channel is which before any
+    // claim is made about the encoders.
+    let cases = std::iter::once(Container::Flac).chain(
+        tag_cases()
+            .into_iter()
+            .filter(|container| container.is_lossy()),
+    );
+
+    for container in cases {
+        let path = dir.path().join(format!("tone.{}", container.extension()));
+        write_tone(&path, container, 44_100, 1_000.0, 3_000.0);
+
+        let left = pitch(&ffmpeg, &sox, &path, "FL");
+        let right = pitch(&ffmpeg, &sox, &path, "FR");
+        assert!(
+            (left - 1_000.0).abs() < 50.0,
+            "{container}: the left channel came back at {left} Hz, not 1 kHz"
+        );
+        assert!(
+            (right - 3_000.0).abs() < 150.0,
+            "{container}: the right channel came back at {right} Hz, not 3 kHz"
+        );
+    }
+}
+
+#[test]
+#[cfg(any(feature = "mp3", feature = "ogg"))]
+fn a_lower_quality_really_does_write_a_smaller_file() {
+    // The setting is three words that travel from a select in the panel through
+    // a settings file, a JSON command, a CLI flag and two different encoder
+    // builders. Every step of that could drop it and still produce a playable
+    // file at the default, so the only honest check is that the three levels
+    // differ in the direction they say they do.
+    let dir = tempfile::tempdir().unwrap();
+
+    for container in tag_cases()
+        .into_iter()
+        .filter(|container| container.is_lossy())
+    {
+        let sizes: Vec<(Quality, u64)> = Quality::ALL
+            .into_iter()
+            .map(|quality| {
+                let container = container.with_quality(quality);
+                let path = dir
+                    .path()
+                    .join(format!("{quality}.{}", container.extension()));
+                (
+                    quality,
+                    write_tone(&path, container, 44_100, 1_000.0, 3_000.0),
+                )
+            })
+            .collect();
+
+        for pair in sizes.windows(2) {
+            let [(better, bigger), (worse, smaller)] = [pair[0], pair[1]];
+            assert!(
+                bigger > smaller,
+                "{container}: {better} wrote {bigger} bytes and {worse} wrote {smaller}, \
+                 so the quality is being parsed and then ignored"
+            );
+        }
+        // And all three are far smaller than the 529 KiB of PCM that went in,
+        // which is the other half of the claim: a lossy container that came out
+        // bigger than the audio would be a copy with extra steps.
+        for (quality, bytes) in sizes {
+            assert!(
+                bytes < 300_000,
+                "{container} at {quality} wrote {bytes} bytes for three seconds of a tone"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(any(feature = "mp3", feature = "ogg"))]
+fn mutagen_reads_the_lossy_tags_we_wrote() {
+    // The two tag formats again, in the two files that are their native homes:
+    // ID3v2 in an MP3 rather than bolted into a RIFF chunk, and Vorbis comments
+    // in an Ogg stream rather than in a FLAC metadata block. lofty picks the
+    // backend from the file it is handed, so this is the test that it picked
+    // right - and that the cover survives being base64'd into a comment, which
+    // is how Ogg carries one.
+    let Some(python) = tool("python3") else {
+        eprintln!("skipped: no python3");
+        return;
+    };
+    if !run(&python, &["-c", "import mutagen"]).is_empty() {
+        eprintln!("skipped: python3 has no mutagen");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+
+    #[cfg(feature = "mp3")]
+    {
+        let path = tagged(dir.path(), Container::Mp3(Quality::High));
+        let script = "
+import sys, mutagen
+mp3 = mutagen.File(sys.argv[1])
+assert str(mp3.tags['TIT2']) == \"L'Enfant Sauvage\", mp3.tags['TIT2']
+assert str(mp3.tags['TALB']) == 'Terra Incognita', mp3.tags['TALB']
+assert 'Gojira' in str(mp3.tags['TPE1']), mp3.tags['TPE1']
+assert str(mp3.tags['TRCK']) == '3/11', mp3.tags['TRCK']
+pictures = mp3.tags.getall('APIC')
+assert len(pictures) == 1, pictures
+assert pictures[0].mime == 'image/png', pictures[0].mime
+assert round(mp3.info.length, 1) == 0.3, mp3.info.length
+print('ok')
+";
+        let said = run(&python, &["-c", script, path.to_str().unwrap()]);
+        assert!(said.trim_end().ends_with("ok"), "mutagen on mp3:\n{said}");
+    }
+
+    #[cfg(feature = "ogg")]
+    {
+        let path = tagged(dir.path(), Container::OggVorbis(Quality::High));
+        let script = "
+import base64, sys, mutagen
+from mutagen.flac import Picture
+ogg = mutagen.File(sys.argv[1])
+assert ogg.tags['title'] == [\"L'Enfant Sauvage\"], ogg.tags['title']
+assert ogg.tags['artist'] == ['Gojira', 'Joe Duplantier'], ogg.tags['artist']
+assert ogg.tags['genre'] == ['Metal', 'Progressive'], ogg.tags['genre']
+assert ogg.tags['discogs_releaseid'] == ['3778213']
+blocks = ogg.tags['metadata_block_picture']
+assert len(blocks) == 1, blocks
+picture = Picture(base64.b64decode(blocks[0]))
+assert picture.mime == 'image/png', picture.mime
+assert picture.type == 3, picture.type
+print('ok')
+";
+        let said = run(&python, &["-c", script, path.to_str().unwrap()]);
+        assert!(said.trim_end().ends_with("ok"), "mutagen on ogg:\n{said}");
+    }
 }

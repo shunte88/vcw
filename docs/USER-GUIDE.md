@@ -184,9 +184,10 @@ case.
 Two things to expect. The audio is **re-blocked** rather than adopted, so an
 import writes a new file of comparable size and takes a couple of minutes for a
 full side. And Audacity records at 32-bit float by default, which FLAC cannot
-carry - FLAC is an integer codec - so a float project can currently only be
-exported as WAV. `vcw export --format flac` refuses before it writes anything
-rather than producing half a library.
+carry - FLAC is an integer codec - so a float project leaves as **WAV** if you
+want it lossless, or as **Ogg Vorbis** if you want it small. `vcw export
+--format flac` refuses before it writes anything rather than producing half a
+library.
 
 ## Finding the tracks
 
@@ -265,8 +266,10 @@ title is not the same as knowing which side it is on.
 ## Exporting
 
 ```text
-vcw export side-a.vcw --into ~/Music --format wav
 vcw export side-a.vcw --into ~/Music --format flac
+vcw export side-a.vcw --into ~/Music --format wav
+vcw export side-a.vcw --into ~/Music --format mp3 --quality high
+vcw export side-a.vcw --into ~/Music --format ogg --quality transparent
 vcw export side-a.vcw --into ~/Music --dry-run    # the whole plan, no files
 ```
 
@@ -274,21 +277,116 @@ Files are laid out and named from a template, tagged from the release and the
 track, and the cover goes beside them. The default template is
 `{album_artist}/{album}/{tracknum} - {title}`, and `{tracknum}` is the position
 printed on the label - so side A's first track is `A1 - The Rainbow.wav` and
-side B's is `B1 - ...`. Four things worth knowing:
+side B's is `B1 - ...`. Five things worth knowing:
+
+* **A track with no title is called `Untitled`.** Plenty of records have
+  untitled sides, and plenty of provider rows come back with the positions
+  filled in and the titles blank, which left the template's separator standing
+  with nothing after it: `A1 -.flac`. The file is now `A1 - Untitled.flac`. The
+  *tag* is left empty, because a blank title is the truth about the record and
+  inventing one would put a made-up word in your library. If you would rather
+  have `A1.flac`, set the template to `{tracknum}` and leave the title out
+  altogether. There is no form that drops the separator only on the untitled
+  tracks: a `[...]` group disappears when everything inside it is blank, but it
+  keeps its brackets when it is not, so `{tracknum}[ {title}]` gives `A1` and
+  `A2[ Sunshine Recorder]` on the same record.
 
 * `--dry-run` resolves the whole plan - every path, every tag, every frame
   count - and stops there. It is the cheapest way to find out what an export
-  will do.
+  will do, and the way to argue with a naming template without producing a
+  gigabyte of files to delete. It **prints the file names**, numbered, exactly
+  as the real run prints them, so you can hold one up against the other:
+
+  ```
+  $ vcw export rip.vcw --into ~/Music --format ogg --dry-run
+    into       /home/you/Music
+    format     Ogg Vorbis q6, template "{album_artist}/{album}/{tracknum} - {title}"
+    tracks     7 file(s), 598732800 frame(s)
+    artwork    106 byte(s) of image/png, embedded and beside the files
+      1/7    Talk Talk/Spirit of Eden/A1 - The Rainbow.ogg
+      2/7    Talk Talk/Spirit of Eden/A2 - Untitled.ogg
+      ...
+    cover      Talk Talk/Spirit of Eden/folder.png
+    dry run    nothing was written
+  ```
+
+  The paths are relative to `--into`, which is on the first line. `--json` adds
+  the tags, the frame spans and the track ids for anything that reads output
+  rather than looks at it.
 * An export **plans before it writes**. If the plan cannot be satisfied - a
   format that cannot carry the audio, a track with no boundary - it refuses
   before encoding, so you do not get half a library.
-* A refusal can still leave the empty directories the plan created. An empty
-  `Album/` left behind is untidy; half a FLAC would be a corrupt library, and
-  that is the trade being made.
-* **A 32-bit capture can only leave as WAV.** The FLAC encoder stops at 24 bits
+* **A refused export leaves nothing at all**, not even an empty directory. The
+  container is checked against the capture while the plan is being resolved, so
+  a format that cannot carry the audio is refused before the filesystem is
+  touched. What can still leave files behind is a run that fails part way - a
+  full disk, a disappearing drive - and there the files already written are
+  real files and are left alone.
+* **A 32-bit capture cannot leave as FLAC.** The FLAC encoder stops at 24 bits
   and narrowing 32 to 24 throws signal away, so `--format flac` refuses it by
-  name rather than quietly dithering. Capture at `--format s24` if FLAC is
-  where the rip is going to live.
+  name rather than quietly dithering. WAV takes it losslessly and Ogg Vorbis
+  takes it lossily; MP3 does not take it at all above 48 kHz. Capture at
+  `--format s24` if FLAC is where the rip is going to live.
+* **Above 96 kHz, FLAC refuses too.** `flacenc` stops there, though the format
+  itself allows far more. A 176.4 or 192 kHz rip leaves as WAV or as Ogg
+  Vorbis - which is the one container that will take any rate VCW records.
+
+### The four formats
+
+| `--format` | What it is | Takes |
+| --- | --- | --- |
+| `flac` | Lossless, compressed. The archival choice. | Up to 24-bit, up to 96 kHz |
+| `wav` | Lossless, uncompressed. Takes everything, including float. | Anything, up to 4 GiB a file |
+| `mp3` | Lossy, variable bitrate. The one every car stereo reads. | 1 or 2 channels at up to 48 kHz |
+| `ogg` | Lossy Vorbis. Smaller than MP3 at the same quality. | Anything VCW records |
+
+`--quality` applies to the two lossy formats and is ignored by the two lossless
+ones, so you can leave it set while you change your mind about the format:
+
+| `--quality` | MP3 | Ogg Vorbis | Roughly |
+| --- | --- | --- | --- |
+| `transparent` | V0 | q8 | 245 kbit/s - as close to the record as the codec gets |
+| `high` | V2 | q6 | 190 kbit/s - the default |
+| `compact` | V5 | q3 | 130 kbit/s - small enough to stop thinking about |
+
+**MP3 refuses a high-rate capture.** MPEG never defined a sample rate above 48
+kHz, so a 96 or 192 kHz rip cannot become an MP3 without resampling it - and
+resampling means choosing an anti-alias filter, which is a decision about how
+the record sounds and not one an exporter should make on your behalf. The
+refusal names the rate it is looking at. Export that rip as Ogg Vorbis, which
+has no such limit, or as WAV. FLAC is only an option at 96 kHz or below.
+
+The lossy formats are for the copy you carry around. Keep the lossless one.
+
+### In the window
+
+`Ctrl+5` is the export panel, and it is the same two steps. **Browse...** opens
+the system's own directory chooser, starting at your library, so the output
+directory does not have to be typed. **Plan** resolves it and lists every file
+with the path it will have. **Export** (`Ctrl+E`) writes, reports `Writing 2 of
+3...` as it goes, and finishes with a line saying what came out:
+
+```text
+Wrote 3 files, 1 cover image, 273.6 MiB.
+```
+
+The format and quality selects are beside the directory, and the quality one
+appears only when the format is MP3 or Ogg Vorbis. Changing any of them drops
+the plan, because a plan resolved against the old settings describes files
+nobody asked for - down to the file extension.
+
+### The tags
+
+A track goes out with its title, artists, album, genres, year, composer,
+comment, label, catalogue number, country, barcode and both MusicBrainz ids,
+plus the cover and the `VINYL_POSITION` the record was cut at. **FLAC and Ogg
+get Vorbis comments; WAV and MP3 get a full ID3v2 tag** - in a chunk after the
+audio for WAV, at the front of the file for MP3, which is what every player
+reads. The field set is the same in all four, and so is the embedded cover.
+
+Track numbers are per record, not per release, and they carry their total: on a
+double album the second disc is `1/8` upwards rather than `9/17`, because that
+is what a track number means to everything that will read it.
 
 ## When you need to report a problem
 

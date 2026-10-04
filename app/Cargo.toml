@@ -50,6 +50,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
+# The only native dialog VCW opens: a directory picker, so "where do the files
+# go?" is answered by pointing rather than by typing an absolute path from
+# memory. `gtk3` is the default backend and is what WebKitGTK is already linked
+# against; `xdg-portal` is left off deliberately, because a portal needs a
+# running desktop portal service and a first-light session under Xvfb has none.
+tauri-plugin-dialog = { version = "2", default-features = false, features = ["gtk3"] }
 thiserror = "2"
 # §42's logging. The shell installs a subscriber for the same reason the CLI does
 # and with the same default: the versions match the product workspace, which is

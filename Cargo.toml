@@ -51,6 +51,18 @@ crc32fast = "1"
 # allowlist; WAV is our own writer because a RIFF header is thirty lines and
 # every crate that writes one has an opinion about 24-bit that we do not share.
 flacenc = { version = "0.5", default-features = false }
+# MP3, behind `vcw-export/mp3` (D5, WP-25). High-level bindings over libmp3lame,
+# whose C source `mp3lame-sys` vendors and builds - so there is no system library
+# to find on any of the four targets, and the relink obligation in
+# THIRD-PARTY-NOTICES.md is ours to honour. The crate declares **LGPL-3.0**, not
+# the LGPL-2.1 D5 assumed, which is why `deny.toml` names a version of the
+# licence the chromaprint-next exception does not cover.
+mp3lame-encoder = { version = "0.2", features = ["std"] }
+# Ogg Vorbis, behind `vcw-export/ogg` (D5, WP-25). Bindings over aoTuV-Lancer, a
+# tuned libvorbis, and libogg. **BSD-3-Clause** - D5 recorded this one as LGPL and
+# it is not, so Ogg export adds no copyleft obligation at all and nothing to
+# `deny.toml`'s exception list.
+vorbis_rs = "0.5"
 # 0.18.2 or newer is a hard floor, not a preference: 0.16 mis-reported ALSA formats
 # and could not select a device by PCM id. See docs/spikes/S1-cpal-capture.md.
 cpal = "0.18.2"

@@ -286,6 +286,12 @@ fn distance(a: &str, b: &str) -> usize {
 /// `{tracknum}` wants `01` and nobody writes `{tracknum:02}`. A number that is
 /// not a number - an alpha position typed into the wrong field - is passed
 /// through as it stands.
+///
+/// A `{title}` with nothing behind it becomes [`UNTITLED`] unless it sits
+/// inside a bracket group, where the group's own rule wins and it stays blank.
+/// The tag is not touched: [`crate::splitter`] builds the tags from the record
+/// separately, so an untitled track keeps an empty title tag and gains the word
+/// only in its file name.
 #[must_use]
 pub fn expand(template: &str, values: &Values) -> String {
     let tracknum = if values.tracknum.is_empty() {
@@ -295,6 +301,21 @@ pub fn expand(template: &str, values: &Values) -> String {
             .tracknum
             .parse::<u32>()
             .map_or_else(|_| values.tracknum.clone(), |n| format!("{n:02}"))
+    };
+
+    // A title nobody has filled in yet gets a word, the way an empty
+    // `{tracknum}` gets `00` just above. Without it the default template left
+    // the separator standing with nothing after it - `A2 -.flac`, four of them
+    // on a two-sided rip, which is what a real 192 kHz capture of an unnamed
+    // side produced. Done before the substitution rather than after, because
+    // afterwards there is no way to tell a title that is absent from a title
+    // that is genuinely blank.
+    let named;
+    let template = if values.title.trim().is_empty() {
+        named = name_the_untitled(template);
+        named.as_str()
+    } else {
+        template
     };
 
     let mut out = template.to_owned();
@@ -321,6 +342,42 @@ pub fn expand(template: &str, values: &Values) -> String {
         }
     }
     collapse_brackets(&out)
+}
+
+/// What an unnamed track is called.
+pub const UNTITLED: &str = "Untitled";
+
+/// Puts [`UNTITLED`] where `{title}` stands outside any bracket group.
+///
+/// Outside, because `[...]` is already the way a template says *only if there
+/// is one* - see [`collapse_brackets`]. Someone who wrote
+/// `{tracknum}[ - {title}]` to work around the dangling separator asked for the
+/// whole group to vanish, and substituting a word into it would quietly take
+/// that back and start writing `A2 - Untitled` where they had arranged for
+/// `A2`. So the group keeps the old behaviour exactly, and an unbracketed
+/// `{title}` - which is what the default template has - gets the word.
+fn name_the_untitled(template: &str) -> String {
+    let mut out = String::with_capacity(template.len() + UNTITLED.len());
+    let mut depth = 0usize;
+    let mut rest = template;
+    while !rest.is_empty() {
+        if let Some(tail) = rest.strip_prefix("{title}") {
+            out.push_str(if depth == 0 { UNTITLED } else { "{title}" });
+            rest = tail;
+            continue;
+        }
+        let Some(ch) = rest.chars().next() else { break };
+        match ch {
+            '[' => depth += 1,
+            // Saturating, because a template with a stray `]` is a typo and not
+            // a reason to panic; `collapse_brackets` leaves it alone too.
+            ']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        out.push(ch);
+        rest = &rest[ch.len_utf8()..];
+    }
+    out
 }
 
 /// Expands a template into a relative path.
@@ -590,6 +647,71 @@ mod tests {
     }
 
     #[test]
+    fn a_track_with_no_title_is_called_untitled() {
+        let mut v = values();
+        v.title = String::new();
+        // The default template, which is where this actually bit: `A2 -.flac`,
+        // a file name ending in a separator with nothing after it.
+        assert_eq!(
+            path_for(DEFAULT_TEMPLATE, &v),
+            PathBuf::from("Lush/Split/03 - Untitled")
+        );
+        // Whitespace counts as none. A title of one space came out of a real
+        // provider row, and it sanitises to nothing a moment later anyway.
+        v.title = "   ".into();
+        assert_eq!(expand("{tracknum} - {title}", &v), "03 - Untitled");
+    }
+
+    #[test]
+    fn a_title_that_is_set_is_left_alone() {
+        let v = values();
+        assert_eq!(expand("{title}", &v), "Desire Lines");
+        assert!(!expand(DEFAULT_TEMPLATE, &v).contains(UNTITLED));
+    }
+
+    #[test]
+    fn a_bracketed_title_still_disappears_when_there_is_none() {
+        let mut v = values();
+        v.title = String::new();
+        // `[...]` is the existing way to say *only if there is one*, and
+        // someone who wrote this asked for the title and its brackets to go
+        // together. Substituting a word inside the group would take that back.
+        assert_eq!(expand("{tracknum}[{title}]", &v), "03");
+        // Both halves of what the user guide says about `[...]`: the group
+        // goes when it is blank, and keeps its brackets when it is not - which
+        // is why there is no template that drops the separator only on the
+        // untitled tracks. Pinned here so the guide cannot go stale.
+        assert_eq!(expand("{tracknum}[ {title}]", &v), "03");
+        v.title = "Desire Lines".into();
+        assert_eq!(expand("{tracknum}[ {title}]", &v), "03[ Desire Lines]");
+        v.title = String::new();
+        // A collapse takes the group and nothing around it, which is the rule
+        // `[{year}] {title}` already demonstrates - so the space stays.
+        assert_eq!(expand("{tracknum} [{title}]", &v), "03 ");
+        // Outside the group it is named, in the same template, so the two
+        // rules do not fight: whichever `{title}` you wrote is what you get.
+        assert_eq!(
+            expand("{tracknum} - {title}[ ({year})]", &v),
+            "03 - Untitled[ (1994)]"
+        );
+        // A group only collapses when it trims to nothing, which is the rule
+        // `collapse_brackets` already had - so punctuation inside one keeps the
+        // group alive and the title stays blank there. Pinned because it is the
+        // reason the bracket form was never a workaround for the dangling
+        // separator: `[ - {title}]` leaves the dash behind.
+        assert_eq!(expand("{tracknum}[ - {title}]", &v), "03[ - ]");
+    }
+
+    #[test]
+    fn a_stray_closing_bracket_does_not_panic_or_swallow_the_title() {
+        let mut v = values();
+        v.title = String::new();
+        // A typo in a template someone is still editing. The depth count
+        // saturates rather than wrapping, so `{title}` is still at depth zero.
+        assert_eq!(expand("]{tracknum} - {title}", &v), "]03 - Untitled");
+    }
+
+    #[test]
     fn a_slash_in_a_title_does_not_become_a_directory() {
         // The case that makes per-segment sanitising the rule rather than a
         // detail: this title is real, and one folder called `AC` is not what
@@ -698,10 +820,16 @@ mod tests {
             tracknum: "2".into(),
             ..Values::default()
         };
-        assert_eq!(
-            path_for("{album}/{title}", &v),
-            PathBuf::from("2 - Unknown")
-        );
+        // `{title}` is the one token that is never blank now - it becomes
+        // `Untitled` - so a template whose only other token is empty names the
+        // file after the placeholder rather than falling through to `Unknown`.
+        // Two untitled tracks under this template therefore collide, which
+        // `splitter::plan` refuses by name; the default template does not,
+        // because it leads with the position.
+        assert_eq!(path_for("{album}/{title}", &v), PathBuf::from("Untitled"));
+        // The fallback still has a job: a template with no tokens at all, or
+        // one whose tokens are all blank and none of them the title.
+        assert_eq!(path_for("{album}", &v), PathBuf::from("2 - Unknown"));
         assert_eq!(
             path_for("", &Values::default()),
             PathBuf::from("00 - Unknown")

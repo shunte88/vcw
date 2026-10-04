@@ -15,9 +15,10 @@ of date with what is actually linked.
 
 ---
 
-## Current state, as of the Phase 1 scaffold
+## Current state
 
-The shipped crates under `crates/` link **permissive dependencies only**:
+Everything under `crates/` links permissive dependencies, with one exception: the MP3
+encoder, which is weak copyleft and has its own section below. Otherwise:
 `MIT OR Apache-2.0` predominantly, with a smaller number under Apache-2.0,
 BSD-2-Clause, BSD-3-Clause, ISC, Zlib, BSL-1.0, Unicode-3.0, CC0-1.0,
 CDLA-Permissive-2.0 and Unlicense. These require attribution and nothing more; their
@@ -33,8 +34,10 @@ Two dependencies are worth naming because they are load-bearing rather than inci
   (public domain) into the binary. Bundling is deliberate: it removes platform SQLite
   variance from a file format we have to be able to recover.
 
-The sections below describe obligations that arrive with **Phase 2**. They are written
-now, while the decisions are fresh, rather than at the point of release.
+The sections below describe each obligation beyond attribution. The MP3 one is live -
+`deny.toml` names it and CI enforces it. The `chromaprint-next` one is written ahead of
+the dependency, while the decision is fresh, and its `deny.toml` entry stays commented
+out until the crate is actually in the graph.
 
 ---
 
@@ -87,17 +90,75 @@ into VCW. VCW supports this as follows:
 
 ---
 
-## LGPL - MP3 and Ogg Vorbis encoders (Phase 2, and optional)
+## LGPL-3.0 - the MP3 encoder (shipped, and optional)
 
-Decision D5 selects `mp3lame-encoder` (which links libmp3lame) and `vorbis_rs` for MP3
-and Ogg Vorbis export. Both are LGPL and both extend the relink obligation above to
-their own libraries.
+VCW writes MP3 (REQUIREMENTS §33) through
+[`mp3lame-encoder`](https://crates.io/crates/mp3lame-encoder), a safe wrapper over
+[`mp3lame-sys`](https://crates.io/crates/mp3lame-sys), which vendors libmp3lame's C
+source and compiles it into the binary. **Both crates declare `LGPL-3.0`.**
 
-Because these are *export conveniences* rather than core function - the archival
-formats are WAV and FLAC, and FLAC's encoder (`flacenc`) is pure Rust and Apache-2.0 -
-they are candidates for **optional cargo features**, so that a default build carries no
-LGPL obligation at all. That choice is made at WP-14, not here, and whichever way it
-goes this file records the outcome.
+Two licences are in play and it is worth being exact about which is which:
+
+- **libmp3lame itself** is under the GNU Library General Public License, version 2,
+  "or any later version" - its own `COPYING`, carried in the `mp3lame-sys` crate
+  source and published on crates.io with it.
+- **The two Rust crates** declare LGPL-3.0, which is that option being exercised.
+  LGPL-3.0 is written as a set of additional permissions on top of the GPL version 3,
+  so both texts are needed to read it.
+
+The stricter of the two governs what VCW ships, so this repository carries
+[LICENSE-LGPL-3.0](LICENSE-LGPL-3.0) and [LICENSE-GPL-3.0](LICENSE-GPL-3.0), and both
+ship alongside every released binary that links the crate.
+
+Note that D5 in `PROJECT_PLAN.md` recorded this as LGPL-2.1. That was wrong about the
+version, and it is corrected there; the obligation is the same shape as
+`chromaprint-next`'s and a different document.
+
+### The feature, and why there is one
+
+`vcw-export` has a `mp3` cargo feature, **on by default**. It is on because §33 names
+MP3 as an initial export format and a build that cannot write one does not meet the
+requirement. It is a feature - rather than an unconditional dependency - so that
+anyone redistributing VCW who cannot carry the LGPL-3.0 obligation can drop it without
+forking the tree:
+
+```sh
+cargo build --release --no-default-features --features ogg   # in crates/export
+```
+
+Such a build still understands `--format mp3` and refuses it with a sentence saying
+this binary was compiled without it, which is a better answer than not knowing the
+word. FLAC and WAV - the archival formats, and the ones VCW's bit-exactness claim is
+about - are unaffected either way: `flacenc` is pure Rust and Apache-2.0.
+
+### Notice to users of VCW binaries containing MP3 support
+
+The relink rights described for `chromaprint-next` above apply here too, under LGPL-3.0
+section 4 rather than LGPL-2.1 section 6. The complete source of the LGPL component is
+published on [crates.io](https://crates.io/crates/mp3lame-sys) and at the upstream
+repository; the exact version used by any release is recorded in `Cargo.lock` at that
+release's tag. Because the complete source of the work that uses the library is this
+repository under the MIT licence, you can modify the library and rebuild:
+
+```toml
+# Cargo.toml
+[patch.crates-io]
+mp3lame-sys = { path = "../my-modified-mp3lame-sys" }
+```
+
+---
+
+## BSD-3-Clause - the Ogg Vorbis encoder (shipped)
+
+VCW writes Ogg Vorbis through [`vorbis_rs`](https://crates.io/crates/vorbis_rs), over
+`aotuv_lancer_vorbis_sys` (an aoTuV- and Lancer-patched libvorbis) and `ogg_next_sys`
+(libogg). All three are **BSD-3-Clause**, like the rest of Xiph's work: attribution
+only, no copyleft, and nothing new for anyone redistributing a VCW binary.
+
+D5 recorded Ogg Vorbis as LGPL, which was simply a mistake - corrected in
+`PROJECT_PLAN.md`. Ogg export carries no relink obligation at all. It sits behind a
+`ogg` cargo feature anyway, also on by default, so that the two lossy containers can be
+turned off together; there is no licence reason to turn this one off.
 
 ---
 

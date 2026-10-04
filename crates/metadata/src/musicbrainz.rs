@@ -58,8 +58,14 @@
 //!
 //! A release's `genres` array is frequently empty while its release group's is
 //! populated - the 1994 Warp pressing of *Amber* has none of its own and
-//! `ambient`, `ambient techno`, `idm` on the group. Both are read, release first,
-//! which is why `inc=release-groups+genres` is not optional.
+//! `ambient`, `ambient techno`, `idm` on the group. It is also frequently *thin*:
+//! the 2013 pressing of *Tomorrow's Harvest* has `electronic` with a single vote
+//! of its own while the group has five genres with fourteen votes between them.
+//!
+//! So both arrays are read and concatenated, release first, rather than the
+//! group being a fallback for an empty release. That is why
+//! `inc=release-groups+genres` is not optional, and why a release having one
+//! genre is not a reason to stop looking.
 //!
 //! MusicBrainz tags are also lowercase by convention, every one of them, so they
 //! are title-cased before the §32 lookup. The lookup is case-insensitive either
@@ -249,13 +255,24 @@ impl MusicBrainz {
     /// Turns a release body into a release.
     fn release(&self, id: &str, value: &serde_json::Value) -> Release {
         let label = value["label-info"].as_array().and_then(|l| l.first());
-        // Release genres first, release-group genres second. A release that has
-        // its own is the more specific statement; the group is the fallback and
-        // is populated far more often.
+        // Both arrays, release first. Not a fallback: a release's own genres are
+        // the more specific statement and so they lead, but a release with one
+        // low-voted genre of its own is thin rather than authoritative, and
+        // discarding the group's because the release had *something* loses most
+        // of what MusicBrainz knows. Tomorrow's Harvest is the case that found
+        // this: the release carries `electronic` with one vote, the group
+        // carries `electronic` 4, `ambient` 3, `idm` 3, `downtempo` 1 and
+        // `electronica` 1, and the export went out tagged with one genre.
+        //
+        // Concatenated rather than merged by vote count, because the counts are
+        // not comparable: a release's votes are cast by the handful of people
+        // who edited that pressing, a group's by everyone who ever tagged the
+        // record. `normalise_all` dedupes through §32's table, so a name in both
+        // arrays is written once, and whether two near-neighbours collapse is
+        // the table's call rather than this function's: genre.dat keeps
+        // `Electronica` distinct from `Electronic`, so both go on the sleeve.
         let mut names = genre_names(&value["genres"]);
-        if names.is_empty() {
-            names = genre_names(&value["release-group"]["genres"]);
-        }
+        names.extend(genre_names(&value["release-group"]["genres"]));
         let names: Vec<String> = names.iter().map(|name| title_case(name)).collect();
         Release {
             id: id.to_string(),
@@ -812,7 +829,7 @@ mod tests {
     }
 
     #[test]
-    fn genres_fall_back_to_the_release_group() {
+    fn a_release_with_no_genres_of_its_own_takes_the_groups() {
         let provider = brainz(Arc::new(
             Recorded::new().json_matching(format!("/release/{AMBER_1994}"), RELEASE),
         ));
@@ -842,7 +859,10 @@ mod tests {
     }
 
     #[test]
-    fn a_release_with_its_own_genres_does_not_consult_the_group() {
+    fn a_release_with_its_own_genres_still_takes_the_groups_after_them() {
+        // One vote on the release does not outweigh 99 on the group, and it does
+        // not have to: both are kept and the release's own leads. The counts are
+        // not comparable across the two arrays, so they are not compared.
         let body = r#"{
             "id": "x", "title": "T",
             "genres": [{"name": "krautrock", "count": 1}],
@@ -851,7 +871,43 @@ mod tests {
         }"#;
         let provider = brainz(Arc::new(Recorded::new().json_matching("/release/x", body)));
         let release = provider.fetch("x", &Cancel::new()).expect("a release");
-        assert_eq!(release.genres, ["Krautrock"], "specific beats popular");
+        assert_eq!(
+            release.genres,
+            ["Krautrock", "Rock"],
+            "specific leads, popular follows"
+        );
+    }
+
+    #[test]
+    fn a_genre_on_both_the_release_and_the_group_is_written_once() {
+        // Tomorrow's Harvest, reduced to the shape that mattered: `electronic`
+        // appears in both arrays and comes out once, and the five the group
+        // knows about are not lost to the release having had a single thin one
+        // of its own.
+        //
+        // `Electronica` stays beside `Electronic` rather than folding onto it:
+        // genre.dat has both as keys of their own (rows 327 and 330), which is
+        // VRipr's judgement that they are different genres, and §32 says the
+        // table decides. The dedupe here is of names, not of neighbours.
+        let body = r#"{
+            "id": "x", "title": "T",
+            "genres": [{"name": "electronic", "count": 1}],
+            "release-group": {"genres": [
+                {"name": "electronic", "count": 4},
+                {"name": "ambient", "count": 3},
+                {"name": "idm", "count": 3},
+                {"name": "downtempo", "count": 1},
+                {"name": "electronica", "count": 1}
+            ]},
+            "media": []
+        }"#;
+        let provider = brainz(Arc::new(Recorded::new().json_matching("/release/x", body)));
+        let release = provider.fetch("x", &Cancel::new()).expect("a release");
+        assert_eq!(
+            release.genres,
+            ["Electronic", "Ambient", "IDM", "Downtempo", "Electronica"],
+            "six mentions of five genres, release's own first, then the group most-voted first"
+        );
     }
 
     #[test]

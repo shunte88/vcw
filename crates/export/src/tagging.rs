@@ -53,10 +53,18 @@
 //!   freeform key is just a key.
 //! - **WAV** gets ID3v2, where it is a `TXXX` frame.
 //!
-//! WAV tagging is best-effort on purpose. RIFF has no metadata standard anyone
-//! agrees on - `LIST`/`INFO` is old and thin, ID3v2 in a `id3 ` chunk is what
-//! modern readers look for - so the FLAC path is the one that carries a full set
-//! of tags and the one the tests hold to a standard.
+//! Both paths carry the same field set, because `mapped` builds one list of
+//! assignments and each backend converts the same list. A WAV goes out with
+//! every tag a FLAC does, the freeform keys included, and the cover embedded.
+//!
+//! What differs is how reliably it is read back. RIFF has no metadata standard
+//! anyone agrees on: `LIST`/`INFO` is old and thin, and a full ID3v2 tag in its
+//! own chunk is what modern readers look for. lofty writes the latter, as an
+//! `ID3 ` chunk appended after `data` - uppercase, which is what lofty emits;
+//! the ID3 spec's RIFF note spells it lowercase and readers in the wild accept
+//! either. `tests/third_party.rs` holds both containers to ffprobe and mutagen
+//! for exactly this reason, because a tag we can read back ourselves proves
+//! nothing about the players people use.
 //!
 //! ## Where the canonical key is not the one the old library used
 //!
@@ -257,8 +265,13 @@ fn freeform(tags: &Tags) -> Vec<(String, String)> {
 /// cannot be written back.
 pub fn write(path: &Path, container: Container, tags: &Tags) -> Result<()> {
     match container {
-        Container::Wav => write_id3(path, tags),
-        Container::Flac => write_vorbis(path, tags),
+        // Two backends for four containers, because what differs is the tag
+        // format and not the number of codecs: ID3v2 is what a RIFF reader and
+        // an MP3 reader both look for, and Vorbis comments are what FLAC and
+        // Ogg both carry natively. lofty puts each in the right place for the
+        // file it is handed.
+        Container::Wav | Container::Mp3(_) => write_id3(path, tags),
+        Container::Flac | Container::OggVorbis(_) => write_vorbis(path, tags),
     }
 }
 
@@ -295,7 +308,8 @@ fn write_vorbis(path: &Path, tags: &Tags) -> Result<()> {
         .map_err(tagging(path))
 }
 
-/// WAV: ID3v2 in an `id3 ` chunk, which is what a modern reader looks for.
+/// WAV: a full ID3v2 tag in an `ID3 ` chunk, which is what a modern reader
+/// looks for. Appended after `data`, so the audio bytes are untouched.
 fn write_id3(path: &Path, tags: &Tags) -> Result<()> {
     use lofty::id3::v2::Id3v2Tag;
 

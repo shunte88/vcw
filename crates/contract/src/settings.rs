@@ -220,8 +220,15 @@ pub struct Metadata {
 #[serde(rename_all = "camelCase", default)]
 #[ts(rename = "ExportSettings")]
 pub struct Export {
-    /// `wav` or `flac`.
+    /// `flac`, `wav`, `mp3` or `ogg`.
     pub format: String,
+    /// What a lossy container is written at: `transparent`, `high` or
+    /// `compact`.
+    ///
+    /// Kept even while the format is lossless, deliberately: a person who sets
+    /// a quality, switches to FLAC for an archival copy and switches back
+    /// should find their choice still there.
+    pub quality: String,
     /// Where to write, or `null` to be asked each time.
     pub output: Option<String>,
     /// The naming template (§33).
@@ -371,6 +378,11 @@ impl Default for Export {
             // export a person tries - which is the argument for the refusal
             // naming WAV rather than narrowing the samples quietly.
             format: "flac".to_owned(),
+            // Ignored while the format is FLAC, and the value a person finds
+            // already filled in the moment they switch to MP3 or Ogg. Around
+            // 190 kbit/s either way, which is the level above which most
+            // listeners on most equipment stop being able to tell.
+            quality: vcw_export::encoder::Quality::default().name().to_owned(),
             output: None,
             template: vcw_export::naming::DEFAULT_TEMPLATE.to_owned(),
             artwork: "both".to_owned(),

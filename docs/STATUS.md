@@ -1,8 +1,13 @@
 # VCW - project status
 
-**As of:** 2026-09-28
-**Phase:** 1 is underway - WP-01 through WP-17 are built, plus WP-16a and WP-20, all on
-Linux x86_64 only.
+**As of:** 2026-10-04
+**Phase:** 1 is complete and committed - WP-01 through WP-20 are built, plus WP-16a, and
+WP-25 has been taken out of Phase 2, all on Linux x86_64 only.
+
+> This snapshot was last read end to end on 2026-09-28. The sections written since
+> then are dated where they sit: WP-19's packaging, *closing the loose ends*, the UI
+> redesign and WP-25's lossy encoders. Everything before them is as it was; where a
+> count or a licence statement has moved on, the later section is the current one.
 All five Phase 0 spikes returned verdicts on their primary platform; gate G0 remains
 open on hardware coverage, WP-05's soak settled D3's firmed-config run, **WP-06 closes
 milestone M1, *it records*,** WP-07 locks D8, WP-08 adds the meters and the §10 fan-out
@@ -4902,6 +4907,279 @@ plainly: **a capture killed within two seconds of its first fault reads as
 clean**, and the timestamp beside the counters is the only thing that says
 otherwise.
 
+## Phase 2 - WP-25, the two lossy formats
+
+**Taken out of order, 2026-10-04**, because WP-14's export code was open and the only
+thing holding MP3 and Ogg in G3 was D5's licensing question. That question was half the
+size it looked: `cargo info` disagrees with D5 on both crates. `mp3lame-encoder` and
+`mp3lame-sys` declare **LGPL-3.0**, not the LGPL-2.1 D5 recorded - libmp3lame's own
+`COPYING` is the GNU *Library* GPL v2 "or any later version", and the wrapper exercises
+the later-version option, which is why `deny.toml` needs a version of the licence the
+`chromaprint-next` exception does not cover. And `vorbis_rs`, `aotuv_lancer_vorbis_sys`
+and `ogg_next_sys` are all **BSD-3-Clause**, not LGPL: **Ogg export carries no copyleft
+obligation at all.** Both corrections are now in D5 itself, in the notices and in
+`deny.toml`'s comment, because a licence recorded wrong in a plan is the kind of error
+that gets read twice and checked never.
+
+### Features that exist for the licence, not for the size
+
+Both formats are **default-on cargo features**. R4's pre-committed mitigation was
+"optional cargo features; ship FLAC/WAV only in MVP", and default-off would fail §33,
+which names MP3 and OGG as initial export formats - a build that cannot write them does
+not meet the requirement. So the feature is not there to make the binary smaller. It is
+there so that a redistributor who cannot carry the LGPL-3.0 obligation can drop MP3
+with `cargo build --release --no-default-features --features ogg` instead of forking the
+tree.
+
+`Container::Mp3` and `Container::OggVorbis` exist in **every** build regardless. That
+keeps the contract parser, the ts-rs bindings, the CLI's `--format` and the panel's
+select identical across feature combinations, and a build without the encoder answers
+`--format mp3` with a sentence saying it was compiled without it - which is a better
+answer than not knowing the word. The refusal arrives from `Writer::vet` at plan time,
+so it costs nothing and lands before a directory is made.
+
+### What the encoders needed that the lossless ones did not
+
+Everything goes through `f32`, because both libraries want float. `fan_out`
+de-interleaves a stored frame into planar buffers once per chunk, scaling by a power of
+two so full-scale negative is exactly -1.0 rather than a hair past it, where libvorbis
+clips. Three quality levels rather than a bitrate: `transparent`, `high` and `compact`,
+mapping to LAME V0/V2/V5 and Vorbis q8/q6/q3. The **name** is what travels - through the
+settings file, the JSON command, the CLI flag and the report - because a VBR stream does
+not record which `-V` made it, so the run log is the only place the setting survives.
+The quality is a **no-op on the lossless containers rather than a refusal**, so the panel
+can hold one value while the format changes under it and nothing has to be cleared.
+
+**MP3 refuses a rate MPEG never defined.** Nine rates across MPEG-1, 2 and 2.5, nothing
+above 48 kHz. Measured against the corpus: 54 of the 59 rips in `/data2/source_rips` are
+at 44.1 or 48 kHz and go through untouched; the five at 192 kHz are refused by name.
+Resampling is the way past it and VCW does not do it, for the same reason WP-14 refuses
+to dither a 32-bit capture into FLAC - an anti-alias filter is a choice with an audible
+result on someone else's record. Ogg refuses almost nothing, and is the only container
+besides WAV that takes a `Float32` capture, which makes it the lossy answer for exactly
+the rips MP3 and FLAC both turn away.
+
+**No new tagging code was needed.** Two backends already cover four containers, because
+what differs is the tag format and not the codec: ID3v2 is what a RIFF reader and an MP3
+reader both look for, Vorbis comments are what FLAC and Ogg both carry natively, and
+lofty puts each in the right place for the file it is handed. The embedded cover goes
+into an Ogg as a base64 `METADATA_BLOCK_PICTURE` without a line of new code.
+
+### Four API traps, each found by a test
+
+`InterleavedPcm` hardcodes `len()/2`, so it is **stereo-only** and a mono track has to go
+through `MonoPcm`. `vorbis_rs` has **no empty-block guard** and passes the sample count
+straight to `vorbis_analysis_wrote`, where zero is libvorbis's end-of-stream signal - so
+an empty write would truncate the stream rather than do nothing. `mp3lame-encoder`'s
+`std` feature is **not default**, and without it `BuildError` and `EncodeError` do not
+implement `std::error::Error`. And the **Xing/LAME VBR header is a placeholder frame**
+emitted inside the first encode call's output, patched at the end by seeking to byte
+zero; removing that patch on purpose left a file every player opens and reports the
+wrong length for - three seconds of audio came back as **2.83 s**.
+
+### Two defects in existing code, surfaced by testing the new code
+
+**`Report::bytes` was taken before the tagger ran.** It came from `Writer::finish`,
+which returns before `tagging::write` opens the file, so every export under-reported its
+own size by the size of its tags - and an embedded cover is not close to free: a 4 MB
+sleeve scan across a ten-track side is 40 MB missing from the one number a person checks
+against the disk space they just used up. It is now measured from the filesystem after
+tagging, which also makes the number true for all four containers rather than for the
+two whose writers happened to be exact.
+
+**`Error::Unencodable`'s reason could not name what it was refusing.** It was a
+`&'static str`, so the MP3 refusal could describe MPEG's rate table but not say which
+rate the capture is at - leaving the reader to work out which of the nine listed numbers
+theirs is not, from a spec the exporter was already holding. It is a `Cow` now, and three
+refusals name the rate or the channel count they are looking at.
+
+### Verified by readers we did not write
+
+For a lossy codec that is the only kind of verification there is: our own decoder would
+only prove we are consistently wrong. `ffprobe` on codec, rate, channels and duration
+for every rate each container takes, including 192 kHz Ogg. `ogginfo` with **no
+warnings**, which checks the Ogg page structure rather than just decoding what it can.
+`sox` reading a **1 kHz left, 3 kHz right** tone back out of each container through
+`ffmpeg`'s channel split, because a planar fan-out is exactly the kind of code that
+swaps two channels and still produces a file every player happily plays - with FLAC as a
+control, so the tone generator and the two measuring tools are trusted before any claim
+is made about the encoders. Python `mutagen` on ID3v2 in an MP3 and on the
+`METADATA_BLOCK_PICTURE` in an Ogg. And one check with no tool in it at all: the three
+quality levels must write files of **decreasing size**, because every step between the
+panel's select and the encoder's builder could drop the setting and still produce a
+playable file at the default.
+
+**Both ends of every new check were proven.** Swapping the fan-out failed the channel
+test and left the FLAC control green. Dropping the quality argument failed the size
+test with `transparent wrote 27017 bytes and high wrote 27017`. Removing the VBR patch
+failed three tests and nothing else. The UI's plan-dropping test was verified the same
+way, by deleting the `setPlan(null)` it exists for.
+
+### Where it stands
+
+`cargo test`, `cargo clippy --all-targets -- -D warnings` and the full export suite pass
+in **all four feature combinations** - neither feature, each alone, and both. Nothing
+has been committed. **MP3 has no cue-sheet path** and never will; if a whole-side
+archival deliverable gets a cue sheet it will be FLAC's native `CUESHEET` block, which
+is still an open question. And nothing in the gate previously built `vcw-export`
+without its default features - so the escape hatch in the notices now has a gate leg
+and a CI job of its own, `features` and `export-features`, which build all three of the
+combinations everything else misses.
+
+### First light on real records
+
+Both writers were then run against whole records from `/data2/vcw-firstlight`, which is
+the part no fixture covers.
+
+**`boc-side-a.vcw` as MP3 V2** - 48 kHz, 17 tracks, 60:11 of audio across four sides.
+107.8 MiB in **56.7 s wall, 49 MB peak RSS**, so 64x realtime and flat memory. Every
+one of the 17 durations matched the plan **to the millisecond** under `ffprobe`, which
+is the Xing header doing on an hour of real audio what the unit test only proved on
+three seconds. `mutagen` read back `TIT2`/`TALB`/`TPE1`/`TPE2`/`TRCK`/`TPOS`/`TDRC`/
+`TCON`/`TSSE`, seven `TXXX` frames and a 1.69 MB `APIC` in each file, with the album's
+typographic apostrophe intact and `TRCK` correctly disc-relative (`1/9` on A1, `8/8` on
+D3) rather than side-relative.
+
+That export is also the first real measure of the byte-accounting defect this work
+package fixed: 17 files x 1,692,604 bytes of embedded JPEG is **27.4 MiB of the 107.8
+MiB reported**. Taking `Writer::finish`'s number, as `run` used to, would have claimed
+about 80 MiB - a 25% under-report of the space a person just used up.
+
+**`real-side-a.vcw` as Ogg Vorbis q6** - a genuine 192 kHz `Int32` capture, 7 tracks,
+52 minutes. 88.8 MiB in **2:00, 61 MB peak RSS**. `ogginfo` found **zero warnings in
+all seven files**, each at 192 kHz with the full Vorbis comment set, both `GENRE`
+fields, and the cover parsed as a real `Picture: 3 (Cover (front))` block out of
+`METADATA_BLOCK_PICTURE`. The same project refused MP3 by name - *"this capture is at
+192000 Hz"* - and wrote nothing, exit 1, no output directory created.
+
+Two incidental confirmations. Side B's tracks point at **the same frame spans as side
+A** in that project, so A2 and B2 came out byte-identical in length while A1 and B1
+differ by the 21 bytes of their `VINYL_POSITION` tag: `sides-have-no-extent` in the
+wild, and evidence that the Vorbis path is deterministic.
+
+### What first light found that the suite could not
+
+**The refusals were giving stale advice, and nothing could see it.** FLAC's three
+refusals all ended *"Export this one as WAV"*, written before Ogg Vorbis existed. That
+192 kHz capture is exactly the case: FLAC refuses it, and **Ogg takes it** - it had
+just taken it - but the message never said so. The sentence was never *wrong*, which is
+why it survived: WAV really does carry a 192 kHz `Int32` capture. It was *incomplete*,
+and the only test on that wording asserted `contains("FLAC or WAV")`, which agrees with
+whatever it said yesterday.
+
+Correcting the messages one at a time did not work. Each correction introduced the
+next defect, and the test caught all of them: offering FLAC above 96 kHz, then offering
+FLAC with a caveat ("takes 88.2 and 96 kHz but no higher" - at 176.4 kHz that is a
+second refusal), then offering WAV for a side too long for a 32-bit RIFF size. **Four
+distinct drifts in one family of eight sentences**, so the sentences were the problem.
+
+**The advice is now generated, not written.** `encoder::alternatives(refused, spec)`
+asks every other container whether it would carry *this* capture and composes the
+clause from the answers - "Export this one as WAV to keep it lossless, or as Ogg Vorbis
+for a smaller file" - and every refusal in the crate ends with it. All four drifts
+become impossible by construction, and a fifth container appears in every message that
+should mention it on the day it is added.
+
+That needed one structural change. Each limit check was split into a `*_why` returning
+the **reason only** and a thin wrapper that appends the advice, because `alternatives`
+has to ask the limits and the limits have to call `alternatives` - so the two halves
+cannot be the same function. `carries` is built on the `*_why` predicates, and
+`the_cheap_predicate_agrees_with_the_real_refusal` holds that seam shut across five
+formats, six rates (including 0) and three lengths.
+
+`carries` judges whether a container *could* carry the audio, not whether this build
+has the encoder: `NoEncoder` counts as yes. Otherwise the prose a person reads would
+depend on the cargo features and the `features` leg would disagree with the default
+build about what the messages should say.
+
+**Both ends were proven, and two attempts were not good enough.** The first version of
+the advice test only checked that a *named* container works, and **passed on the
+shipped wording** - restoring all three original FLAC messages left it green, because
+"Export this one as WAV" was never wrong. Adding the group rule failed them with
+`FLAC refuses it and names [Wav, Flac], but says nothing about [OggVorbis(High)]`. The
+second mistake was worse and quieter: a test-local `carries` helper that wrapped
+`Writer::vet` **shadowed the real one**, which made the equivalence test a tautology -
+breaking `carries` left it green. Removing the shadow, it fails. With the generator in
+place the advice test can no longer be defeated by editing a string, so its end is
+proven by breaking `alternatives` instead: dropping the lossy branch fails it with
+`says nothing about [Mp3(High), OggVorbis(High)], which would carry it`.
+
+One existing test was holding a defect in place and had to be rewritten:
+`a_wav_too_big_for_riff_is_refused_before_the_file_is_made` asserted the message
+contained the word `"FLAC"` for a 192 kHz 32-bit spec - a container that refuses that
+capture on both rate and depth. It now asserts Ogg Vorbis is named **and FLAC is not**.
+
+`USER-GUIDE.md` was wrong in the same way twice: the four-formats table claimed FLAC
+takes "any rate" when `flacenc` stops at 96 kHz, and *"A 32-bit capture can only leave
+as WAV"* had been false since the day Ogg landed.
+
+### A track with no title is called `Untitled`
+
+The second thing first light found was cosmetic and immediately visible: six of the
+seven tracks on the 192 kHz project had no title, so the default template
+`{album_artist}/{album}/{tracknum} - {title}` produced `A2 -.ogg` - a separator
+standing with nothing behind it. The capture was fine and the tags were right; the
+file names were simply unpresentable.
+
+`naming::expand` now substitutes `naming::UNTITLED` for an absent `{title}`, the way
+it already substituted `00` for an absent `{tracknum}` three lines above. Three
+decisions are worth recording.
+
+**Only the file name, never the tag.** `splitter::values` feeds `naming::path_for`
+alone; `Tags` is built separately from the same `track::Record`. So an untitled track
+gets `A2 - Untitled.ogg` on disk and keeps an **empty title tag**, because a blank
+title is the truth about the record and a made-up word in a library is worse than a
+blank field.
+
+**Before substitution, not after.** Once `{title}` has been replaced there is no way
+to tell a title that is absent from one that is genuinely blank, and `trim()` means a
+title of one space - which a real provider row supplied - counts as absent.
+
+**A bracket group still wins.** `name_the_untitled` tracks `[` depth and substitutes
+only at depth zero, so `[{title}]` keeps the existing *only if there is one* meaning.
+Proved by mutation: removing the depth check fails two tests, dropping the `trim()`
+fails two, and not substituting at all fails five.
+
+Two of my own premises about `[...]` were wrong and the tests corrected both. A group
+collapses only when its contents **trim to empty**, so `[ - {title}]` leaves `[ - ]`
+behind: the bracket form was never a workaround for the dangling separator. And a
+group that is *not* empty **keeps its brackets as literal text** - `[{year}] {title}`
+has always given `[1994] Desire Lines`. The first draft of the `USER-GUIDE.md`
+paragraph offered `{tracknum}[ {title}]` as the way to get `A1.flac`; the test written
+to pin that advice showed it also gives `A2[ Sunshine Recorder]` on the same record.
+The guide now says plainly that no template drops the separator on the untitled tracks
+only, and the test pins **both** halves of the bracket rule so the paragraph cannot go
+stale.
+
+`from_a_project.rs` had a test asserting `["A1 -.flac", "A2 -.flac", "B1 -.flac",
+"B2 -.flac"]` - the four names that came off the real two-sided record. It now asserts
+the `Untitled` form. The two other places quoting `02 -.flac` are historical accounts
+of a refusal that happened, and were left as written.
+
+### A dry run now prints the paths it resolved
+
+Verifying the `Untitled` change found the next thing: `--dry-run` printed four counts
+and no names. Its own help said it resolves *"every path, every tag, every frame
+count"*, and `--json` carried all of them, but the text output showed none - so the
+only way to see what a naming template had done was to run a real export and look at
+the directory afterwards, which is the thing the flag exists to avoid. Checking seven
+file names cost a two-minute 192 kHz Ogg encode.
+
+`cli::export::print_paths` now prints them, numbered, **relative to `--into`** - the
+relative part is what the template produced, and `--into` is on the line above - plus a
+`cover` line per directory, because one `folder.png` per album is a fact about the
+layout that a template argument is usually about.
+
+The real run's progress lines were made relative too, so a dry run is **the same text**
+the run prints, line for line, and the two can be compared by eye. That is the property
+`a_dry_run_prints_the_paths_the_run_will_write` asserts: it runs both and compares the
+numbered lines, not just that some name appeared. Proved by mutation three ways -
+dropping the listing, and making either side print absolute paths, each fails it. On a
+real project the two outputs differ only in the last line.
+
+**Parallel export is on hold** by instruction. The measurement that prompted the
+question stands in the record above: the Ogg run spent 2:00 of wall clock on one core.
+
 ## Next up
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**,
@@ -4953,11 +5231,13 @@ flawless capture, and nothing checked the WAL size at all - and the first CI run
 on the repaired workflow found four more, three of them on platforms nothing
 local can reach.
 
-The gate is **fifteen legs** -
-`toolchain / fmt / clippy / test / parity / offline / deny / doc / msrv / spikes` at the
-root, `appfmt / appclippy / apptest` in `app/src-tauri` and `uicheck / uitest` in
-`app/ui` - and `/data2/vcw-scratch/gate.sh` is the durable copy of the script. There is a
-sixteenth thing to run that is not in it: `scripts/soak-harness.sh short <dir>` is
+The gate is **sixteen legs** -
+`toolchain / fmt / clippy / test / parity / offline / features / deny / doc / msrv /
+spikes` at the root, `appfmt / appclippy / apptest` in `app/src-tauri` and
+`uicheck / uitest` in `app/ui` - and `/data2/vcw-scratch/gate.sh` is the durable copy of
+the script. `features` arrived with WP-25 and builds the three `vcw-export` feature
+combinations no other leg touches. There is a seventeenth thing to run that is not in
+it: `scripts/soak-harness.sh short <dir>` is
 **1m48s** for seven legs and is what CI runs on every push, and `VCW_RIP` pointed at a
 WAV from `/data2/source_rips` adds an eighth, the corpus leg, for another 16 s.
 
@@ -5098,13 +5378,15 @@ the spike harness.
   first change since WP-02 to touch the schema, so `docs/SCHEMA.md` was regenerated with
   it; regenerate with `VCW_BLESS=1 cargo test -p vcw-project --test schema_doc` whenever
   the schema moves, or `the_committed_document_matches_the_schema` fails.
-- **The gate is fifteen legs now** (twelve until the CI repair added `toolchain`, `msrv`
-  and `spikes`), because the shell is a workspace of its own and the
-  root's legs cannot see it: `fmt clippy test parity offline deny doc` at the repository
+- **The gate is sixteen legs now** (twelve until the CI repair added `toolchain`, `msrv`
+  and `spikes`, and sixteen since WP-25 added `features`), because the shell is a
+  workspace of its own and the
+  root's legs cannot see it: `fmt clippy test parity offline features deny doc` at the
+  repository
   root, `appfmt appclippy apptest` in `app/src-tauri`, and **both** `uicheck`
   (`pnpm check`) and `uitest` (`pnpm test`) in `app/ui` - WP-16a split those two apart,
   because `pnpm check` proves the frontend compiles and cannot prove it behaves.
-  `/data2/vcw-scratch/gate.sh` runs all twelve, tallies `gate-test.log` and
+  `/data2/vcw-scratch/gate.sh` runs them all, tallies `gate-test.log` and
   `gate-apptest.log` together, and sweeps the changed files for em dashes - a sweep that
   now covers `.ts`, `.tsx`, `.css` and `.json` as well. The two new legs earned their
   keep on the first run: `doc` found public documentation in the new crate linking to a
@@ -5192,7 +5474,14 @@ the spike harness.
   fixes, on a crate that has never had a fix to receive. The entry says all of that in
   place, and says to check whether the dependency has gone the next time lofty moves - an
   ignore nobody re-reads is how a real advisory gets through later.
-- Licensing today: MIT core, cpal Apache-2.0 as an ordinary dependency.
-  `chromaprint-next` adds an LGPL-2.1-or-later relink obligation at Phase 2.
+- Licensing today: MIT core, cpal Apache-2.0 as an ordinary dependency, and **one live
+  copyleft obligation**: `mp3lame-encoder` and `mp3lame-sys` are LGPL-3.0 and arrived
+  with WP-25. `deny.toml` names them as exceptions, so any *other* copyleft crate that
+  reaches the graph still fails the build, and `THIRD-PARTY-NOTICES.md` carries the
+  relink notice under LGPL-3.0 §4 with `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` beside
+  it. The MP3 encoder is behind a default-on cargo feature so a redistributor who cannot
+  carry that can drop it. Ogg Vorbis is BSD-3-Clause and adds nothing.
+  `chromaprint-next` will add an LGPL-2.1-or-later obligation at Phase 2; its
+  `deny.toml` entry is written and commented out until the crate is in the graph.
 - **Stay current on CPAL.** Two blocking defects and the device-id API all landed within
   two minor releases; pinning 0.16 had already cost us a fork.

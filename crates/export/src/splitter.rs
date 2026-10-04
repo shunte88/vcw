@@ -228,6 +228,10 @@ pub struct Report {
     /// Frames of audio written.
     pub frames: u64,
     /// Bytes on disk, audio files only.
+    ///
+    /// Measured after tagging, so it includes the tags and any embedded cover -
+    /// which is what the files actually occupy. The cover images written
+    /// *beside* the files are not in here; [`Report::covers`] counts those.
     pub bytes: u64,
 }
 
@@ -310,6 +314,22 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         let layout = pcm::Layout::of(conn, capture_id)?;
         let span = Span::new(record.start, record.end).clamp_to(layout.frames);
 
+        // The container is asked here, where the refusal costs nothing, rather
+        // than left to the first `Writer::create`. The spec is the one `cut`
+        // will build from the same layout and the same clamped span, so a plan
+        // that resolves is a plan that can be written: a dry run that printed
+        // `3 file(s) in FLAC` for a float32 capture and then died on file one
+        // was a plan nobody could trust.
+        Writer::vet(
+            request.container,
+            &Spec {
+                rate: layout.rate.hz(),
+                channels: layout.channels,
+                format: layout.format,
+                frames: span.frames(),
+            },
+        )?;
+
         if let (Some(cover), Some(directory)) = (cover.as_ref(), path.parent())
             && request.artwork.beside()
         {
@@ -361,7 +381,7 @@ pub fn run(conn: &Connection, plan: &Plan, on: &mut dyn FnMut(Progress<'_>)) -> 
         if let Some(directory) = item.path.parent() {
             std::fs::create_dir_all(directory)?;
         }
-        report.bytes += cut(conn, item, plan.container, &mut |frames| {
+        cut(conn, item, plan.container, &mut |frames| {
             on(Progress {
                 item,
                 index,
@@ -374,6 +394,15 @@ pub fn run(conn: &Connection, plan: &Plan, on: &mut dyn FnMut(Progress<'_>)) -> 
         report.files += 1;
 
         tagging::write(&item.path, plan.container, &item.tags)?;
+
+        // Counted after the tagger and from the filesystem, not from what the
+        // writer said it wrote. Tags are not free and an embedded cover is not
+        // close to free: a 4 MB sleeve scan across a ten-track side is 40 MB
+        // that `Writer::finish` has no way of knowing about, because it
+        // returned before the tagger opened the file. Taking the writer's
+        // number made every export under-report its own size, which is the one
+        // number a person checks against the free space they just used up.
+        report.bytes += std::fs::metadata(&item.path)?.len();
     }
 
     tracing::info!(
@@ -475,6 +504,13 @@ struct Numbers {
     /// What a tag's track number means: unique within a disc, restarting on the
     /// next one, which is why this is not the release-wide sequence.
     within_disc: u32,
+    /// Tracks on this track's disc, which is the track number's denominator.
+    ///
+    /// Counted over the whole project rather than over the sides that were
+    /// asked for: `6` of a record is `6 of 8` whether or not side C was in the
+    /// same export, and a file whose tags depended on what else was exported
+    /// beside it would be a file that could not be re-exported.
+    on_disc: u32,
 }
 
 impl Default for Numbers {
@@ -484,6 +520,7 @@ impl Default for Numbers {
             rendered: String::new(),
             alpha: String::new(),
             within_disc: 0,
+            on_disc: 0,
         }
     }
 }
@@ -496,6 +533,7 @@ fn numbers(conn: &Connection, numbering: Numbering) -> Result<HashMap<i64, Numbe
     let mut map = HashMap::new();
     let mut sequence = 0;
     let mut per_disc: HashMap<u32, u32> = HashMap::new();
+    let mut discs: Vec<(i64, u32)> = Vec::new();
     for (side, record) in track::listing(conn)? {
         sequence += 1;
         let within_disc = per_disc
@@ -503,14 +541,24 @@ fn numbers(conn: &Connection, numbering: Numbering) -> Result<HashMap<i64, Numbe
             .and_modify(|n| *n += 1)
             .or_insert(1);
         let position = record.position(side);
+        discs.push((record.id, side.disc()));
         map.insert(
             record.id,
             Numbers {
                 rendered: numbering.render(position, sequence),
                 alpha: position.alpha(),
                 within_disc: *within_disc,
+                on_disc: 0,
             },
         );
+    }
+
+    // A second pass, because a disc's total is only known once its last side has
+    // been counted and the first track on it was numbered long before that.
+    for (id, disc) in discs {
+        if let (Some(numbers), Some(&total)) = (map.get_mut(&id), per_disc.get(&disc)) {
+            numbers.on_disc = total;
+        }
     }
     Ok(map)
 }
@@ -588,7 +636,10 @@ fn tags(
         genre: release.genres.join(";"),
         year: release.year,
         track_number: Some(numbers.within_disc),
-        track_total: None,
+        // `None` rather than `Some(0)` for a track no numbering reached, which
+        // is nothing in a loaded project: `Tags` treats an absent field as *do
+        // not write it*, and `6 of 0` is worse than `6`.
+        track_total: (numbers.on_disc > 0).then_some(numbers.on_disc),
         disc_number: Some(side.disc()),
         disc_total: Some(release.discs.max(1)),
         composer: record.composer_or(&release.composer).to_owned(),

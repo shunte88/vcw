@@ -4,7 +4,7 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  WAV and FLAC encoding (D5).
+ *  Container selection and the two lossless writers (D5).
  *
  * MIT License
  *
@@ -30,12 +30,15 @@
  *
  */
 
-//! WAV and FLAC encoding (D5).
+//! Container selection and the two lossless writers (D5).
 //!
 //! Our own WAV writer - trivial to write, and it avoids `hound`'s format limits
-//! at 24/192. FLAC through `flacenc`, pure Rust and Apache-2.0. MP3 and Ogg
-//! Vorbis are Phase 2 and both carry LGPL relink obligations, which is why they
-//! are candidates for optional cargo features rather than defaults.
+//! at 24/192. FLAC through `flacenc`, pure Rust and Apache-2.0. The two lossy
+//! containers live in [`crate::lossy`], behind the `mp3` and `ogg` cargo
+//! features: they are the only code in this crate that links a C library, the
+//! only code that converts samples rather than copying them, and the only code
+//! whose output cannot be compared byte for byte with its input, so they are
+//! kept where those three facts can be stated once.
 //!
 //! Both writers are **streaming**: [`Writer::write`] takes whatever
 //! `vcw_project::pcm::Reader::fill` produced and hands nothing back, so a
@@ -62,6 +65,16 @@
 //!   spelled out rather than linked because a `cfg(test)` item is not there to
 //!   link to in a doc build, so the day either cap is lifted that test fails
 //!   and tells us.
+//! - **MP3 carries nine sample rates and at most two channels.** MPEG-1 stops
+//!   at 48 kHz, so a 96 or 192 kHz capture has no MP3 path without resampling,
+//!   and choosing a resampling filter is the same kind of decision as choosing
+//!   a dither. Measured against the corpus on 2026-10-04: of the 59 rips in
+//!   `/data2/source_rips`, 54 are at 44.1 or 48 kHz and go to MP3 untouched,
+//!   and the 5 at 192 kHz are refused.
+//! - **Ogg Vorbis refuses almost nothing.** libvorbis takes any rate VCW
+//!   records and up to 255 channels, which makes it the lossy format for a
+//!   high-rate capture and the only container besides WAV that will take a
+//!   `Float32` one.
 //!
 //! ## Why the fmt chunk is extensible above 16 bits
 //!
@@ -94,7 +107,96 @@ use vcw_types::StorageFormat;
 
 use crate::error::{Error, Result};
 
+/// How hard a lossy encoder should work.
+///
+/// Three choices rather than a number, because a number invites one nobody can
+/// justify. The useful span is V0 to V5 for MP3 and q3 to q8 for Vorbis;
+/// outside it a setting is either indistinguishable from the one above it or
+/// audibly worse than the record, and offering `V7` to someone archiving vinyl
+/// is offering them a way to waste an afternoon.
+///
+/// Every level is variable-bitrate. Constant bitrate exists for streaming to
+/// something that has to budget bandwidth, and a file on a disc is not that.
+///
+/// The lossless containers ignore this entirely -
+/// [`with_quality`](Container::with_quality) is a no-op on WAV and FLAC - which
+/// is what lets a settings panel keep one value across all four formats instead
+/// of a field that appears and disappears.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Quality {
+    /// As close to the record as the codec gets: MP3 V0, Vorbis q8.
+    Transparent,
+    /// The default: MP3 V2, Vorbis q6, both around 190 kbit/s.
+    #[default]
+    High,
+    /// Small enough to stop thinking about: MP3 V5, Vorbis q3.
+    Compact,
+}
+
+impl Quality {
+    /// Every level, in the order a UI should offer them.
+    ///
+    /// Here rather than in the UI so that a list of options and the parser that
+    /// reads them back cannot drift apart.
+    pub const ALL: [Self; 3] = [Self::Transparent, Self::High, Self::Compact];
+
+    /// The word a person types, and the one a settings file stores.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Transparent => "transparent",
+            Self::High => "high",
+            Self::Compact => "compact",
+        }
+    }
+
+    /// Reads a quality from what was typed, in any case.
+    #[must_use]
+    pub fn parse(given: &str) -> Option<Self> {
+        let given = given.trim().to_ascii_lowercase();
+        Self::ALL.into_iter().find(|level| level.name() == given)
+    }
+
+    /// LAME's own spelling of this level, which is what a bitrate table shows.
+    #[must_use]
+    pub const fn mp3(self) -> &'static str {
+        match self {
+            Self::Transparent => "V0",
+            Self::High => "V2",
+            Self::Compact => "V5",
+        }
+    }
+
+    /// `oggenc`'s own spelling of this level.
+    #[must_use]
+    pub const fn vorbis(self) -> &'static str {
+        match self {
+            Self::Transparent => "q8",
+            Self::High => "q6",
+            Self::Compact => "q3",
+        }
+    }
+}
+
+impl std::fmt::Display for Quality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
 /// A deliverable container.
+///
+/// The two lossy variants carry their quality, so that a resolved
+/// [`crate::splitter::Plan`] records what it is going to write rather than
+/// merely what kind of thing. A plan that said `MP3` and left the bitrate to
+/// whatever the writer felt like would be a plan that could not be checked
+/// against the file it produced.
+///
+/// All four exist whatever the cargo features say. A build without the `mp3`
+/// feature still understands `--format mp3` and still refuses it with a
+/// sentence explaining that this binary cannot write one, which is a better
+/// answer than not knowing the word.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Container {
@@ -102,28 +204,95 @@ pub enum Container {
     Wav,
     /// Lossless compression.
     Flac,
+    /// MPEG-1 Audio Layer III, variable bitrate.
+    Mp3(Quality),
+    /// Vorbis in an Ogg stream.
+    OggVorbis(Quality),
 }
 
 impl Container {
+    /// Every container, in the order a UI should offer them.
+    ///
+    /// Lossless first, because the archival copy is the one that matters and a
+    /// list opening with MP3 would be a list suggesting otherwise.
+    pub const ALL: [Self; 4] = [
+        Self::Flac,
+        Self::Wav,
+        Self::Mp3(Quality::High),
+        Self::OggVorbis(Quality::High),
+    ];
+
     /// The file extension, without the dot.
     #[must_use]
     pub const fn extension(self) -> &'static str {
         match self {
             Self::Wav => "wav",
             Self::Flac => "flac",
+            Self::Mp3(_) => "mp3",
+            // Xiph's own guidance is `.oga` for Ogg audio generally and `.ogg`
+            // for Ogg Vorbis specifically. `.ogg` is also what every player,
+            // phone and car stereo expects, so it is what gets written; `.oga`
+            // is accepted on the way in.
+            Self::OggVorbis(_) => "ogg",
         }
     }
 
-    /// The name used in messages.
+    /// The name used in messages, without the quality.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
             Self::Wav => "WAV",
             Self::Flac => "FLAC",
+            Self::Mp3(_) => "MP3",
+            Self::OggVorbis(_) => "Ogg Vorbis",
+        }
+    }
+
+    /// The cargo feature a build needs to write this, where it needs one.
+    #[must_use]
+    pub const fn feature(self) -> Option<&'static str> {
+        match self {
+            Self::Wav | Self::Flac => None,
+            Self::Mp3(_) => Some("mp3"),
+            Self::OggVorbis(_) => Some("ogg"),
+        }
+    }
+
+    /// The quality this will be written at, where the container has one.
+    #[must_use]
+    pub const fn quality(self) -> Option<Quality> {
+        match self {
+            Self::Wav | Self::Flac => None,
+            Self::Mp3(quality) | Self::OggVorbis(quality) => Some(quality),
+        }
+    }
+
+    /// Whether audio will be thrown away on the way out.
+    #[must_use]
+    pub const fn is_lossy(self) -> bool {
+        self.quality().is_some()
+    }
+
+    /// The same container at a different quality.
+    ///
+    /// A no-op on WAV and FLAC, deliberately rather than by oversight: someone
+    /// who has set a quality and then switches the format to FLAC has not asked
+    /// for an error, and a settings file that kept a quality only while the
+    /// format happened to be lossy would lose it on every round trip.
+    #[must_use]
+    pub const fn with_quality(self, quality: Quality) -> Self {
+        match self {
+            Self::Wav | Self::Flac => self,
+            Self::Mp3(_) => Self::Mp3(quality),
+            Self::OggVorbis(_) => Self::OggVorbis(quality),
         }
     }
 
     /// Reads a container from an extension, with or without its dot.
+    ///
+    /// Lossy containers come back at [`Quality::High`];
+    /// [`with_quality`](Self::with_quality) is how a caller that was given a
+    /// quality as well applies it.
     #[must_use]
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension
@@ -133,14 +302,33 @@ impl Container {
         {
             "wav" | "wave" => Some(Self::Wav),
             "flac" => Some(Self::Flac),
+            "mp3" => Some(Self::Mp3(Quality::default())),
+            "ogg" | "oga" | "vorbis" => Some(Self::OggVorbis(Quality::default())),
             _ => None,
         }
+    }
+
+    /// Every spelling a person may type, for a message that lists them.
+    #[must_use]
+    pub fn spellings() -> String {
+        Self::ALL
+            .iter()
+            .map(|container| container.extension())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
 impl std::fmt::Display for Container {
+    /// The container and, for a lossy one, the codec's own spelling of the
+    /// quality - `MP3 V2` - so that what VCW says it wrote can be checked
+    /// against what a decoder says it read.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.name())
+        match self {
+            Self::Wav | Self::Flac => f.write_str(self.name()),
+            Self::Mp3(quality) => write!(f, "MP3 {}", quality.mp3()),
+            Self::OggVorbis(quality) => write!(f, "Ogg Vorbis {}", quality.vorbis()),
+        }
     }
 }
 
@@ -234,8 +422,12 @@ fn to_wire(spec: &Spec, stored: &[u8], out: &mut Vec<u8>) {
 
 /// An open output file.
 ///
-/// An enum rather than a boxed trait: there are two containers, `finish`
-/// consumes the writer, and neither of those wants `dyn`.
+/// An enum rather than a boxed trait: `finish` consumes the writer and there
+/// are four containers, neither of which wants `dyn`.
+///
+/// The lossy variants are absent from a build without their cargo feature.
+/// [`Container`] is not - see its own docs for why the refusal is better than
+/// the gap.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Writer {
@@ -248,6 +440,12 @@ pub enum Writer {
     /// value would otherwise carry the larger of the two. One allocation per
     /// exported file is not a cost worth measuring.
     Flac(Box<Flac>),
+    /// An MP3 file. Needs the `mp3` feature.
+    #[cfg(feature = "mp3")]
+    Mp3(Box<crate::lossy::Mp3>),
+    /// An Ogg Vorbis file. Needs the `ogg` feature.
+    #[cfg(feature = "ogg")]
+    OggVorbis(Box<crate::lossy::Ogg>),
 }
 
 impl Writer {
@@ -261,6 +459,40 @@ impl Writer {
         match container {
             Container::Wav => Wav::create(path, spec).map(Self::Wav),
             Container::Flac => Flac::create(path, spec).map(|flac| Self::Flac(Box::new(flac))),
+            // Both arms go through `crate::lossy`, which has a stub for each
+            // whose only job is to raise [`Error::NoEncoder`]. The alternative
+            // was `#[cfg]` on the arms themselves, and a match arm that exists
+            // in one build and not another is a match that has to be read twice
+            // to be trusted.
+            Container::Mp3(quality) => crate::lossy::mp3(path, spec, quality),
+            Container::OggVorbis(quality) => crate::lossy::ogg(path, spec, quality),
+        }
+    }
+
+    /// Whether [`create`](Self::create) would accept this spec, without
+    /// touching the filesystem.
+    ///
+    /// Exists so a plan can be refused before a byte is written. A dry run that
+    /// says `3 file(s) in FLAC` for a float32 capture is worse than no dry run:
+    /// the whole point of planning first is that a container can be argued with
+    /// for free, and a plan that only fails once the first file is open has
+    /// moved the argument to after the directories were made.
+    ///
+    /// Both writers check again in `create`, which is not duplication. This is
+    /// a question about a spec; that is a precondition on a file, and a writer
+    /// reached any other way still owes it.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unencodable`] for a format the container cannot carry,
+    /// [`Error::TooLargeForWav`] for a piece too long for RIFF to describe, and
+    /// [`Error::NoEncoder`] for a container this build was not compiled with.
+    pub fn vet(container: Container, spec: &Spec) -> Result<()> {
+        match container {
+            Container::Wav => Wav::vet(spec),
+            Container::Flac => Flac::vet(spec),
+            Container::Mp3(_) => crate::lossy::vet_mp3(spec),
+            Container::OggVorbis(_) => crate::lossy::vet_ogg(spec),
         }
     }
 
@@ -274,6 +506,10 @@ impl Writer {
         match self {
             Self::Wav(wav) => wav.write(stored),
             Self::Flac(flac) => flac.write(stored),
+            #[cfg(feature = "mp3")]
+            Self::Mp3(mp3) => mp3.write(stored),
+            #[cfg(feature = "ogg")]
+            Self::OggVorbis(ogg) => ogg.write(stored),
         }
     }
 
@@ -286,6 +522,10 @@ impl Writer {
         match self {
             Self::Wav(wav) => wav.finish(),
             Self::Flac(flac) => flac.finish(),
+            #[cfg(feature = "mp3")]
+            Self::Mp3(mp3) => mp3.finish(),
+            #[cfg(feature = "ogg")]
+            Self::OggVorbis(ogg) => ogg.finish(),
         }
     }
 }
@@ -319,17 +559,124 @@ const GUID_FLOAT: [u8; 16] = [
     0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71,
 ];
 
+/// Whether a container could carry this audio at all.
+///
+/// About the recording, not about this binary: a build compiled without the
+/// `mp3` feature still answers yes for an MP3 of 44.1 kHz stereo, because
+/// [`Error::NoEncoder`] is a different sentence and explains itself. Judging
+/// otherwise would make the advice in a refusal depend on the cargo features,
+/// and the `features` gate leg would then disagree with the default build about
+/// what the prose should say.
+pub(crate) fn carries(container: Container, spec: &Spec) -> bool {
+    match container {
+        Container::Wav => Wav::carries(spec),
+        Container::Flac => Flac::why(spec).is_none(),
+        Container::Mp3(_) => crate::lossy::mp3_why(spec).is_none(),
+        Container::OggVorbis(_) => crate::lossy::ogg_why(spec).is_none(),
+    }
+}
+
+/// The "export it as this instead" clause for a capture one container refuses.
+///
+/// Every refusal in this crate ends with this rather than with a sentence
+/// naming containers from memory, and that is the whole point. The hand-written
+/// version drifted four separate ways in one work package: all three FLAC
+/// refusals said "Export this one as WAV", written before Ogg Vorbis existed
+/// and never updated; the MP3 rate refusal offered FLAC, which stops at 96 kHz
+/// just as MPEG stops at 48; [`Error::TooLargeForWav`] offered FLAC for a
+/// capture FLAC would refuse on bit depth; and the MP3 refusal offered WAV for
+/// a side too long for a 32-bit RIFF size. None of them was caught by a test,
+/// because advice written as a string literal agrees with whatever it said
+/// yesterday. A real 192 kHz rip found the first one.
+///
+/// Asking every container makes all four impossible by construction, and makes
+/// a fifth container appear in every message that should mention it on the day
+/// it is added.
+///
+/// Both halves of the answer where both exist. Someone refused a format wants
+/// to know how to keep the capture lossless *and* how to get a small file, and
+/// which of those they wanted is not knowable from the format they asked for.
+pub(crate) fn alternatives(refused: Container, spec: &Spec) -> String {
+    let mut lossless = Vec::new();
+    let mut lossy = Vec::new();
+    for other in Container::ALL {
+        if other.name() == refused.name() || !carries(other, spec) {
+            continue;
+        }
+        if other.is_lossy() {
+            lossy.push(other.name());
+        } else {
+            lossless.push(other.name());
+        }
+    }
+    match (lossless.is_empty(), lossy.is_empty()) {
+        (false, false) => format!(
+            "Export this one as {} to keep it lossless, or as {} for a smaller file.",
+            join(&lossless),
+            join(&lossy)
+        ),
+        (false, true) => format!("Export this one as {}.", join(&lossless)),
+        // Reachable, and the reason this arm says so out loud: a 192 kHz side
+        // long enough to overflow RIFF has no lossless container left, because
+        // `flacenc` stops at 96 kHz and WAV stops at four gibibytes.
+        (true, false) => format!(
+            "Export this one as {} - nothing VCW writes will take this capture \
+             losslessly.",
+            join(&lossy)
+        ),
+        (true, true) => "Nothing VCW writes will take this capture.".to_owned(),
+    }
+}
+
+/// `a`, `a or b`, `a, b or c` - the way a person would read a list aloud.
+fn join(names: &[&'static str]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => (*one).to_owned(),
+        [most @ .., last] => format!("{} or {last}", most.join(", ")),
+    }
+}
+
 impl Wav {
+    /// The most audio this header can describe.
+    ///
+    /// RIFF counts everything after `RIFF<size>` in a 32-bit field, so the
+    /// ceiling is four gibibytes less the header. An extensible header is 24
+    /// bytes longer than a plain one, which is why this takes the header's own
+    /// length rather than a constant.
+    const fn ceiling(header_bytes: u64) -> u64 {
+        u32::MAX as u64 - (header_bytes - 8)
+    }
+
+    /// Everything that has to be true before a WAV file is created.
+    ///
+    /// RIFF carries every format VCW records, so length is the only refusal.
+    /// It is a real one: a 32-bit stereo side at 96 kHz passes four gibibytes
+    /// in about an hour and a half, which is one long side.
+    fn vet(spec: &Spec) -> Result<()> {
+        if Self::carries(spec) {
+            return Ok(());
+        }
+        Err(Error::TooLargeForWav {
+            bytes: spec.wire_bytes(),
+            ceiling: Self::ceiling(Self::header(spec).len() as u64),
+            instead: alternatives(Container::Wav, spec),
+        })
+    }
+
+    /// Whether RIFF can describe a file this long.
+    ///
+    /// Split out from `vet` so [`carries`] can ask without building a message,
+    /// which is what keeps [`alternatives`] from recursing into the refusals it
+    /// is writing the advice for.
+    fn carries(spec: &Spec) -> bool {
+        spec.wire_bytes() <= Self::ceiling(Self::header(spec).len() as u64)
+    }
+
     /// Creates the file and writes a header with placeholder sizes.
     fn create(path: &Path, spec: Spec) -> Result<Self> {
+        Self::vet(&spec)?;
         let header = Self::header(&spec);
-        let ceiling = u32::MAX as u64 - (header.len() as u64 - 8);
-        if spec.wire_bytes() > ceiling {
-            return Err(Error::TooLargeForWav {
-                bytes: spec.wire_bytes(),
-                ceiling,
-            });
-        }
         let mut file = File::create(path)?;
         file.write_all(&header)?;
         Ok(Self {
@@ -401,11 +748,12 @@ impl Wav {
             });
         }
         to_wire(&self.spec, stored, &mut self.scratch);
-        let ceiling = u32::MAX as u64 - (self.header_bytes - 8);
+        let ceiling = Self::ceiling(self.header_bytes);
         if self.data_bytes + self.scratch.len() as u64 > ceiling {
             return Err(Error::TooLargeForWav {
                 bytes: self.data_bytes + self.scratch.len() as u64,
                 ceiling,
+                instead: alternatives(Container::Wav, &self.spec),
             });
         }
         self.file.write_all(&self.scratch)?;
@@ -546,39 +894,45 @@ impl Flac {
     /// Separated from `create` so the refusals can be tested without a
     /// filesystem, and so each one can say which limit it hit.
     fn vet(spec: &Spec) -> Result<()> {
-        if spec.is_float() {
-            return Err(Error::Unencodable {
+        match Self::why(spec) {
+            None => Ok(()),
+            Some(reason) => Err(Error::Unencodable {
                 format: spec.format,
                 container: Container::Flac.name(),
-                why: "FLAC is an integer codec, and choosing how to dither 32-bit \
-                      float down to integers is a decision about headroom that belongs \
-                      to a person. Export this one as WAV.",
-            });
+                why: format!("{reason} {}", alternatives(Container::Flac, spec)).into(),
+            }),
+        }
+    }
+
+    /// Why FLAC cannot carry this audio, or `None` if it can.
+    ///
+    /// The reason only. Where to go instead is [`alternatives`]'s job, and
+    /// keeping the two apart is what stops a message naming a container that
+    /// will refuse the same capture a moment later.
+    fn why(spec: &Spec) -> Option<&'static str> {
+        if spec.is_float() {
+            return Some(
+                "FLAC is an integer codec, and choosing how to dither 32-bit float \
+                 down to integers is a decision about headroom that belongs to a \
+                 person.",
+            );
         }
         if spec.bits() > 24 {
-            return Err(Error::Unencodable {
-                format: spec.format,
-                container: Container::Flac.name(),
-                why: "the FLAC format allows 32-bit samples but flacenc 0.5.1 stops at \
-                      24, and narrowing 32 bits to 24 loses signal. Export this one as WAV.",
-            });
+            return Some(
+                "the FLAC format allows 32-bit samples but flacenc 0.5.1 stops at 24, \
+                 and narrowing 32 bits to 24 loses signal.",
+            );
         }
         if spec.rate > 96_000 {
-            return Err(Error::Unencodable {
-                format: spec.format,
-                container: Container::Flac.name(),
-                why: "flacenc 0.5.1 refuses rates above 96 kHz, though the FLAC format \
-                      allows up to 655350 Hz. Export this one as WAV.",
-            });
+            return Some(
+                "flacenc 0.5.1 refuses rates above 96 kHz, though the FLAC format \
+                 allows up to 655350 Hz.",
+            );
         }
         if spec.channels == 0 || spec.channels > 8 {
-            return Err(Error::Unencodable {
-                format: spec.format,
-                container: Container::Flac.name(),
-                why: "FLAC carries between one and eight channels.",
-            });
+            return Some("FLAC carries between one and eight channels.");
         }
-        Ok(())
+        None
     }
 
     /// Writes the `STREAMINFO` metadata block, header and all, at the cursor.
@@ -715,6 +1069,163 @@ mod tests {
             format,
             frames,
         }
+    }
+
+    /// Every container whose own name appears in a refusal's text.
+    ///
+    /// Matched on the words a person reads, not on a structured field, because
+    /// the words are what they will act on. "Ogg Vorbis" is matched before
+    /// "Ogg" would be, and both spellings resolve to the same container.
+    fn named_in(said: &str) -> Vec<Container> {
+        let mut found = Vec::new();
+        for (word, container) in [
+            ("WAV", Container::Wav),
+            ("FLAC", Container::Flac),
+            ("MP3", Container::Mp3(Quality::High)),
+            ("Ogg Vorbis", Container::OggVorbis(Quality::High)),
+            ("Ogg", Container::OggVorbis(Quality::High)),
+        ] {
+            if said.contains(word) && !found.contains(&container) {
+                found.push(container);
+            }
+        }
+        found
+    }
+
+    /// `carries` and `vet` must never disagree.
+    ///
+    /// [`carries`] is the cheap predicate [`alternatives`] is built on, and it
+    /// has to stay the same question `vet` asks or every refusal in the crate
+    /// starts recommending containers that then refuse. They cannot be the same
+    /// function - `vet` builds the message, and building the message calls
+    /// `alternatives`, which calls `carries` - so this is the seam, and a seam
+    /// gets a test.
+    #[test]
+    fn the_cheap_predicate_agrees_with_the_real_refusal() {
+        for format in [
+            StorageFormat::Int16,
+            StorageFormat::Int24Packed,
+            StorageFormat::Int24Padded,
+            StorageFormat::Int32,
+            StorageFormat::Float32,
+        ] {
+            for rate in [0, 44_100, 48_000, 96_000, 192_000, 400_000] {
+                for frames in [0, 48_000, 2_000_000_000] {
+                    let spec = spec(format, rate, frames);
+                    for container in Container::ALL {
+                        // `NoEncoder` is not an answer about the audio, so it
+                        // counts as carrying - the same rule `carries` uses.
+                        let vetted = matches!(
+                            Writer::vet(container, &spec),
+                            Ok(()) | Err(Error::NoEncoder { .. })
+                        );
+                        assert_eq!(
+                            carries(container, &spec),
+                            vetted,
+                            "{container} at {rate} Hz, {format:?}, {frames} frame(s)"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// A refusal must send a person somewhere that works.
+    ///
+    /// The one test in this file that is about prose. It exists because the
+    /// FLAC refusals said "Export this one as WAV" for a whole work package
+    /// after Ogg Vorbis arrived and became an equally true answer, and nothing
+    /// here noticed: the advice was a string literal, and a string literal
+    /// agrees with whatever it said yesterday. A real 192 kHz rip found it.
+    ///
+    /// So the property, rather than the wording. For every spec some container
+    /// refuses: each container the refusal names must itself accept that spec,
+    /// and the refusal must name at least one. Add a fifth container and this
+    /// starts failing on every message that should have mentioned it, which is
+    /// the direction the failure wants to point.
+    #[test]
+    fn a_refusal_only_sends_a_person_to_a_container_that_takes_the_capture() {
+        // Int32 and Float32 are what the FLAC refusals are about; the rates
+        // span MPEG's ceiling, flacenc's and §8's. Not a matrix for its own
+        // sake - every row here is a capture VCW can really produce.
+        let mut checked = 0usize;
+        for format in [
+            StorageFormat::Int16,
+            StorageFormat::Int24Packed,
+            StorageFormat::Int24Padded,
+            StorageFormat::Int32,
+            StorageFormat::Float32,
+        ] {
+            for rate in [44_100, 48_000, 88_200, 96_000, 176_400, 192_000] {
+                // A second or so, and then a side long enough to overflow a
+                // 32-bit RIFF size. Both are real: the second is a 90-minute
+                // unsplit side, which is what `--format wav` on a whole capture
+                // asks for, and it is the only way to reach TooLargeForWav -
+                // whose advice was wrong in exactly the way FLAC's was.
+                for frames in [48_000, 2_000_000_000] {
+                    let spec = spec(format, rate, frames);
+                    for container in Container::ALL {
+                        let Err(why) = Writer::vet(container, &spec) else {
+                            continue;
+                        };
+                        // A build compiled without an encoder is not giving advice
+                        // about the audio, so it is not this test's business.
+                        if matches!(why, Error::NoEncoder { .. }) {
+                            continue;
+                        }
+                        assert!(!carries(container, &spec), "{container} contradicts itself");
+                        let said = why.to_string();
+                        let offered = named_in(&said);
+
+                        // Named and wrong is worse than not named: it costs a
+                        // person a second refusal to find out.
+                        for &other in &offered {
+                            if other == container {
+                                continue;
+                            }
+                            assert!(
+                                carries(other, &spec),
+                                "{format:?} at {rate} Hz: {container} says to use \
+                             {other}, and {other} will not carry it either"
+                            );
+                        }
+
+                        // And the half that the stale FLAC advice got past. "Export
+                        // this one as WAV" was never *wrong* - WAV really does take
+                        // a 192 kHz Int32 capture - it was incomplete, and an
+                        // assertion that only checked the named container worked
+                        // stayed green through it. A person refused a format wants
+                        // both halves of the answer: how to keep it lossless, and
+                        // how to make it small. So each group that has a working
+                        // member has to be represented.
+                        for lossy in [false, true] {
+                            let group: Vec<_> = Container::ALL
+                                .into_iter()
+                                .filter(|&other| {
+                                    other != container
+                                        && other.is_lossy() == lossy
+                                        && carries(other, &spec)
+                                })
+                                .collect();
+                            if group.is_empty() {
+                                continue;
+                            }
+                            assert!(
+                                group.iter().any(|other| offered.contains(other)),
+                                "{format:?} at {rate} Hz: {container} refuses it and \
+                             names {offered:?}, but says nothing about {group:?}, \
+                             which would carry it: {said}"
+                            );
+                        }
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        // The loop above is only evidence if it found refusals to read. A
+        // change that made every container accept everything would otherwise
+        // pass this test by having nothing to say.
+        assert!(checked >= 12, "only {checked} refusal(s) were examined");
     }
 
     /// Interleaved stored bytes for `frames` frames, each byte distinct enough
@@ -923,9 +1434,16 @@ mod tests {
         let err = Writer::create(&path, Container::Wav, spec).unwrap_err();
         assert!(matches!(err, Error::TooLargeForWav { .. }), "got {err:?}");
         assert!(!path.exists(), "nothing was created");
+        // Ogg Vorbis, and only Ogg Vorbis. This assertion used to require the
+        // word "FLAC", which for this very spec - 192 kHz, 32-bit - is a
+        // container that refuses it on both counts, so the test was holding the
+        // wrong advice in place. The right answer here is that nothing lossless
+        // will take it: WAV is out on length and FLAC on rate and depth.
+        let said = err.to_string();
+        assert!(said.contains("Ogg Vorbis"), "{said}");
         assert!(
-            err.to_string().contains("FLAC"),
-            "the message names the way out: {err}"
+            !said.contains("FLAC"),
+            "FLAC refuses this spec too, so naming it costs a second attempt: {said}"
         );
     }
 
@@ -1046,6 +1564,116 @@ mod tests {
         assert_eq!(Container::Wav.extension(), "wav");
         assert_eq!(Container::from_extension(".FLAC"), Some(Container::Flac));
         assert_eq!(Container::from_extension("wave"), Some(Container::Wav));
-        assert_eq!(Container::from_extension("mp3"), None, "Phase 2");
+        assert_eq!(
+            Container::from_extension("mp3"),
+            Some(Container::Mp3(Quality::High)),
+            "a bare extension carries no quality, so it gets the default"
+        );
+        assert_eq!(
+            Container::from_extension(".OGA"),
+            Some(Container::OggVorbis(Quality::High))
+        );
+        assert_eq!(Container::from_extension("opus"), None);
+    }
+
+    #[test]
+    fn a_quality_is_only_attached_to_the_containers_it_means_something_to() {
+        // `with_quality` is deliberately a no-op rather than a refusal, so that
+        // a panel can hold one quality while the format changes under it and
+        // nothing has to be cleared. The thing that must not happen is a
+        // lossless container quietly acquiring a setting it does not have.
+        assert_eq!(
+            Container::Flac.with_quality(Quality::Compact),
+            Container::Flac
+        );
+        assert_eq!(
+            Container::Wav.with_quality(Quality::Compact),
+            Container::Wav
+        );
+        assert_eq!(Container::Flac.quality(), None);
+        assert!(!Container::Flac.is_lossy());
+
+        assert_eq!(
+            Container::Mp3(Quality::High).with_quality(Quality::Transparent),
+            Container::Mp3(Quality::Transparent)
+        );
+        assert_eq!(
+            Container::OggVorbis(Quality::High).quality(),
+            Some(Quality::High)
+        );
+        assert!(Container::Mp3(Quality::High).is_lossy());
+    }
+
+    #[test]
+    fn a_quality_round_trips_through_the_name_a_person_types() {
+        // The name is what the CLI flag, the settings file and the panel's
+        // select all carry, so a parse that disagreed with `name` would make a
+        // saved setting unreadable by the thing that saved it.
+        for quality in Quality::ALL {
+            assert_eq!(Quality::parse(quality.name()), Some(quality));
+        }
+        assert_eq!(Quality::parse("  HIGH  "), Some(Quality::High));
+        assert_eq!(Quality::parse("medium"), None);
+        assert_eq!(Quality::default(), Quality::High);
+    }
+
+    #[test]
+    fn what_a_container_calls_itself_includes_the_quality() {
+        // What the CLI prints in a plan and what the event log records. A line
+        // saying "MP3" alone cannot be checked against the file afterwards.
+        assert_eq!(Container::Mp3(Quality::High).to_string(), "MP3 V2");
+        assert_eq!(
+            Container::OggVorbis(Quality::Transparent).to_string(),
+            "Ogg Vorbis q8"
+        );
+        assert_eq!(Container::Flac.to_string(), "FLAC");
+    }
+
+    #[test]
+    fn the_spellings_a_refusal_offers_are_the_ones_that_parse() {
+        // `Container::spellings()` is pasted straight into the message a bad
+        // `--format` gets, so every word in it has to come back out of
+        // `from_extension`. Spelling a format a person cannot then type is a
+        // worse failure than the original typo.
+        let offered = Container::spellings();
+        for word in offered.split(", ") {
+            assert!(
+                Container::from_extension(word).is_some(),
+                "the refusal offers {word:?}, which does not parse: {offered}"
+            );
+        }
+        assert_eq!(offered.split(", ").count(), Container::ALL.len());
+    }
+
+    #[test]
+    fn a_build_without_an_encoder_refuses_at_plan_time_and_not_at_write_time() {
+        // The claim the whole `vet` path exists for: whatever this build was
+        // compiled with, asking for a container it cannot write is answered
+        // before a file is created. With both features on there is nothing to
+        // refuse, which is the case worth asserting the other way round.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let layout = spec(StorageFormat::Int16, 44_100, 0);
+        for container in Container::ALL {
+            // What this build can actually write, named feature by feature -
+            // which also asserts that `feature()` returns a name that exists.
+            // A build with one of the two is a real configuration: the licence
+            // reason to drop MP3 says nothing about Ogg.
+            let available = match container.feature() {
+                None => true,
+                Some("mp3") => cfg!(feature = "mp3"),
+                Some("ogg") => cfg!(feature = "ogg"),
+                Some(other) => panic!("{container} names a feature nothing knows: {other:?}"),
+            };
+            let answer = Writer::vet(container, &layout);
+            assert_eq!(answer.is_ok(), available, "{container}: {answer:?}");
+            if let Err(why) = answer {
+                assert!(matches!(why, Error::NoEncoder { .. }), "{why}");
+            }
+        }
+        assert_eq!(
+            std::fs::read_dir(dir.path()).expect("read_dir").count(),
+            0,
+            "vetting wrote something"
+        );
     }
 }

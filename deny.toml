@@ -58,10 +58,41 @@ allow = [
 ]
 confidence-threshold = 0.93
 
-# Phase 2 will add exactly one weak-copyleft dependency, deliberately and with the
-# relink obligation documented in THIRD-PARTY-NOTICES.md. Uncomment when
-# chromaprint-next actually lands in the dependency graph, and not before - an
-# allowance carried ahead of the dependency is an allowance nobody reviews.
+# Weak-copyleft dependencies, named one at a time. Every entry here is a decision
+# with an obligation attached, written up in THIRD-PARTY-NOTICES.md; an exception
+# without a corresponding section in that file is a bug in one of the two.
+
+# MP3 (D5, WP-25). `mp3lame-encoder` is the safe wrapper and `mp3lame-sys` vendors
+# and builds libmp3lame's C; both crates declare `LGPL-3.0`, which SPDX deprecated
+# in favour of `LGPL-3.0-only` - cargo-deny warns about the spelling and matches it
+# anyway, and correcting it is upstream's call rather than ours.
+#
+# Note that this is *not* the licence libmp3lame itself carries. The bundled
+# `lame-3.100/COPYING` is the GNU Library GPL version 2, "or any later version",
+# and the wrapper's LGPL-3.0 is the exercise of that option. The stricter of the
+# two is the one that governs what we ship, which is why the tree carries
+# LICENSE-LGPL-3.0 and LICENSE-GPL-3.0.
+#
+# Reachable only through `vcw-export`'s `mp3` feature. It is on by default because
+# §33 requires MP3 export, and it is a feature so that a redistributor who cannot
+# carry this obligation can drop it without forking: `--no-default-features
+# --features ogg`.
+#
+# Ogg Vorbis needs no entry. `vorbis_rs`, `aotuv_lancer_vorbis_sys` and
+# `ogg_next_sys` are all BSD-3-Clause, which the allowlist above already covers -
+# D5 recorded Ogg as LGPL and that was wrong.
+[[licenses.exceptions]]
+name = "mp3lame-encoder"
+allow = ["LGPL-3.0"]
+
+[[licenses.exceptions]]
+name = "mp3lame-sys"
+allow = ["LGPL-3.0"]
+
+# Phase 2 will add one more, deliberately and with the relink obligation
+# documented alongside the two above. Uncomment when chromaprint-next actually
+# lands in the dependency graph, and not before - an allowance carried ahead of
+# the dependency is an allowance nobody reviews.
 #
 # [[licenses.exceptions]]
 # name = "chromaprint-next"

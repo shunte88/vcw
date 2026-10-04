@@ -1,6 +1,6 @@
 [package]
 name = "vcw-export"
-description = "Splitting committed blocks into tagged WAV and FLAC deliverables"
+description = "Splitting committed blocks into tagged WAV, FLAC, MP3 and Ogg Vorbis deliverables"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,9 +12,27 @@ authors.workspace = true
 vcw-types = { workspace = true }
 vcw-project = { workspace = true }
 flacenc = { workspace = true }
+mp3lame-encoder = { workspace = true, optional = true }
+vorbis_rs = { workspace = true, optional = true }
 lofty = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[features]
+# Both lossy containers are on by default, because §33 requires MP3 and OGG as
+# initial export formats and a build that cannot write them does not meet the
+# requirement. The features exist for the licence rather than for the size: MP3
+# links libmp3lame under LGPL-3.0, and anyone redistributing VCW who cannot
+# carry that obligation can drop the feature without forking the tree. Ogg is
+# BSD-3-Clause and costs nothing, and is a feature only so that the pair can be
+# turned off together.
+#
+# `Container::Mp3` and `Container::OggVorbis` exist either way. A build without
+# the feature still parses `--format mp3` and still refuses it with a sentence
+# saying so, which is a better answer than not knowing the word.
+default = ["mp3", "ogg"]
+mp3 = ["dep:mp3lame-encoder"]
+ogg = ["dep:vorbis_rs"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

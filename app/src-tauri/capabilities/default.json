@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The core defaults and nothing else: every VCW capability is a command in this crate, so the frontend needs no plugin permissions to capture, play or export.",
+  "description": "The core defaults plus one dialog permission: every other VCW capability is a command in this crate, so the frontend needs no plugin permissions to capture, play or export. `dialog:allow-open` is the exception - a native directory picker cannot be a Rust command, because only the host can draw its own file chooser. Open only, never save: nothing in VCW asks the frontend to name a file.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:allow-open"]
 }

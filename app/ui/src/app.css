@@ -312,6 +312,13 @@ label {
   font-size: 0.9em;
 }
 
+/* A control and its button on one line, inside a label that is a column. */
+label .row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
 label input,
 label select,
 label textarea {

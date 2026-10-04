@@ -468,8 +468,14 @@ pub struct Selection {
 pub struct Export {
     /// Directory to write into. Created if it does not exist.
     pub into: String,
-    /// `wav` or `flac`.
+    /// `flac`, `wav`, `mp3` or `ogg`.
     pub format: String,
+    /// `transparent`, `high` or `compact`, or `null` for `high`.
+    ///
+    /// Ignored by the lossless containers rather than refused by them, so a
+    /// panel can keep one value while the format changes under it.
+    #[serde(default)]
+    pub quality: Option<String>,
     /// A naming template, or `null` for the default.
     pub template: Option<String>,
     /// Side letters to export, or empty for every side that has tracks.
@@ -496,15 +502,32 @@ impl Export {
     /// artwork policy that is not one of the four, or something that is not a
     /// side letter.
     pub fn request(&self) -> Result<vcw_export::splitter::Request, Invalid> {
-        let container = vcw_export::encoder::Container::from_extension(&self.format).ok_or_else(
-            || Invalid {
-                field: "format",
-                why: format!(
-                    "{:?} is not a container VCW writes yet - wav or flac. MP3 and Ogg are release 0.2",
-                    self.format
-                ),
-            },
-        )?;
+        let container =
+            vcw_export::encoder::Container::from_extension(&self.format).ok_or_else(|| {
+                Invalid {
+                    field: "format",
+                    why: format!(
+                        "{:?} is not a container VCW writes - {}",
+                        self.format,
+                        vcw_export::encoder::Container::spellings()
+                    ),
+                }
+            })?;
+        // Applied whatever the container is. `with_quality` is a no-op on WAV
+        // and FLAC, which is what makes it safe to send a quality with every
+        // request rather than only with the lossy ones.
+        let container = match self.quality.as_deref() {
+            None => container,
+            Some(given) => container.with_quality(
+                vcw_export::encoder::Quality::parse(given).ok_or_else(|| Invalid {
+                    field: "quality",
+                    why: format!(
+                        "{given:?} is not a quality - transparent, high or compact. \
+                         The lossless containers ignore it."
+                    ),
+                })?,
+            ),
+        };
 
         let artwork = match self
             .artwork

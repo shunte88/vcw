@@ -43,10 +43,10 @@
 //! (WP-16) has to make the same decisions from the same settings and a CLI that
 //! quietly did something extra would be a second implementation to keep in step.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use vcw_export::encoder::Container;
+use vcw_export::encoder::{Container, Quality};
 use vcw_export::splitter::{self, Artwork, Plan, Progress, Report, Request};
 use vcw_project::Project;
 use vcw_types::vinyl::Side;
@@ -59,6 +59,8 @@ pub(crate) struct Args {
     pub(crate) into: PathBuf,
     /// Container to write.
     pub(crate) format: String,
+    /// How hard a lossy container compresses. Ignored by WAV and FLAC.
+    pub(crate) quality: String,
     /// Naming template, or `None` for the default.
     pub(crate) template: Option<String>,
     /// Sides to export. Empty exports every side that has tracks.
@@ -78,7 +80,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     if !args.project.exists() {
         bail!("{} does not exist", args.project.display());
     }
-    let container = container(&args.format)?;
+    let container = container(&args.format, &args.quality)?;
     let request = Request {
         container,
         template: args
@@ -107,6 +109,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
             println!("{}", plan_json(&plan, None));
         } else {
             print_plan(&plan, &request);
+            print_paths(&plan, &request);
             println!("  dry run    nothing was written");
         }
         return Ok(());
@@ -119,6 +122,11 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     // A line as each file starts rather than as it finishes: an export is long,
     // and the file being worked on is the useful thing to show. Printed on the
     // first update for an index, which is the first read of that item.
+    //
+    // Relative to `--into`, which is the line `print_plan` has just printed, so
+    // these lines are the same text `--dry-run` showed for the same request -
+    // the dry run is then a prediction a person can hold up against the run and
+    // compare line for line, rather than a differently-formatted summary.
     let mut started = 0usize;
     let mut on = |progress: Progress<'_>| {
         if args.json || progress.index < started {
@@ -129,7 +137,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
             "  {:>3}/{}    {}",
             progress.index + 1,
             progress.of,
-            progress.item.path.display()
+            under(&progress.item.path, &request.into).display()
         );
     };
     let report = splitter::run(project.conn(), &plan, &mut on)?;
@@ -153,10 +161,12 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 /// Prints what is about to happen, or what would have.
 fn print_plan(plan: &Plan, request: &Request) {
     println!("  into       {}", request.into.display());
+    // `Display` rather than `name`, so a lossy container prints the codec's own
+    // spelling of its quality - `MP3 V2` - and a dry run says exactly what a
+    // bitrate reader will say afterwards.
     println!(
         "  format     {}, template {:?}",
-        plan.container.name(),
-        request.template
+        plan.container, request.template
     );
     println!(
         "  tracks     {} file(s), {} frame(s)",
@@ -182,10 +192,50 @@ fn print_plan(plan: &Plan, request: &Request) {
     );
 }
 
+/// Every path the plan resolved, relative to `--into`.
+///
+/// `--dry-run` is how to argue with a naming template without producing a
+/// gigabyte of files to delete, and until this was here it printed the counts
+/// and none of the names: the only way to find out what a template had done was
+/// to run a real export and look at the directory afterwards. `--json` carried
+/// them all along, which is no help to a person at a terminal.
+///
+/// Relative rather than absolute because the relative part *is* what the
+/// template produced, and `--into` is on the line above. The gutter is the one a
+/// real run's progress lines use, so a dry run and the run it predicts read the
+/// same down the page.
+fn print_paths(plan: &Plan, request: &Request) {
+    let of = plan.items.len();
+    for (index, item) in plan.items.iter().enumerate() {
+        println!(
+            "  {:>3}/{of}    {}",
+            index + 1,
+            under(&item.path, &request.into).display()
+        );
+    }
+    // The covers are planned paths too, and the `artwork` line above says the
+    // policy without saying where: one `folder.png` per directory is a fact
+    // about the layout that a template argument is usually about.
+    for cover in &plan.covers {
+        println!("  cover      {}", under(cover, &request.into).display());
+    }
+}
+
+/// `path` with `into` taken off the front, or whole if it is not under it.
+fn under<'a>(path: &'a Path, into: &Path) -> &'a Path {
+    path.strip_prefix(into).unwrap_or(path)
+}
+
 /// The plan, and the report where there is one, as JSON.
 fn plan_json(plan: &Plan, report: Option<&Report>) -> serde_json::Value {
     serde_json::json!({
         "container": plan.container.extension(),
+        // `null` for a lossless container rather than a missing key, so that a
+        // script can read `.quality` on every report and get an answer. The
+        // answer "this container has no such setting" is `null`, which is not
+        // the same as "high" and not the same as a typo.
+        "quality": plan.container.quality().map(|quality| quality.name()),
+        "lossless": !plan.container.is_lossy(),
         "frames": plan.frames(),
         "covers": plan.covers.iter().map(|path| path.display().to_string()).collect::<Vec<_>>(),
         "items": plan.items.iter().map(|item| serde_json::json!({
@@ -209,13 +259,23 @@ fn plan_json(plan: &Plan, report: Option<&Report>) -> serde_json::Value {
     })
 }
 
-/// A container from what was typed.
-fn container(given: &str) -> Result<Container> {
-    Container::from_extension(given).ok_or_else(|| {
+/// A container from what was typed, at the quality that was typed.
+///
+/// The quality is applied whatever the container is. `with_quality` is a no-op
+/// on WAV and FLAC, so `--format flac --quality compact` is not an error: the
+/// defaults put a quality on every invocation, and a flag that only becomes
+/// legal once another flag changes is a flag people trip over.
+fn container(given: &str, quality: &str) -> Result<Container> {
+    let container = Container::from_extension(given).ok_or_else(|| {
         anyhow::anyhow!(
-            "{given:?} is not a container VCW writes yet - wav or flac. MP3 and Ogg are release 0.2"
+            "{given:?} is not a container VCW writes - {}",
+            Container::spellings()
         )
-    })
+    })?;
+    let quality = Quality::parse(quality).ok_or_else(|| {
+        anyhow::anyhow!("{quality:?} is not a quality - transparent, high or compact")
+    })?;
+    Ok(container.with_quality(quality))
 }
 
 /// An artwork policy from what was typed.

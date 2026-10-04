@@ -265,6 +265,7 @@ fn an_artwork_policy_defaults_to_both_rather_than_none() {
         sides: Vec::new(),
         artwork: None,
         overwrite: false,
+        quality: None,
     };
     let request = export.request().expect("a valid export");
     assert_eq!(request.artwork, vcw_export::splitter::Artwork::Both);
@@ -272,17 +273,66 @@ fn an_artwork_policy_defaults_to_both_rather_than_none() {
 
 #[test]
 fn a_container_vcw_cannot_write_is_refused_by_name() {
+    // This used to be `mp3`, which VCW now writes. The refusal still has to
+    // list what it does take, because a format field is free text coming off a
+    // JSON command line and "no" on its own leaves the caller guessing.
     let export = vcw_contract::command::Export {
         into: "/tmp/out".to_owned(),
-        format: "mp3".to_owned(),
+        format: "opus".to_owned(),
         template: None,
         sides: Vec::new(),
         artwork: None,
         overwrite: false,
+        quality: None,
     };
-    let error = export.request().expect_err("mp3 is release 0.2");
+    let error = export.request().expect_err("VCW does not write Opus");
     assert_eq!(error.field, "format");
-    assert!(error.why.contains("MP3"), "{}", error.why);
+    for spelling in ["flac", "wav", "mp3", "ogg"] {
+        assert!(
+            error.why.contains(spelling),
+            "the refusal does not offer {spelling:?}: {}",
+            error.why
+        );
+    }
+}
+
+#[test]
+fn a_quality_is_taken_by_the_lossy_containers_and_ignored_by_the_others() {
+    // The panel keeps one quality while the format changes under it, so the
+    // pair arrives at the contract in every combination. A lossless container
+    // with a quality is not an error - it is a setting that does not apply -
+    // and a lossy container without one gets the default rather than a refusal.
+    let export = |format: &str, quality: Option<&str>| vcw_contract::command::Export {
+        into: "/tmp/out".to_owned(),
+        format: format.to_owned(),
+        template: None,
+        sides: Vec::new(),
+        artwork: None,
+        overwrite: false,
+        quality: quality.map(str::to_owned),
+    };
+    use vcw_export::encoder::{Container, Quality};
+
+    let request = export("mp3", Some("compact"))
+        .request()
+        .expect("mp3 at compact");
+    assert_eq!(request.container, Container::Mp3(Quality::Compact));
+
+    let request = export("ogg", None).request().expect("ogg with no quality");
+    assert_eq!(request.container, Container::OggVorbis(Quality::High));
+
+    let request = export("flac", Some("transparent"))
+        .request()
+        .expect("flac does not mind");
+    assert_eq!(request.container, Container::Flac);
+
+    // A word that is not a quality is still refused, and against the right
+    // field: a typo in the quality is not a problem with the format.
+    let error = export("mp3", Some("lossless"))
+        .request()
+        .expect_err("lossless is not a quality");
+    assert_eq!(error.field, "quality");
+    assert!(error.why.contains("transparent"), "{}", error.why);
 }
 
 #[test]
@@ -295,6 +345,7 @@ fn a_side_has_to_be_one_letter() {
             sides: vec![given.to_owned()],
             artwork: None,
             overwrite: false,
+            quality: None,
         };
         let error = export
             .request()

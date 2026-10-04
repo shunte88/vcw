@@ -354,6 +354,63 @@ fn a_dry_run_resolves_everything_and_writes_nothing() {
 }
 
 #[test]
+fn a_dry_run_prints_the_paths_the_run_will_write() {
+    // `--dry-run` exists to settle an argument with a naming template, and it
+    // used to print four counts and no names: the only way to see what a
+    // template had done was to run a real export and look at the directory,
+    // which is the thing the flag is for avoiding. `--json` had every path all
+    // along, which is no help to a person at a terminal.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "s24", 2.0);
+    let out = dir.path().join("out");
+    let project = project.display().to_string();
+    let out_arg = out.display().to_string();
+    let common = [
+        "export",
+        project.as_str(),
+        "--into",
+        out_arg.as_str(),
+        "--template",
+        "{position} {title}",
+    ];
+
+    let mut dry = common.to_vec();
+    dry.push("--dry-run");
+    let predicted = vcw(&dry);
+    assert!(!out.exists(), "a dry run created {}", out.display());
+    assert!(
+        predicted.contains("A1 Europe Endless.flac"),
+        "the dry run named no files:\n{predicted}"
+    );
+
+    // The point of the lines, not just their presence: a dry run is a
+    // prediction, so it has to be the *same text* the run prints, line for
+    // line. Printing absolute paths in one and relative in the other would make
+    // the two impossible to compare by eye, which is how they would be read.
+    let actually = vcw(&common);
+    assert_eq!(
+        numbered(&predicted),
+        numbered(&actually),
+        "the dry run did not predict the run\n--- dry\n{predicted}\n--- run\n{actually}"
+    );
+    assert_eq!(numbered(&predicted).len(), 2, "{predicted}");
+}
+
+/// The `  1/2    some/path` lines of an export's output, in order.
+fn numbered(printed: &str) -> Vec<&str> {
+    printed
+        .lines()
+        .filter(|line| {
+            line.split_whitespace().next().is_some_and(|first| {
+                first.split_once('/').is_some_and(|(n, of)| {
+                    !n.is_empty() && n.chars().chain(of.chars()).all(|c| c.is_ascii_digit())
+                })
+            })
+        })
+        .collect()
+}
+
+#[test]
 fn one_side_can_be_exported_on_its_own() {
     let dir = tempfile::tempdir().expect("tempdir");
     let project = side(dir.path(), "s24", 2.0);
@@ -404,7 +461,10 @@ fn what_flac_cannot_carry_is_refused_with_the_reason() {
         "flac",
     ]);
     assert!(said.contains("cannot be written as FLAC"), "{said}");
-    assert!(said.contains("Export this one as WAV"), "{said}");
+    // Both containers that will take a 32-bit capture, because a refusal that
+    // names only one of them sends a person who wanted a small file to WAV.
+    assert!(said.contains("as WAV"), "{said}");
+    assert!(said.contains("Ogg Vorbis"), "{said}");
 }
 
 #[test]
@@ -418,4 +478,126 @@ fn a_second_export_over_the_first_needs_permission() {
     let said = refused(&["export", &path, "--into", &out]);
     assert!(said.contains("already exists"), "{said}");
     vcw(&["export", &path, "--into", &out, "--overwrite", "--json"]);
+}
+
+#[test]
+fn a_lossy_export_runs_from_the_command_line_and_says_what_it_wrote() {
+    // The two new containers end to end: §33 names MP3 and OGG as initial
+    // export formats, and the CLI is where §50's one-command run reaches them.
+    // The quality is in the report because it is not recoverable from the file
+    // afterwards - a VBR stream does not record which `-V` made it - so a log
+    // of the run is the only place the setting survives.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "s16", 4.0);
+
+    for (format, quality, expected) in [("mp3", Some("compact"), "compact"), ("ogg", None, "high")]
+    {
+        let out = dir.path().join(format!("out-{format}"));
+        let mut args = vec![
+            "export".to_owned(),
+            project.display().to_string(),
+            "--into".to_owned(),
+            out.display().to_string(),
+            "--format".to_owned(),
+            format.to_owned(),
+            "--json".to_owned(),
+        ];
+        if let Some(quality) = quality {
+            args.push("--quality".to_owned());
+            args.push(quality.to_owned());
+        }
+        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+        let printed = vcw(&borrowed);
+        let report: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+
+        assert_eq!(report["container"], format);
+        assert_eq!(report["quality"], expected, "{format}: {printed}");
+        assert_eq!(report["lossless"], false);
+        assert_eq!(report["report"]["files"], 2);
+
+        let items = report["items"].as_array().expect("items");
+        let mut written = 0u64;
+        for item in items {
+            let path = Path::new(item["path"].as_str().expect("a path"));
+            assert_eq!(
+                path.extension().and_then(|ext| ext.to_str()),
+                Some(format),
+                "{} is not a .{format}",
+                path.display()
+            );
+            written += std::fs::metadata(path).expect("stat").len();
+        }
+        assert_eq!(
+            report["report"]["bytes"].as_u64(),
+            Some(written),
+            "{format}: the reported byte count is not what is on disk"
+        );
+
+        // And a reader we did not write agrees about what the container is.
+        if let Some(ffprobe) = tool("ffprobe") {
+            let said = Command::new(&ffprobe)
+                .args([
+                    "-v",
+                    "error",
+                    // The audio stream only. An MP3 with an embedded cover has
+                    // two streams and the second one is a PNG, which is itself
+                    // worth knowing: the artwork really did go in.
+                    "-select_streams",
+                    "a:0",
+                    "-show_entries",
+                    "stream=codec_name",
+                    "-of",
+                    "default=nw=1:nk=1",
+                    items[0]["path"].as_str().expect("a path"),
+                ])
+                .output()
+                .expect("ffprobe");
+            let codec = String::from_utf8_lossy(&said.stdout).trim().to_owned();
+            assert_eq!(
+                codec,
+                if format == "mp3" { "mp3" } else { "vorbis" },
+                "ffprobe read a {codec} out of a .{format}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_quality_that_is_not_one_is_refused_before_anything_is_written() {
+    // A typo in a flag that only some containers read. It is still a refusal -
+    // taking "lovely" to mean the default would write two hours of someone's
+    // record at a setting they did not choose - and it names the three words
+    // that work, because a flag with three legal values should not need the
+    // manual.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "s16", 1.0);
+    let out = dir.path().join("out");
+
+    let said = refused(&[
+        "export",
+        &project.display().to_string(),
+        "--into",
+        &out.display().to_string(),
+        "--format",
+        "mp3",
+        "--quality",
+        "lovely",
+    ]);
+    assert!(said.contains("transparent"), "{said}");
+    assert!(!out.exists(), "a refused export created {}", out.display());
+
+    // The same word against a lossless container is not an error the other way
+    // round either: it is still not a quality, and a refusal that depended on
+    // the format would be a flag people trip over.
+    let said = refused(&[
+        "export",
+        &project.display().to_string(),
+        "--into",
+        &out.display().to_string(),
+        "--format",
+        "flac",
+        "--quality",
+        "lovely",
+    ]);
+    assert!(said.contains("transparent"), "{said}");
 }

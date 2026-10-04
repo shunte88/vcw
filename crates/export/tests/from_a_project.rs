@@ -79,8 +79,23 @@ fn recorded(
     channels: u16,
     frames: u64,
 ) -> (Project, Vec<u8>, usize) {
+    recorded_at(dir, 96_000, format, channels, frames)
+}
+
+/// The same, at a named sample rate.
+///
+/// Split out for the lossy containers, which are the first ones that care: 96
+/// kHz is a rate MPEG never defined, so a project recorded at the default
+/// cannot be exported as MP3 at all and the successful case needs 44.1.
+fn recorded_at(
+    dir: &Path,
+    rate: u32,
+    format: StorageFormat,
+    channels: u16,
+    frames: u64,
+) -> (Project, Vec<u8>, usize) {
     let info = CaptureInfo {
-        rate: SampleRate(96_000),
+        rate: SampleRate(rate),
         channels,
         storage_format: format,
         capture_mode: CaptureMode::Exclusive,
@@ -396,7 +411,18 @@ fn a_two_sided_record_numbers_its_tracks_across_the_disc() {
                 .into_owned()
         })
         .collect();
-    assert_eq!(names, ["A1 -.flac", "A2 -.flac", "B1 -.flac", "B2 -.flac"]);
+    // `Untitled` rather than a dangling separator: these four names came off a
+    // real record whose provider row had no titles, and `A1 -.flac` is what a
+    // person then has to look at in a file manager.
+    assert_eq!(
+        names,
+        [
+            "A1 - Untitled.flac",
+            "A2 - Untitled.flac",
+            "B1 - Untitled.flac",
+            "B2 - Untitled.flac"
+        ]
+    );
 
     // A tag's track number is unique within its disc and says nothing about
     // which face it came from, which is what every player assumes.
@@ -641,4 +667,259 @@ fn a_title_with_a_dot_in_it_still_gets_its_extension() {
         plan.items[0].path.strip_prefix(&out).expect("under out"),
         Path::new("Symphony No. 5.flac")
     );
+}
+
+#[test]
+fn a_track_number_carries_the_total_for_its_own_disc() {
+    // `disc 2/2` beside a bare `track 6` is the shape a real export went out
+    // in: `track_total` was hardcoded `None`, so every player showed the
+    // numerator and nothing to divide it by. The denominator is per disc for
+    // the same reason the numerator is - a tag's track number restarts on the
+    // next record - so a double album is 1..9 of 9 then 1..8 of 8, and not
+    // 1..17 of 17.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, _, _) = recorded(dir.path(), StorageFormat::Int16, 2, 80_000);
+    described(&mut project);
+    let capture = side::load(project.conn(), Side::A)
+        .expect("side A")
+        .and_then(|row| row.capture)
+        .expect("a capture behind side A");
+    for letter in ['B', 'C', 'D'] {
+        let side = Side::from_letter(letter).expect("a side");
+        side::ensure(&mut project, side).expect("side");
+        side::attach(&mut project, side, capture).expect("attach");
+    }
+    // Two tracks a face, so disc one holds four and disc two holds four, and a
+    // release-wide total would be eight and wrong on both.
+    titled_on(
+        &mut project,
+        Side::A,
+        &[(0, 10_000, ""), (10_000, 20_000, "")],
+    );
+    titled_on(
+        &mut project,
+        Side::from_letter('B').expect("B"),
+        &[(20_000, 30_000, ""), (30_000, 40_000, "")],
+    );
+    titled_on(
+        &mut project,
+        Side::from_letter('C').expect("C"),
+        &[(40_000, 50_000, ""), (50_000, 60_000, "")],
+    );
+    titled_on(
+        &mut project,
+        Side::from_letter('D').expect("D"),
+        &[(60_000, 70_000, ""), (70_000, 80_000, "")],
+    );
+
+    let out = dir.path().join("out");
+    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Flac)).expect("plan");
+    let numbered: Vec<(Option<u32>, Option<u32>, Option<u32>)> = plan
+        .items
+        .iter()
+        .map(|item| {
+            (
+                item.tags.disc_number,
+                item.tags.track_number,
+                item.tags.track_total,
+            )
+        })
+        .collect();
+    assert_eq!(
+        numbered,
+        [
+            (Some(1), Some(1), Some(4)),
+            (Some(1), Some(2), Some(4)),
+            (Some(1), Some(3), Some(4)),
+            (Some(1), Some(4), Some(4)),
+            (Some(2), Some(1), Some(4)),
+            (Some(2), Some(2), Some(4)),
+            (Some(2), Some(3), Some(4)),
+            (Some(2), Some(4), Some(4)),
+        ],
+        "each disc numbers 1..4 of 4, and the second disc restarts"
+    );
+
+    // And the total does not depend on what else was in the export: a side
+    // exported on its own is still `of 4`, or a file could not be re-made.
+    let mut one_side = Request::new(&out, Container::Flac);
+    one_side.sides = vec![Side::from_letter('D').expect("D")];
+    let plan = splitter::plan(project.conn(), &one_side).expect("plan");
+    assert_eq!(plan.items.len(), 2, "side D only");
+    assert_eq!(
+        plan.items
+            .iter()
+            .map(|item| (item.tags.track_number, item.tags.track_total))
+            .collect::<Vec<_>>(),
+        [(Some(3), Some(4)), (Some(4), Some(4))],
+        "side D is tracks 3 and 4 of disc two, whatever was exported with it"
+    );
+}
+
+#[test]
+fn a_container_that_cannot_carry_the_capture_is_refused_by_the_plan() {
+    // The plan is the thing an operator is invited to argue with for free, so a
+    // container the capture cannot go into has to be refused there and not by
+    // the first `Writer::create`. A `--dry-run` that printed `3 file(s) in
+    // FLAC` for a float32 rip and then died on file one had already made the
+    // directories by the time it told the truth.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, _, _) = recorded(dir.path(), StorageFormat::Float32, 2, 30_000);
+    described(&mut project);
+    titled(&mut project, &[(0, 30_000, "Franz Schubert")]);
+
+    let out = dir.path().join("out");
+    let error = splitter::plan(project.conn(), &Request::new(&out, Container::Flac))
+        .expect_err("FLAC is an integer codec");
+    assert!(
+        matches!(error, Error::Unencodable { .. }),
+        "the refusal should name the format and the container, got {error:?}"
+    );
+    assert!(
+        !out.exists(),
+        "a refused plan must not have made the output directory"
+    );
+
+    // The same capture as WAV is fine, which is the point of saying which
+    // container rather than refusing the project.
+    splitter::plan(project.conn(), &Request::new(&out, Container::Wav)).expect("WAV takes float32");
+}
+
+#[test]
+#[cfg(any(feature = "mp3", feature = "ogg"))]
+fn a_lossy_export_writes_the_span_of_audio_the_track_asked_for() {
+    // The round-trip claim a lossy container can actually make. There is no
+    // byte comparison to do - that is what lossy means - so what is checked is
+    // the thing the splitter is responsible for either way: that the file holds
+    // the cut the track describes and not the whole side, and that the plan's
+    // paths and the report's byte count describe what is on disk.
+    let Some(ffprobe) = tool("ffprobe") else {
+        eprintln!("skipped: no ffprobe");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, _, _) = recorded_at(dir.path(), 44_100, StorageFormat::Int16, 2, 441_000);
+    described(&mut project);
+    // Ten seconds of capture cut into two tracks of four and three, with a gap
+    // between them and lead-out after - so a writer that ignored the range
+    // would come back at ten seconds and a writer that ran the two together
+    // would come back at seven.
+    titled(
+        &mut project,
+        &[
+            (0, 176_400, "Europe Endless"),
+            (220_500, 352_800, "The Hall of Mirrors"),
+        ],
+    );
+
+    for (container, seconds) in [
+        #[cfg(feature = "mp3")]
+        (
+            Container::Mp3(vcw_export::encoder::Quality::High),
+            [4.0, 3.0],
+        ),
+        #[cfg(feature = "ogg")]
+        (
+            Container::OggVorbis(vcw_export::encoder::Quality::High),
+            [4.0, 3.0],
+        ),
+    ] {
+        let out = dir.path().join(format!("out-{}", container.extension()));
+        let plan = splitter::plan(project.conn(), &Request::new(&out, container)).expect("plan");
+        assert_eq!(plan.items.len(), 2);
+        for item in &plan.items {
+            assert_eq!(
+                item.path.extension().and_then(|ext| ext.to_str()),
+                Some(container.extension()),
+                "the plan named {}",
+                item.path.display()
+            );
+        }
+        let report = splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+
+        let on_disk: u64 = plan
+            .items
+            .iter()
+            .map(|item| std::fs::metadata(&item.path).expect("stat").len())
+            .sum();
+        assert_eq!(
+            report.bytes, on_disk,
+            "{container}: the report and the filesystem disagree"
+        );
+        assert_eq!(report.files, 2);
+        assert_eq!(report.frames, 176_400 + 132_300);
+
+        for (item, expected) in plan.items.iter().zip(seconds) {
+            let said = std::process::Command::new(&ffprobe)
+                .args([
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=nw=1:nk=1",
+                    item.path.to_str().unwrap(),
+                ])
+                .output()
+                .expect("ffprobe");
+            let duration: f64 = String::from_utf8_lossy(&said.stdout)
+                .trim()
+                .parse()
+                .unwrap_or_else(|why| {
+                    panic!(
+                        "ffprobe said {:?}: {why}",
+                        String::from_utf8_lossy(&said.stdout)
+                    )
+                });
+            assert!(
+                (duration - expected).abs() < 0.1,
+                "{container}: {} is {duration} s and the track is {expected} s",
+                item.path.display()
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(feature = "mp3")]
+fn a_rate_mp3_cannot_carry_is_refused_by_the_plan_and_offered_the_others() {
+    // The same shape as the float32-into-FLAC refusal above, for the limit that
+    // will actually come up: 96 kHz is a perfectly ordinary capture rate and the
+    // one `recorded` uses by default, and MPEG stops at 48. Resampling it would
+    // be a filter choice, which belongs to a person and not to an export.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, _, _) = recorded(dir.path(), StorageFormat::Int16, 2, 30_000);
+    described(&mut project);
+    titled(&mut project, &[(0, 30_000, "Showroom Dummies")]);
+
+    let out = dir.path().join("out");
+    let error = splitter::plan(
+        project.conn(),
+        &Request::new(&out, Container::Mp3(vcw_export::encoder::Quality::High)),
+    )
+    .expect_err("96 kHz is not an MPEG rate");
+    assert!(matches!(error, Error::Unencodable { .. }), "got {error:?}");
+    let said = error.to_string();
+    assert!(
+        said.contains("96000"),
+        "the refusal has to name the rate: {said}"
+    );
+    assert!(
+        !out.exists(),
+        "a refused plan must not have made the output directory"
+    );
+
+    // And the containers that do take it, which is the point of refusing the
+    // one rather than the project. Ogg has no rate table at all.
+    #[cfg(feature = "ogg")]
+    splitter::plan(
+        project.conn(),
+        &Request::new(
+            &out,
+            Container::OggVorbis(vcw_export::encoder::Quality::High),
+        ),
+    )
+    .expect("Ogg takes 96 kHz");
+    splitter::plan(project.conn(), &Request::new(&out, Container::Flac))
+        .expect("FLAC takes it too");
 }

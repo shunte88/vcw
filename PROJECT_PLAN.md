@@ -139,7 +139,7 @@ Four are written: D1, D2, D7+D10, and the workspace layout WP-01 had to settle.
 | **D2** | SQLite binding | **Locked 2026-09-25, [ADR-0002](docs/adr/0002-sqlite-binding.md).** `rusqlite` with the `bundled` feature - synchronous, predictable, no async runtime on the writer thread; bundled build removes platform SQLite variance, which matters because §15 makes recovery a correctness requirement and recovery behaviour depends on WAL semantics that vary by SQLite version. `sqlx` is async-first and wrong here. | Locked |
 | **D3** | Block layout & size | **Firmed 2026-09-25 by WP-05's soak**, which is the firmed-config run S2 could not do: per-channel (AUP4-compatible) blocks of **250 ms**, **batch 1**, WAL, `synchronous=FULL`, ring >= 500 ms, and now a WAL ceiling **stated in bytes** (`Config::wal_bytes`, 4 MiB). That last part is a correction: SQLite's autocheckpoint counts pages and VCW's are 64 KiB, so the stock threshold was a 64 MiB log rather than the 4 MiB one S2 measured on a default-page-size harness - bounded, but 13.7x larger and with a materially worse commit tail. Rationale otherwise unchanged and still inverted from the starting hypothesis: throughput is a non-issue, so the budget buys *recovery granularity*. Confirm on Pi 5 before locking the platform story. See `docs/spikes/S2-sqlite-capture.md` and `docs/STATUS.md` | G0 (pending Pi 5) |
 | **D4** | Sample representation at rest | Store the device's bytes **verbatim** plus a format tag. §9 forbids conversion; converting to f32 at rest would silently break the bit-perfect claim. | WP-02 |
-| **D5** | Encoder stack | WAV: own writer (trivial, avoids `hound`'s format limits). FLAC: `flacenc` (pure Rust, Apache-2.0). MP3: `mp3lame-encoder` (LGPL, links libmp3lame) - Phase 2. Ogg Vorbis: `vorbis_rs` (LGPL) - Phase 2. Licensing consequence: MP3/OGG extend the LGPL relink obligation already established for chromaprint-next; alternatively make them optional features. | WP-14 (FLAC/WAV), G3 (MP3/OGG) |
+| **D5** | Encoder stack | WAV: own writer (trivial, avoids `hound`'s format limits). FLAC: `flacenc` (pure Rust, Apache-2.0). MP3: `mp3lame-encoder`, which links a vendored libmp3lame. Ogg Vorbis: `vorbis_rs`, over aoTuV-Lancer libvorbis and libogg. **Two licences here were recorded wrong and are corrected from the registry (2026-10-04):** `mp3lame-encoder` and `mp3lame-sys` declare **LGPL-3.0**, not LGPL-2.1 - libmp3lame's own `COPYING` is the GNU *Library* GPL v2 "or any later version" and the wrapper exercises the later-version option, so `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` both ship and `deny.toml` names an exception the `chromaprint-next` one does not cover. `vorbis_rs` and both its `-sys` crates are **BSD-3-Clause**, not LGPL, so **Ogg export adds no copyleft obligation at all**. Licensing consequence: MP3 alone extends the relink obligation, under LGPL-3.0 §4. | WP-14 (FLAC/WAV), WP-25 (MP3/OGG) |
 | **D6** | High-rate IPC transport *and* waveform rendering | **Revised from S3 (2026-09-24); the original wording was wrong in two of its three clauses.** Channels for meter/waveform/position - chosen for API shape (typed, per-invocation, no global event namespace), *not* throughput, which is indistinguishable from the event bus at §35 payload sizes. Hand-built compact JSON; **never** `InvokeResponseBody::Raw` for small frames - under Tauri's 1024-byte direct-execute threshold it is eval'd as a decimal JSON array, 42% *larger* than the JSON it replaces. **Do not coalesce sends**: the webview absorbed the full 750 Hz worker rate with zero loss, no added main-thread cost and a quarter of the delivery latency. Coalesce *paints* instead - one read of latest state per `rAF`. **Draw the waveform incrementally, in an `OffscreenCanvas` worker**: full-canvas main-thread redraw costs 29% of the main thread against 0.5% in a worker. Acceptance metric is **main-thread occupancy, not fps** - WebKitGTK does not pace `rAF` to vsync. See `docs/spikes/S3-tauri-ipc.md` | G0 (met on Linux) |
 | **D7** | Licence posture | **Locked 2026-09-25, [ADR-0004](docs/adr/0004-licence-and-toolchain.md).** MIT core; `THIRD-PARTY-NOTICES.md` and `LICENSE-LGPL-2.1` in the repository, written ahead of the Phase 2 obligation and describing the present position honestly - permissive dependencies only today. `deny.toml` carries the allowlist and `cargo deny check` runs on every push. The LGPL exception stays commented out until `chromaprint-next` actually lands: an allowance carried ahead of its dependency is one nobody reviews. | Locked |
 | **D8** | Concurrency model | **Locked 2026-09-25, [ADR-0005](docs/adr/0005-concurrency-model.md).** Dedicated OS threads on the capture path - device callback, writer, engine - with `mpsc` between them and no async runtime anywhere near audio or SQLite. **No async runtime anywhere, as it turned out**: WP-12 was where tokio was expected to enter and did not, because metadata networking is a handful of blocking `ureq` calls behind a `Transport` trait, and a thread that is waiting on an HTTP response is a thread doing exactly what it should. The workspace still has no `tokio` dependency. Two clauses of the original wording changed on contact with the work: the engine thread is not a matter of taste, because `cpal`'s stream handle is **`!Send`** and the thread that opens a device must be the thread that keeps it; and **elevated priority is not implemented**, because WP-05's 192 kHz soak showed no overruns at ordinary priority on any rig tested. It stays available for a platform that needs it rather than applied speculatively. | Locked |
@@ -612,12 +612,101 @@ early, because each one belongs to a package that is not built yet.
 | 22 | `fingerprint/acoustid` + MusicBrainz recording resolution | 5 |
 | 23 | `identify`: evidence/candidate/confidence/resolver - combining fingerprint, timing, metadata and signal evidence (§26, §27) | 12 |
 | 24 | Metadata-assisted boundaries; release/side topology inference constraining detection | 7 |
-| 25 | MP3 + Ogg export (D5 licensing consequences) | 5 |
+| 25 | MP3 + Ogg export (D5 licensing consequences) - **built 2026-10-04**, ahead of its gate, while the export code was open. See the note below | 5 |
 | 26 | Advanced capture diagnostics + diagnostic bundle export | 4 |
 | 27 | UI: identification review, candidate comparison, confidence surfacing | 8 |
 
 **Total ≈ 47 sessions.** The resolver (WP-23) is the intellectually hardest
 piece in the whole project and deserves a design document before code.
+
+**WP-25, built 2026-10-04.** Taken out of order because WP-14's export code was
+open and the only thing holding MP3 and Ogg in G3 was D5's licensing question,
+which turned out to be half the size it looked. `cargo info` disagreed with D5
+on both crates: `mp3lame-encoder` is **LGPL-3.0** rather than LGPL-2.1, and
+`vorbis_rs` is **BSD-3-Clause** rather than LGPL, so Ogg carries no obligation
+and MP3's is a version of the licence the `chromaprint-next` exception does not
+cover. Both are **default-on cargo features** - §33 requires the formats, so a
+build that cannot write them does not meet the requirement; the feature is there
+so a redistributor who cannot carry LGPL-3.0 can drop MP3 without forking the
+tree, and `Container::Mp3` exists in every build either way so that the contract,
+the bindings, the CLI and the panel are identical across feature combinations and
+a build without the encoder refuses by name instead of not knowing the word.
+
+The design decisions worth recording. **Everything goes through `f32`** - both
+libraries want float, so `fan_out` de-interleaves the stored frame into planar
+buffers once, scaling by a power of two so that full-scale negative is exactly
+-1.0 rather than a hair past it where libvorbis clips. **Three quality levels,
+not a bitrate**: `transparent`/`high`/`compact` map to V0/V2/V5 and q8/q6/q3, and
+the name survives in the settings file, the JSON command, the CLI flag and the
+report, because a VBR stream does not record which `-V` made it and the run log
+is the only place the setting lives afterwards. **The quality is a no-op on the
+lossless containers rather than a refusal**, so the panel can hold one value
+while the format changes under it. **MP3 refuses a rate MPEG never defined**:
+nine rates, nothing above 48 kHz, so the five 192 kHz rips in `/data2/source_rips`
+are refused by name - resampling means choosing an anti-alias filter, which is
+the same argument that refuses silent dither in WP-14 - while the other 54 go
+untouched. Ogg refuses almost nothing and is the only container besides WAV that
+takes a `Float32` capture. **No new tagging code was needed**: two backends
+already cover four containers, because what differs is the tag format and not the
+codec - ID3v2 for WAV and MP3, Vorbis comments for FLAC and Ogg.
+
+**A refusal's advice is generated, not written.** Found by exporting real records
+rather than by any test: the eight refusals in `vcw-export` ended in sentences
+naming a container, and four of them had drifted - three FLAC refusals still said
+"Export this one as WAV" from before Ogg existed, MP3 offered FLAC above 96 kHz
+where `flacenc` stops too, and the WAV size ceiling offered FLAC for a capture
+FLAC refuses on bit depth. Correcting them individually introduced the next
+defect each time, so `encoder::alternatives(refused, spec)` now asks every other
+container whether it would carry *this* capture and composes the clause. A fifth
+container will appear in every message that should mention it. The limits were
+split into a `*_why` returning the reason alone plus a wrapper that appends the
+advice, because otherwise the generator and the limits call each other, and the
+seam between them has its own test.
+
+**An untitled track is named, not abbreviated.** The same real records showed the
+default template producing `A2 -.ogg` for the six of seven tracks whose provider
+row had no title. `naming::expand` substitutes `naming::UNTITLED` for an absent
+`{title}` exactly as it already substituted `00` for an absent `{tracknum}` - in
+the **file name only**, because `Tags` is built separately and an empty title tag
+is the truth about the record. A bracket group still wins at any depth, so
+`[{title}]` keeps its *only if there is one* meaning. Parallel export, raised by
+the same investigation, is on hold by instruction.
+
+Four API traps, each found by a test rather than by reading. `InterleavedPcm`
+hardcodes `len()/2`, so it is stereo-only and a mono track has to go through
+`MonoPcm`. `vorbis_rs` has **no empty-block guard** and passes the sample count
+straight to `vorbis_analysis_wrote`, where zero is libvorbis's end-of-stream
+signal - so a zero-length write would truncate the file rather than do nothing.
+`mp3lame-encoder`'s `std` feature is **not default**, without which its errors do
+not implement `std::error::Error`. And the Xing/LAME VBR header is emitted as a
+blank placeholder inside the *first* encode call's output and has to be patched
+by seeking back to byte zero at the end; skipping that leaves a file every player
+opens and reports the wrong length for - three seconds of audio came back as
+**2.83 s** when the patch was removed on purpose.
+
+**Two defects in existing code came out of testing the new code.** `Report::bytes`
+was taken from `Writer::finish`, which returns before the tagger opens the file,
+so every export under-reported its own size by the size of its tags - a 4 MB
+sleeve scan across a ten-track side is 40 MB missing from the one number a person
+checks against the disk space they just used. It is now measured from the
+filesystem after tagging. And `Error::Unencodable`'s reason was a `&'static str`,
+so the refusals could describe MPEG's rate table but not name the rate they were
+looking at; it is a `Cow` now, and three refusals say what the capture actually
+is.
+
+**Verified by readers we did not write**, which for a lossy codec is the only
+kind of verification there is: `ffprobe` on codec, rate, channels and duration;
+`ogginfo` with no warnings, which checks the page structure rather than just
+decoding; `sox` reading a 1 kHz left and 3 kHz right tone back out of each
+container through `ffmpeg`'s channel split, because a planar fan-out is exactly
+the kind of code that swaps two channels and still produces a file every player
+happily plays - with FLAC as a control, so the measurement is trusted before any
+claim is made about the encoders; and python `mutagen` on ID3v2 in an MP3 and on
+a `METADATA_BLOCK_PICTURE` in an Ogg. **Both ends of every new check were
+proven**: swapping the fan-out, dropping the quality argument and removing the
+VBR patch each failed exactly the test that exists for it, and nothing else.
+`cargo test`, `cargo clippy --all-targets -- -D warnings` and the whole suite
+pass in **all four feature combinations**.
 
 ## 7. Phase 3 (§46) - Gate G4
 
@@ -657,7 +746,7 @@ Rust. Cheap, and the architectural rule dies without it.
 | **R1** | SQLite cannot sustain 24/192 with concurrent reads | **L** (was M) | **Critical** | Largely retired by S2 on x86_64/SSD: 4× real-time headroom, zero drops, bounded WAL. Residual risk is the Pi 5 on SD/NVMe - re-measure there before closing | Sidecar block file + SQLite index; project becomes a container (costs §12's single-file property) |
 | **R2** | CPAL's device abstraction can hide the hardware's real capabilities, so bit-perfection cannot be assumed from the API | **L** (was M, was L) | M | **Re-assessed 2026-09-22 from S1 evidence.** The *audio path* is fine - raw bytes arrive unconverted. *Device discovery* is not: CPAL's ALSA list is the plug layer's, and a silent 8 kHz→48 kHz upsample was reported as an honoured request. Mitigation is now concrete: verify every negotiated format against the OS (`/proc/asound` on Linux, the WASAPI exclusive format on Windows) and refuse to claim bit-perfect without it. Built and working in S1; must land in WP-04. **Revised 2026-09-23:** CPAL 0.18.2 enumerates `hw:` PCMs and adds `HostTrait::device_by_id`, so the device list is no longer the plug layer's fiction and devices are selectable by PCM id - likelihood drops back to **L**. Impact stays M and the verifier stays mandatory: a better list makes the lie less likely, not detectable | Report negotiated path honestly (§9 demands this regardless); select devices by PCM id (now a stock CPAL API); stay current on CPAL rather than pinning |
 | **R3** | Tauri IPC can't carry 60 Hz meters + waveform | **L** (was M) | **L** (was M) | **Retired by S3 on Linux/x86_64 - and the risk was mis-aimed.** The IPC boundary carried 12.5× the required rate with zero loss; two of the three mitigations listed here (coalescing, binary channels) are measurably counter-productive. The live concern is the one that was only a footnote: **main-thread waveform rendering**, at 29% occupancy naive. Residual risk is Windows/WebView2 and Pi 5, where Tauri's direct-execute thresholds differ | `OffscreenCanvas` worker (now the default, not the fallback); incremental self-blit redraw; drop waveform update rate before touching transport |
-| **R4** | Encoder licensing/quality (MP3/Ogg LGPL) | M | L | D5 at WP-14; `cargo deny` | Optional cargo features; ship FLAC/WAV only in MVP |
+| **R4** | Encoder licensing/quality (MP3/Ogg LGPL) | M | L | D5 at WP-14; `cargo deny` | **Closed at WP-25 (2026-10-04).** Half the risk was not there: Ogg is BSD-3-Clause. The mitigation landed as cargo features that are **on by default** - §33 requires both formats, so default-off would fail the requirement, and the features exist for the licence rather than for the size. `cargo build --no-default-features --features ogg` is the escape for a redistributor who cannot carry LGPL-3.0, and `deny.toml` fails the build if any other copyleft crate reaches the graph |
 | **R5** | **Scope** - very large surface, single developer | M | **H** | Gates; headless-first; scope levers (§10.2) | Ship a CLI-only 0.1 if the GUI slips; it is genuinely useful alone |
 | **R6** | `chromaprint-next` is 0.1.0, single-maintainer | M | M | Vendor the local checkout, pin exactly, run its test suite in our CI | `rusty-chromaprint` (known gaps) or upstream C via FFI - the latter violates §25, so this is a real loss |
 | **R7** | Detector port regresses vs VRipr | M | M | A/B harness on the labelled corpus from day one of WP-11 | Keep VRipr binary available for comparison. **Closed 2026-09-26.** `crates/signal/tests/vripr_parity.rs` reproduces 97.6-99.7% of VRipr's boundaries over all 595 snippets, exact to the frame, and fails if any detector drops below 97% or below VRipr's own agreement with the labels. VRipr's answers are checked in as `tests/fixtures/vripr_answers.jsonl`, computed out of tree at `/data2/vcw-scratch/parity` from a verbatim copy of VRipr's `src/audio/mod.rs`, so the reference outlives the other repo |
@@ -827,10 +916,10 @@ and it is what would close G1.
    stack**.
 
    **What WP-14 leaves behind, in the order it will be asked about.** §33 lists MP3 and
-   Ogg as required initial formats and neither is built: they sit in G3 because D5's
-   encoders extend the LGPL relink obligation, and the decision to make - optional cargo
-   features or a blanket relink notice - is a licensing decision rather than a coding
-   one. **A default capture cannot be exported as FLAC**, because a device negotiation
+   Ogg as required initial formats and **both are now built** - WP-25, 2026-10-04, taken
+   out of order because the licensing decision turned out to be the only thing holding
+   them and half of it was not real (Ogg is BSD-3-Clause). Default-on cargo features,
+   with MP3's LGPL-3.0 obligation live in `deny.toml` and `THIRD-PARTY-NOTICES.md`. **A default capture cannot be exported as FLAC**, because a device negotiation
    takes the widest integer format on offer, that is S32 here, and `flacenc` 0.5.1 stops
    at 24 bits; `--format s24` sidesteps it, and the real fix is either a 32-bit-capable
    encoder through bindings - which costs D5's pure-Rust choice - or an explicit

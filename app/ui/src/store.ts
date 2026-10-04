@@ -99,6 +99,9 @@ export type Line = {
  */
 export type Detection = Extract<Wire, { kind: "detection-finished" }>;
 
+/** What `export-finished` reported, kept so the panel can say what it wrote. */
+export type Exported = Extract<Wire, { kind: "export-finished" }>;
+
 /** What the last thing Rust said adds up to. */
 export type Engine = {
   /** The capture phase: `idle`, `armed`, `recording`, `paused`, `stopped`. */
@@ -125,6 +128,15 @@ export type Engine = {
   readonly auditioning: number | null;
   /** Export progress as `[done, total]`, or null when nothing is exporting. */
   readonly exporting: readonly [number, number] | null;
+  /**
+   * What the last finished export wrote, or null if none has finished.
+   *
+   * Kept for the same reason `detection` is: `exporting` goes back to null the
+   * moment the thread reports done, so without this a successful export is a
+   * progress line that vanishes. A person who waited four minutes for a side is
+   * owed a sentence saying what came out.
+   */
+  readonly exported: Exported | null;
   /** What the last detection pass found, or null if none has finished. */
   readonly detection: Detection | null;
   /** The last refusal, whether it came back from a command or over the bus. */
@@ -153,6 +165,7 @@ export const NOTHING: Engine = {
   playhead: 0,
   auditioning: null,
   exporting: null,
+  exported: null,
   detection: null,
   refusal: null,
   log: [],
@@ -227,9 +240,11 @@ export function fold(state: Engine, event: Wire): Engine {
         },
       };
     case "export-progress":
-      return { ...state, exporting: [event.index, event.of] };
+      // The report is cleared as the next export starts, so the panel can never
+      // show last run's total beside this run's progress bar.
+      return { ...state, exporting: [event.index, event.of], exported: null };
     case "export-finished":
-      return { ...state, exporting: null };
+      return { ...state, exporting: null, exported: event };
     case "export-failed":
       return {
         ...state,

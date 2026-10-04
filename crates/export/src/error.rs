@@ -80,7 +80,14 @@ pub enum Error {
         /// What was asked for.
         container: &'static str,
         /// Why it will not work.
-        why: &'static str,
+        ///
+        /// A [`Cow`] rather than a `&'static str` because some of these have to
+        /// name the number they are refusing. "MP3 carries 32, 44.1 or 48 kHz"
+        /// leaves the reader to work out which of those their capture is not,
+        /// and the answer is in the spec the exporter is already holding.
+        ///
+        /// [`Cow`]: std::borrow::Cow
+        why: std::borrow::Cow<'static, str>,
     },
 
     /// A WAV file would exceed what a RIFF header can describe.
@@ -88,16 +95,27 @@ pub enum Error {
     /// RIFF sizes are 32-bit, so 4 GiB is the ceiling for the whole file. A
     /// 30-minute side at 192 kHz in 32-bit stereo is 1.4 GiB, so this is reachable
     /// by a long unsplit side rather than by a track. Refused rather than
-    /// truncated, and FLAC has no such limit.
+    /// truncated.
     #[error(
         "{bytes} bytes will not fit in a WAV file: RIFF sizes are 32-bit, so the ceiling is \
-         {ceiling} bytes. Export this one as FLAC."
+         {ceiling} bytes. {instead}"
     )]
     TooLargeForWav {
         /// How many bytes of audio were to be written.
         bytes: u64,
         /// The largest a data chunk can be.
         ceiling: u64,
+        /// Where to send this particular capture instead.
+        ///
+        /// Computed at the refusal rather than written into the message,
+        /// because the honest answer depends on the capture. This used to read
+        /// "Export this one as FLAC", which is true of a 24-bit 44.1 kHz side
+        /// and false of the 192 kHz `Int32` one in `/data2/vcw-firstlight`:
+        /// `flacenc` stops at 96 kHz and at 24 bits, so for that capture the
+        /// only container with no size ceiling is Ogg Vorbis. A refusal that
+        /// names a container which then refuses as well costs a person a
+        /// second attempt to find out.
+        instead: String,
     },
 
     /// A naming template mentions a token that does not exist.
@@ -151,6 +169,38 @@ pub enum Error {
     Flac {
         /// What it said.
         why: String,
+    },
+
+    /// A lossy encoder refused.
+    ///
+    /// One variant for both of them rather than one each, because the two
+    /// libraries say nothing a caller can branch on: libmp3lame reports
+    /// `BadSampleFreq` and libvorbis reports `EINVAL`, and what a person needs
+    /// in either case is which container it was and what it said.
+    #[error("the {container} encoder refused: {why}")]
+    Lossy {
+        /// Which container, as [`crate::encoder::Container::name`] spells it.
+        container: &'static str,
+        /// What the library said.
+        why: String,
+    },
+
+    /// This build cannot write that container.
+    ///
+    /// MP3 links libmp3lame under LGPL-3.0, so `vcw-export` keeps it behind a
+    /// cargo feature that a redistributor who cannot carry that obligation can
+    /// turn off - see `THIRD-PARTY-NOTICES.md`. `Container` has the variant
+    /// either way, which is what makes this error reachable rather than
+    /// making the word unknown: "this build cannot write MP3" is actionable
+    /// and "mp3 is not a container VCW writes" would be a lie.
+    #[error(
+        "this build of VCW cannot write {container}: it was compiled without the {feature:?}          feature. Export this one as FLAC or WAV, or rebuild with it."
+    )]
+    NoEncoder {
+        /// Which container, as [`crate::encoder::Container::name`] spells it.
+        container: &'static str,
+        /// The cargo feature that would have provided it.
+        feature: &'static str,
     },
 
     /// The tagger refused.

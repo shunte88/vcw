@@ -294,7 +294,10 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
         Some("Stardonas (Transverse)"),
         "the album came from an Audacity ALBUM tag and survived to the file"
     );
-    assert_eq!(id3_text(file, b"TRCK").as_deref(), Some("1"));
+    // `number/total`, which is how ID3v2 spells a track number. The total is
+    // the count on this track's own disc, so a one-track import is `1/1` and a
+    // double album's second record is `1/8` upwards rather than `9/17`.
+    assert_eq!(id3_text(file, b"TRCK").as_deref(), Some("1/1"));
 }
 
 #[test]
@@ -323,14 +326,21 @@ fn a_float32_import_cannot_be_flac_and_is_told_so_before_anything_is_written() {
         said.contains("FLAC") && said.contains("WAV"),
         "the refusal should name the format that will work: {said}"
     );
-    // The plan makes the directories before it encodes anything, so what this
-    // checks is that no *file* appeared: an empty `Album/` left behind is
-    // untidy, half a FLAC is a corrupt library.
+    // Nothing at all, not even the directory. This used to allow an empty
+    // `Album/` to be left behind, because the refusal came from the first
+    // `Writer::create` and the plan had already made the directories by then.
+    // The container is now vetted in `splitter::plan`, so a format the capture
+    // cannot go into is refused before the filesystem is touched.
     assert!(
         files_under(&out).is_empty(),
         "a file was written under {} before the refusal: {:?}",
         out.display(),
         files_under(&out)
+    );
+    assert!(
+        !out.exists(),
+        "{} was created for an export that was refused",
+        out.display()
     );
 }
 

@@ -446,16 +446,22 @@ enum Command {
     ///
     /// Reads immutable blocks plus the edit instructions and writes nothing
     /// back, so the project is opened read-only. `--dry-run` resolves the whole
-    /// plan - every path, every tag, every frame count - and stops there.
+    /// plan - every path, every tag, every frame count - and stops there,
+    /// printing the file names a real run would write. Add `--json` for the
+    /// tags as well.
     Export {
         /// Project to export from.
         project: std::path::PathBuf,
         /// Directory the files go under. Created if it is not there.
         #[arg(long)]
         into: std::path::PathBuf,
-        /// Container to write: wav or flac.
+        /// Container to write: flac, wav, mp3 or ogg.
         #[arg(long, default_value = "flac")]
         format: String,
+        /// How hard a lossy container compresses: transparent, high or
+        /// compact. Ignored by flac and wav.
+        #[arg(long, default_value = "high")]
+        quality: String,
         /// Naming template. Omit for the default.
         #[arg(long)]
         template: Option<String>,
@@ -1083,6 +1089,7 @@ fn run() -> anyhow::Result<()> {
             project,
             into,
             format,
+            quality,
             template,
             sides,
             artwork,
@@ -1093,6 +1100,7 @@ fn run() -> anyhow::Result<()> {
             project,
             into,
             format,
+            quality,
             template,
             sides,
             artwork,

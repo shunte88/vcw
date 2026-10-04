@@ -104,6 +104,32 @@ jobs:
         with:
           command: check
 
+  # WP-25: the MP3 encoder links libmp3lame under LGPL-3.0, so it sits behind a
+  # default-on cargo feature and THIRD-PARTY-NOTICES.md tells a redistributor who
+  # cannot carry that obligation to build with `--no-default-features --features
+  # ogg`. That is a promise, and a promise nothing builds is a wish: every other
+  # job in this file builds the one combination where both features are on, so
+  # three of the four would break silently. Linux only and `vcw-export` only -
+  # this is about a feature combination, not about a platform.
+  export-features:
+    name: export without its lossy features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Neither encoder
+        run: |
+          cargo clippy -p vcw-export --all-targets --no-default-features -- -D warnings
+          cargo test -p vcw-export --no-default-features
+      - name: MP3 only - the combination a BSD-only redistributor does not want
+        run: cargo test -p vcw-export --no-default-features --features mp3
+      - name: Ogg only - the escape hatch the notices name
+        run: cargo test -p vcw-export --no-default-features --features ogg
+
   # §2 is an architectural rule, so it gets a test rather than a code review habit:
   # nothing in crates/ may depend on Tauri, directly or transitively. WP-15 adds the
   # shell under app/, and this job is what stops the shell leaking downward.

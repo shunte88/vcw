@@ -354,6 +354,23 @@ export function Settings({
           >
             <option value="flac">FLAC</option>
             <option value="wav">WAV</option>
+            <option value="mp3">MP3</option>
+            <option value="ogg">Ogg Vorbis</option>
+          </select>
+        </label>
+        <label>
+          Lossy quality
+          {/* Shown whatever the format is, unlike the export panel's: this is
+              the default a session starts from, and a field that vanished when
+              the default format was FLAC would be a default nobody could set
+              in advance. */}
+          <select
+            value={draft.export.quality}
+            onChange={(event) => exporting({ quality: event.target.value })}
+          >
+            <option value="transparent">Transparent</option>
+            <option value="high">High</option>
+            <option value="compact">Compact</option>
           </select>
         </label>
         <label>
