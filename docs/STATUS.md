@@ -2,7 +2,7 @@
 
 **As of:** 2026-10-04
 **Phase:** 1 is complete and committed - WP-01 through WP-20 are built, plus WP-16a, and
-WP-25 has been taken out of Phase 2, all on Linux x86_64 only.
+WP-25, WP-28, WP-21 and WP-22 have been taken out of Phase 2, all on Linux x86_64 only.
 
 > This snapshot was last read end to end on 2026-09-28. The sections written since
 > then are dated where they sit: WP-19's packaging, *closing the loose ends*, the UI
@@ -5422,6 +5422,126 @@ Skipped: the live regions have no CLI surface, because §35 declares no event fo
 the offline path. The live worker stops a region at 120 s, which is `fpcalc`'s default
 and AcoustID's indexing length, but a span the operator asked for is a span they get.
 
+## Phase 2 - WP-22, the fingerprint lookup
+
+**2026-10-04.** A fingerprint now has somewhere to go. `vcw_metadata::AcoustId` posts
+one to `api.acoustid.org/v2/lookup` and hands back the recordings it matched, each with
+the pressings it appears on; `MusicBrainz::recording` fetches the other half for a match
+that came back as nothing but an MBID. `vcw fingerprint --identify` drives it on a real
+side. Nothing is persisted: §35's `fingerprint-match` event and a table for a chosen
+match both wait on the evidence resolver, because choosing among candidates is not the
+lookup's job.
+
+**It landed in `vcw-metadata`, not in `vcw-fingerprint` where the plan put it.** A lookup
+is a provider request before it is anything to do with audio: it needs the rate limiter,
+the retry policy, the cache, the credential rule and the offline mode that crate already
+has, and `vcw-fingerprint` would have had to grow a second copy of all of it to host a
+37-line stub. The stub is deleted and `crates/fingerprint/src/lib.rs` carries a section
+saying where it went, so a reader following the plan finds it. `AcoustId` is deliberately
+*not* a `Provider`: that trait searches with words and answers with releases, and this
+one searches with audio and answers with recordings.
+
+**POST, decided by measuring.** A fingerprint is about 28 base64 characters per second of
+audio, which was measured off the real corpus rather than assumed:
+
+| Audio | Fingerprint | In a form body |
+| --- | --- | --- |
+| 120 s | 3,303 chars | fits a request line |
+| 300 s | 8,476 chars | at the 8 KB default limit |
+| 600 s | 16,884 chars | twice over it |
+
+So a five-minute track is already at the request-line limit a default server enforces,
+and a whole side is well past it. `net::Request` grew a body and the `Transport` trait
+kept one method: a request with a body is a POST and one without is a GET, which is the
+only distinction either provider needs, and both are read-only. The credential travels
+in the body, so `Request`'s `Debug` prints `body_bytes` and never the body.
+`acoustid_fingerprint_400s.txt` is a real 400 s fingerprint kept as a fixture, and a
+test fails if it is ever replaced with something that would fit in a URL.
+
+**The `meta` separator is a space, and getting it wrong fails silently.** AcoustID
+documents `meta=recordings+releases+tracks`. In a form body `+` *is* a space, so sending
+a literal plus means `%2B`, and AcoustID then reads `recordings%2Breleases%2Btracks` as
+one unknown name, answers `{"status": "ok"}` with the matches present, and omits every
+piece of metadata. No error, no warning, no clue. Measured against the live service:
+
+| Separator sent | Recordings returned |
+| --- | --- |
+| `%2B` (a literal plus) | 0 |
+| `%2C` (a comma) | 0 |
+| `+` (a space on the wire) | 1, with 13 releases |
+| `%20` | 1, with 13 releases |
+
+`META` is therefore the string `"recordings releases tracks"`, which `encode` turns into
+`%20`. A unit test asserts the encoded form contains no `%2B`, and a live test asserts
+the service still reads it that way, because this is the kind of thing a provider changes
+without telling anyone.
+
+**Every provider error message in VCW has been empty, and nobody noticed.** A live test
+with no API key was expected to report what AcoustID says about a bad key. It reported
+`AcoustID returned HTTP 400: ` with nothing after the colon. The service does send a body
+- `{"error": {"code": 4, "message": "invalid API key"}, "status": "error"}` - and `ureq`
+3 was throwing it away: `http_status_as_error` defaults to true, which turns any 4xx or
+5xx into `Error::StatusCode(u16)` and discards the response. One config call fixes it for
+all three providers, and the status still reaches the client, which is what lets it
+decide a 429 is worth retrying. A second fix was needed for AcoustID specifically, which
+puts its refusals in a 200 as often as in a 400: `refined` re-reads an HTTP error's body
+as AcoustID JSON, so a bad key is `Error::Rejected` rather than a bare status, and
+`Error::Refused` is a new variant for a refusal that arrived inside a success. A caller
+that trusted the status code would have read a refusal as "no match found", which is the
+one wrong answer available.
+
+**First light, and the finding that matters for the product: a vinyl transfer matches
+nothing.** `vcw fingerprint --identify` on a real 198 s side returns `no match at
+AcoustID` - a successful request with an empty result. A probe over the first four rips
+of the media2026 corpus asked 32 regions and got **one** result, at score 0.615, titled
+"My Medly (May 14, 2019)" by an artist the record has nothing to do with: a false
+positive, not a hit. AcoustID's index is submitted overwhelmingly from digital releases,
+and a record is a different master cut at a slightly different speed through a different
+cartridge. The consequences: the populated fixture had to be captured by `trackid`
+instead of by fingerprint (recorded in `tests/fixtures/README.md`, with why), fingerprint
+evidence needs a *low* weight and a score floor in the resolver rather than a veto, and
+WP-22 cannot be the identification story on its own - the catalogue number and the
+matrix text a person can read off the label stay the strongest evidence VCW has.
+
+The same probe says something about WP-21's detectors too: of 215 regions across four
+sides at `--tracks --min-sources 1`, **183 were under 20 seconds**. That is over-splitting
+at those settings, not a lookup problem, but it means `--identify` on a default
+`--tracks` run mostly asks about fragments too short to answer.
+
+**Sixteen legs green on this box at Rust 1.99.0, 1,130 Rust tests and 138 frontend
+tests** - the whole gate, including `spikes`, `appclippy` and `apptest`, which do not run
+on media2026. The bench box was busy with the corpus soak, and the split exists for
+resources rather than capability; the one leg it is still needed for is a judgement call
+about whether `rustup check` works here, and it did.
+
+**Leg zero was lying, which is why it is leg zero.** `rustup check` exits **100** when an
+update is available, and the leg tested its exit status first, so it printed
+`toolchain SKIPPED (rustup check could not reach the network)` on exactly the outcome it
+exists to catch: stable at 1.98.1 against CI's newest stable, 1.99.0. The update line was
+sitting in a variable nobody read. It now reads the output for the finding and the status
+only to tell a real failure from one, and the full gate was re-run on 1.99.0 before any
+of the above was claimed green.
+
+**The `features` leg earned its place.** `pub mod acoustid;` was inserted one line above
+`pub mod agent;` and took the `#[cfg(feature = "net")]` that belonged to it, leaving the
+only module that mentions `ureq` compiled unconditionally. Everything built and all
+1,096 tests passed; `cargo check -p vcw-metadata --no-default-features` was the only
+thing that failed, which is exactly the §40 regression that leg exists to catch.
+`acoustid` itself needs no feature: it holds a `Transport` and does not know what kind.
+
+**A read defect in schema v3, found by accident and fixed.** Driving the corpus work
+turned up `no such column: c.capture_eq` on a project written before this morning's
+migration. `85acd44` added the column and every read site in `session.rs` selected it by
+name, so **every pre-v3 project failed to open for reading**, through all sixteen of
+those sites - `fingerprint`, `detect`, `waveform`, `export`, the lot. `open_read_only`
+could not catch it: it rejects a *newer* schema and accepts an older one, which is the
+right policy and exactly why the caller has to read tolerantly. The select now asks
+whether the column exists and the row parser already defaulted it to `Unknown`, which is
+what a v1 project honestly knows about its equalisation. The regression test builds a v1
+fixture by winding the migrations back, asserts the fixture really is older before it
+asserts anything about the read, and was mutation-proved: with the column check forced
+true it fails with the original error.
+
 ## Next up
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**, and so
@@ -5429,13 +5549,12 @@ are the two Phase 2 packages taken out of order: WP-25's lossy encoders and sche
 `capture_eq` at `85acd44`, which was the tip of `main`. On top of that, uncommitted:
 **WP-28's About dialog** and **WP-21's fingerprinting**, both built, both green.
 
-**WP-22 is next, and WP-21 handed it everything it needs.** A fingerprint and its
-duration are what AcoustID's `/lookup` wants, `vcw_core::fingerprinting::of_span` will
-produce one for any span, and §35's `fingerprint-match` is still the event nothing
-publishes - that event is WP-22's to publish, because a match is an answer and WP-21
-only asks the question. The first thing to decide there is what gets persisted: WP-21
-deliberately left the schema alone, and a lookup result is the first thing in this area
-worth a table.
+**WP-22 is built** (above): the lookup, the recording fetch, `--identify`, and the
+measurement that says a vinyl transfer will rarely match. What it deliberately did not
+do is persist anything or publish §35's `fingerprint-match`, because both need a decision
+WP-23 owns: what a *chosen* match is, how fingerprint evidence is weighted against a
+catalogue number, and what score floor makes a match worth showing at all. The 0.615
+false positive is the argument for deciding that before anything is written to a table.
 
 **The gate now runs in two places, and WP-21's final run was split across both.**
 media2026 takes thirteen of the sixteen legs, including the `toolchain` check this box
@@ -5745,7 +5864,9 @@ the spike harness.
   relink notice under LGPL-3.0 §4 with `LICENSE-LGPL-3.0` and `LICENSE-GPL-3.0` beside
   it. The MP3 encoder is behind a default-on cargo feature so a redistributor who cannot
   carry that can drop it. Ogg Vorbis is BSD-3-Clause and adds nothing.
-  `chromaprint-next` will add an LGPL-2.1-or-later obligation at Phase 2; its
-  `deny.toml` entry is written and commented out until the crate is in the graph.
+  `chromaprint-next` added the LGPL-2.1-or-later obligation when WP-21 put it in the
+  graph; its `deny.toml` exception is live, and unlike the encoders it is behind no cargo
+  feature, because §25 is not optional and a build without it could not identify
+  anything.
 - **Stay current on CPAL.** Two blocking defects and the device-id API all landed within
   two minor releases; pinning 0.16 had already cost us a fork.

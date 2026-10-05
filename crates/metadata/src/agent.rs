@@ -83,30 +83,56 @@ impl Agent {
 }
 
 impl Transport for Agent {
-    fn get(&self, request: &Request) -> Result<Response, TransportError> {
+    fn send(&self, request: &Request) -> Result<Response, TransportError> {
         let agent = ureq::Agent::config_builder()
             // Both halves matter: a server that accepts a connection and then says
             // nothing would otherwise hold a worker thread forever.
             .timeout_connect(Some(request.timeout))
             .timeout_global(Some(request.timeout))
+            // A 4xx or 5xx is a response, not an error, and the body is the half of
+            // it worth reading. ureq's default turns the status into
+            // `Error::StatusCode(u16)` and drops everything else, which cost every
+            // provider its error message: AcoustID answers a bad key with
+            // `400 {"error": {"code": 4, "message": "invalid API key"}}` and VCW
+            // reported `AcoustID returned HTTP 400: ` with nothing after the colon.
+            // The status reaching the client is what lets it decide 429 is worth
+            // retrying; the body is what lets a person know what to fix.
+            .http_status_as_error(false)
             .build()
             .new_agent();
-
-        let mut call = agent.get(&request.url);
-        for header in &request.headers {
-            call = call.header(&header.name, &header.value);
-        }
 
         tracing::debug!(
             url = %without_query(&request.url),
             timeout_ms = millis(request.timeout),
+            body_bytes = request.body.as_ref().map_or(0, Vec::len),
             "provider request"
         );
-        let mut response = match call.call() {
+
+        // The header loop twice over, because ureq's builder is a different type
+        // with a body than without one and the two cannot share a variable. Six
+        // duplicated lines beats a generic helper for two call sites.
+        let outcome = match &request.body {
+            Some(body) => {
+                let mut call = agent.post(&request.url);
+                for header in &request.headers {
+                    call = call.header(&header.name, &header.value);
+                }
+                call.send(body.as_slice())
+            }
+            None => {
+                let mut call = agent.get(&request.url);
+                for header in &request.headers {
+                    call = call.header(&header.name, &header.value);
+                }
+                call.call()
+            }
+        };
+
+        let mut response = match outcome {
             Ok(response) => response,
-            // A 4xx or 5xx is an answer, not a failure: the client decides whether
-            // 429 is worth retrying and 404 is worth reporting, and it cannot
-            // decide that if the status never reaches it.
+            // Still handled, though `http_status_as_error(false)` means it should
+            // not arrive: it is one config call away, and a body-less status is a
+            // better answer than a transport error that loses the status too.
             Err(ureq::Error::StatusCode(status)) => {
                 tracing::warn!(
                     url = %without_query(&request.url),
@@ -227,7 +253,7 @@ mod tests {
     fn a_url_that_is_not_a_url_is_a_protocol_error_and_not_a_hang() {
         // No network is touched: there is nothing here to resolve.
         let error = Agent::new()
-            .get(&Request::get("not a url at all").with_timeout(Duration::from_millis(50)))
+            .send(&Request::get("not a url at all").with_timeout(Duration::from_millis(50)))
             .expect_err("no response");
         assert!(matches!(error, TransportError::Protocol(_)), "{error:?}");
         assert!(!error.is_transient(), "asking again will not help");
@@ -238,7 +264,7 @@ mod tests {
         // `.invalid` is reserved by RFC 2606 and cannot resolve, so this fails
         // locally in the resolver rather than reaching anything.
         let error = Agent::new()
-            .get(
+            .send(
                 &Request::get("https://vcw.invalid/release/1")
                     .with_timeout(Duration::from_millis(500)),
             )

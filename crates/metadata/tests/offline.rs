@@ -51,10 +51,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use vcw_metadata::AcoustId;
 use vcw_metadata::cache::Memory;
 use vcw_metadata::fixtures::Recorded;
 use vcw_metadata::net::{Offline, Response};
 use vcw_metadata::policy::{Limiter, TestClock};
+use vcw_metadata::query::Fingerprint;
 use vcw_metadata::{
     Artwork, Cancel, Client, Criterion, Discogs, Error, Genres, MusicBrainz, Provider, ProviderId,
     Query, Token, Transport, search_all,
@@ -103,6 +105,23 @@ fn with_networking_disabled_every_provider_answers_with_a_message() {
             .expect_err("also offline");
         assert!(matches!(error, Error::Offline { .. }), "{error:?}");
     }
+}
+
+#[test]
+fn with_networking_disabled_a_fingerprint_lookup_answers_with_a_message_too() {
+    // Not covered by the loop above, because AcoustID is not a `Provider`: it
+    // takes audio evidence rather than words. The promise is the same one, and a
+    // lookup that hung or panicked here would break §40 just as thoroughly.
+    let provider = AcoustId::new(Arc::new(Offline)).with_key(Token::new("sekrit"));
+    assert!(provider.is_offline());
+    let error = provider
+        .lookup(&Fingerprint::new("AQABz0q3", 198), &Cancel::new())
+        .expect_err("offline is an answer");
+    assert!(matches!(error, Error::Offline { .. }), "{error:?}");
+    let message = error.to_string();
+    assert!(message.contains("networking is disabled"), "{message}");
+    assert!(message.contains("AcoustID"), "{message}");
+    assert!(!error.is_transient());
 }
 
 #[test]

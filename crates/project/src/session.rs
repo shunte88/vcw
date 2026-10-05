@@ -272,7 +272,7 @@ impl Session {
 pub fn load(conn: &Connection, id: i64) -> Result<Option<Record>> {
     let record = conn
         .query_row(
-            &format!("{SELECT} WHERE c.capture_id = ?1"),
+            &format!("{} WHERE c.capture_id = ?1", select(conn)),
             params![id],
             row,
         )
@@ -286,7 +286,7 @@ pub fn load(conn: &Connection, id: i64) -> Result<Option<Record>> {
 ///
 /// If the query fails.
 pub fn all(conn: &Connection) -> Result<Vec<Record>> {
-    let mut stmt = conn.prepare(&format!("{SELECT} ORDER BY c.capture_id"))?;
+    let mut stmt = conn.prepare(&format!("{} ORDER BY c.capture_id", select(conn)))?;
     let rows = stmt.query_map([], row)?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
@@ -303,19 +303,55 @@ pub fn all(conn: &Connection) -> Result<Vec<Record>> {
 /// If the query fails.
 pub fn unfinished(conn: &Connection) -> Result<Vec<Record>> {
     let mut stmt = conn.prepare(&format!(
-        "{SELECT} WHERE c.finished_at IS NULL ORDER BY c.capture_id"
+        "{} WHERE c.finished_at IS NULL ORDER BY c.capture_id",
+        select(conn)
     ))?;
     let rows = stmt.query_map([], row)?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-const SELECT: &str = "SELECT c.capture_id, c.sample_rate, c.channels, c.storage_format,
+/// The captures query, asking for `capture_eq` only where there is one.
+///
+/// Schema v3 added that column (§51) and `open_read_only` deliberately does not
+/// migrate, so an older project is still one this build reads - the layout, the
+/// blocks and the waveform all come out of a v1 capture unchanged, which is the
+/// property `require_current_schema` exists to let a *caller* decide about. A
+/// `SELECT` naming the column unconditionally took that away from every caller at
+/// once: 16 read sites, the whole CLI read path and six of the window's commands
+/// answered `no such column: c.capture_eq` on any project written before v3.
+///
+/// `NULL` rather than the string `'unknown'` so the fallback is not a literal that
+/// has to keep matching an enum spelling; [`row`] reads the column as an `Option`
+/// and an absent equalisation is [`CaptureEq::Unknown`], which is what the column's
+/// own default says and what it means - this capture did not record what it
+/// arrived with.
+fn select(conn: &Connection) -> String {
+    let eq = if has_capture_eq(conn) {
+        "c.capture_eq"
+    } else {
+        "NULL"
+    };
+    format!(
+        "SELECT c.capture_id, c.sample_rate, c.channels, c.storage_format,
         c.capture_mode, c.host_api, c.device_id, c.device_name, c.os_verified,
         c.os_report, c.state, c.started_at, c.finished_at, c.frames,
         COALESCE(d.overruns, 0), COALESCE(d.underruns, 0),
         COALESCE(d.dropped_frames, 0), COALESCE(d.stream_errors, 0),
-        c.capture_eq
-   FROM captures c LEFT JOIN capture_diagnostics d ON d.capture_id = c.capture_id";
+        {eq}
+   FROM captures c LEFT JOIN capture_diagnostics d ON d.capture_id = c.capture_id"
+    )
+}
+
+/// Whether the `captures` table carries v3's equalisation column.
+///
+/// Asked of the table rather than of `user_version`, because what the query needs
+/// to know is whether the column is there. A project whose version says one thing
+/// and whose columns say another is exactly the case where the two questions give
+/// different answers, and only one of them keeps the query running.
+fn has_capture_eq(conn: &Connection) -> bool {
+    conn.prepare("SELECT capture_eq FROM captures LIMIT 0")
+        .is_ok()
+}
 
 /// SQLite integers are signed, and every counter here is a `u64`. Saturating
 /// rather than wrapping: at 192 kHz a frame count reaches `i64::MAX` after
@@ -340,7 +376,8 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
     let storage_code: u32 = r.get(3)?;
     let mode: String = r.get(4)?;
     let state: String = r.get(10)?;
-    let eq: String = r.get(18)?;
+    // `Option`, because `select` asks for `NULL` on a project older than v3.
+    let eq: Option<String> = r.get(18)?;
     Ok(Record {
         id: r.get(0)?,
         info: CaptureInfo {
@@ -355,7 +392,7 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
             // A spelling no version of VCW wrote reads as unknown, which is both
             // the safe answer and the honest one: the column says something this
             // build cannot interpret, so the provenance is not known to it.
-            eq: CaptureEq::parse(&eq).unwrap_or_default(),
+            eq: eq.as_deref().and_then(CaptureEq::parse).unwrap_or_default(),
             host_api: r.get(5)?,
             device_id: r.get(6)?,
             device_name: r.get(7)?,
@@ -404,6 +441,53 @@ mod tests {
             // the column defaults to and what a parse failure reads as.
             eq: CaptureEq::Riaa,
         }
+    }
+
+    /// A capture read out of a project written before v3's column existed.
+    ///
+    /// The whole point of [`select`]: this is the project every read site saw
+    /// `no such column: c.capture_eq` on. The wind-back is the one in
+    /// `app/src-tauri/src/transport.rs` - §51's column and WP-13's tables, in the
+    /// order a migration added them - and it asserts the fixture really is older
+    /// before it asserts anything about the read, because a fixture that still
+    /// has the column would pass this test without exercising a line of it.
+    #[test]
+    fn a_capture_written_before_v3_still_reads_with_no_equalisation() {
+        let (_dir, mut p) = project();
+        let id = Session::begin(&mut p, &info()).expect("begin").id();
+
+        p.conn()
+            .execute_batch(
+                "DROP TABLE IF EXISTS tracks;
+                 DROP TABLE IF EXISTS track_boundaries;
+                 DROP TABLE IF EXISTS sides;
+                 DROP TABLE IF EXISTS release_artwork;
+                 DROP TABLE IF EXISTS releases;
+                 ALTER TABLE captures DROP COLUMN capture_eq;
+                 DELETE FROM schema_migrations WHERE version >= 2;
+                 PRAGMA user_version = 1;",
+            )
+            .expect("winding the schema back");
+        assert!(
+            !has_capture_eq(p.conn()),
+            "the fixture still has v3's column, so it is not an older project"
+        );
+
+        // Every one of the three read paths, because each builds its own SQL.
+        let one = load(p.conn(), id)
+            .expect("the capture still loads")
+            .expect("a row");
+        assert_eq!(one.info.eq, CaptureEq::Unknown);
+        assert_eq!(
+            one.info.rate,
+            SampleRate(96_000),
+            "the rest of the row is intact"
+        );
+        assert_eq!(all(p.conn()).expect("all still lists").len(), 1);
+        assert_eq!(
+            unfinished(p.conn()).expect("unfinished still lists").len(),
+            1
+        );
     }
 
     #[test]

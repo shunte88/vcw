@@ -85,6 +85,7 @@
 //! }
 //! ```
 
+pub mod acoustid;
 #[cfg(feature = "net")]
 pub mod agent;
 pub mod artwork;
@@ -104,6 +105,7 @@ pub mod query;
 pub mod release;
 pub mod setup;
 
+pub use acoustid::AcoustId;
 #[cfg(feature = "net")]
 pub use agent::Agent;
 pub use artwork::{Artwork, ArtworkFormat};
@@ -118,7 +120,9 @@ pub use net::{Request, Response, Transport, TransportError};
 pub use policy::{Clock, Limiter, Retry, SystemClock};
 pub use provider::{Provider, search_all};
 pub use query::{Criterion, Fingerprint, Query};
-pub use release::{ArtworkRef, Candidate, Medium, ProviderId, Release, TrackEntry};
+pub use release::{
+    ArtworkRef, Candidate, Medium, ProviderId, Recording, RecordingRelease, Release, TrackEntry,
+};
 pub use setup::Setup;
 
 // Re-exported because a caller working with a release works with its sides, and

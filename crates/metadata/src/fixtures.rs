@@ -173,7 +173,7 @@ fn next(queue: &mut Vec<Response>) -> Response {
 }
 
 impl Transport for Recorded {
-    fn get(&self, request: &Request) -> Result<Response, TransportError> {
+    fn send(&self, request: &Request) -> Result<Response, TransportError> {
         let mut state = self.state.lock().expect("the fixture is not poisoned");
         state.seen.push(request.clone());
         if let Some(queue) = state.exact.get_mut(&request.url) {
@@ -209,7 +209,7 @@ mod tests {
     fn an_exact_url_is_answered_and_recorded() {
         let transport = Recorded::new().json("https://example.invalid/a", "{\"ok\":true}");
         let response = transport
-            .get(&Request::get("https://example.invalid/a"))
+            .send(&Request::get("https://example.invalid/a"))
             .expect("an answer");
         assert!(response.is_success());
         assert_eq!(response.body, b"{\"ok\":true}");
@@ -229,11 +229,11 @@ mod tests {
             .answering("https://example.invalid/a", Response::ok("first"))
             .answering("https://example.invalid/a", Response::ok("second"));
         let request = Request::get("https://example.invalid/a");
-        assert_eq!(transport.get(&request).expect("a").status, 429);
-        assert_eq!(transport.get(&request).expect("b").body, b"first");
-        assert_eq!(transport.get(&request).expect("c").body, b"second");
+        assert_eq!(transport.send(&request).expect("a").status, 429);
+        assert_eq!(transport.send(&request).expect("b").body, b"first");
+        assert_eq!(transport.send(&request).expect("c").body, b"second");
         assert_eq!(
-            transport.get(&request).expect("d").body,
+            transport.send(&request).expect("d").body,
             b"second",
             "the last answer repeats rather than running out"
         );
@@ -247,14 +247,14 @@ mod tests {
             .json("https://example.invalid/release/1", "specific");
         assert_eq!(
             transport
-                .get(&Request::get("https://example.invalid/release/1"))
+                .send(&Request::get("https://example.invalid/release/1"))
                 .expect("an answer")
                 .body,
             b"specific"
         );
         assert_eq!(
             transport
-                .get(&Request::get("https://example.invalid/release/2"))
+                .send(&Request::get("https://example.invalid/release/2"))
                 .expect("an answer")
                 .body,
             b"general"
@@ -265,7 +265,7 @@ mod tests {
     fn a_missing_fixture_is_a_test_defect_and_says_so() {
         let transport = Recorded::new();
         let error = transport
-            .get(&Request::get("https://example.invalid/nothing"))
+            .send(&Request::get("https://example.invalid/nothing"))
             .expect_err("no fixture");
         assert_eq!(
             error,
@@ -279,9 +279,12 @@ mod tests {
     fn requests_can_be_forgotten_without_losing_the_answers() {
         let transport = Recorded::new().json_matching("/a", "body");
         let request = Request::get("https://example.invalid/a");
-        transport.get(&request).expect("an answer");
+        transport.send(&request).expect("an answer");
         transport.clear_requests();
         assert_eq!(transport.calls(), 0);
-        assert!(transport.get(&request).is_ok(), "the answer is still there");
+        assert!(
+            transport.send(&request).is_ok(),
+            "the answer is still there"
+        );
     }
 }

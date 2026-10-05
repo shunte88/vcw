@@ -1,6 +1,6 @@
 [package]
 name = "vcw-metadata"
-description = "Discogs and MusicBrainz providers, genre normalization and artwork"
+description = "Discogs, MusicBrainz and AcoustID providers, genre normalization and artwork"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

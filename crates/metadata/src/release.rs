@@ -204,6 +204,86 @@ impl TrackEntry {
     }
 }
 
+/// One recording, which is what a fingerprint lookup answers (§27).
+///
+/// A *recording* is not a release and not a track: it is the performance, and the
+/// same performance appears on many pressings. That is exactly why this is a
+/// separate type from [`Candidate`] - a fingerprint identifies the performance, and
+/// which pressing the user is holding is a question the performance alone cannot
+/// answer. [`Self::releases`] is the evidence for that second question.
+///
+/// Produced by both providers: AcoustID returns it inline with a lookup, and
+/// [`crate::MusicBrainz::recording`] fetches the canonical version of one by MBID.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Recording {
+    /// The MusicBrainz recording MBID. Both providers use the same identifier
+    /// here, because AcoustID's recordings *are* MusicBrainz recordings.
+    pub id: String,
+    /// The recording title.
+    pub title: String,
+    /// The artist credit, joined when there are several.
+    pub artist: String,
+    /// Stated length, when the provider knows one.
+    ///
+    /// Evidence for §26's duration agreement, not a boundary: a recording's
+    /// length is the studio master's, and a pressing's groove is often a second or
+    /// two off it.
+    pub duration: Option<Duration>,
+    /// The releases this recording is known to appear on.
+    pub releases: Vec<RecordingRelease>,
+}
+
+impl Recording {
+    /// The stated length in seconds, for matching against a detected region.
+    #[must_use]
+    pub fn seconds(&self) -> Option<f64> {
+        self.duration.map(|d| d.as_secs_f64())
+    }
+}
+
+/// Where a [`Recording`] sits on one release it appears on.
+///
+/// The position fields are the point. A fingerprint that matches a recording which
+/// is track 3 of side B on one pressing and track 1 of a CD on another is evidence
+/// about *which* pressing, and §26 says several such matches together constrain
+/// the release, the side and the position. Anything the provider did not say is
+/// `None` rather than zero, because a missing position and the first position are
+/// not the same claim.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct RecordingRelease {
+    /// The release MBID, which [`crate::Provider::fetch`] accepts for MusicBrainz.
+    pub id: String,
+    /// The release title.
+    pub title: String,
+    /// Which medium of the release, one-based: the second disc of a 2xLP is `2`.
+    ///
+    /// The disc, not the side. MusicBrainz models a vinyl release as one medium per
+    /// disc, so the side lives in the track *number* - `A3` - and neither provider
+    /// sends that string here: a recording lookup gives the numeric position within
+    /// the medium. The side comes from [`crate::Provider::fetch`] on [`Self::id`],
+    /// which returns [`TrackEntry::resolved`] for every track at once, so a resolver
+    /// holding several matches on one release fetches it once rather than per track.
+    pub medium: Option<u32>,
+    /// How many tracks that medium carries.
+    pub track_count: Option<u32>,
+    /// This recording's one-based position on that medium.
+    pub position: Option<u32>,
+    /// The medium's format as the provider spells it: `12" Vinyl`, `CD`.
+    ///
+    /// The field that separates the pressing the user is holding from the CD
+    /// reissue it shares a title with. Thirteen releases came back for one Autechre
+    /// recording and two of them were records.
+    pub format: String,
+}
+
+impl RecordingRelease {
+    /// Whether this appearance is on a record rather than a CD, a file or a tape.
+    #[must_use]
+    pub fn is_vinyl(&self) -> bool {
+        looks_like_vinyl(&self.format)
+    }
+}
+
 /// One physical carrier in a release: a disc, in §29's vocabulary.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Medium {
@@ -223,9 +303,21 @@ impl Medium {
     /// machine-readable flag.
     #[must_use]
     pub fn is_vinyl(&self) -> bool {
-        let lower = self.format.to_ascii_lowercase();
-        lower.contains("vinyl") || lower.contains("lp") || lower.contains('"')
+        looks_like_vinyl(&self.format)
     }
+}
+
+/// Whether a provider's format string describes a record.
+///
+/// A substring test on the provider's own word, because both providers spell it
+/// several ways (`Vinyl`, `12" Vinyl`, `Vinyl, LP`) and neither offers a
+/// machine-readable flag. Shared by [`Medium`] and [`RecordingRelease`] so the two
+/// cannot drift: a format one of them calls vinyl and the other does not would show
+/// up as a release appearing and disappearing between two views of the same record.
+#[must_use]
+pub fn looks_like_vinyl(format: &str) -> bool {
+    let lower = format.to_ascii_lowercase();
+    lower.contains("vinyl") || lower.contains("lp") || lower.contains('"')
 }
 
 /// A reference to artwork, which may or may not have been downloaded.

@@ -296,6 +296,32 @@ impl Client {
         Ok(self.send(&request, cancel)?.body)
     }
 
+    /// Sends a form POST and hands back the body.
+    ///
+    /// Uncached in both directions, unlike [`Self::body`]. A cache key is the URL,
+    /// and every AcoustID lookup is the *same* URL - `/v2/lookup` - so what
+    /// distinguishes two of them is the form, and the form carries the API key
+    /// (§39), which must not end up in a key written to disk. A cached POST
+    /// therefore needs a tag from the caller naming what it asked; worth adding
+    /// when a repeated lookup costs more than the plumbing, and not before.
+    ///
+    /// The rate limiter, the retry policy and the counters all apply: this goes
+    /// through the same send path as a GET.
+    pub fn post_form(
+        &self,
+        url: &str,
+        form: &str,
+        extra: &[Header],
+        cancel: &Cancel,
+    ) -> Result<Vec<u8>> {
+        cancel.check()?;
+        let mut request = Request::post_form(url, form)
+            .with_header("User-Agent", self.user_agent.clone())
+            .with_timeout(self.timeout);
+        request.headers.extend_from_slice(extra);
+        Ok(self.send(&request, cancel)?.body)
+    }
+
     /// Makes a request, waiting for a slot and retrying what is worth retrying.
     fn send(&self, request: &Request, cancel: &Cancel) -> Result<Response> {
         let mut attempt = 0;
@@ -305,7 +331,7 @@ impl Client {
             self.wait_for_a_slot(cancel)?;
 
             self.counters.requests.fetch_add(1, Ordering::Relaxed);
-            let outcome = self.transport.get(request);
+            let outcome = self.transport.send(request);
 
             let (again, error) = match &outcome {
                 Ok(response) if response.is_success() => return Ok(response.clone()),

@@ -1,0 +1,1104 @@
+{
+  "first-release-date": "1994-11-07",
+  "id": "91fa0fd1-60d9-4536-8316-2e4489812fa4",
+  "releases": [
+    {
+      "disambiguation": "",
+      "title": "Amber",
+      "media": [
+        {
+          "track-offset": 2,
+          "track-count": 11,
+          "title": "",
+          "position": 1,
+          "tracks": [
+            {
+              "title": "Silverside",
+              "position": 3,
+              "artist-credit": [
+                {
+                  "joinphrase": "",
+                  "name": "Autechre",
+                  "artist": {
+                    "sort-name": "Autechre",
+                    "country": "GB",
+                    "disambiguation": "electronic music duo",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type": "Group",
+                    "name": "Autechre"
+                  }
+                }
+              ],
+              "id": "f13ead3a-4f39-4b04-8f41-e5341183b5af",
+              "length": 331066,
+              "number": "3"
+            }
+          ],
+          "format": "Digital Media",
+          "id": "e9aa3460-d08f-3137-b903-e3c198194405",
+          "format-id": "907a28d9-b3b2-3ef6-89a8-7b18d91d4794"
+        }
+      ],
+      "barcode": "801061002534",
+      "quality": "normal",
+      "id": "217dce53-c5b9-42f2-8d0e-1b94da77914c",
+      "release-events": [
+        {
+          "area": {
+            "id": "525d4e18-3d00-31b9-a58b-a146a916de8f",
+            "type-id": null,
+            "name": "[Worldwide]",
+            "type": null,
+            "sort-name": "[Worldwide]",
+            "iso-3166-1-codes": [
+              "XW"
+            ],
+            "disambiguation": ""
+          },
+          "date": "1994-11-07"
+        }
+      ],
+      "artist-credit": [
+        {
+          "artist": {
+            "sort-name": "Autechre",
+            "country": "GB",
+            "disambiguation": "electronic music duo",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "name": "Autechre",
+            "type": "Group"
+          },
+          "joinphrase": "",
+          "name": "Autechre"
+        }
+      ],
+      "date": "1994-11-07",
+      "text-representation": {
+        "language": "eng",
+        "script": "Latn"
+      },
+      "packaging": null,
+      "status": "Official",
+      "packaging-id": null,
+      "country": "XW",
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe"
+    },
+    {
+      "release-events": [
+        {
+          "date": "1994-11-07",
+          "area": {
+            "sort-name": "Germany",
+            "disambiguation": "",
+            "iso-3166-1-codes": [
+              "DE"
+            ],
+            "type-id": null,
+            "id": "85752fda-13c4-31a3-bee5-0e5cb1f51dad",
+            "type": null,
+            "name": "Germany"
+          }
+        }
+      ],
+      "id": "59c5c1fd-0425-3240-bfc1-a63cdd35ebc8",
+      "quality": "normal",
+      "barcode": "5021603025127",
+      "media": [
+        {
+          "track-count": 11,
+          "track-offset": 2,
+          "title": "",
+          "position": 1,
+          "id": "293112c1-58f5-3ce4-ae99-f1e8d77cacfc",
+          "format-id": "9712d52a-4509-3d4b-a1a2-67c88c643e31",
+          "tracks": [
+            {
+              "length": 331066,
+              "id": "3f3b9084-aeec-3288-a0f7-6a74479dcba2",
+              "number": "3",
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "name": "Autechre",
+                    "type": "Group",
+                    "sort-name": "Autechre",
+                    "country": "GB",
+                    "disambiguation": "electronic music duo"
+                  },
+                  "joinphrase": "",
+                  "name": "Autechre"
+                }
+              ],
+              "position": 3,
+              "title": "Silverside"
+            }
+          ],
+          "format": "CD"
+        }
+      ],
+      "title": "Amber",
+      "disambiguation": "",
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "packaging": "Jewel Case",
+      "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+      "country": "DE",
+      "status": "Official",
+      "text-representation": {
+        "language": "eng",
+        "script": "Latn"
+      },
+      "date": "1994-11-07",
+      "artist-credit": [
+        {
+          "joinphrase": "",
+          "name": "Autechre",
+          "artist": {
+            "country": "GB",
+            "disambiguation": "electronic music duo",
+            "sort-name": "Autechre",
+            "name": "Autechre",
+            "type": "Group",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b"
+          }
+        }
+      ]
+    },
+    {
+      "release-events": [
+        {
+          "date": "1994-11-07",
+          "area": {
+            "type": null,
+            "name": "United Kingdom",
+            "type-id": null,
+            "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+            "disambiguation": "",
+            "iso-3166-1-codes": [
+              "GB"
+            ],
+            "sort-name": "United Kingdom"
+          }
+        }
+      ],
+      "id": "6076acc9-aed5-3629-8d65-5cb9fdd19a62",
+      "quality": "normal",
+      "barcode": "5021603025141",
+      "media": [
+        {
+          "track-count": 11,
+          "track-offset": 2,
+          "title": "",
+          "position": 1,
+          "id": "eae12fdd-dfcc-3ec7-8d61-c7b07bc9ece7",
+          "format-id": "f5e6e254-8f39-331c-936b-9c69d686dc47",
+          "format": "Cassette",
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "joinphrase": "",
+                  "name": "Autechre",
+                  "artist": {
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "name": "Autechre",
+                    "type": "Group",
+                    "sort-name": "Autechre",
+                    "disambiguation": "electronic music duo",
+                    "country": "GB"
+                  }
+                }
+              ],
+              "title": "Silverside",
+              "position": 3,
+              "number": "A3",
+              "id": "8e944edd-c54c-3a81-a54d-4f1dff95913f",
+              "length": 331066
+            }
+          ]
+        }
+      ],
+      "title": "Amber",
+      "disambiguation": "",
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "packaging": "Cassette Case",
+      "packaging-id": "c70b737a-0114-39a9-88f7-82843e54f906",
+      "country": "GB",
+      "status": "Official",
+      "text-representation": {
+        "language": "eng",
+        "script": "Latn"
+      },
+      "date": "1994-11-07",
+      "artist-credit": [
+        {
+          "joinphrase": "",
+          "name": "Autechre",
+          "artist": {
+            "country": "GB",
+            "disambiguation": "electronic music duo",
+            "sort-name": "Autechre",
+            "type": "Group",
+            "name": "Autechre",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61"
+          }
+        }
+      ]
+    },
+    {
+      "media": [
+        {
+          "format-id": "3e9080b0-5e6c-34ab-bd15-f526b6306a64",
+          "id": "b8980aa8-2a59-3d17-8ab9-fc1d3b9af2b8",
+          "format": "12\" Vinyl",
+          "tracks": [
+            {
+              "number": "A3",
+              "id": "86b670a2-7db5-3194-a5d5-ef9660709333",
+              "length": 331000,
+              "artist-credit": [
+                {
+                  "name": "Autechre",
+                  "joinphrase": "",
+                  "artist": {
+                    "name": "Autechre",
+                    "type": "Group",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "country": "GB",
+                    "disambiguation": "electronic music duo",
+                    "sort-name": "Autechre"
+                  }
+                }
+              ],
+              "title": "Silverside",
+              "position": 3
+            }
+          ],
+          "position": 1,
+          "title": "",
+          "track-count": 6,
+          "track-offset": 2
+        }
+      ],
+      "title": "Amber",
+      "disambiguation": "",
+      "id": "bd5b1270-7468-47f0-9c9a-928199f9e4ad",
+      "release-events": [
+        {
+          "area": {
+            "iso-3166-1-codes": [
+              "GB"
+            ],
+            "disambiguation": "",
+            "sort-name": "United Kingdom",
+            "name": "United Kingdom",
+            "type": null,
+            "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+            "type-id": null
+          },
+          "date": "1994-11-07"
+        }
+      ],
+      "quality": "normal",
+      "barcode": null,
+      "text-representation": {
+        "script": "Latn",
+        "language": "eng"
+      },
+      "date": "1994-11-07",
+      "artist-credit": [
+        {
+          "joinphrase": "",
+          "name": "Autechre",
+          "artist": {
+            "country": "GB",
+            "disambiguation": "electronic music duo",
+            "sort-name": "Autechre",
+            "name": "Autechre",
+            "type": "Group",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b"
+          }
+        }
+      ],
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "status": "Official",
+      "packaging-id": "e724a489-a7e8-30a1-a17c-30dfd6831202",
+      "country": "GB",
+      "packaging": "Gatefold Cover"
+    },
+    {
+      "text-representation": {
+        "language": "eng",
+        "script": "Latn"
+      },
+      "date": "1994-11-07",
+      "artist-credit": [
+        {
+          "artist": {
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "name": "Autechre",
+            "type": "Group",
+            "sort-name": "Autechre",
+            "disambiguation": "electronic music duo",
+            "country": "GB"
+          },
+          "joinphrase": "",
+          "name": "Autechre"
+        }
+      ],
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+      "country": "GB",
+      "status": "Official",
+      "packaging": "Jewel Case",
+      "media": [
+        {
+          "track-offset": 2,
+          "track-count": 11,
+          "position": 1,
+          "title": "",
+          "format": "CD",
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "joinphrase": "",
+                  "name": "Autechre",
+                  "artist": {
+                    "country": "GB",
+                    "disambiguation": "electronic music duo",
+                    "sort-name": "Autechre",
+                    "type": "Group",
+                    "name": "Autechre",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61"
+                  }
+                }
+              ],
+              "position": 3,
+              "title": "Silverside",
+              "number": "3",
+              "length": 331066,
+              "id": "6a4a84c7-4df7-3e27-86f7-f67416f7b572"
+            }
+          ],
+          "format-id": "9712d52a-4509-3d4b-a1a2-67c88c643e31",
+          "id": "37aae26e-fbc8-3281-8f2b-3c9db4b2212c"
+        }
+      ],
+      "title": "Amber",
+      "disambiguation": "",
+      "id": "192a81e6-a335-4126-8fab-abb258ae8e0e",
+      "release-events": [
+        {
+          "date": "1994-11-07",
+          "area": {
+            "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+            "type-id": null,
+            "name": "United Kingdom",
+            "type": null,
+            "sort-name": "United Kingdom",
+            "iso-3166-1-codes": [
+              "GB"
+            ],
+            "disambiguation": ""
+          }
+        }
+      ],
+      "quality": "normal",
+      "barcode": "5021603025127"
+    },
+    {
+      "release-events": [
+        {
+          "date": "1994",
+          "area": {
+            "disambiguation": "",
+            "iso-3166-1-codes": [
+              "US"
+            ],
+            "sort-name": "United States",
+            "type": null,
+            "name": "United States",
+            "type-id": null,
+            "id": "489ce91b-6658-3307-9877-795b68554c98"
+          }
+        }
+      ],
+      "id": "313ac1fa-f6e1-38f1-9c3b-b5a176495944",
+      "quality": "normal",
+      "barcode": null,
+      "media": [
+        {
+          "format": "Cassette",
+          "tracks": [
+            {
+              "title": "Silverside",
+              "position": 3,
+              "artist-credit": [
+                {
+                  "name": "Autechre",
+                  "joinphrase": "",
+                  "artist": {
+                    "type": "Group",
+                    "name": "Autechre",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "country": "GB",
+                    "disambiguation": "electronic music duo",
+                    "sort-name": "Autechre"
+                  }
+                }
+              ],
+              "id": "cd4bfdba-b423-3cfc-ad48-d3f97948d352",
+              "length": 331066,
+              "number": "A3"
+            }
+          ],
+          "format-id": "f5e6e254-8f39-331c-936b-9c69d686dc47",
+          "id": "2897e328-f207-380e-9fc1-ea745a5c3c78",
+          "track-offset": 2,
+          "track-count": 11,
+          "position": 1,
+          "title": ""
+        }
+      ],
+      "title": "Amber",
+      "disambiguation": "",
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "packaging": "Cassette Case",
+      "packaging-id": "c70b737a-0114-39a9-88f7-82843e54f906",
+      "status": "Official",
+      "country": "US",
+      "text-representation": {
+        "script": "Latn",
+        "language": "eng"
+      },
+      "date": "1994",
+      "artist-credit": [
+        {
+          "artist": {
+            "name": "Autechre",
+            "type": "Group",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "disambiguation": "electronic music duo",
+            "country": "GB",
+            "sort-name": "Autechre"
+          },
+          "joinphrase": "",
+          "name": "Autechre"
+        }
+      ]
+    },
+    {
+      "date": "1994",
+      "artist-credit": [
+        {
+          "joinphrase": "",
+          "name": "Autechre",
+          "artist": {
+            "disambiguation": "electronic music duo",
+            "country": "GB",
+            "sort-name": "Autechre",
+            "type": "Group",
+            "name": "Autechre",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61"
+          }
+        }
+      ],
+      "text-representation": {
+        "script": "Latn",
+        "language": "eng"
+      },
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "country": "US",
+      "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+      "status": "Official",
+      "packaging": "Jewel Case",
+      "title": "Amber",
+      "disambiguation": "",
+      "media": [
+        {
+          "track-count": 11,
+          "track-offset": 2,
+          "position": 1,
+          "title": "",
+          "format-id": "9712d52a-4509-3d4b-a1a2-67c88c643e31",
+          "id": "aee2f8ca-93e9-3be4-8434-b15bfe2e763a",
+          "format": "CD",
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "name": "Autechre",
+                  "joinphrase": "",
+                  "artist": {
+                    "country": "GB",
+                    "disambiguation": "electronic music duo",
+                    "sort-name": "Autechre",
+                    "name": "Autechre",
+                    "type": "Group",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b"
+                  }
+                }
+              ],
+              "title": "Silverside",
+              "position": 3,
+              "id": "5e2a9ceb-6de5-3753-9e51-0b28854938b9",
+              "length": 331066,
+              "number": "3"
+            }
+          ]
+        }
+      ],
+      "barcode": "016581723023",
+      "release-events": [
+        {
+          "date": "1994",
+          "area": {
+            "id": "489ce91b-6658-3307-9877-795b68554c98",
+            "type-id": null,
+            "name": "United States",
+            "type": null,
+            "sort-name": "United States",
+            "iso-3166-1-codes": [
+              "US"
+            ],
+            "disambiguation": ""
+          }
+        }
+      ],
+      "id": "3f7306e5-7f9a-3bb2-9fda-d5d4adb7d744",
+      "quality": "normal"
+    },
+    {
+      "packaging": "Jewel Case",
+      "status": "Official",
+      "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+      "country": "GB",
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "text-representation": {
+        "language": "eng",
+        "script": "Latn"
+      },
+      "artist-credit": [
+        {
+          "name": "Various Artists",
+          "joinphrase": "",
+          "artist": {
+            "sort-name": "Various Artists",
+            "country": null,
+            "disambiguation": "add compilations to this artist",
+            "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+            "type-id": "ac897045-5043-3294-969b-187360e45d86",
+            "name": "Various Artists",
+            "type": "Other"
+          }
+        }
+      ],
+      "date": "1996-11-18",
+      "quality": "normal",
+      "id": "70b27c8d-f15d-4e81-8ba7-4d1b230e484d",
+      "release-events": [
+        {
+          "area": {
+            "iso-3166-1-codes": [
+              "GB"
+            ],
+            "disambiguation": "",
+            "sort-name": "United Kingdom",
+            "name": "United Kingdom",
+            "type": null,
+            "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+            "type-id": null
+          },
+          "date": "1996-11-18"
+        }
+      ],
+      "barcode": "5032966095528",
+      "media": [
+        {
+          "title": "Pink",
+          "position": 2,
+          "track-offset": 13,
+          "track-count": 18,
+          "format": "CD",
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "name": "Autechre",
+                  "joinphrase": "",
+                  "artist": {
+                    "sort-name": "Autechre",
+                    "country": "GB",
+                    "disambiguation": "electronic music duo",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "name": "Autechre",
+                    "type": "Group"
+                  }
+                }
+              ],
+              "position": 14,
+              "title": "Silverside",
+              "number": "14",
+              "length": 330773,
+              "id": "2ce1f1ad-1302-3976-873a-ac26a0edd875"
+            }
+          ],
+          "id": "ae23b6b0-306e-38f3-a7ba-0f0d31bb46a7",
+          "format-id": "9712d52a-4509-3d4b-a1a2-67c88c643e31"
+        }
+      ],
+      "disambiguation": "",
+      "title": "No Compromize"
+    },
+    {
+      "text-representation": {
+        "language": "eng",
+        "script": "Latn"
+      },
+      "date": "1997",
+      "artist-credit": [
+        {
+          "artist": {
+            "name": "Various Artists",
+            "type": "Other",
+            "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+            "type-id": "ac897045-5043-3294-969b-187360e45d86",
+            "disambiguation": "add compilations to this artist",
+            "country": null,
+            "sort-name": "Various Artists"
+          },
+          "joinphrase": "",
+          "name": "Various Artists"
+        }
+      ],
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "packaging": null,
+      "country": "BE",
+      "packaging-id": null,
+      "status": "Official",
+      "media": [
+        {
+          "id": "bd3014f5-fcf5-3216-afbf-a8f23eab42be",
+          "format-id": "9712d52a-4509-3d4b-a1a2-67c88c643e31",
+          "format": "CD",
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "joinphrase": "",
+                  "name": "Autechre",
+                  "artist": {
+                    "sort-name": "Autechre",
+                    "disambiguation": "electronic music duo",
+                    "country": "GB",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "name": "Autechre",
+                    "type": "Group"
+                  }
+                }
+              ],
+              "title": "Silverside",
+              "position": 6,
+              "number": "6",
+              "id": "9e26e592-5692-375e-a297-ac4472671679",
+              "length": 328000
+            }
+          ],
+          "position": 2,
+          "title": "",
+          "track-count": 12,
+          "track-offset": 5
+        }
+      ],
+      "title": "10 Days of Techno: The Soundtrack",
+      "disambiguation": "",
+      "release-events": [
+        {
+          "date": "1997",
+          "area": {
+            "name": "Belgium",
+            "type": null,
+            "id": "5b8a5ee5-0bb3-34cf-9a75-c27c44e341fc",
+            "type-id": null,
+            "iso-3166-1-codes": [
+              "BE"
+            ],
+            "disambiguation": "",
+            "sort-name": "Belgium"
+          }
+        }
+      ],
+      "id": "5b9c6b71-6f9a-4396-8165-21b2af53a833",
+      "quality": "normal",
+      "barcode": "5413356865226"
+    },
+    {
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "packaging": "None",
+      "packaging-id": "119eba76-b343-3e02-a292-f0f00644bb9b",
+      "status": "Official",
+      "country": "XW",
+      "text-representation": {
+        "script": "Latn",
+        "language": "qaa"
+      },
+      "date": "2004",
+      "artist-credit": [
+        {
+          "artist": {
+            "sort-name": "Autechre",
+            "country": "GB",
+            "disambiguation": "electronic music duo",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "name": "Autechre",
+            "type": "Group"
+          },
+          "joinphrase": "",
+          "name": "Autechre"
+        }
+      ],
+      "release-events": [
+        {
+          "date": "2004",
+          "area": {
+            "type": null,
+            "name": "[Worldwide]",
+            "type-id": null,
+            "id": "525d4e18-3d00-31b9-a58b-a146a916de8f",
+            "disambiguation": "",
+            "iso-3166-1-codes": [
+              "XW"
+            ],
+            "sort-name": "[Worldwide]"
+          }
+        }
+      ],
+      "id": "f88736b3-8d17-4df9-83d7-f12bd262ac6a",
+      "quality": "normal",
+      "barcode": null,
+      "media": [
+        {
+          "tracks": [
+            {
+              "number": "3",
+              "id": "dda4b608-2f51-405e-94c1-fa4f5a4b2346",
+              "length": 331066,
+              "title": "Silverside",
+              "position": 3,
+              "artist-credit": [
+                {
+                  "joinphrase": "",
+                  "name": "Autechre",
+                  "artist": {
+                    "country": "GB",
+                    "disambiguation": "electronic music duo",
+                    "sort-name": "Autechre",
+                    "name": "Autechre",
+                    "type": "Group",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b"
+                  }
+                }
+              ]
+            }
+          ],
+          "format": "Digital Media",
+          "id": "2be6b126-5b93-320b-8249-dd88431e42c5",
+          "format-id": "907a28d9-b3b2-3ef6-89a8-7b18d91d4794",
+          "title": "",
+          "position": 1,
+          "track-offset": 2,
+          "track-count": 11
+        }
+      ],
+      "title": "Amber",
+      "disambiguation": "Original Bleep.com release"
+    },
+    {
+      "quality": "normal",
+      "release-events": [
+        {
+          "date": "2005-06-28",
+          "area": {
+            "sort-name": "United Kingdom",
+            "disambiguation": "",
+            "iso-3166-1-codes": [
+              "GB"
+            ],
+            "type-id": null,
+            "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+            "type": null,
+            "name": "United Kingdom"
+          }
+        }
+      ],
+      "id": "e1918457-987b-3ab2-a4d7-d8e45517c9e3",
+      "barcode": "801061002527",
+      "media": [
+        {
+          "id": "212cd1e8-c145-308a-82ad-0841abecc130",
+          "format-id": "9712d52a-4509-3d4b-a1a2-67c88c643e31",
+          "tracks": [
+            {
+              "artist-credit": [
+                {
+                  "artist": {
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "name": "Autechre",
+                    "type": "Group",
+                    "sort-name": "Autechre",
+                    "country": "GB",
+                    "disambiguation": "electronic music duo"
+                  },
+                  "joinphrase": "",
+                  "name": "Autechre"
+                }
+              ],
+              "position": 3,
+              "title": "Silverside",
+              "number": "3",
+              "length": 331066,
+              "id": "91c816c7-df22-3919-80a0-8e48da4b7529"
+            }
+          ],
+          "format": "CD",
+          "track-count": 11,
+          "track-offset": 2,
+          "position": 1,
+          "title": ""
+        }
+      ],
+      "disambiguation": "",
+      "title": "Amber",
+      "packaging": "Jewel Case",
+      "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+      "country": "GB",
+      "status": "Official",
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "text-representation": {
+        "language": "eng",
+        "script": "Latn"
+      },
+      "artist-credit": [
+        {
+          "artist": {
+            "type": "Group",
+            "name": "Autechre",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "country": "GB",
+            "disambiguation": "electronic music duo",
+            "sort-name": "Autechre"
+          },
+          "joinphrase": "",
+          "name": "Autechre"
+        }
+      ],
+      "date": "2005-06-28"
+    },
+    {
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "packaging": "Gatefold Cover",
+      "packaging-id": "e724a489-a7e8-30a1-a17c-30dfd6831202",
+      "status": "Official",
+      "country": "GB",
+      "date": "2016-11-11",
+      "artist-credit": [
+        {
+          "name": "Autechre",
+          "joinphrase": "",
+          "artist": {
+            "sort-name": "Autechre",
+            "country": "GB",
+            "disambiguation": "electronic music duo",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "type": "Group",
+            "name": "Autechre"
+          }
+        }
+      ],
+      "text-representation": {
+        "script": "Latn",
+        "language": "eng"
+      },
+      "barcode": "801061802516",
+      "id": "fd88c041-81a2-4e20-af47-8e39192592a2",
+      "release-events": [
+        {
+          "area": {
+            "type-id": null,
+            "id": "8a754a16-0027-3a29-b6d7-2b40ea0481ed",
+            "type": null,
+            "name": "United Kingdom",
+            "sort-name": "United Kingdom",
+            "disambiguation": "",
+            "iso-3166-1-codes": [
+              "GB"
+            ]
+          },
+          "date": "2016-11-11"
+        }
+      ],
+      "quality": "normal",
+      "title": "Amber",
+      "disambiguation": "",
+      "media": [
+        {
+          "position": 1,
+          "title": "",
+          "track-offset": 2,
+          "track-count": 6,
+          "tracks": [
+            {
+              "position": 3,
+              "title": "Silverside",
+              "artist-credit": [
+                {
+                  "artist": {
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type": "Group",
+                    "name": "Autechre",
+                    "sort-name": "Autechre",
+                    "disambiguation": "electronic music duo",
+                    "country": "GB"
+                  },
+                  "joinphrase": "",
+                  "name": "Autechre"
+                }
+              ],
+              "number": "A3",
+              "length": null,
+              "id": "3b0eaafb-1da2-4d13-a80d-5be506c9cedc"
+            }
+          ],
+          "format": "12\" Vinyl",
+          "format-id": "3e9080b0-5e6c-34ab-bd15-f526b6306a64",
+          "id": "3ec472e1-c3b1-33e6-b6ea-1ef41b3559ce"
+        }
+      ]
+    },
+    {
+      "barcode": null,
+      "quality": "normal",
+      "release-events": [
+        {
+          "date": "",
+          "area": {
+            "disambiguation": "",
+            "iso-3166-1-codes": [
+              "XW"
+            ],
+            "sort-name": "[Worldwide]",
+            "type": null,
+            "name": "[Worldwide]",
+            "type-id": null,
+            "id": "525d4e18-3d00-31b9-a58b-a146a916de8f"
+          }
+        }
+      ],
+      "id": "dbbe3d7f-bd2e-448e-a2e8-f3d1c81dfbd2",
+      "disambiguation": "",
+      "title": "Amber",
+      "media": [
+        {
+          "format": "Digital Media",
+          "tracks": [
+            {
+              "number": "3",
+              "id": "51edba09-1c39-497e-8b0b-96ccd04f8cf5",
+              "length": 331066,
+              "title": "Silverside",
+              "position": 3,
+              "artist-credit": [
+                {
+                  "artist": {
+                    "country": "GB",
+                    "disambiguation": "electronic music duo",
+                    "sort-name": "Autechre",
+                    "name": "Autechre",
+                    "type": "Group",
+                    "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b"
+                  },
+                  "joinphrase": "",
+                  "name": "Autechre"
+                }
+              ]
+            }
+          ],
+          "format-id": "907a28d9-b3b2-3ef6-89a8-7b18d91d4794",
+          "id": "c304bc86-23de-3f7e-b2a4-6c0dc923fbdc",
+          "title": "",
+          "position": 1,
+          "track-offset": 2,
+          "track-count": 11
+        }
+      ],
+      "packaging": "None",
+      "packaging-id": "119eba76-b343-3e02-a292-f0f00644bb9b",
+      "status": "Official",
+      "country": "XW",
+      "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+      "artist-credit": [
+        {
+          "artist": {
+            "sort-name": "Autechre",
+            "country": "GB",
+            "disambiguation": "electronic music duo",
+            "id": "410c9baf-5469-44f6-9852-826524b80c61",
+            "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+            "name": "Autechre",
+            "type": "Group"
+          },
+          "joinphrase": "",
+          "name": "Autechre"
+        }
+      ],
+      "date": "",
+      "text-representation": {
+        "language": "eng",
+        "script": "Latn"
+      }
+    }
+  ],
+  "length": 331066,
+  "title": "Silverside",
+  "artist-credit": [
+    {
+      "artist": {
+        "sort-name": "Autechre",
+        "country": "GB",
+        "disambiguation": "electronic music duo",
+        "id": "410c9baf-5469-44f6-9852-826524b80c61",
+        "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+        "name": "Autechre",
+        "type": "Group"
+      },
+      "joinphrase": "",
+      "name": "Autechre"
+    }
+  ],
+  "disambiguation": "",
+  "video": false
+}

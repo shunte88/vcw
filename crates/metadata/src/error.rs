@@ -123,6 +123,25 @@ pub enum Error {
         message: String,
     },
 
+    /// The provider answered 200 and refused the request in the body.
+    ///
+    /// AcoustID does this and it is not an edge case: an unreadable fingerprint, a
+    /// missing parameter and an exhausted quota all come back as HTTP 200 with
+    /// `{"status": "error"}` and a message. A caller that trusted the status code
+    /// would read a refusal as "no match found", which is the one wrong answer -
+    /// it would tell the user their record is unknown when the truth is that VCW
+    /// asked the question badly.
+    ///
+    /// Not [`Self::Malformed`], because the response was perfectly readable, and
+    /// not [`Self::Http`], because 200 is not what went wrong.
+    #[error("{provider} could not process the request: {message}")]
+    Refused {
+        /// The provider that refused.
+        provider: ProviderId,
+        /// The provider's own explanation, trimmed and truncated.
+        message: String,
+    },
+
     /// The provider answered, but not with something VCW can read.
     #[error("{provider} sent a response VCW could not read: {detail}")]
     Malformed {

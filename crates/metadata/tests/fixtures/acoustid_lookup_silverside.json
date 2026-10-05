@@ -1,0 +1,623 @@
+{
+  "results": [
+    {
+      "id": "71f9f5bd-3798-4f8c-8604-0c809478c82f",
+      "recordings": [
+        {
+          "artists": [
+            {
+              "id": "410c9baf-5469-44f6-9852-826524b80c61",
+              "name": "Autechre"
+            }
+          ],
+          "duration": 331.066,
+          "id": "91fa0fd1-60d9-4536-8316-2e4489812fa4",
+          "releases": [
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "XW",
+              "date": {
+                "year": 2004
+              },
+              "id": "f88736b3-8d17-4df9-83d7-f12bd262ac6a",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "Digital Media",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "dda4b608-2f51-405e-94c1-fa4f5a4b2346",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "XW",
+                  "date": {
+                    "year": 2004
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "GB",
+              "date": {
+                "day": 7,
+                "month": 11,
+                "year": 1994
+              },
+              "id": "192a81e6-a335-4126-8fab-abb258ae8e0e",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "CD",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "6a4a84c7-4df7-3e27-86f7-f67416f7b572",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "GB",
+                  "date": {
+                    "day": 7,
+                    "month": 11,
+                    "year": 1994
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "DE",
+              "date": {
+                "day": 7,
+                "month": 11,
+                "year": 1994
+              },
+              "id": "59c5c1fd-0425-3240-bfc1-a63cdd35ebc8",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "CD",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "3f3b9084-aeec-3288-a0f7-6a74479dcba2",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "DE",
+                  "date": {
+                    "day": 7,
+                    "month": 11,
+                    "year": 1994
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "US",
+              "date": {
+                "year": 1994
+              },
+              "id": "3f7306e5-7f9a-3bb2-9fda-d5d4adb7d744",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "CD",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "5e2a9ceb-6de5-3753-9e51-0b28854938b9",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "US",
+                  "date": {
+                    "year": 1994
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "GB",
+              "date": {
+                "day": 28,
+                "month": 6,
+                "year": 2005
+              },
+              "id": "e1918457-987b-3ab2-a4d7-d8e45517c9e3",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "CD",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "91c816c7-df22-3919-80a0-8e48da4b7529",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "GB",
+                  "date": {
+                    "day": 28,
+                    "month": 6,
+                    "year": 2005
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "US",
+              "date": {
+                "year": 1994
+              },
+              "id": "313ac1fa-f6e1-38f1-9c3b-b5a176495944",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "Cassette",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "cd4bfdba-b423-3cfc-ad48-d3f97948d352",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "US",
+                  "date": {
+                    "year": 1994
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+                  "name": "Various Artists"
+                }
+              ],
+              "country": "BE",
+              "date": {
+                "year": 1997
+              },
+              "id": "5b9c6b71-6f9a-4396-8165-21b2af53a833",
+              "medium_count": 2,
+              "mediums": [
+                {
+                  "format": "CD",
+                  "position": 2,
+                  "track_count": 12,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "9e26e592-5692-375e-a297-ac4472671679",
+                      "position": 6,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "BE",
+                  "date": {
+                    "year": 1997
+                  }
+                }
+              ],
+              "title": "10 Days of Techno: The Soundtrack",
+              "track_count": 24
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "GB",
+              "date": {
+                "day": 7,
+                "month": 11,
+                "year": 1994
+              },
+              "id": "bd5b1270-7468-47f0-9c9a-928199f9e4ad",
+              "medium_count": 2,
+              "mediums": [
+                {
+                  "format": "12\" Vinyl",
+                  "position": 1,
+                  "track_count": 6,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "86b670a2-7db5-3194-a5d5-ef9660709333",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "GB",
+                  "date": {
+                    "day": 7,
+                    "month": 11,
+                    "year": 1994
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "GB",
+              "date": {
+                "day": 7,
+                "month": 11,
+                "year": 1994
+              },
+              "id": "6076acc9-aed5-3629-8d65-5cb9fdd19a62",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "Cassette",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "8e944edd-c54c-3a81-a54d-4f1dff95913f",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "GB",
+                  "date": {
+                    "day": 7,
+                    "month": 11,
+                    "year": 1994
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "XW",
+              "id": "dbbe3d7f-bd2e-448e-a2e8-f3d1c81dfbd2",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "Digital Media",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "51edba09-1c39-497e-8b0b-96ccd04f8cf5",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "XW"
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "GB",
+              "date": {
+                "day": 11,
+                "month": 11,
+                "year": 2016
+              },
+              "id": "fd88c041-81a2-4e20-af47-8e39192592a2",
+              "medium_count": 2,
+              "mediums": [
+                {
+                  "format": "12\" Vinyl",
+                  "position": 1,
+                  "track_count": 6,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "3b0eaafb-1da2-4d13-a80d-5be506c9cedc",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "GB",
+                  "date": {
+                    "day": 11,
+                    "month": 11,
+                    "year": 2016
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            },
+            {
+              "artists": [
+                {
+                  "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+                  "name": "Various Artists"
+                }
+              ],
+              "country": "GB",
+              "date": {
+                "day": 18,
+                "month": 11,
+                "year": 1996
+              },
+              "id": "70b27c8d-f15d-4e81-8ba7-4d1b230e484d",
+              "medium_count": 2,
+              "mediums": [
+                {
+                  "format": "CD",
+                  "position": 2,
+                  "title": "Pink",
+                  "track_count": 18,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "2ce1f1ad-1302-3976-873a-ac26a0edd875",
+                      "position": 14,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "GB",
+                  "date": {
+                    "day": 18,
+                    "month": 11,
+                    "year": 1996
+                  }
+                }
+              ],
+              "title": "No Compromize",
+              "track_count": 31
+            },
+            {
+              "artists": [
+                {
+                  "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                  "name": "Autechre"
+                }
+              ],
+              "country": "XW",
+              "date": {
+                "day": 7,
+                "month": 11,
+                "year": 1994
+              },
+              "id": "217dce53-c5b9-42f2-8d0e-1b94da77914c",
+              "medium_count": 1,
+              "mediums": [
+                {
+                  "format": "Digital Media",
+                  "position": 1,
+                  "track_count": 11,
+                  "tracks": [
+                    {
+                      "artists": [
+                        {
+                          "id": "410c9baf-5469-44f6-9852-826524b80c61",
+                          "name": "Autechre"
+                        }
+                      ],
+                      "id": "f13ead3a-4f39-4b04-8f41-e5341183b5af",
+                      "position": 3,
+                      "title": "Silverside"
+                    }
+                  ]
+                }
+              ],
+              "releaseevents": [
+                {
+                  "country": "XW",
+                  "date": {
+                    "day": 7,
+                    "month": 11,
+                    "year": 1994
+                  }
+                }
+              ],
+              "title": "Amber",
+              "track_count": 11
+            }
+          ],
+          "title": "Silverside"
+        }
+      ],
+      "score": 1.0
+    }
+  ],
+  "status": "ok"
+}

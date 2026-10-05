@@ -40,8 +40,18 @@
 //! see what the live pass would have produced, on a side that was recorded before
 //! there was a fingerprint worker at all.
 //!
-//! Nothing here looks anything up. A fingerprint becomes a candidate recording in
-//! WP-22, over AcoustID; what this prints is the question, not the answer.
+//! # The question, and optionally the answer
+//!
+//! Without `--identify` nothing here looks anything up, which is the default
+//! deliberately: §40 says a network request is something a person asks for. With
+//! it, every region that fingerprinted is sent to AcoustID and what came back is
+//! printed under it - which is WP-22, and the only way to see this path run on a
+//! real side rather than on a recorded fixture.
+//!
+//! The lookup is read-only. Nothing is written to the project: deciding which of
+//! several candidate recordings a track *is* belongs to the evidence resolver, and
+//! a verb that printed one answer and saved it would be making that decision by
+//! being run.
 
 use std::path::PathBuf;
 
@@ -49,6 +59,10 @@ use anyhow::{Context, Result, bail};
 use vcw_core::detection;
 use vcw_core::fingerprinting;
 use vcw_fingerprint::chromaprint::{ALGORITHM, Fingerprint};
+use vcw_metadata::acoustid::Match;
+use vcw_metadata::credentials::Credentials;
+use vcw_metadata::query::Fingerprint as Evidence;
+use vcw_metadata::{Cancel, Setup};
 use vcw_project::pcm::Layout;
 use vcw_project::{Project, session};
 use vcw_signal::regions::Config;
@@ -70,12 +84,18 @@ pub(crate) struct Args {
     pub(crate) min_sources: usize,
     /// Machine-readable output.
     pub(crate) json: bool,
+    /// Look each fingerprint up at AcoustID (§26).
+    pub(crate) identify: bool,
 }
 
 /// One region, fingerprinted or refused.
 struct Region {
     span: Span,
     outcome: Result<Fingerprint, fingerprinting::Error>,
+    /// What AcoustID said, or why it could not be asked. `None` without
+    /// `--identify`, which is not the same as an empty list: no question asked is
+    /// not the same answer as "nobody has submitted this record".
+    found: Option<Result<Vec<Match>, vcw_metadata::Error>>,
 }
 
 /// Seconds to a frame, clamped to the capture.
@@ -169,7 +189,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
             args.min_sources.max(1)
         );
     }
-    let regions: Vec<Region> = wanted
+    let mut regions: Vec<Region> = wanted
         .into_iter()
         .map(|span| Region {
             span,
@@ -177,9 +197,13 @@ pub(crate) fn run(args: &Args) -> Result<()> {
             // between two tracks has nothing to fingerprint, and the tracks either
             // side of it still do.
             outcome: fingerprinting::of_span(&project, capture_id, span),
+            found: None,
         })
         .collect();
     project.close()?;
+    if args.identify {
+        identify(&mut regions);
+    }
 
     if args.json {
         print_json(capture_id, &layout, &regions);
@@ -188,6 +212,52 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     }
     Ok(())
 }
+
+/// Asks AcoustID about every region that fingerprinted.
+///
+/// One provider for the whole run, so the rate limiter is the same one throughout:
+/// a thirteen-track side is thirteen requests at a request a second, and thirteen
+/// providers would be thirteen limiters that each think they are first.
+///
+/// A failure is recorded against the region rather than ending the run. The one
+/// that would otherwise waste a person's time is a bad key - thirteen identical
+/// refusals a second apart - so a rejected credential stops the loop and the
+/// regions after it say so.
+fn identify(regions: &mut [Region]) {
+    let credentials = Credentials::from_env();
+    let provider = Setup::new()
+        .online(true)
+        .with_timeout(TIMEOUT)
+        .acoustid(&credentials);
+    let cancel = Cancel::new();
+    let mut refused = None;
+    for region in regions.iter_mut() {
+        let Ok(fingerprint) = &region.outcome else {
+            continue;
+        };
+        if let Some(error) = &refused {
+            region.found = Some(Err(vcw_metadata::Error::Rejected { provider: *error }));
+            continue;
+        }
+        let evidence = Evidence::new(&fingerprint.encoded, seconds_of(fingerprint));
+        let answer = provider.lookup(&evidence, &cancel);
+        if let Err(vcw_metadata::Error::Rejected { provider }) = &answer {
+            refused = Some(*provider);
+        }
+        region.found = Some(answer);
+    }
+}
+
+/// A fingerprint's length in whole seconds, which is what a lookup sends.
+fn seconds_of(fingerprint: &Fingerprint) -> u32 {
+    fingerprint.seconds().round().max(0.0) as u32
+}
+
+/// How long to wait for one lookup.
+///
+/// Longer than the library default for the same reason `vcw metadata` is: a person
+/// who typed a command is waiting on purpose.
+const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// The first of a fingerprint, which is all a person reads.
 fn head(encoded: &str) -> String {
@@ -228,11 +298,71 @@ fn print_report(capture_id: i64, layout: &Layout, regions: &[Region]) {
             }
             Err(error) => println!("             refused: {error}"),
         }
+        print_matches(region);
     }
     println!(
         "  total      {done} fingerprinted, {} refused, nothing written",
         regions.len() - done
     );
+}
+
+/// What AcoustID said about one region, under the fingerprint it answered.
+///
+/// A vinyl transfer frequently matches nothing at all - AcoustID's index is
+/// submitted from digital releases, and a record is a different master at a
+/// slightly different speed - so "no match" is printed rather than left blank. A
+/// person reading this needs to be able to tell a question with no answer from a
+/// question that was never asked.
+fn print_matches(region: &Region) {
+    let Some(found) = &region.found else {
+        return;
+    };
+    match found {
+        Ok(matches) if matches.is_empty() => println!("             no match at AcoustID"),
+        Ok(matches) => {
+            for found in matches {
+                let recording = &found.recording;
+                println!(
+                    "             {:.2}  {} - {}{}",
+                    found.score,
+                    if recording.artist.is_empty() {
+                        "unknown artist"
+                    } else {
+                        &recording.artist
+                    },
+                    if recording.title.is_empty() {
+                        "untitled"
+                    } else {
+                        &recording.title
+                    },
+                    match recording.seconds() {
+                        Some(seconds) => format!(" ({seconds:.1} s)"),
+                        None => String::new(),
+                    }
+                );
+                // Records only, and the count of everything else: the pressing a
+                // person is holding is a record, and thirteen CD reissues under it
+                // would bury the two that matter.
+                let records: Vec<&_> = recording.releases.iter().filter(|r| r.is_vinyl()).collect();
+                for release in &records {
+                    println!(
+                        "                     {} [{}]{}",
+                        release.title,
+                        release.format,
+                        match release.position {
+                            Some(position) => format!(" track {position}"),
+                            None => String::new(),
+                        }
+                    );
+                }
+                let others = recording.releases.len() - records.len();
+                if others > 0 {
+                    println!("                     and {others} release(s) that are not records");
+                }
+            }
+        }
+        Err(error) => println!("             not identified: {error}"),
+    }
 }
 
 fn print_json(capture_id: i64, layout: &Layout, regions: &[Region]) {
@@ -255,6 +385,27 @@ fn print_json(capture_id: i64, layout: &Layout, regions: &[Region]) {
                 "duration": fingerprint.seconds(),
             })),
             "refused": region.outcome.as_ref().err().map(ToString::to_string),
+            // Absent without `--identify`, and `[]` for a question that was asked
+            // and came back empty. The two are different facts about the record.
+            "matches": region.found.as_ref().and_then(|found| found.as_ref().ok())
+                .map(|matches| matches.iter().map(|found| serde_json::json!({
+                    "score": found.score,
+                    "recording_id": found.recording.id,
+                    "title": found.recording.title,
+                    "artist": found.recording.artist,
+                    "seconds": found.recording.seconds(),
+                    "releases": found.recording.releases.iter().map(|release| serde_json::json!({
+                        "release_id": release.id,
+                        "title": release.title,
+                        "format": release.format,
+                        "vinyl": release.is_vinyl(),
+                        "medium": release.medium,
+                        "position": release.position,
+                        "track_count": release.track_count,
+                    })).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>()),
+            "not_identified": region.found.as_ref()
+                .and_then(|found| found.as_ref().err()).map(ToString::to_string),
         })).collect::<Vec<_>>(),
     });
     println!("{value:#}");

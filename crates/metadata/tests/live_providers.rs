@@ -60,8 +60,9 @@ use std::time::Duration;
 use vcw_metadata::credentials::{Credentials, Token};
 use vcw_metadata::net::user_agent;
 use vcw_metadata::policy::Limiter;
+use vcw_metadata::query::Fingerprint;
 use vcw_metadata::{
-    Agent, Cancel, Client, Discogs, MusicBrainz, Provider, ProviderId, Query, Side,
+    AcoustId, Agent, Cancel, Client, Discogs, MusicBrainz, Provider, ProviderId, Query, Side,
 };
 
 const AMBER_1994: &str = "bd5b1270-7468-47f0-9c9a-928199f9e4ad";
@@ -269,5 +270,128 @@ fn discogs_without_a_token_is_refused_rather_than_answered() {
     assert!(
         error.to_string().contains("rejected") || error.to_string().contains("401"),
         "{error}"
+    );
+}
+
+/// The AcoustID key, or `None`, in which case the caller skips itself.
+fn acoustid_key() -> Option<Token> {
+    Credentials::from_env().acoustid().cloned()
+}
+
+/// A real fingerprint of 400 s of a record, 9,856 characters of base64.
+const LONG_FINGERPRINT: &str = include_str!("fixtures/acoustid_fingerprint_400s.txt");
+
+/// The AcoustID track the recording fixture was captured from.
+const SILVERSIDE_TRACK: &str = "71f9f5bd-3798-4f8c-8604-0c809478c82f";
+
+#[test]
+#[ignore = "talks to api.acoustid.org and needs VCW_ACOUSTID_KEY"]
+fn acoustid_still_reads_only_a_space_as_the_meta_separator() {
+    // The `format:vinyl` of this provider, and worse, because it fails *upward*:
+    // the request is accepted, the status is `ok`, the match is there and every
+    // field of metadata is missing. AcoustID's documentation writes the meta list
+    // with `+`, which is a space in a query string and a literal plus in a form
+    // body - and this is a form body, because a fingerprint does not fit in a URL.
+    //
+    // Measured 2026-10-04: `%2B` 0 recordings, `%2C` 0 recordings, `%20` 1
+    // recording with 13 releases. If a separator that used to return nothing ever
+    // starts working, VCW's spelling is merely unnecessary; if the space ever
+    // stops, every lookup goes quietly blank.
+    let Some(key) = acoustid_key() else {
+        eprintln!("skipped: VCW_ACOUSTID_KEY is not set");
+        return;
+    };
+    let client = live(ProviderId::AcoustId);
+    let cancel = Cancel::new();
+    let recordings = |separator: &str| -> usize {
+        let form = format!(
+            "client={}&meta=recordings{separator}releases{separator}tracks&trackid={SILVERSIDE_TRACK}",
+            vcw_metadata::net::encode(key.expose())
+        );
+        let body = client
+            .post_form(vcw_metadata::acoustid::API, &form, &[], &cancel)
+            .expect("a lookup");
+        let value: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(value["status"], "ok", "and it answers `ok` either way");
+        value["results"][0]["recordings"]
+            .as_array()
+            .map_or(0, Vec::len)
+    };
+
+    assert_eq!(recordings("%20"), 1, "a space is the separator that works");
+    assert_eq!(
+        recordings("%2B"),
+        0,
+        "a literal plus still reads as one unknown name, silently"
+    );
+    assert_eq!(recordings("%2C"), 0, "and so does a comma");
+}
+
+#[test]
+#[ignore = "talks to api.acoustid.org and needs VCW_ACOUSTID_KEY"]
+fn acoustid_accepts_a_fingerprint_that_would_not_fit_in_a_url() {
+    // The measurement that made `Transport` grow a body, asserted against the
+    // service rather than against a server's documented limit: 9,856 characters of
+    // fingerprint plus the other parameters, which no request line would carry.
+    let Some(key) = acoustid_key() else {
+        eprintln!("skipped: VCW_ACOUSTID_KEY is not set");
+        return;
+    };
+    let provider = AcoustId::new(Arc::new(Agent::new()))
+        .with_client(live(ProviderId::AcoustId))
+        .with_key(Some(key));
+    let found = provider
+        .lookup(
+            &Fingerprint::new(LONG_FINGERPRINT.trim(), 400),
+            &Cancel::new(),
+        )
+        .expect("the service accepts it, whether or not it knows the record");
+    // No assertion on the contents: this is a vinyl transfer, and AcoustID's index
+    // is submitted from digital releases. An empty answer is the expected one and
+    // is not what this test is about.
+    eprintln!("{} match(es) for a 400 s side", found.len());
+}
+
+#[test]
+#[ignore = "talks to api.acoustid.org"]
+fn acoustid_without_a_key_is_refused_rather_than_answered() {
+    let provider = AcoustId::new(Arc::new(Agent::new()))
+        .with_client(live(ProviderId::AcoustId))
+        .with_key(Token::new("obviously-not-a-key"));
+    let error = provider
+        .lookup(
+            &Fingerprint::new(LONG_FINGERPRINT.trim(), 400),
+            &Cancel::new(),
+        )
+        .expect_err("refused");
+    assert!(
+        matches!(error, vcw_metadata::Error::Rejected { .. }),
+        "a bad key is a rejection and not a fingerprint problem: {error}"
+    );
+}
+
+#[test]
+#[ignore = "talks to musicbrainz.org"]
+fn the_recording_fixture_still_describes_the_recording_it_describes() {
+    let provider =
+        MusicBrainz::new(Arc::new(Agent::new())).with_client(live(ProviderId::MusicBrainz));
+    let found = provider
+        .recording("91fa0fd1-60d9-4536-8316-2e4489812fa4", &Cancel::new())
+        .expect("a recording");
+    assert_eq!(found.title, "Silverside");
+    assert_eq!(found.artist, "Autechre");
+    assert_eq!(
+        found.seconds().map(|s| s.round()),
+        Some(331.0),
+        "the length the fixture was captured with"
+    );
+    assert!(
+        found.releases.iter().filter(|r| r.is_vinyl()).count() >= 2,
+        "two of its pressings are records, and new ones only get added: {:?}",
+        found
+            .releases
+            .iter()
+            .map(|r| format!("{} {}", r.title, r.format))
+            .collect::<Vec<_>>()
     );
 }

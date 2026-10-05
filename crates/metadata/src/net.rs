@@ -100,11 +100,15 @@ impl fmt::Debug for Header {
     }
 }
 
-/// A GET request. There is no other kind in this crate.
+/// A request: a URL, and optionally a body to send with it.
 ///
-/// Both providers are read-only, so the absence of a method field is a statement:
-/// nothing here can modify anything at a provider, and a future POST would have to
-/// be added deliberately rather than passed as a parameter.
+/// There is no method field, because the body is the method. A request with no
+/// body is a GET and a request with one is a POST, which is the only distinction
+/// either provider needs: both are read-only, so a POST here never modifies
+/// anything at the far end - it exists because an AcoustID fingerprint does not
+/// fit in a URL. A real vinyl side measures ~28 base64 characters per second of
+/// audio, so a five-minute track is 8.5 KB and a ten-minute one 16.9 KB, both at
+/// or past the request-line limit a default HTTP server enforces.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Request {
     /// The absolute URL, credentials excluded by §39's rule.
@@ -113,6 +117,12 @@ pub struct Request {
     pub headers: Vec<Header>,
     /// The time box for this request.
     pub timeout: Duration,
+    /// The body, if this is a POST. A `Content-Type` header goes with it.
+    ///
+    /// This is where a credential lives on a POST - AcoustID's `client` parameter
+    /// is a form field, not a query parameter - so it is never printed. See the
+    /// [`fmt::Debug`] impl.
+    pub body: Option<Vec<u8>>,
 }
 
 impl Request {
@@ -123,6 +133,26 @@ impl Request {
             url: url.into(),
             headers: Vec::new(),
             timeout: DEFAULT_TIMEOUT,
+            body: None,
+        }
+    }
+
+    /// A form POST to a URL, with the default timeout.
+    ///
+    /// The content type is set here rather than left to the caller, because the
+    /// only body this crate sends is a form: `a=1&b=2`, each value through
+    /// [`encode`]. A provider that wanted JSON would need its own constructor, and
+    /// neither of ours does.
+    #[must_use]
+    pub fn post_form(url: impl Into<String>, form: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            headers: vec![Header::new(
+                "Content-Type",
+                "application/x-www-form-urlencoded",
+            )],
+            timeout: DEFAULT_TIMEOUT,
+            body: Some(form.into().into_bytes()),
         }
     }
 
@@ -156,6 +186,10 @@ impl fmt::Debug for Request {
             .field("url", &self.url)
             .field("headers", &self.headers)
             .field("timeout_ms", &self.timeout.as_millis())
+            // The length, never the content: a form body is where a POST carries
+            // its credential (§39), and the one thing a diagnostic needs to know
+            // about it is whether it was there and how big it was.
+            .field("body_bytes", &self.body.as_ref().map_or(0, Vec::len))
             .finish()
     }
 }
@@ -288,14 +322,19 @@ impl TransportError {
     }
 }
 
-/// Anything that can fetch a URL.
+/// Anything that can make a request.
 ///
 /// `Send + Sync` because a provider is shared across the worker threads that use
 /// it; `Debug` because a client that cannot say which transport it is holding is
 /// no use in a diagnostic bundle (§42).
 pub trait Transport: fmt::Debug + Send + Sync {
-    /// Fetches a URL, or explains why it could not.
-    fn get(&self, request: &Request) -> Result<Response, TransportError>;
+    /// Makes a request, or explains why it could not.
+    ///
+    /// One method and not two, because [`Request::body`] already says which verb
+    /// this is. An implementation that forgot to look at it would send an
+    /// 8 KB fingerprint as a query string, which is the failure the body exists
+    /// to avoid, so every implementation is tested on a body.
+    fn send(&self, request: &Request) -> Result<Response, TransportError>;
 
     /// A short name for logs and diagnostics: `offline`, `recorded`, `http`.
     fn name(&self) -> &'static str;
@@ -337,7 +376,7 @@ pub fn encode(value: &str) -> String {
 pub struct Offline;
 
 impl Transport for Offline {
-    fn get(&self, _request: &Request) -> Result<Response, TransportError> {
+    fn send(&self, _request: &Request) -> Result<Response, TransportError> {
         Err(TransportError::Disabled)
     }
 
@@ -438,12 +477,50 @@ mod tests {
     }
 
     #[test]
+    fn a_form_post_carries_the_body_and_says_what_it_is() {
+        let request = Request::post_form("https://api.acoustid.org/v2/lookup", "a=1&b=2");
+        assert_eq!(
+            request.header("content-type"),
+            Some("application/x-www-form-urlencoded"),
+            "matched case-insensitively, as a header is"
+        );
+        assert_eq!(request.body.as_deref(), Some(&b"a=1&b=2"[..]));
+        assert_eq!(request.timeout, DEFAULT_TIMEOUT);
+        assert!(
+            Request::get("https://musicbrainz.org/ws/2/release")
+                .body
+                .is_none(),
+            "a GET has no body, which is how a transport tells them apart"
+        );
+    }
+
+    #[test]
+    fn a_post_body_does_not_print_itself() {
+        // It is where a credential lives on a POST: AcoustID's `client` parameter
+        // is a form field (§39), and a `Debug` is one `tracing` call from a log.
+        let shown = format!(
+            "{:?}",
+            Request::post_form("https://api.acoustid.org/v2/lookup", "client=secretkey")
+        );
+        assert!(!shown.contains("secretkey"), "{shown}");
+        assert!(shown.contains("body_bytes: 16"), "{shown}");
+    }
+
+    #[test]
     fn the_offline_transport_refuses_everything() {
         let offline = Offline;
         assert_eq!(offline.name(), "offline");
         assert_eq!(
-            offline.get(&Request::get("https://musicbrainz.org/ws/2/release")),
+            offline.send(&Request::get("https://musicbrainz.org/ws/2/release")),
             Err(TransportError::Disabled)
+        );
+        assert_eq!(
+            offline.send(&Request::post_form(
+                "https://api.acoustid.org/v2/lookup",
+                "client=k"
+            )),
+            Err(TransportError::Disabled),
+            "a body is not a way around §40"
         );
         assert!(
             !TransportError::Disabled.is_transient(),

@@ -91,7 +91,9 @@ use crate::net::{Transport, encode};
 use crate::positions::{self, Reading};
 use crate::provider::Provider;
 use crate::query::{Criterion, Query};
-use crate::release::{ArtworkRef, Candidate, Medium, ProviderId, Release, TrackEntry};
+use crate::release::{
+    ArtworkRef, Candidate, Medium, ProviderId, Recording, RecordingRelease, Release, TrackEntry,
+};
 
 /// The web service root.
 pub const API: &str = "https://musicbrainz.org/ws/2";
@@ -109,6 +111,14 @@ pub const COVER_ART: &str = "https://coverartarchive.org/release";
 /// per-track artist on a compilation, `release-groups` is where the genres often
 /// are, and `genres` is §32's input.
 pub const RELEASE_INCLUDES: &str = "recordings+artist-credits+labels+release-groups+genres";
+
+/// What a recording fetch has to ask for.
+///
+/// `artists` is the credit, `releases` is which pressings carry the recording - the
+/// answer §26 wants - and `media` is where on each of them it sits. Without `media`
+/// the releases come back as bare titles, which cannot distinguish the LP from the
+/// CD reissue it shares a title with.
+pub const RECORDING_INCLUDES: &str = "artists+releases+media";
 
 /// Every format name MusicBrainz uses for a record.
 ///
@@ -222,6 +232,38 @@ impl MusicBrainz {
             "{API}/release/{}?inc={RELEASE_INCLUDES}&fmt=json",
             encode(id)
         )
+    }
+
+    /// The recording URL for an MBID.
+    #[must_use]
+    pub fn recording_url(id: &str) -> String {
+        format!(
+            "{API}/recording/{}?inc={RECORDING_INCLUDES}&fmt=json",
+            encode(id)
+        )
+    }
+
+    /// One recording in full, by its MusicBrainz MBID (§26).
+    ///
+    /// The second half of a fingerprint lookup. [`crate::AcoustId`] returns
+    /// recordings with the metadata AcoustID holds, which is usually everything
+    /// needed; this is for the match where it holds nothing but an MBID, and for
+    /// the canonical spelling of a title or a credit when the two disagree.
+    ///
+    /// What it deliberately does not do is resolve a *side*. A vinyl release is one
+    /// medium per disc in this data model, with the side living in the track
+    /// number (`A3`), and a recording fetch gives the numeric position within the
+    /// medium instead. The side-aware path is [`Provider::fetch`] on the release, which
+    /// returns [`TrackEntry::resolved`]; a resolver holding several matches on one
+    /// release should fetch it once rather than ask here per track.
+    pub fn recording(&self, id: &str, cancel: &Cancel) -> Result<Recording> {
+        if id.trim().is_empty() {
+            return Err(Error::NothingToSearch {
+                provider: ProviderId::MusicBrainz,
+            });
+        }
+        let body = self.client.body(&Self::recording_url(id), &[], cancel)?;
+        Ok(recording_of(id, &parse(&body)?))
     }
 
     /// Turns one search result into a candidate.
@@ -415,6 +457,51 @@ fn credit(value: &serde_json::Value) -> String {
         }
     }
     out.trim().to_string()
+}
+
+/// Turns a recording body into a recording.
+///
+/// The id is passed in rather than read out of the body, because the body's `id` is
+/// the one the service redirected to: ask for a merged recording's old MBID and
+/// MusicBrainz answers with the surviving one. Keeping the id that was asked for
+/// means a caller can match the answer to its question; the body's own id is the
+/// interesting one only to something following merges, which nothing here does.
+fn recording_of(id: &str, value: &serde_json::Value) -> Recording {
+    Recording {
+        id: id.to_string(),
+        title: value["title"].as_str().unwrap_or("").trim().to_string(),
+        artist: credit(&value["artist-credit"]),
+        duration: length_of(value),
+        releases: value["releases"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|release| {
+                let medium = release["media"].as_array().and_then(|m| m.first());
+                RecordingRelease {
+                    id: release["id"].as_str().unwrap_or("").to_string(),
+                    title: release["title"].as_str().unwrap_or("").trim().to_string(),
+                    medium: medium.and_then(|m| count(&m["position"])),
+                    track_count: medium
+                        .and_then(|m| count(&m["track-count"]))
+                        .or_else(|| count(&release["track-count"])),
+                    position: medium
+                        .and_then(|m| m["tracks"].as_array())
+                        .and_then(|t| t.first())
+                        .and_then(|t| count(&t["position"])),
+                    format: medium
+                        .and_then(|m| m["format"].as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                }
+            })
+            .collect(),
+    }
+}
+
+/// A JSON number as a `u32`, or `None` if it was absent or absurd.
+fn count(value: &serde_json::Value) -> Option<u32> {
+    value.as_u64().and_then(|n| u32::try_from(n).ok())
 }
 
 /// The year out of a MusicBrainz date, which may be `1994`, `1994-11` or full.
@@ -634,7 +721,9 @@ mod tests {
 
     const SEARCH: &str = include_str!("../tests/fixtures/musicbrainz_search_amber_vinyl.json");
     const RELEASE: &str = include_str!("../tests/fixtures/musicbrainz_release_amber_1994.json");
+    const RECORDING: &str = include_str!("../tests/fixtures/musicbrainz_recording_silverside.json");
     const AMBER_1994: &str = "bd5b1270-7468-47f0-9c9a-928199f9e4ad";
+    const SILVERSIDE_MBID: &str = "91fa0fd1-60d9-4536-8316-2e4489812fa4";
 
     fn brainz(transport: Arc<dyn Transport>) -> MusicBrainz {
         let client = Client::new(ProviderId::MusicBrainz, transport)
@@ -1032,6 +1121,69 @@ mod tests {
             error.to_string(),
             "networking is disabled, so MusicBrainz was not contacted"
         );
+    }
+
+    #[test]
+    fn a_recording_comes_back_with_its_length_its_credit_and_its_pressings() {
+        let provider = brainz(Arc::new(
+            Recorded::new().json(MusicBrainz::recording_url(SILVERSIDE_MBID), RECORDING),
+        ));
+        let found = provider
+            .recording(SILVERSIDE_MBID, &Cancel::new())
+            .expect("the recorded answer");
+
+        assert_eq!(found.id, SILVERSIDE_MBID);
+        assert_eq!(found.title, "Silverside");
+        assert_eq!(found.artist, "Autechre");
+        // 331066 ms, and milliseconds here where AcoustID sends float seconds.
+        assert_eq!(found.seconds(), Some(331.066));
+        assert_eq!(found.releases.len(), 13);
+
+        let records: Vec<&RecordingRelease> =
+            found.releases.iter().filter(|r| r.is_vinyl()).collect();
+        assert_eq!(records.len(), 2, "two of the thirteen are records");
+        assert_eq!(records[0].title, "Amber");
+        assert_eq!(records[0].format, "12\" Vinyl");
+        assert_eq!(
+            records[0].position,
+            Some(3),
+            "the third track of the medium"
+        );
+        assert_eq!(records[0].medium, Some(1), "one disc, so side A is disc 1");
+    }
+
+    #[test]
+    fn a_recording_fetch_asks_for_the_media_without_which_releases_are_bare_titles() {
+        let url = MusicBrainz::recording_url(SILVERSIDE_MBID);
+        assert!(url.contains("/recording/"), "{url}");
+        assert!(url.contains("inc=artists+releases+media"), "{url}");
+        assert!(url.ends_with("&fmt=json"), "{url}");
+    }
+
+    #[test]
+    fn a_recording_keeps_the_mbid_it_was_asked_about() {
+        // MusicBrainz answers a merged recording's old MBID with the surviving
+        // one's body. Keeping the id that was asked for is what lets a caller
+        // match the answer to its question.
+        let provider = brainz(Arc::new(
+            Recorded::new().json_matching("/recording/", RECORDING),
+        ));
+        let found = provider
+            .recording("00000000-0000-0000-0000-000000000000", &Cancel::new())
+            .expect("an answer for a merged id");
+        assert_eq!(found.id, "00000000-0000-0000-0000-000000000000");
+        assert_eq!(found.title, "Silverside", "and the body that came back");
+    }
+
+    #[test]
+    fn an_empty_mbid_is_refused_before_a_request_is_made() {
+        let recorded = Arc::new(Recorded::new());
+        let provider = brainz(recorded.clone());
+        assert!(matches!(
+            provider.recording("  ", &Cancel::new()),
+            Err(Error::NothingToSearch { .. })
+        ));
+        assert_eq!(recorded.calls(), 0);
     }
 
     #[test]

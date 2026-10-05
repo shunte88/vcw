@@ -1,6 +1,6 @@
 [package]
 name = "vcw-fingerprint"
-description = "Chromaprint fingerprinting off the capture stream, and AcoustID lookup"
+description = "Chromaprint fingerprinting off the capture stream"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

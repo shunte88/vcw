@@ -61,6 +61,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::acoustid::AcoustId;
 use crate::cache::Disk;
 use crate::client::{Client, default_limiter};
 use crate::credentials::Credentials;
@@ -177,6 +178,26 @@ impl Setup {
         providers
     }
 
+    /// The fingerprint provider for this setup (§26).
+    ///
+    /// Separate from [`Self::providers`] rather than one of them, because
+    /// [`AcoustId`] is not a [`Provider`]: that trait searches with words and
+    /// answers with releases, and AcoustID takes audio evidence and answers with
+    /// recordings. Wiring it here anyway is the point of this module - it gets the
+    /// same transport, the same published rate, the same timeout and the same user
+    /// agent as the other two, and a caller that built its own would owe all four.
+    ///
+    /// Always built, and offline or keyless is not this method's decision to make:
+    /// a lookup answers [`crate::Error::Offline`] or
+    /// [`crate::Error::MissingCredential`] by itself, which is what lets a window
+    /// grey a button out for the right reason.
+    #[must_use]
+    pub fn acoustid(&self, credentials: &Credentials) -> AcoustId {
+        AcoustId::new(self.transport())
+            .with_client(self.client(ProviderId::AcoustId, credentials))
+            .with_key(credentials.acoustid().cloned())
+    }
+
     /// The transport: the real one, or the one that refuses.
     ///
     /// The `cfg` is the whole of §40's strongest form. With the `net` feature
@@ -218,6 +239,7 @@ impl Setup {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::credentials::Token;
 
     #[test]
     fn the_default_is_offline_with_both_providers() {
@@ -258,6 +280,27 @@ mod tests {
                 .only(false, false)
                 .providers(&Credentials::none())
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn the_fingerprint_provider_gets_the_same_wiring_and_the_key_it_is_given() {
+        let setup = Setup::new();
+        let keyless = setup.acoustid(&Credentials::none());
+        assert!(
+            keyless.is_offline(),
+            "offline by default, like the other two"
+        );
+        assert!(!keyless.has_key());
+
+        let keyed = setup.acoustid(
+            &Credentials::none().with_acoustid(Token::new("testkey123").expect("a token")),
+        );
+        assert!(keyed.has_key());
+        assert_eq!(
+            keyed.client().provider(),
+            ProviderId::AcoustId,
+            "its own published rate, not another provider's"
         );
     }
 

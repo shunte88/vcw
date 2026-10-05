@@ -344,6 +344,12 @@ enum Command {
         /// With --tracks, use only boundaries this many detectors reported.
         #[arg(long, default_value_t = 1)]
         min_sources: usize,
+        /// Ask AcoustID what each fingerprint is. Needs VCW_ACOUSTID_KEY (§39).
+        ///
+        /// Off by default because §40 says a network request is something a
+        /// person asks for. Nothing is written to the project either way.
+        #[arg(long)]
+        identify: bool,
         /// Machine-readable output.
         #[arg(long)]
         json: bool,
@@ -1075,6 +1081,7 @@ fn run() -> anyhow::Result<()> {
             length,
             tracks,
             min_sources,
+            identify,
             json,
         } => fingerprint::run(&fingerprint::Args {
             project,
@@ -1083,6 +1090,7 @@ fn run() -> anyhow::Result<()> {
             length,
             tracks,
             min_sources,
+            identify,
             json,
         }),
         Command::Waveform {
