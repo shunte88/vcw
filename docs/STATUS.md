@@ -5737,19 +5737,29 @@ additive migration when the curves ship.
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**, and so
 are the two Phase 2 packages taken out of order: WP-25's lossy encoders and schema v3's
-`capture_eq` at `85acd44`, which was the tip of `main`. On top of that, uncommitted:
-**WP-28's About dialog** and **WP-21's fingerprinting**, both built, both green.
+`capture_eq` at `85acd44`. WP-28's About dialog and WP-21's fingerprinting followed at
+`2297178`, WP-22's lookup at `75424f2`, and WP-23's resolver with schema v4 at `b96b440`.
+**The tree is clean and everything described above is committed.**
 
 **WP-22 is built** (above): the lookup, the recording fetch, `--identify`, and the
 measurement that says alignment rather than audio quality is what decides whether a
 record can be identified. It deliberately persists nothing and publishes no §35
-`fingerprint-match`, because both need decisions WP-23 owns - and WP-23's evidence model,
-weights and resolver now exist, so what is left there is the wiring: the three provider
-lookups behind `Lookup`, the schema for the two setup facts that have nowhere to live,
-and the setup prompt itself. One defect is known and unfixed: `seconds_of` in
+`fingerprint-match`, because both need decisions WP-23 owns.
+
+**WP-23's evidence model, weights and resolver exist, and schema v4 has landed the two
+setup facts.** What is left on the package is a single item: **the three provider lookups
+behind `Lookup`**. It says what to ask, in what order, and nothing asks it yet;
+`vcw-metadata` already holds all three providers, so this is a walk of `Lookup::ORDER`
+through `next_lookup`, folding each answer into `Observed` and each candidate into a
+`Claim`, stopping when `resolve` returns `Outcome::Resolved`. The setup prompt itself is
+done in the window, minus the fields that do not exist yet.
+
+**Two known defects, neither fixed, both deliberate.** `seconds_of` in
 `crates/cli/src/fingerprint.rs` declares each region's own length as the AcoustID
 duration, which is the wrong number for any region that is not a whole track, so
-`--identify` on a `--tracks` run mostly asks questions that cannot be answered.
+`--identify` on a `--tracks` run mostly asks questions that cannot be answered. And
+`releases.is_mono` is recorded and read by nothing: the export does not fold to mono yet,
+which is the piece of the processing chain the flag is waiting on.
 
 **The gate now runs in two places, and WP-21's final run was split across both.**
 media2026 takes thirteen of the sixteen legs, including the `toolchain` check this box
@@ -5955,7 +5965,15 @@ the spike harness.
   it. WP-09 is the
   first change since WP-02 to touch the schema, so `docs/SCHEMA.md` was regenerated with
   it; regenerate with `VCW_BLESS=1 cargo test -p vcw-project --test schema_doc` whenever
-  the schema moves, or `the_committed_document_matches_the_schema` fails.
+  the schema moves, or `the_committed_document_matches_the_schema` fails. The schema has
+  moved twice more since: **v3** adds `captures.capture_eq` at `85acd44` and **v4** adds
+  `releases.is_mono` and `releases.riaa_eq` at `b96b440`. A migration is never only a
+  migration - `doc.rs`'s DDL parser, the generated `SCHEMA.md`, `tools/vcw-read.py`'s
+  `SUPPORTED_USER_VERSIONS`, the shell's `wind_back_to_v1` fixture and any `SELECT`
+  naming the new column all have a say, and the last of those is the one that bites:
+  `open_read_only` does not migrate, so a query naming a column unconditionally breaks
+  every older project at once. Both `session::select` and `release::load` ask whether
+  the column is there before naming it.
 - **The gate is sixteen legs now** (twelve until the CI repair added `toolchain`, `msrv`
   and `spikes`, and sixteen since WP-25 added `features`), because the shell is a
   workspace of its own and the
