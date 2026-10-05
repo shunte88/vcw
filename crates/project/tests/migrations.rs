@@ -287,9 +287,12 @@ fn an_older_project_gains_the_equalisation_column_as_unknown() {
         "the column cannot exist before the migration that adds it"
     );
 
+    // Every migration from 3 up, derived rather than written out: this test is
+    // about what happens to the v2 *row*, and it should not need editing every
+    // time a later migration is added.
     assert_eq!(
         migrate::apply(&mut conn, vcw_project::MIGRATIONS).unwrap(),
-        vec![3]
+        (3..=vcw_project::SCHEMA_VERSION).collect::<Vec<_>>()
     );
     assert_eq!(version(&conn), vcw_project::SCHEMA_VERSION);
 
@@ -309,4 +312,44 @@ fn an_older_project_gains_the_equalisation_column_as_unknown() {
         "the migration rewrote a row it should not have"
     );
     assert_eq!(state, "finalised");
+}
+
+/// A release written before v4 keeps what it said and gains two unstated intents.
+#[test]
+fn an_older_release_gains_the_setup_intents_as_unstated() {
+    let mut conn = db();
+    let upto_v3 = &vcw_project::MIGRATIONS
+        .iter()
+        .filter(|m| m.version <= 3)
+        .copied()
+        .collect::<Vec<_>>()[..];
+    migrate::apply(&mut conn, upto_v3).unwrap();
+
+    conn.execute(
+        "INSERT INTO releases (release_id, album, album_artist, updated_at)
+         VALUES (1, 'Vienna', 'Ultravox', 1700000000)",
+        [],
+    )
+    .unwrap();
+    assert!(
+        conn.prepare("SELECT is_mono FROM releases").is_err(),
+        "the column cannot exist before the migration that adds it"
+    );
+
+    migrate::apply(&mut conn, vcw_project::MIGRATIONS).unwrap();
+    assert_eq!(version(&conn), vcw_project::SCHEMA_VERSION);
+
+    let (album, mono, riaa): (String, i64, i64) = conn
+        .query_row(
+            "SELECT album, is_mono, riaa_eq FROM releases WHERE release_id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        album, "Vienna",
+        "the migration rewrote a row it should not have"
+    );
+    assert_eq!(mono, 0, "nobody was asked, so nothing was stated");
+    assert_eq!(riaa, 0);
 }

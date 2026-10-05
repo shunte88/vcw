@@ -44,7 +44,7 @@
 use rusqlite::Connection;
 
 use crate::error::{Error, Result};
-use crate::schema::{SCHEMA_V1, SCHEMA_V2, SCHEMA_V3};
+use crate::schema::{SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4};
 
 /// One step from schema version `version - 1` to `version`.
 #[derive(Debug, Clone, Copy)]
@@ -76,6 +76,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 3,
         description: "capture equalisation provenance: captures.capture_eq",
         sql: SCHEMA_V3,
+    },
+    Migration {
+        version: 4,
+        description: "release intents: releases.is_mono, releases.riaa_eq",
+        sql: SCHEMA_V4,
     },
 ];
 
@@ -206,6 +211,32 @@ mod tests {
             );
         }
         assert!(sql.contains("ALTER TABLE CAPTURES ADD COLUMN"));
+    }
+
+    #[test]
+    fn the_release_intent_migration_only_adds_columns() {
+        // Migration 3's promise, kept for the two columns the setup prompt writes.
+        // Both default to 0, so an existing project reads as "nobody was asked",
+        // and no row is rewritten on open.
+        let sql = SCHEMA_V4
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("--"))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .to_ascii_uppercase();
+        for forbidden in [
+            "UPDATE ", "DROP ", "DELETE ", "INSERT ", "RENAME ", "CREATE ",
+        ] {
+            assert!(
+                !sql.contains(forbidden),
+                "migration 4 contains {forbidden}, so it is not purely additive"
+            );
+        }
+        assert_eq!(
+            sql.matches("ALTER TABLE RELEASES ADD COLUMN").count(),
+            2,
+            "migration 4 is two added columns and nothing else"
+        );
     }
 
     #[test]

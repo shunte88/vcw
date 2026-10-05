@@ -860,7 +860,7 @@ enum ReleaseCommand {
 
 /// The fields `vcw release set` takes.
 ///
-/// A boxed struct rather than a variant's worth of fields: thirteen of them make
+/// A boxed struct rather than a variant's worth of fields: fifteen of them make
 /// `ReleaseCommand` several hundred bytes wide, and every copy of the enum would
 /// carry that width around for the sake of the two one-word variants beside it.
 #[derive(Debug, clap::Args)]
@@ -904,6 +904,12 @@ struct ReleaseFields {
     /// Mark the release's metadata as accepted (§26).
     #[arg(long)]
     confirm: bool,
+    /// Whether this is a mono pressing: the export folds the channels to one.
+    #[arg(long, action = clap::ArgAction::Set)]
+    mono: Option<bool>,
+    /// Whether the RIAA curve is applied on playback and on export (§51).
+    #[arg(long, action = clap::ArgAction::Set)]
+    riaa: Option<bool>,
 }
 /// Stack for [`run`]. 8 MiB is what Linux and macOS hand a main thread by
 /// default, so this gives every platform the size the two we develop on already
@@ -1257,6 +1263,8 @@ fn run() -> anyhow::Result<()> {
                     discs: fields.discs,
                     numbering: fields.numbering,
                     confirm: fields.confirm,
+                    mono: fields.mono,
+                    riaa: fields.riaa,
                 })),
             },
         }),

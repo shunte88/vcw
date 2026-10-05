@@ -38,9 +38,14 @@
 //! on `vcw-metadata`: a release found on Discogs and one typed in at a terminal
 //! are the same record.
 //!
-//! `set` is also what §5.3's new-project prompt will write. Artist, title and
-//! catalogue number are the three fields worth asking for up front, because they
-//! are what a search needs and what automation cannot guess.
+//! `set` is also what the new-project prompt writes. Artist, title and catalogue
+//! number are the three fields worth asking for up front, because they are what a
+//! search needs and what automation cannot guess; `--mono` and `--riaa` are the
+//! other two, and they are asked for a stronger reason - no search and no analysis
+//! can answer them at all. A mono pressing transferred with a stereo cartridge
+//! gives two channels that are nearly identical and never exactly so, and the
+//! equalisation a record was cut with leaves no trace in the audio it was applied
+//! to. Both are stated or they are nothing.
 
 use std::path::PathBuf;
 
@@ -96,6 +101,10 @@ pub(crate) struct Change {
     pub(crate) numbering: Option<String>,
     /// Whether to mark the metadata accepted.
     pub(crate) confirm: bool,
+    /// Whether this is a mono pressing.
+    pub(crate) mono: Option<bool>,
+    /// Whether the RIAA curve is to be applied on playback and export.
+    pub(crate) riaa: Option<bool>,
 }
 
 /// What `vcw release` was asked to do, and to which project.
@@ -159,7 +168,7 @@ fn show(project: &mut Project, json: bool) -> Result<()> {
             "{{\"album\":{},\"artist\":{},\"year\":{},\"genres\":{},\"label\":{},\
              \"catalog\":{},\"country\":{},\"barcode\":{},\"composer\":{},\
              \"discs\":{},\"discs_recorded\":{},\"numbering\":\"{}\",\
-             \"sides\":{},\"confirmed\":{},\"empty\":{}}}",
+             \"sides\":{},\"confirmed\":{},\"mono\":{},\"riaa_eq\":{},\"empty\":{}}}",
             quote(&record.album),
             quote(&record.album_artist),
             record
@@ -179,6 +188,8 @@ fn show(project: &mut Project, json: bool) -> Result<()> {
             numbering_name(record.numbering),
             sides.len(),
             record.confirmed,
+            record.is_mono,
+            record.riaa_eq,
             record.is_empty()
         );
         return Ok(());
@@ -214,6 +225,8 @@ fn show(project: &mut Project, json: bool) -> Result<()> {
         sides.len()
     );
     field("numbering", numbering_name(record.numbering));
+    field("mono", if record.is_mono { "yes" } else { "no" });
+    field("riaa eq", if record.riaa_eq { "yes" } else { "no" });
     field("confirmed", if record.confirmed { "yes" } else { "no" });
     if !missing.is_empty() {
         let letters: String = missing.iter().map(|s| s.letter()).collect();
@@ -312,6 +325,12 @@ fn apply(record: &mut release::Record, change: &Change) -> Result<()> {
             bail!("a record has at least one disc");
         }
         record.discs = discs;
+    }
+    if let Some(mono) = change.mono {
+        record.is_mono = mono;
+    }
+    if let Some(riaa) = change.riaa {
+        record.riaa_eq = riaa;
     }
     if let Some(numbering) = &change.numbering {
         record.numbering = match numbering.as_str() {

@@ -5491,22 +5491,73 @@ that trusted the status code would have read a refusal as "no match found", whic
 one wrong answer available.
 
 **First light, and the finding that matters for the product: a vinyl transfer matches
-nothing.** `vcw fingerprint --identify` on a real 198 s side returns `no match at
-AcoustID` - a successful request with an empty result. A probe over the first four rips
-of the media2026 corpus asked 32 regions and got **one** result, at score 0.615, titled
-"My Medly (May 14, 2019)" by an artist the record has nothing to do with: a false
-positive, not a hit. AcoustID's index is submitted overwhelmingly from digital releases,
-and a record is a different master cut at a slightly different speed through a different
-cartridge. The consequences: the populated fixture had to be captured by `trackid`
-instead of by fingerprint (recorded in `tests/fixtures/README.md`, with why), fingerprint
-evidence needs a *low* weight and a score floor in the resolver rather than a veto, and
-WP-22 cannot be the identification story on its own - the catalogue number and the
-matrix text a person can read off the label stay the strongest evidence VCW has.
+AcoustID, and the first conclusion written here that it did not was wrong.** The wrong
+version is left described because the way it was wrong is the lesson. `vcw fingerprint
+--identify` on a real side returned `no match at AcoustID`, and a sweep through the C
+reference `fpcalc` 1.6.0 agreed: nine 120 s windows over *Tomorrow's Harvest*, the same
+side at three positions by seven speeds, and six more records at three windows each -
+**48 lookups, zero results** - against a digital mp3 control that scored 0.974 through
+the identical path. The conclusion drawn from that was that a record is a different
+master for a different medium and does not match a digital one.
 
-The same probe says something about WP-21's detectors too: of 215 regions across four
-sides at `--tracks --min-sources 1`, **183 were under 20 seconds**. That is over-splitting
-at those settings, not a lookup problem, but it means `--identify` on a default
-`--tracks` run mostly asks about fragments too short to answer.
+Challenged on it, the missing control turned out to be in the *method*. Every one of
+those 48 lookups declared the **window's** length as the `duration` parameter and started
+at an arbitrary point mid-side. Both are fatal, and neither is documented:
+
+| fact | measurement |
+| --- | --- |
+| `duration` is a hard pre-filter, not a hint | One track's fingerprint matched declared as 170 to 183 s and returned **zero results** at 166 s and at 190 s. The same bytes scored 0 declared as 120 s and **0.974** declared as the track's true 371 s. |
+| The fingerprint must begin at the track's start | 0 s of offset scored 0.867, 5 s scored 0.868, 10 s scored 0.833 and **11 s scored nothing at all**. |
+| The audio itself can be short | 30 s from the track start scored 0.840 and 60 s scored 0.867, against 0.868 for the whole track. |
+| A vinyl transfer does match | **0.64 to 0.88** across the tracks of a real rip. |
+
+So those zeros were guaranteed whatever the audio was. Redone track-aligned with real
+durations, the vinyl rip of *Tomorrow's Harvest* identifies `Boards of Canada - Gemini`
+at **0.867**, and 9 of its 17 tracks come back correctly named. A digital source of the
+same material scores 0.96 to 1.00: one real library album, a 37-track Ultravox box,
+returned **37/37 at 0.956 to 1.000**, including the rarities disc.
+
+S4's finding is not in conflict with this and neither replaces the other: boundary error
+costs at most 0.064 BER in *fingerprint* terms, and AcoustID's index lookup is not a BER
+comparison. A good fingerprint of the wrong eleven seconds is still a good fingerprint
+and still finds nothing.
+
+**Our implementation was the first suspect and it is cleared.** `chromaprint-next` is a
+pure-Rust port, so index compatibility was an assumption nothing tested - the bit-for-bit
+exit criterion compares our output against our *own* output. A digital mp3 through the
+whole VCW chain returns **0.97 with both vinyl pressings named**, so the port matches the
+index when the audio is in it, and ffmpeg's chromaprint muxer was checked byte-identical
+to `fpcalc` on the same window.
+
+**What does remain a real gap is ours, and it is the layout.** Over the corpus at
+`vcw fingerprint --tracks --min-sources 1`, 2002 regions across 21 rips have a **median
+length of 5.6 s**, 70% are under 10 s, and only 3.4% are the 120 to 480 s a real track
+occupies. The agreement threshold does not rescue it: on one ten-minute three-track side,
+1 source gives 16 regions with a 5 s median, 2 gives a single 134 s region spanning all
+three tracks, and 3 gives `no track boundaries were agreed`. The fingerprint verb
+defaults to 1 while `adopt` defaults to 2, and neither value produces a track. Since
+identification needs the start within 10 s and the duration within 7 s, `--identify` on
+a default `--tracks` run is asking about fragments that cannot be answered, and
+`seconds_of` in `fingerprint.rs` declares each region's own length, which is the wrong
+number for anything that is not a whole track.
+
+**The Vinyl Streamer is not a counter-example either way.** That Raspberry Pi project
+fingerprints with Chromaprint **locally**: a record is taught once by playing it and
+importing the metadata from Discogs by hand, and later plays match against its own local
+database. Vinyl against your own earlier rip of the same pressing is an easier problem
+than vinyl against a digital master, and it is one VCW could usefully answer (*have I
+ripped this side before?*) as a Phase 3 idea.
+
+One caveat recorded rather than resolved: a probe at 469.0 s returned nothing where
+469.7 s scored 0.851 on the same track. A sub-second shift should not matter at a 10 s
+tolerance, and chromaprint's ~0.124 s frame step is the obvious suspect, since the index
+needs exact subfingerprint hashes. Unverified and parked.
+
+The consequence for the design is in `docs/design/WP-23-identification-resolver.md`: the
+catalogue number a person reads off the label stays the strongest evidence VCW has, and
+AcoustID is the fallback for the records that cannot be found by name plus the
+*confirmation* for the ones that can. The populated fixture was still captured by
+`trackid` rather than by fingerprint (recorded in `tests/fixtures/README.md`, with why).
 
 **Sixteen legs green on this box at Rust 1.99.0, 1,130 Rust tests and 138 frontend
 tests** - the whole gate, including `spikes`, `appclippy` and `apptest`, which do not run
@@ -5542,6 +5593,146 @@ fixture by winding the migrations back, asserts the fixture really is older befo
 asserts anything about the read, and was mutation-proved: with the column check forced
 true it fails with the original error.
 
+## Phase 2 - WP-23, the identification resolver
+
+**The design document came first, and then had to be rewritten.** The plan says the
+resolver "deserves a design document before code", so one was written from the AcoustID
+measurements above:
+[`docs/design/WP-23-identification-resolver.md`](design/WP-23-identification-resolver.md).
+Its first version had identification *discovering* the record from audio, because the
+detectors cannot supply a layout and the measurements showed audio identification works.
+That was the wrong end of the problem, and the correction came from the owner of the
+workflow rather than from a measurement:
+
+> when we start a new project we'll prompt the user for some basic information, artist,
+> title, catalog number, mono/stereo, and whether an RIAA EQ will be applied on playback
+> and on the exported files. So up front we'll have some pretty solid information to make
+> informed decisions as the rip workflow progresses. we need only get into the acoustid
+> weeds if we cannot find the release on discogs via catalog lookup, or artist title
+> combination
+
+Which is right, and it makes the hard part cheap. A project starts from a record in
+somebody's hand, so four of the five things setup asks for are release identity stated by
+a person looking at the object, arriving before the first sample does. The resolver's job
+is not to guess what the record is; it is to turn a stated identity into a specific
+**pressing**, confirm the audio is consistent with it, and lay the side out. Artist and
+title identify a work, a catalogue number identifies a pressing, and §28 asks VCW to tell
+pressings apart.
+
+`Lookup::ORDER` is that policy as code, and it is a pure function over the evidence so
+the escalation order is asserted by a test rather than emerging from the order somebody
+wrote the calls in: Discogs by catalogue number, Discogs by name, MusicBrainz by name,
+and only then the audio. AcoustID is last for three measured reasons - about a third of
+`/data2/source_rips` does not resolve at MusicBrainz from artist and album at all, a text
+lookup is one request where identification from audio alone cost 63 to 138, and §26's
+rule that automatic identification never silently replaces what a person confirmed is
+structural if the typed facts are the *first* evidence rather than a late tie-breaker.
+`is_possible` keeps §40 honest too: a catalogue lookup with no catalogue number is not a
+cheap failure, it is a request that cannot succeed.
+
+**Four modules, and the split is the design.** `evidence` collects `(source, fact)` pairs
+and judges nothing, because the same fact arrives from several places and disagrees with
+itself - a person types `CHRH 1296`, Discogs says `CHRH1296`, MusicBrainz has no
+catalogue number at all, and that is three states rather than one field. `candidate`
+gives one release's account of them. `confidence` holds every weight in one table.
+`resolver` picks one, or declines to.
+
+**The three-way verdict is load-bearing.** Silent is not a small disagreement. A release
+with *no* catalogue number is merely unsupported by the number on somebody's sleeve,
+while a release with a *different* one is contradicted and must lose to a candidate with
+less evidence in its favour; fold those together and the better-documented database loses
+every time it is honest. An identified recording, by contrast, can agree but **never**
+disagree: AcoustID's release lists come from digital submissions and routinely omit a
+vinyl pressing entirely, so a candidate missing from the list is unmentioned and not
+excluded.
+
+**The thresholds were set by a failing test, which is the right way round.** A candidate
+agreeing on artist, title and track count scored 0.45 against a `LIKELY` floor of 0.50,
+so the ordinary result of a text search was being discarded instead of shortlisted. The
+floor now sits at exactly what artist-plus-title is worth, because "right album, unknown
+pressing" is a question to put to a person. Deliberate consequences of the same table: a
+catalogue number alone reaches `LIKELY` and not `CERTAIN`, since a number can be mistyped
+into a search box; identified recordings accumulate (§26 requires it) but are capped,
+because ten confirmed tracks prove the audio is this album and say nothing about which
+pressing; and nothing short of a catalogue match can reach `CERTAIN` at all.
+
+**Declining is a result, not a fallback.** Three outcomes and no fourth. The failure mode
+worth designing against is not "could not identify the record", which is ordinary and
+recoverable; it is a plausible wrong pressing written silently over a catalogue number
+somebody read off the label. So a tie asks (`Doubt::TooClose` - two pressings of one
+record agree about artist, title and track count equally well), a contradiction asks
+(`Doubt::ContradictsAPerson`, which can never resolve however high the score), and the
+shortlist stops at five because past that a question becomes a search result. The reason
+is reported from the agreements rather than from the score, since §26's "evidence-based
+rather than a single-match decision" is only true if the evidence can be printed.
+
+26 tests and a doctest, all green, clippy clean. **Not done and called out rather than
+smuggled in:** the provider calls are not wired - `Lookup` says what to ask and nothing
+asks it yet.
+
+## Phase 2 - schema v4, the two intents the setup prompt asks for
+
+The two setup facts that had nowhere to live now have one. Both are booleans on the one
+release row, which is the project header:
+
+```sql
+ALTER TABLE releases ADD COLUMN is_mono INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE releases ADD COLUMN riaa_eq INTEGER NOT NULL DEFAULT 0;
+```
+
+**Why they are asked and the other three fields are offered.** Artist, title and
+catalogue number are a head start: leave them blank and identification finds them. These
+two are not findable by anything. A mono groove transferred with a stereo cartridge gives
+two channels that are *nearly* identical and never exactly so, which is a measurement no
+threshold survives; and an equalisation curve leaves no trace in the audio it was applied
+to, which is the whole reason §51 requires `captures.capture_eq` recorded from the first
+release that can capture at all. Unticked is an answer rather than a gap, so they are
+`bool` and not `Option<bool>` on the wire.
+
+**`riaa_eq` is not `capture_eq`, and the two are easy to confuse.** `captures.capture_eq`
+is per capture and records what the signal *already carried* when it reached the sound
+card. `releases.riaa_eq` is per project and is what the operator wants done about it.
+The first is the input to the decision; the second is the decision.
+
+**Neither one touches the capture path.** §9 governs what lands and §51 says equalisation
+is "a non-destructive stored decision ... applied on playback, render and export". The
+mono fold is the same kind of decision: the stereo capture of a mono record stays stereo
+in the project, and the sum happens on the way out. That is what makes both flags free to
+change your mind about, and it is why a mono rip is still a stereo file in the `.vcw`.
+
+**What the migration cost, against the five-places checklist.** Four of the five were
+already paid for by v3: `doc.rs` parses `ALTER TABLE ... ADD COLUMN` since then and folded
+both columns onto `releases` with no change, `SCHEMA.md` regenerated from the `--`
+comments above the DDL, `tools/vcw-read.py` wanted `4` in `SUPPORTED_USER_VERSIONS`, and
+the shell's `wind_back_to_v1` needed nothing because it drops the whole `releases` table.
+The fifth cost the usual: `release::load` names the two columns, so it asks
+`has_intents()` first for the same reason `session::select` asks `has_capture_eq()` -
+`open_read_only` does not migrate, and a bare `SELECT is_mono` would have answered
+`no such column` to the export planner, the track numbering and the library listing
+rather than to the one caller that wanted the flag. One `migrations.rs` assertion of the
+applied list was rewritten as `(3..=SCHEMA_VERSION)`, so the next migration does not
+break a test that is about a v2 row.
+
+`identity::accept` carries both over from the existing row, beside `composer` and
+`comments` and for a stronger reason: no provider reports them, and §26 says
+identification does not get to silently undo what a person stated.
+
+**Reachable from both ends.** `vcw release set --mono true --riaa false`, printed by
+`vcw release show` and in its `--json`; two checkboxes on the window's new-project form,
+whose seed condition now counts a tick as "something was given" - a person who ticks mono
+and types nothing else had been having it dropped. 1,161 Rust tests, 138 frontend, all
+sixteen gate legs green.
+
+**Not done, and this is the whole of what the flags do today: they are recorded.** The
+export does not yet fold to mono and nothing applies a curve. The fold is a transform
+in `splitter::cut`, which currently moves interleaved bytes from the reader straight to
+the writer without decoding them, so it needs the sum at -6 dB in each of the four
+storage formats, a halved `Spec::channels`, and the four containers checked. The curve
+is Phase 3 and §51 wants rather more than a boolean: nine named curves, per side and
+overridable per track, each within ±0.5 dB of its published source. The boolean buys
+RIAA, which is every record cut after 1954; widening it to a curve reference is another
+additive migration when the curves ship.
+
 ## Next up
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**, and so
@@ -5550,11 +5741,15 @@ are the two Phase 2 packages taken out of order: WP-25's lossy encoders and sche
 **WP-28's About dialog** and **WP-21's fingerprinting**, both built, both green.
 
 **WP-22 is built** (above): the lookup, the recording fetch, `--identify`, and the
-measurement that says a vinyl transfer will rarely match. What it deliberately did not
-do is persist anything or publish §35's `fingerprint-match`, because both need a decision
-WP-23 owns: what a *chosen* match is, how fingerprint evidence is weighted against a
-catalogue number, and what score floor makes a match worth showing at all. The 0.615
-false positive is the argument for deciding that before anything is written to a table.
+measurement that says alignment rather than audio quality is what decides whether a
+record can be identified. It deliberately persists nothing and publishes no §35
+`fingerprint-match`, because both need decisions WP-23 owns - and WP-23's evidence model,
+weights and resolver now exist, so what is left there is the wiring: the three provider
+lookups behind `Lookup`, the schema for the two setup facts that have nowhere to live,
+and the setup prompt itself. One defect is known and unfixed: `seconds_of` in
+`crates/cli/src/fingerprint.rs` declares each region's own length as the AcoustID
+duration, which is the wrong number for any region that is not a whole track, so
+`--identify` on a `--tracks` run mostly asks questions that cannot be answered.
 
 **The gate now runs in two places, and WP-21's final run was split across both.**
 media2026 takes thirteen of the sixteen legs, including the `toolchain` check this box

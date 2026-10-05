@@ -42,7 +42,7 @@ import wave
 
 # From the spec's "Identity" table.
 APPLICATION_ID = 0x56435700  # 'VCW\0'
-SUPPORTED_USER_VERSIONS = (1, 2, 3)
+SUPPORTED_USER_VERSIONS = (1, 2, 3, 4)
 SUPPORTED_FORMAT_VERSION = 1
 
 # Audacity's, for the one case a reader has to recognise and refuse.

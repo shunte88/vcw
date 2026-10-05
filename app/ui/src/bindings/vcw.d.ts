@@ -637,7 +637,15 @@ album: string | null,
 /**
  * Catalogue number, which is what actually identifies a pressing (§32).
  */
-catalog: string | null, };
+catalog: string | null,
+/**
+ * Whether this is a mono pressing. Folded to one channel on export only.
+ */
+isMono: boolean,
+/**
+ * Whether the RIAA curve is applied on playback and on export (§51).
+ */
+riaaEq: boolean, };
 
 // ----------------------------------------------------------------------
 // View models (§35)

@@ -65,11 +65,13 @@ pub const APPLICATION_ID: u32 = 0x5643_5700;
 /// pack four into it.
 ///
 /// v1 is capture; v2 adds the §29 vinyl data model; v3 adds `captures.capture_eq`
-/// (§51). [`FORMAT_VERSION`] has not moved with any of them, because nothing an
-/// older version wrote means anything different now - a v1 or v2 capture has an
-/// unrecorded equalisation provenance, and `'unknown'` is what that is, not a
-/// changed meaning for a column that already existed.
-pub const SCHEMA_VERSION: u32 = 3;
+/// (§51); v4 adds the two release-level intents the new-project prompt asks for,
+/// `releases.is_mono` and `releases.riaa_eq`. [`FORMAT_VERSION`] has not moved with
+/// any of them, because nothing an older version wrote means anything different
+/// now: a v1 or v2 capture has an unrecorded equalisation provenance, and
+/// `'unknown'` is what that is, not a changed meaning for a column that already
+/// existed; a pre-v4 release has no stated intent, and `0` is what that is.
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// The project-format version: the *meaning* of the schema, as opposed to its shape.
 ///
@@ -515,6 +517,44 @@ pub const SCHEMA_V3: &str = r#"
 -- 'unknown' when nobody said. Playback equalisation needs it and it cannot be recovered
 -- from the audio, so it is recorded from the first capture, years before the curves ship.
 ALTER TABLE captures ADD COLUMN capture_eq TEXT NOT NULL DEFAULT 'unknown';
+"#;
+
+/// Schema v4: what the operator said about the record, before a note was captured.
+///
+/// Two booleans on the one release row, because both are answers to the setup
+/// prompt rather than anything identification or analysis can find out. A mono
+/// pressing is not detectable from a stereo transfer of it - a mono groove played
+/// with a stereo cartridge gives two channels that are *nearly* identical and
+/// never exactly so - and no equalisation curve is recoverable from the audio it
+/// was applied to.
+///
+/// Neither one changes a byte of what is captured. §9 governs the capture path and
+/// §51 says equalisation is "a non-destructive stored decision, held with the
+/// project's other edit instructions and applied on playback, render and export";
+/// the fold to mono is the same kind of decision, made at export and never on the
+/// way in. The stereo capture of a mono record stays stereo in the project, which
+/// is what makes the flag free to change your mind about.
+///
+/// `riaa_eq` is distinct from `captures.capture_eq` and the two are easy to
+/// confuse: `capture_eq` records what the signal *already carried* when it reached
+/// the sound card, which is the input to this decision, and this is the decision.
+///
+/// ponytail: one boolean where §51 eventually wants a named curve selectable per
+/// side and overridable per track. RIAA is the curve for every record cut after
+/// 1954, which is nearly all of them, so a boolean buys the common case now;
+/// widening it to a curve reference is another additive migration when Phase 3
+/// ships the other eight curves.
+pub const SCHEMA_V4: &str = r#"
+-- Whether this pressing is mono, as the operator stated it at setup. Export sums
+-- the captured channels to one; capture and the project stay stereo, because the
+-- two channels of a stereo cartridge in a mono groove are not identical and
+-- discarding one on the way in cannot be undone.
+ALTER TABLE releases ADD COLUMN is_mono INTEGER NOT NULL DEFAULT 0;
+-- Whether the RIAA curve is to be applied on playback and on export (§51). Not
+-- what the capture arrived with - that is captures.capture_eq, and it is the input
+-- to this decision rather than the decision. 0 on every project written before v4,
+-- which is the truth about them: nobody was asked.
+ALTER TABLE releases ADD COLUMN riaa_eq INTEGER NOT NULL DEFAULT 0;
 "#;
 
 /// Tables the current schema must contain. Checked on open, so a truncated or

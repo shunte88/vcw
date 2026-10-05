@@ -609,12 +609,22 @@ impl Export {
 /// cheaper than correcting what a provider guessed later - but a project with
 /// none of them is perfectly valid, and identification fills the gaps.
 ///
-/// `name` is the file name and the other three are the release row. They are
-/// separate because they answer different questions: the file is what a person
-/// finds in a directory a year from now, and the release is what gets tagged
-/// into the exported audio. Leaving `name` null derives one, which is a
-/// decision and so is made on this side - see `vcw_contract::browse`'s sibling
-/// in the shell.
+/// `name` is the file name and the rest are the release row. They are separate
+/// because they answer different questions: the file is what a person finds in
+/// a directory a year from now, and the release is what gets tagged into the
+/// exported audio. Leaving `name` null derives one, which is a decision and so
+/// is made on this side - see `vcw_contract::browse`'s sibling in the shell.
+///
+/// The last two are a different kind of field, and the only reason they are on
+/// a prompt advertised as optional. The three above are a head start on a
+/// lookup: skip them and identification finds them anyway. `isMono` and
+/// `riaaEq` are not findable by anything. A mono groove transferred with a
+/// stereo cartridge gives two channels that are nearly identical and never
+/// exactly so, and no equalisation curve is recoverable from the audio it was
+/// applied to - which is why §51 requires the capture's own provenance to be
+/// recorded from the first release that can capture at all. They are `bool`
+/// rather than `Option<bool>` because the prompt is a pair of boxes and an
+/// unticked box is an answer: not mono, no curve.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct NewProject {
@@ -626,6 +636,10 @@ pub struct NewProject {
     pub album: Option<String>,
     /// Catalogue number, which is what actually identifies a pressing (§32).
     pub catalog: Option<String>,
+    /// Whether this is a mono pressing. Folded to one channel on export only.
+    pub is_mono: bool,
+    /// Whether the RIAA curve is applied on playback and on export (§51).
+    pub riaa_eq: bool,
 }
 
 /// Place a new boundary (§31).

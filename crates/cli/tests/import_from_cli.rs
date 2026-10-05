@@ -255,6 +255,17 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
     let printed = vcw(&["release", &path, "--json", "show"]);
     let release: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
     assert_eq!(release["album"], "Stardonas (Transverse)");
+    // An import states neither intent, so both read false before anyone is asked.
+    assert_eq!(release["mono"], false);
+    assert_eq!(release["riaa_eq"], false);
+
+    // And they are settable, separately: a stereo pressing that still wants the
+    // curve is the ordinary case, so one flag must not carry the other.
+    vcw(&["release", &path, "set", "--riaa", "true"]);
+    let printed = vcw(&["release", &path, "--json", "show"]);
+    let release: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(release["mono"], false);
+    assert_eq!(release["riaa_eq"], true);
 
     // A track, added by the same verb a recorded capture uses. 240 frames of
     // the 256 that landed, so the export has to resolve a span and not just

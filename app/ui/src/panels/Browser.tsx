@@ -33,6 +33,14 @@
 // sides, discs, a numbering scheme - is what identification and detection fill
 // in, and asking would be asking a person to guess at the answer the
 // application is about to find.
+//
+// The two boxes below them are there on the opposite argument. Mono and the
+// RIAA curve are the only things on this form that nothing downstream can work
+// out: a mono groove played with a stereo cartridge is two nearly-identical
+// channels and never exactly identical ones, and a cutting curve leaves no
+// trace in the audio it was applied to. Unticked is an answer rather than a
+// gap, which is why they are checkboxes and not a third state, and both are
+// changeable afterwards - neither touches what is captured.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 
@@ -139,6 +147,8 @@ export function Browser({
     artist: "",
     album: "",
     catalog: "",
+    isMono: false,
+    riaaEq: false,
   });
 
   const open = () => {
@@ -181,13 +191,21 @@ export function Browser({
           artist: blank(seed.artist),
           album: blank(seed.album),
           catalog: blank(seed.catalog),
+          isMono: seed.isMono,
+          riaaEq: seed.riaaEq,
         });
         onSelect(made.path);
         await api.openProject(made.path);
       })
       .then(() => {
         setCreating(false);
-        setSeed({ artist: "", album: "", catalog: "" });
+        setSeed({
+          artist: "",
+          album: "",
+          catalog: "",
+          isMono: false,
+          riaaEq: false,
+        });
         // Both, and they are not the same thing: `reload` re-reads the project
         // the shell has open, `onLibraryChanged` re-reads the directory it came
         // from. Creating a project changes both, and for WP-19 only the first
@@ -250,6 +268,32 @@ export function Browser({
               }
             />
           </label>
+          <label className="tick">
+            <input
+              type="checkbox"
+              checked={seed.isMono}
+              onChange={(event) =>
+                setSeed({ ...seed, isMono: event.target.checked })
+              }
+            />
+            Mono pressing
+          </label>
+          <label className="tick">
+            <input
+              type="checkbox"
+              checked={seed.riaaEq}
+              onChange={(event) =>
+                setSeed({ ...seed, riaaEq: event.target.checked })
+              }
+            />
+            Apply RIAA equalisation
+          </label>
+          <p className="hint">
+            These two are not. Mono folds the channels together in the exported
+            files and leaves the capture stereo; RIAA applies the curve on
+            playback and on export, so leave it off if your phono stage already
+            did. Both can be changed later and neither touches what is recorded.
+          </p>
           <button type="submit">Create</button>
         </form>
       )}

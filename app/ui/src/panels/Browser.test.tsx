@@ -120,11 +120,26 @@ describe("the project browser", () => {
     const form = container.querySelector("form");
     expect(form, "the create helper should be showing").not.toBeNull();
 
+    // Mono and the curve are the two answers nothing downstream can work out,
+    // so the one check worth having here is that a tick reaches the command.
+    // The text fields are optional and go as null; these go as booleans, and
+    // an unticked box is "no" rather than "not asked".
+    const ticks = container.querySelectorAll<HTMLInputElement>(
+      "input[type=checkbox]",
+    );
+    expect(ticks).toHaveLength(2);
+    await act(async () => {
+      ticks[0]?.click();
+    });
+
     await act(async () => {
       form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
     expect(api.newProject).toHaveBeenCalledTimes(1);
+    expect(api.newProject).toHaveBeenCalledWith(
+      expect.objectContaining({ isMono: true, riaaEq: false }),
+    );
     expect(api.openProject).toHaveBeenCalledWith("/library/new.vcw");
     // The open project, and the directory it lives in. A created project
     // changes both, and only one of them was being asked again.

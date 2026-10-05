@@ -186,11 +186,21 @@ pub(crate) fn new_project(app: AppHandle, seed: NewProject) -> Result<ProjectRow
         // `read::release` answer with a release rather than `null` - which is
         // the difference a metadata panel uses to decide whether to offer a
         // lookup or show what is already known.
-        if seed.artist.is_some() || seed.album.is_some() || seed.catalog.is_some() {
+        // The two flags count as "something given": a person who ticked mono and
+        // typed nothing else has still told the project the one thing nothing
+        // can work out later, and leaving them out of this test would drop it.
+        if seed.artist.is_some()
+            || seed.album.is_some()
+            || seed.catalog.is_some()
+            || seed.is_mono
+            || seed.riaa_eq
+        {
             let mut release = release::ensure(&mut project)?;
             release.album = seed.album.clone().unwrap_or_default();
             release.album_artist = seed.artist.clone().unwrap_or_default();
             release.catalog = seed.catalog.clone().unwrap_or_default();
+            release.is_mono = seed.is_mono;
+            release.riaa_eq = seed.riaa_eq;
             release::store(&mut project, &release)?;
         }
         project.close()?;
@@ -416,6 +426,8 @@ mod tests {
             artist: None,
             album: None,
             catalog: None,
+            is_mono: false,
+            riaa_eq: false,
         }
     }
 

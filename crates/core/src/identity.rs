@@ -163,6 +163,13 @@ pub fn accept(project: &mut Project, found: &Release) -> Result<Applied> {
         musicbrainz_id: found.musicbrainz_id.clone(),
         discogs_id: found.discogs_id.clone(),
         confirmed: true,
+        // The operator's, not the provider's, and not derivable from either: a
+        // Discogs release says nothing about whether this copy is to be folded
+        // to mono on export or played through a curve. Carried over for the
+        // same reason as composer and comments, and §26's reason besides -
+        // identification does not get to silently undo what a person stated.
+        is_mono: existing.is_mono,
+        riaa_eq: existing.riaa_eq,
         updated_at: existing.updated_at,
     };
     release::store(project, &record)?;

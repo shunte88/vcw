@@ -89,6 +89,18 @@ pub struct Record {
     pub discogs_id: Option<String>,
     /// Whether a person has accepted this metadata (§26).
     pub confirmed: bool,
+    /// Whether this is a mono pressing, as stated at setup.
+    ///
+    /// An export decision and nothing else: the capture of a mono record is a
+    /// two-channel capture like any other, and this says the two channels are to
+    /// be folded to one on the way out. Not detectable from the audio, which is
+    /// why it is asked rather than analysed.
+    pub is_mono: bool,
+    /// Whether the RIAA curve is to be applied on playback and on export (§51).
+    ///
+    /// The stored decision, not the provenance. What the signal already carried
+    /// when it reached the sound card is `captures.capture_eq`, one per capture.
+    pub riaa_eq: bool,
     /// Unix seconds of the last change.
     pub updated_at: i64,
 }
@@ -149,12 +161,19 @@ pub fn ensure(project: &mut Project) -> Result<Record> {
 ///
 /// If the query fails.
 pub fn load(conn: &Connection) -> Result<Option<Record>> {
+    let (mono, riaa) = if has_intents(conn) {
+        ("is_mono", "riaa_eq")
+    } else {
+        ("0", "0")
+    };
     let record = conn
         .query_row(
-            "SELECT album, album_artist, year, genres, label, catalog, country, barcode,
-                    composer, comments, discs, numbering, musicbrainz_id, discogs_id,
-                    confirmed, updated_at
-               FROM releases WHERE release_id = ?1",
+            &format!(
+                "SELECT album, album_artist, year, genres, label, catalog, country, barcode,
+                        composer, comments, discs, numbering, musicbrainz_id, discogs_id,
+                        confirmed, updated_at, {mono}, {riaa}
+                   FROM releases WHERE release_id = ?1"
+            ),
             params![RELEASE_ID],
             |r| {
                 let genres: String = r.get(3)?;
@@ -176,11 +195,27 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
                     discogs_id: r.get(13)?,
                     confirmed: r.get::<_, i64>(14)? != 0,
                     updated_at: r.get(15)?,
+                    is_mono: r.get::<_, i64>(16)? != 0,
+                    riaa_eq: r.get::<_, i64>(17)? != 0,
                 })
             },
         )
         .optional()?;
     Ok(record)
+}
+
+/// Whether the `releases` table carries v4's two intent columns.
+///
+/// The same question [`crate::session`] asks about `captures.capture_eq`, and for
+/// the same reason: `open_read_only` deliberately does not migrate, so a v2 or v3
+/// project is still one this build reads, and a `SELECT` naming a column that is
+/// not there would answer `no such column` to every reader of the release row -
+/// the export planner, the track numbering, the library listing - rather than to
+/// the one caller that wanted the flag. Asked of the table rather than of
+/// `user_version`, because the column is what the query needs.
+fn has_intents(conn: &Connection) -> bool {
+    conn.prepare("SELECT is_mono, riaa_eq FROM releases LIMIT 0")
+        .is_ok()
 }
 
 /// Writes the release, creating the row if it is not there.
@@ -198,8 +233,10 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
     conn.execute(
         "INSERT INTO releases (release_id, album, album_artist, year, genres, label, catalog,
                                country, barcode, composer, comments, discs, numbering,
-                               musicbrainz_id, discogs_id, confirmed, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                               musicbrainz_id, discogs_id, confirmed, updated_at,
+                               is_mono, riaa_eq)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                 ?18, ?19)
          ON CONFLICT (release_id) DO UPDATE SET
              album = excluded.album, album_artist = excluded.album_artist,
              year = excluded.year, genres = excluded.genres, label = excluded.label,
@@ -208,7 +245,8 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
              comments = excluded.comments, discs = excluded.discs,
              numbering = excluded.numbering, musicbrainz_id = excluded.musicbrainz_id,
              discogs_id = excluded.discogs_id, confirmed = excluded.confirmed,
-             updated_at = excluded.updated_at",
+             updated_at = excluded.updated_at, is_mono = excluded.is_mono,
+             riaa_eq = excluded.riaa_eq",
         params![
             RELEASE_ID,
             record.album,
@@ -227,6 +265,8 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
             record.discogs_id,
             i64::from(record.confirmed),
             crate::now(),
+            i64::from(record.is_mono),
+            i64::from(record.riaa_eq),
         ],
     )?;
     Ok(())
@@ -538,6 +578,10 @@ mod tests {
             musicbrainz_id: Some("bd5b1270-7468-47f0-9c9a-928199f9e4ad".into()),
             discogs_id: Some("20209".into()),
             confirmed: true,
+            // Both non-default, so a column dropped from the write fails here
+            // rather than passing on the default it would have had anyway.
+            is_mono: true,
+            riaa_eq: true,
             updated_at: 0,
         };
         store(&mut p, &written).expect("store");
@@ -548,6 +592,8 @@ mod tests {
         assert_eq!(read.discs, 2);
         assert_eq!(read.numbering, Numbering::Numeric);
         assert!(read.confirmed);
+        assert!(read.is_mono);
+        assert!(read.riaa_eq);
         assert!(read.updated_at > 0, "updated_at is set by the write");
         assert_eq!(read.sides().len(), 4, "two discs are four sides");
         assert!(!read.is_empty());
@@ -566,6 +612,55 @@ mod tests {
             load(p.conn()).expect("load").expect("row").album,
             "Tri Repetae"
         );
+    }
+
+    #[test]
+    fn the_setup_intents_round_trip_and_default_to_unstated() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir);
+        let fresh = ensure(&mut p).expect("ensure");
+        assert!(!fresh.is_mono, "nobody has been asked yet");
+        assert!(!fresh.riaa_eq);
+
+        let mut record = fresh;
+        record.is_mono = true;
+        record.riaa_eq = true;
+        store(&mut p, &record).expect("store");
+        let read = load(p.conn()).expect("load").expect("row");
+        assert!(read.is_mono);
+        assert!(read.riaa_eq);
+
+        // Both are set independently: the common case is a stereo pressing that
+        // still wants the curve, and a shared column would make that impossible.
+        record.is_mono = false;
+        store(&mut p, &record).expect("store again");
+        let read = load(p.conn()).expect("load").expect("row");
+        assert!(!read.is_mono);
+        assert!(read.riaa_eq);
+    }
+
+    #[test]
+    fn a_pre_v4_release_reads_as_unstated_rather_than_failing() {
+        // `open_read_only` does not migrate, so this is what every reader of the
+        // release row sees on a project written before v4. Dropping the columns is
+        // how a v3 project is spelled from here.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir);
+        let mut record = ensure(&mut p).expect("ensure");
+        record.album = "Vienna".into();
+        record.is_mono = true;
+        store(&mut p, &record).expect("store");
+        p.conn()
+            .execute_batch(
+                "ALTER TABLE releases DROP COLUMN is_mono;
+                 ALTER TABLE releases DROP COLUMN riaa_eq;",
+            )
+            .expect("winding the release row back to v3");
+
+        let read = load(p.conn()).expect("load").expect("row");
+        assert_eq!(read.album, "Vienna", "the rest of the row still reads");
+        assert!(!read.is_mono, "an absent column is an unstated intent");
+        assert!(!read.riaa_eq);
     }
 
     #[test]

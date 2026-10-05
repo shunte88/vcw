@@ -16,7 +16,7 @@ no rewriting, and everything else is what Audacity has nowhere to put. See
 |---|---|
 | extension | `.vcw` |
 | `application_id` | `0x56435700` (ASCII `VCW\0`) - Audacity's is `0x41554459`, `AUDY`, for *both* AUP3 and AUP4 |
-| `user_version` | 3 - the schema version, a plain ascending integer |
+| `user_version` | 4 - the schema version, a plain ascending integer |
 | format version | 1 - the *meaning* of the schema, in `meta` |
 | page size | 65536 bytes, set at creation |
 | journal mode | WAL, `synchronous=FULL` (D3) |
@@ -194,6 +194,8 @@ The release being captured (§29, §32). One per project: §29's topology is Pro
 | `discogs_id` | `TEXT` | Discogs release id, likewise. Both are kept rather than the search that found them, because the id is what a later lookup can use again. |
 | `confirmed` | `INTEGER NOT NULL DEFAULT 0` | §26: automatic identification shall never silently replace what a person confirmed. 1 once a person has accepted this metadata. |
 | `updated_at` | `INTEGER NOT NULL` | Unix seconds of the last change to this row. |
+| `is_mono` | `INTEGER NOT NULL DEFAULT 0` | Whether this pressing is mono, as the operator stated it at setup. Export sums the captured channels to one; capture and the project stay stereo, because the two channels of a stereo cartridge in a mono groove are not identical and discarding one on the way in cannot be undone. |
+| `riaa_eq` | `INTEGER NOT NULL DEFAULT 0` | Whether the RIAA curve is to be applied on playback and on export (§51). Not what the capture arrived with - that is captures.capture_eq, and it is the input to this decision rather than the decision. 0 on every project written before v4, which is the truth about them: nobody was asked. |
 
 ### `release_artwork`
 
