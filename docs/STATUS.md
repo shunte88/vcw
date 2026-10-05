@@ -5733,13 +5733,70 @@ overridable per track, each within ±0.5 dB of its published source. The boolean
 RIAA, which is every record cut after 1954; widening it to a curve reference is another
 additive migration when the curves ship.
 
+## 0.1.1-alpha, the first release
+
+Tagged `v0.1.1-alpha` at `bbe709c` on 2026-10-05. Nothing has been pushed yet: the
+commit and the tag are local, and the tag is the thing to be careful with, because
+`tags: ['v*']` is the only trigger that turns the packaging job into a public GitHub
+release with four platform builds and a `SHA256SUMS` behind it.
+
+**The version lives in four places and a test says so.** The root workspace's
+`workspace.package.version` plus the eleven path-dependency pins beside it,
+`app/Cargo.toml`, `app/src-tauri/tauri.conf.json` and `app/ui/package.json`.
+`the_version_is_one_number_in_one_place` compares the Tauri config against
+`CARGO_PKG_VERSION` as the crate actually resolved it, so the config and the binary
+cannot drift; nothing checks `package.json`, which is the one to remember by hand.
+The spikes keep their own `0.1.0` and are deliberately left alone - they are finished
+evidence in their own workspace, not shipped code.
+
+**The changelog heading is a machine-read string.** The release job does
+`version="${GITHUB_REF_NAME#v}"` and then an awk with an exact `$0 == "## $version"`
+match, falling back to `## Unreleased` only if that finds nothing. So the section for
+this release is spelled `## 0.1.1-alpha` with no date and no brackets on the heading
+line; the date went on a line of its own underneath. Keep a Changelog's usual
+`## [0.1.1] - 2026-10-05` would have silently fallen through to the Unreleased branch.
+`the_version_is_one_number_in_one_place` also wants the changelog to name either
+`## Unreleased` or the declared version, and `## 0.1.1-alpha` contains `0.1.1`, so
+renaming the section rather than adding an empty Unreleased beside it is enough.
+
+**What the release carries beyond the bump.** The repo-wide US spelling sweep, 206
+files in the main pass and 27 stragglers; `crates/contract/build.rs`, which stamps
+`VCW_BUILT` and repaints `assets/version.svg`; the `built` field on `About`, shown on
+the splash and in the About dialog; the compact VU dials; and the README swap, with the
+development README moved to `docs/README.md`.
+
+**Two spelling carve-outs, both deliberate.** `finalised` stays, 108 occurrences of it:
+it is a value in `captures.state` with a CHECK constraint on it, parsed in `vcw-types`,
+and crossing the wire as `CaptureStateName`, so changing it is a schema v5 migration
+rather than a spelling fix. And the `ALIASES` table in `crates/export/src/naming.rs`
+keeps `catalogue`, `catalogue_number` and `organisation` alongside the US rows, because
+that table is not VCW's prose - it is what other tools and other people's templates call
+these fields, and a VRipr template reading `{catalogue}` has to get a suggestion rather
+than a spelling lesson. The sweep had flattened those rows into duplicates of the US
+ones, deleting the tolerance without failing a test; they were restored by hand and two
+asserts added. Worth knowing for the next sweep: a `(?<![A-Za-z])catalogue(?![A-Za-z])`
+boundary silently misses `CatalogueAtDiscogs`, so grep the stems afterwards rather than
+trusting the pass.
+
+**`build.rs` at the repository root is dead and still committed.** The root manifest is
+virtual - `[workspace]`, no `[package]` - and Cargo only runs a build script for a
+package, so it has never executed once. `tools/version-badge.sh` is superseded by
+`crates/contract/build.rs`. Neither is referenced by CI, the gate, `scripts/` or the
+README. Both should be deleted; the deletion is outstanding.
+
+**Gate before the tag:** sixteen legs green, 1173 Rust tests passed, 0 failed, 23
+ignored, 155 frontend tests passed, exit 0.
+
 ## Next up
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**, and so
 are the two Phase 2 packages taken out of order: WP-25's lossy encoders and schema v3's
 `capture_eq` at `85acd44`. WP-28's About dialog and WP-21's fingerprinting followed at
 `2297178`, WP-22's lookup at `75424f2`, and WP-23's resolver with schema v4 at `b96b440`.
-**The tree is clean and everything described above is committed.**
+**The tree is clean and everything described above is committed**, and `bbe709c` is
+tagged `v0.1.1-alpha` - see the section above it. The first thing to decide in the
+morning is whether to push the branch alone or the tag with it, because the tag is what
+publishes.
 
 **WP-22 is built** (above): the lookup, the recording fetch, `--identify`, and the
 measurement that says alignment rather than audio quality is what decides whether a
