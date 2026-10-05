@@ -188,7 +188,7 @@ pub fn scan(trace: &Trace<'_>, cfg: &Config) -> Outcome {
 /// and a boundary placed on a jump in flatness is not made less certain by the groove
 /// being loud. Both numbers stay in the evidence either way, which is the point of §24
 /// carrying evidence at all - the resolver can disagree with this weighting later
-/// without re-analysing the audio.
+/// without re-analyzing the audio.
 fn score(boundary: &mut BoundaryObservation, trace: &Trace<'_>, cfg: &Config, smoothed: &[f64]) {
     let window_frames = trace.shape.window_frames() as u64;
     let window = (boundary.at / window_frames) as usize;
@@ -386,7 +386,7 @@ mod tests {
 
         // The counterfactual, run through the shared pipeline with the transient left
         // in: each half of the gap is 0.5 s, under min_silence_secs, so the thump gets
-        // bridged to both neighbours and the two tracks become one.
+        // bridged to both neighbors and the two tracks become one.
         let smoothed = smooth(
             &frames
                 .iter()
@@ -430,7 +430,7 @@ mod tests {
         // extractor: every window looks perfectly tonal, the flatness half of the
         // classifier never fires, and the answer is the level detector's - minus the
         // hysteresis band, which this machine does not have. Stated here so the
-        // behaviour is known rather than discovered.
+        // behavior is known rather than discovered.
         let layout = layout();
         let frames = trace_of(&[(-70.0, 0.0, 20), (-14.0, 0.0, 300), (-70.0, 0.0, 20)]);
         let trace = view(&frames, &layout);

@@ -130,7 +130,7 @@ pub enum Error {
     /// rate is the exact failure the honesty rules exist to prevent.
     #[error("{device} cannot record {wanted}; it offers {offered}")]
     NoConfiguration {
-        /// The device, as a user would recognise it.
+        /// The device, as a user would recognize it.
         device: String,
         /// What was asked for.
         wanted: String,
@@ -150,7 +150,7 @@ pub enum Error {
          resample, so this capture needs a device that can play its own rate"
     )]
     RateUnavailable {
-        /// The device, as a user would recognise it.
+        /// The device, as a user would recognize it.
         device: String,
         /// The rate the capture was recorded at.
         wanted: u32,

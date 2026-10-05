@@ -38,13 +38,13 @@
 //! on `vcw-metadata`: a release found on Discogs and one typed in at a terminal
 //! are the same record.
 //!
-//! `set` is also what the new-project prompt writes. Artist, title and catalogue
+//! `set` is also what the new-project prompt writes. Artist, title and catalog
 //! number are the three fields worth asking for up front, because they are what a
 //! search needs and what automation cannot guess; `--mono` and `--riaa` are the
 //! other two, and they are asked for a stronger reason - no search and no analysis
 //! can answer them at all. A mono pressing transferred with a stereo cartridge
 //! gives two channels that are nearly identical and never exactly so, and the
-//! equalisation a record was cut with leaves no trace in the audio it was applied
+//! equalization a record was cut with leaves no trace in the audio it was applied
 //! to. Both are stated or they are nothing.
 
 use std::path::PathBuf;
@@ -85,7 +85,7 @@ pub(crate) struct Change {
     pub(crate) genres: Option<String>,
     /// The label.
     pub(crate) label: Option<String>,
-    /// The catalogue number.
+    /// The catalog number.
     pub(crate) catalog: Option<String>,
     /// The country of pressing.
     pub(crate) country: Option<String>,

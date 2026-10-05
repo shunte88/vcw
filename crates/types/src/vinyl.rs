@@ -47,7 +47,7 @@
 //!
 //! The Discogs and MusicBrainz position grammars. A position like `AA` meaning the
 //! second track on side A, or a bare `3` on a release whose sides were never
-//! labelled, is a provider convention rather than a property of vinyl, so it is
+//! labeled, is a provider convention rather than a property of vinyl, so it is
 //! parsed in `vcw-metadata` and arrives here already resolved. [`Position`]'s own
 //! [`FromStr`](std::str::FromStr::from_str) takes the unambiguous form only.
 
@@ -205,7 +205,7 @@ impl FromStr for Side {
 pub struct SideError(pub String);
 
 // Sides cross the IPC boundary and land in JSON that a person reads, so they
-// serialise as their letter. An index would be shorter and unreadable, and would
+// serialize as their letter. An index would be shorter and unreadable, and would
 // also silently survive the day someone changes the base.
 impl Serialize for Side {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -399,14 +399,14 @@ mod tests {
     #[test]
     fn a_side_travels_as_its_letter() {
         let side = Side::from_letter('C').expect("C");
-        let json = serde_json::to_string(&side).expect("serialises");
+        let json = serde_json::to_string(&side).expect("serializes");
         assert_eq!(json, "\"C\"");
         assert_eq!(
             serde_json::from_str::<Side>(&json).expect("round trips"),
             side
         );
         assert_eq!(
-            serde_json::to_string(&Position::new(side, 2)).expect("serialises"),
+            serde_json::to_string(&Position::new(side, 2)).expect("serializes"),
             r#"{"side":"C","number":2}"#
         );
         assert!(

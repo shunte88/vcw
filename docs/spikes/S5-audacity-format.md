@@ -2,7 +2,7 @@
 
 **Status:** complete. AUP3 and AUP4 both decoded and verified against a real corpus.
 **Date:** 2026-09-22, AUP4 delta and rate correction 2026-09-24 · **Requirement:** REQUIREMENTS §12, §13 · **Plan:** PROJECT_PLAN §4 (S5), decision D1
-**Artefact:** [`spikes/aup-format-probe/probe.py`](../../spikes/aup-format-probe/probe.py)
+**Artifact:** [`spikes/aup-format-probe/probe.py`](../../spikes/aup-format-probe/probe.py)
 
 ## Question
 
@@ -26,7 +26,7 @@ Audacity source was consulted, so nothing here inherits Audacity's GPL.
 
 The acceptance test is deliberately unforgiving: **every byte of every document
 must be consumed.** A tag-length grammar that is even slightly wrong
-desynchronises within a few records and throws. Partial credit is not
+desynchronizes within a few records and throws. Partial credit is not
 available, so 30/30 clean parses is strong evidence the grammar is right rather
 than merely plausible.
 
@@ -98,7 +98,7 @@ count here and needs no ×4 correction - unlike `0x03`, this is not UTF-32.
 
 Tags `0x00`, `0x09`, `0x0B`, `0x0D`, `0x0E` never occur in either version.
 **The importer must reject them, not guess a width** - a wrong guess silently
-desynchronises the stream and yields plausible garbage rather than an error.
+desynchronizes the stream and yields plausible garbage rather than an error.
 That property is what made the AUP4 delta cheap to find: the AUP3 grammar did
 not mis-parse the new files, it stopped dead at `tag 0x10 at 1237 (name
 'data')`, naming the offset and the attribute.
@@ -186,7 +186,7 @@ summary pyramids:
 | simples_test | 192000 | **int24** | **4096** | 456 -> 456 | **73..2005** unchanged | **identical** | **identical** |
 
 Nothing is resampled, reformatted or repacked. **`sampleformat` 262145 (int24)
-survives** and so does a 4096-byte **page size** - Audacity 4 does not normalise
+survives** and so does a 4096-byte **page size** - Audacity 4 does not normalize
 either, so a converted file inherits whatever its AUP3 had. And `blockid` values
 are preserved exactly, including simples_test's sparse, non-contiguous 73..2005
 range: ids are neither dense nor 1-based, and the conversion does not renumber
@@ -208,7 +208,7 @@ groups:
 |---|---|---|
 | version stamps | `project/@version` 1.3.0 -> 2.0.0, `@audacityversion` 3.7.5 -> 4.0.0 | no |
 | metadata reordered | `tag/@name`, `tag/@value` swap position, same content | no |
-| **track colour assigned** | `wavetrack/@colorindex` 0 -> 1, 3, 4 or 5, per project | no |
+| **track color assigned** | `wavetrack/@colorindex` 0 -> 1, 3, 4 or 5, per project | no |
 | editor state | `project/@sel0`, `@sel1`, `wavetrack/@isSelected` | no |
 | **envelope points created** | `envelope/@numpoints` 0 -> 1 on 16 of 38 envelopes | see below |
 | **f64 re-rounding** | `waveclip/@trimLeft` on 2 of 38 clips | yes, negligibly |
@@ -441,7 +441,7 @@ never again be collapsed into one number by a caller.
    `project/@rate` as UI state and ignore it.
 2. **Two tags for one type.** Accept `0x06` and `0x08` identically.
 3. **Byte lengths, not character counts.** A UTF-32 length read as characters
-   under-reads by 4× and desynchronises.
+   under-reads by 4× and desynchronizes.
 4. **Page size varies** - 4096 and 65536 both present.
 5. **`autosave` may be populated** on a project Audacity did not close cleanly.
    Importing `project` alone silently discards that session's work; detect the

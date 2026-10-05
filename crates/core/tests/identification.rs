@@ -33,7 +33,7 @@
 //! Accepting a provider release into a project, end to end (§26, §32).
 //!
 //! [`vcw_core::identity`] is the only place `vcw-metadata` and `vcw-project`
-//! meet, and the interesting behaviour is all at the seam: a position string a
+//! meet, and the interesting behavior is all at the seam: a position string a
 //! provider printed has to name the same track §29 numbered, a tracklist that
 //! does not line up has to be reported rather than forced, and a title a person
 //! typed has to survive.

@@ -84,7 +84,7 @@ pub(crate) fn install(level: Option<&str>) {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
-        // Colour only when a person is looking. A redirected log full of escape
+        // Color only when a person is looking. A redirected log full of escape
         // codes is a log somebody has to strip before reading.
         .with_ansi(std::io::stderr().is_terminal())
         .with_target(true)

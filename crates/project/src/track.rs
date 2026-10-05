@@ -607,7 +607,7 @@ pub fn listing(conn: &Connection) -> Result<Vec<(Side, Record)>> {
 /// (§21) and a skip does not stop at the join between them any more than the
 /// needle does.
 ///
-/// Empty for a capture nothing has been analysed from, which is the state a skip
+/// Empty for a capture nothing has been analyzed from, which is the state a skip
 /// falls back to a fixed step in.
 ///
 /// # Errors
@@ -844,7 +844,7 @@ pub fn update(project: &mut Project, track_id: i64, change: &Update) -> Result<(
 /// Renumbers a side's tracks 1..n in timeline order.
 ///
 /// Called by every verb that changes the set of tracks, so a caller only needs it
-/// after moving a boundary past a neighbour - the one edit that can reorder tracks
+/// after moving a boundary past a neighbor - the one edit that can reorder tracks
 /// without adding or removing any.
 ///
 /// # Errors
@@ -1662,7 +1662,7 @@ mod tests {
     }
 
     #[test]
-    fn a_capture_nothing_has_been_analysed_from_has_no_edges() {
+    fn a_capture_nothing_has_been_analyzed_from_has_no_edges() {
         // Which is the state a skip falls back to a fixed step in, so it is
         // worth being sure it is empty rather than a zero.
         let dir = tempfile::tempdir().expect("tempdir");

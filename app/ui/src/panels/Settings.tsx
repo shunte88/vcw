@@ -335,7 +335,7 @@ export function Settings({
             </select>
           </label>
           <label>
-            Equalisation on input
+            Equalization on input
             <select
               value={draft.audio.eq ?? "unknown"}
               onChange={(event) => audio({ eq: event.target.value })}
@@ -544,7 +544,7 @@ export function Settings({
             Naming template
             {/* Twice the width of the other fields, because it is the only one
                 whose value is longer than a word: the default is 44 characters
-                and a template with a catalogue number and a year in it runs to
+                and a template with a catalog number and a year in it runs to
                 seventy, which an 18ch box showed a third of. */}
             <input
               className="template"

@@ -35,7 +35,7 @@
 //! `rusqlite` with the `bundled` feature (D2, [ADR-0002]): synchronous and
 //! predictable, no async runtime anywhere near the writer thread, and one SQLite
 //! build across every platform instead of whatever the OS shipped. §15 makes
-//! recovery a correctness requirement, and recovery behaviour depends on WAL
+//! recovery a correctness requirement, and recovery behavior depends on WAL
 //! semantics that vary by SQLite version.
 //!
 //! [ADR-0002]: https://github.com/shunte88/vcw/blob/main/docs/adr/0002-sqlite-binding.md
@@ -131,7 +131,7 @@ impl Project {
 
     /// Opens an existing project read-only, without migrating it.
     ///
-    /// Uses a `mode=ro` URI so a populated `-wal` is honoured.
+    /// Uses a `mode=ro` URI so a populated `-wal` is honored.
     pub fn open_read_only(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         let uri = format!("file:{}?mode=ro", path.display());

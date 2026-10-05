@@ -4,7 +4,7 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  The library: every project under a root, summarised for the browser (§34).
+ *  The library: every project under a root, summarized for the browser (§34).
  *
  * MIT License
  *
@@ -30,7 +30,7 @@
  *
  */
 
-//! The library: every project under a root, summarised for the browser (§34).
+//! The library: every project under a root, summarized for the browser (§34).
 //!
 //! Separate from [`crate::read`] because it is a different kind of read. Every
 //! reader there takes a `&Connection` and answers a question about one open
@@ -44,13 +44,13 @@
 //! such a directory always contains surprises: a partial copy, a `.vcw` written
 //! by a newer schema, one written by an older one that has not been upgraded
 //! yet, a file being captured into right now, a name that happens to end in
-//! `.vcw` and is not a project at all. [`summarise`] answers with a
+//! `.vcw` and is not a project at all. [`summarize`] answers with a
 //! row for every one of them, carrying `problem` rather than an error, because
 //! the alternative is a browser that silently omits the file the person is
 //! looking for.
 //!
 //! The one thing it will not do is repair anything. A project is opened
-//! `mode=ro` (never `immutable=1`, so a populated `-wal` is honoured), which
+//! `mode=ro` (never `immutable=1`, so a populated `-wal` is honored), which
 //! means listing a library cannot run a migration, cannot recover a sidecar and
 //! cannot touch a capture in progress.
 //!
@@ -92,7 +92,7 @@ pub fn library(root: &Path) -> Vec<view::Project> {
             path.extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case(schema::EXTENSION))
         })
-        .map(|path| summarise(&path))
+        .map(|path| summarize(&path))
         .collect();
 
     // Newest first. `Reverse` rather than a flipped comparator: same stable
@@ -101,13 +101,13 @@ pub fn library(root: &Path) -> Vec<view::Project> {
     out
 }
 
-/// Summarises one project file.
+/// Summarizes one project file.
 ///
 /// Never fails. Everything that can go wrong lands in
 /// [`problem`](view::Project::problem) with the counts left at zero, which is
-/// the row a browser draws greyed out with a reason beside it.
+/// the row a browser draws grayed out with a reason beside it.
 #[must_use]
-pub fn summarise(path: &Path) -> view::Project {
+pub fn summarize(path: &Path) -> view::Project {
     let (bytes, modified) = fs::metadata(path).map_or((0, 0), |meta| {
         let seconds = meta
             .modified()

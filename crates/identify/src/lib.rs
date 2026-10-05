@@ -45,17 +45,17 @@
 //! # It starts with what a person typed
 //!
 //! A VCW project starts from a record in somebody's hand, and project setup asks for
-//! what is printed on it: artist, title, catalogue number, mono or stereo, and whether
-//! RIAA equalisation is to be applied. Four of those are release identity, stated by
+//! what is printed on it: artist, title, catalog number, mono or stereo, and whether
+//! RIAA equalization is to be applied. Four of those are release identity, stated by
 //! someone looking at the object, and they arrive before the first sample does.
 //!
 //! So this crate is not a machine for guessing what a record is from its audio. It
 //! turns a stated identity into a specific *pressing*, checks the audio is consistent
-//! with it, and lays the side out. The catalogue number is the lever: artist and title
-//! identify a work, a catalogue number identifies a pressing, and §28 asks VCW to tell
+//! with it, and lays the side out. The catalog number is the lever: artist and title
+//! identify a work, a catalog number identifies a pressing, and §28 asks VCW to tell
 //! pressings apart.
 //!
-//! [`resolver::Lookup::ORDER`] is that policy as code. Discogs by catalogue number,
+//! [`resolver::Lookup::ORDER`] is that policy as code. Discogs by catalog number,
 //! then Discogs by name, then MusicBrainz by name, and only then the audio: measured
 //! on `/data2/source_rips`, about a third of real rips do not resolve at MusicBrainz
 //! from artist and album at all, and identifying a record from audio alone cost 63 to
@@ -92,11 +92,11 @@
 //! observed
 //!     .add(Source::Stated, Fact::Artist("Ultravox".into()))
 //!     .add(Source::Stated, Fact::Album("Vienna".into()))
-//!     .add(Source::Stated, Fact::Catalogue("CHRH 1296".into()))
+//!     .add(Source::Stated, Fact::Catalog("CHRH 1296".into()))
 //!     .add(Source::Signal, Fact::Count(9));
 //!
-//! // A catalogue number was typed, so that is the first and cheapest question.
-//! assert_eq!(next_lookup(&observed, &[]), Some(Lookup::CatalogueAtDiscogs));
+//! // A catalog number was typed, so that is the first and cheapest question.
+//! assert_eq!(next_lookup(&observed, &[]), Some(Lookup::CatalogAtDiscogs));
 //!
 //! // What it answered with, scored against everything known.
 //! let found = Claim {

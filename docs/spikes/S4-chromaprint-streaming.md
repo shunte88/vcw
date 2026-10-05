@@ -3,7 +3,7 @@
 **Status:** COMPLETE on Linux/x86_64. Acceptance met, and met with more margin than asked for.
 **Date:** 2026-09-24
 **Requirement:** REQUIREMENTS §25, §26, §46 · **Plan:** PROJECT_PLAN §4 (S4)
-**Artefact:** [`spikes/fingerprint-stream`](../../spikes/fingerprint-stream)
+**Artifact:** [`spikes/fingerprint-stream`](../../spikes/fingerprint-stream)
 **Corpus:** `/data2/source_rips` - 62 real vinyl rips, 71 GB, 48 kHz and 192 kHz 32-bit WAV plus 24-bit FLAC
 
 ## Question
@@ -90,7 +90,7 @@ so the resampler always sees the same input in the same 32768-sample units
 regardless of how the caller split the feed. `finish()` flushes the remainder.
 Nothing in the chain is sensitive to call granularity. This is a structural
 property of the crate, not a coincidence of these inputs - but it is worth
-re-asserting in CI, because it is exactly the kind of property an optimisation
+re-asserting in CI, because it is exactly the kind of property an optimization
 could quietly break - so it is. `cargo test -p fingerprint-stream` asserts chunk
 invariance, instance independence and the unrelated-audio baseline against a
 deterministic synthetic signal, in 0.5 s, with no corpus on disk:
@@ -310,7 +310,7 @@ Two of these are decisions VCW owns, and both are now settled:
   give the identical fingerprint. The worker does not need dither or careful
   rounding for the fingerprint's sake.
 - **Level is free.** −20 dB to +3 dB is invisible, because chroma
-  normalisation removes it. This matters for vinyl specifically: cartridge,
+  normalization removes it. This matters for vinyl specifically: cartridge,
   preamp gain and pressing level vary between plays and between users, and none
   of it reaches the fingerprint.
 

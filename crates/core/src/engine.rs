@@ -140,7 +140,7 @@ pub struct Recorded {
 /// Built before the transport is armed, because [`Idle::arm`](crate::state::Idle::arm)
 /// is infallible by design - everything that can fail about opening a device or
 /// a project has already happened by the time this exists, so a failure to open
-/// never has to be modelled as a phase.
+/// never has to be modeled as a phase.
 ///
 /// The writer thread starts immediately and **paused**. That is what makes
 /// §11's `Armed` real: the device is running so levels can be set (§50's "Set
@@ -207,7 +207,7 @@ impl Recorder {
                 (Box::new(capture), reader)
             }
             None => {
-                // `setup.format` is honoured here as well as on a real device:
+                // `setup.format` is honored here as well as on a real device:
                 // it was silently ignored, so `--format s16` produced an S32
                 // capture and there was no way to make a project the FLAC
                 // encoder would accept without hardware.
@@ -222,7 +222,7 @@ impl Recorder {
         };
 
         // The device's negotiated facts, plus the one fact the device cannot
-        // report: §51's equalisation provenance, which only the operator knows.
+        // report: §51's equalization provenance, which only the operator knows.
         let info = source.info().with_eq(setup.eq);
         let mut project = open_or_create(&setup.project)?;
         // The session row goes down before a single frame is drained, so a
@@ -544,7 +544,7 @@ impl Engine {
 
     /// Stops the engine and waits for the thread.
     ///
-    /// Finalises a capture in progress rather than abandoning it: the audio is
+    /// Finalizes a capture in progress rather than abandoning it: the audio is
     /// the part that cannot be recorded again.
     ///
     /// # Errors
@@ -591,7 +591,7 @@ fn run(commands: &Receiver<Command>, bus: &Bus) {
     loop {
         match commands.recv_timeout(TICK) {
             Ok(Command::Shutdown) => {
-                machine = finalise(machine, bus);
+                machine = finalize(machine, bus);
                 break;
             }
             Ok(Command::Poll) => {
@@ -613,7 +613,7 @@ fn run(commands: &Receiver<Command>, bus: &Bus) {
             // Every sender has gone. Nothing more can arrive, so finish the
             // capture rather than leave a thread holding a device for ever.
             Err(RecvTimeoutError::Disconnected) => {
-                machine = finalise(machine, bus);
+                machine = finalize(machine, bus);
                 break;
             }
         }
@@ -792,7 +792,7 @@ fn announce(recorder: &Recorder, bus: &Bus) {
 
 /// How a capture should be recorded as having ended.
 ///
-/// Interrupted, not finalised, if anything was lost. The stop was orderly
+/// Interrupted, not finalized, if anything was lost. The stop was orderly
 /// either way; the capture was not, and §38 wants the difference kept.
 fn ending(machine: &Machine<Recorder>) -> CaptureState {
     let clean = match machine {
@@ -830,7 +830,7 @@ fn position(machine: &Machine<Recorder>, frames: u64) -> Event {
 /// A shutdown must not lose a side. Anything recording or paused is stopped
 /// properly; anything merely armed is abandoned, which removes the empty row
 /// it would otherwise leave.
-fn finalise(machine: Machine<Recorder>, bus: &Bus) -> Machine<Recorder> {
+fn finalize(machine: Machine<Recorder>, bus: &Bus) -> Machine<Recorder> {
     let machine = match machine {
         Machine::Recording(_) | Machine::Paused(_) => {
             let state = ending(&machine);

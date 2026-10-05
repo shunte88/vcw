@@ -44,7 +44,7 @@
 //! **Bit-perfect playback is claimed the same way and no more easily.**
 //! [`fidelity`] weighs the same kinds of evidence [`crate::capture::verdict`]
 //! does - the mode the stream was opened in, what the operating system says the
-//! device is doing, whether the request was honoured - and adds the one that only
+//! device is doing, whether the request was honored - and adds the one that only
 //! exists on this side: whether anything had to be *converted* between what was
 //! stored and what the device takes. A 24-bit side played on a float-only card
 //! sounds fine and is not bit-perfect, and the UI has to be able to say so.
@@ -184,7 +184,7 @@ impl Opened {
 
     /// Whether everything the caller pinned came back unchanged.
     #[must_use]
-    pub fn honoured(&self) -> bool {
+    pub fn honored(&self) -> bool {
         self.divergences.is_empty()
     }
 
@@ -550,7 +550,7 @@ impl Source {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Fidelity {
     /// The device took the stored bytes unaltered, the OS confirmed the format,
-    /// the request was honoured, and no counter moved.
+    /// the request was honored, and no counter moved.
     Confirmed,
     /// Something rules it out. Each reason is stated.
     Refuted {
@@ -641,9 +641,9 @@ pub fn fidelity(
     if let Verification::Unavailable { why } = verification {
         missing.push(why.clone());
     }
-    if !opened.honoured() {
+    if !opened.honored() {
         missing.push(format!(
-            "the request was not honoured in full ({})",
+            "the request was not honored in full ({})",
             opened
                 .divergences
                 .iter()
@@ -876,7 +876,7 @@ impl Playback {
         self.counters.snapshot()
     }
 
-    /// The device, as a user would recognise it.
+    /// The device, as a user would recognize it.
     #[must_use]
     pub fn device_name(&self) -> &str {
         &self.name
@@ -1180,7 +1180,7 @@ mod tests {
         (feeder, source, cursor, counters)
     }
 
-    /// Queues one chunk of recognisable audio.
+    /// Queues one chunk of recognizable audio.
     fn queue_chunk(feeder: &mut Feeder, epoch: u64, start_frame: u64, byte: u8, frames: usize) {
         let mut chunk = feeder.take().expect("a spare chunk");
         chunk.spare_mut()[..frames * FRAME].fill(byte);

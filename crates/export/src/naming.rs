@@ -99,7 +99,7 @@ pub struct Values {
     pub composer: String,
     /// Country of the pressing, as the provider spelled it.
     pub country: String,
-    /// Catalogue number.
+    /// Catalog number.
     pub catalog: String,
     /// Record label.
     pub label: String,
@@ -120,15 +120,15 @@ impl Values {
     /// not do this: its output is text - a comment, a log line, a label in the
     /// interface - where a slash is just a slash.
     #[must_use]
-    pub fn sanitised(&self) -> Self {
-        // A blank field must stay blank. `sanitise` answers "Unknown" for an
+    pub fn sanitized(&self) -> Self {
+        // A blank field must stay blank. `sanitize` answers "Unknown" for an
         // empty segment, which is right for a whole segment and wrong for a
         // token, because `[{year}]` can only collapse while the year is empty.
         let clean = |value: &String| {
             if value.trim().is_empty() {
                 String::new()
             } else {
-                sanitise(value)
+                sanitize(value)
             }
         };
         Self {
@@ -193,7 +193,7 @@ pub fn validate(template: &str) -> Vec<Unknown> {
     unknown
 }
 
-/// The closest supported token to something unrecognised.
+/// The closest supported token to something unrecognized.
 ///
 /// The alias table first, because the common cases are not spelling mistakes but
 /// other tools' names for the same thing, and edit distance would sooner map
@@ -217,11 +217,18 @@ pub fn suggest(unknown: &str) -> Option<String> {
         ("catno", "catalog"),
         ("cat_no", "catalog"),
         ("catalog_no", "catalog"),
-        ("catalogue", "catalog"),
         ("catalognumber", "catalog"),
         ("catalog_number", "catalog"),
+        // The UK rows stay. VCW's own prose is US English, but this table is
+        // not prose - it is what other tools and other people's templates
+        // happen to call these fields, and a person who types `{catalogue}`
+        // wants a suggestion rather than a spelling lesson.
+        ("catalogue", "catalog"),
+        ("catalogue_no", "catalog"),
+        ("cataloguenumber", "catalog"),
         ("catalogue_number", "catalog"),
         ("organization", "label"),
+        ("organisation", "label"),
         ("publisher", "label"),
         ("date", "year"),
         ("released", "year"),
@@ -360,7 +367,7 @@ pub const UNTITLED: &str = "Untitled";
 /// `{tracknum}[ - {title}]` to work around the dangling separator asked for the
 /// whole group to vanish, and substituting a word into it would quietly take
 /// that back and start writing `A2 - Untitled` where they had arranged for
-/// `A2`. So the group keeps the old behaviour exactly, and an unbracketed
+/// `A2`. So the group keeps the old behavior exactly, and an unbracketed
 /// `{title}` - which is what the default template has - gets the word.
 fn name_the_untitled(template: &str) -> String {
     let mut out = String::with_capacity(template.len() + UNTITLED.len());
@@ -389,28 +396,28 @@ fn name_the_untitled(template: &str) -> String {
 /// Expands a template into a relative path.
 ///
 /// Segments are split on `/` whatever the platform is, because a template is
-/// stored in settings and copied between machines. The values are sanitised
+/// stored in settings and copied between machines. The values are sanitized
 /// *before* they go into the template rather than after, which is what keeps the
 /// two kinds of slash apart: the operator's `/` in `{album}/{title}` is a
 /// directory, and a provider's `/` in `AC/DC Medley` is a character in a name.
-/// Sanitising the joined-up string cannot tell them apart, and one folder called
+/// Sanitizing the joined-up string cannot tell them apart, and one folder called
 /// `AC` is nobody's intention.
 ///
-/// The segments are then sanitised again, which is not redundant: it catches the
+/// The segments are then sanitized again, which is not redundant: it catches the
 /// hazards the operator typed into the template itself.
 ///
 /// An expansion that comes out empty - every token blank - falls back to the
 /// track number, since a file still has to be called something.
 #[must_use]
 pub fn path_for(template: &str, values: &Values) -> PathBuf {
-    let expanded = expand(template, &values.sanitised());
+    let expanded = expand(template, &values.sanitized());
     let mut path = PathBuf::new();
     for segment in expanded.split('/') {
         let trimmed = segment.trim();
         if trimmed.is_empty() {
             continue;
         }
-        path.push(sanitise(trimmed));
+        path.push(sanitize(trimmed));
     }
     if path.as_os_str().is_empty() {
         let number = if values.tracknum.is_empty() {
@@ -433,7 +440,7 @@ pub fn path_for(template: &str, values: &Values) -> PathBuf {
 /// unlikely and `Aux` is a French word, so the check is on the stem and
 /// case-insensitive.
 #[must_use]
-pub fn sanitise(segment: &str) -> String {
+pub fn sanitize(segment: &str) -> String {
     const RESERVED: &[&str] = &[
         "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
         "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
@@ -470,7 +477,7 @@ pub fn sanitise(segment: &str) -> String {
 ///
 /// **Divergence from VRipr, deliberately.** The original found the first `[` in
 /// the string each time round its loop and stopped as soon as that one turned out
-/// to be non-empty, so `[{year}] - [{catalog}]` with a year and no catalogue
+/// to be non-empty, so `[{year}] - [{catalog}]` with a year and no catalog
 /// number left a bare `[]` in the file name. This scans the whole string and
 /// repeats until nothing changes, so nested and later groups both go. Templates
 /// are not a parity corpus - nobody's library depends on VCW reproducing a
@@ -568,7 +575,7 @@ pub fn country_iso(country: &str) -> &str {
 ///
 /// A template is a person's own text, so this is not a security boundary - but a
 /// title read off a provider is *not* their text, and `..` in one would write
-/// outside the folder they chose. [`sanitise`] leaves dots alone deliberately,
+/// outside the folder they chose. [`sanitize`] leaves dots alone deliberately,
 /// because `Vol. 2` and `Mr. Bungle` are ordinary names, so the check happens
 /// here instead.
 #[must_use]
@@ -663,7 +670,7 @@ mod tests {
             PathBuf::from("Lush/Split/03 - Untitled")
         );
         // Whitespace counts as none. A title of one space came out of a real
-        // provider row, and it sanitises to nothing a moment later anyway.
+        // provider row, and it sanitizes to nothing a moment later anyway.
         v.title = "   ".into();
         assert_eq!(expand("{tracknum} - {title}", &v), "03 - Untitled");
     }
@@ -719,7 +726,7 @@ mod tests {
 
     #[test]
     fn a_slash_in_a_title_does_not_become_a_directory() {
-        // The case that makes per-segment sanitising the rule rather than a
+        // The case that makes per-segment sanitizing the rule rather than a
         // detail: this title is real, and one folder called `AC` is not what
         // anyone meant.
         let mut v = values();
@@ -734,20 +741,20 @@ mod tests {
     fn windows_only_hazards_are_handled_on_every_platform() {
         // Deliberately not conditional on the platform: the file is exported on
         // Linux and read on Windows more often than not.
-        assert_eq!(sanitise("Where Is My Mind?"), "Where Is My Mind_");
-        assert_eq!(sanitise("Vol. 2 "), "Vol. 2");
-        assert_eq!(sanitise("Trailing..."), "Trailing");
-        assert_eq!(sanitise("aux"), "aux_", "a reserved device name");
-        assert_eq!(sanitise("aux.wav"), "aux.wav_");
-        assert_eq!(sanitise("Auxiliary"), "Auxiliary", "only the whole stem");
+        assert_eq!(sanitize("Where Is My Mind?"), "Where Is My Mind_");
+        assert_eq!(sanitize("Vol. 2 "), "Vol. 2");
+        assert_eq!(sanitize("Trailing..."), "Trailing");
+        assert_eq!(sanitize("aux"), "aux_", "a reserved device name");
+        assert_eq!(sanitize("aux.wav"), "aux.wav_");
+        assert_eq!(sanitize("Auxiliary"), "Auxiliary", "only the whole stem");
         assert_eq!(
-            sanitise("Mr. Bungle"),
+            sanitize("Mr. Bungle"),
             "Mr. Bungle",
             "an interior dot is fine"
         );
-        assert_eq!(sanitise("bell\u{7}er"), "bell_er", "a control character");
-        assert_eq!(sanitise(""), "Unknown");
-        assert_eq!(sanitise("   "), "Unknown", "blank after trimming");
+        assert_eq!(sanitize("bell\u{7}er"), "bell_er", "a control character");
+        assert_eq!(sanitize(""), "Unknown");
+        assert_eq!(sanitize("   "), "Unknown", "blank after trimming");
     }
 
     #[test]
@@ -801,12 +808,14 @@ mod tests {
         assert_eq!(suggest("disk").as_deref(), Some("disc"));
         // The six VRipr's table had and this one did not. Every one of them is
         // too far from its target for the edit distance to reach - `catalog`
-        // is seven edits from `catalog_number` - so without the alias they
+        // is seven edits from `catalogue_number` - so without the alias they
         // were unknown tokens with no suggestion at all, and a template
         // written for VRipr is exactly where they come from.
-        assert_eq!(suggest("catalog_number").as_deref(), Some("catalog"));
         assert_eq!(suggest("catalogue_number").as_deref(), Some("catalog"));
+        assert_eq!(suggest("catalog_number").as_deref(), Some("catalog"));
+        assert_eq!(suggest("catalogue").as_deref(), Some("catalog"));
         assert_eq!(suggest("catalog_no").as_deref(), Some("catalog"));
+        assert_eq!(suggest("organisation").as_deref(), Some("label"));
         assert_eq!(suggest("release_id").as_deref(), Some("discogs_id"));
         assert_eq!(suggest("discogs_release").as_deref(), Some("discogs_id"));
         assert_eq!(
@@ -859,7 +868,7 @@ mod tests {
     #[test]
     fn a_title_cannot_climb_out_of_the_output_directory() {
         // Not the operator's template - a title that came off a provider. The
-        // sanitiser leaves dots alone on purpose, so this is checked instead.
+        // sanitizer leaves dots alone on purpose, so this is checked instead.
         let mut v = values();
         v.title = "../../etc/passwd".into();
         let path = path_for("{album}/{title}", &v);

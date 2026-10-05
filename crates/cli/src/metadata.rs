@@ -71,9 +71,9 @@ pub(crate) enum Args {
     Search(Box<SearchArgs>),
     /// Fetch one release in full.
     Fetch(FetchArgs),
-    /// Normalise genre names through the §32 table.
+    /// Normalize genre names through the §32 table.
     Genres {
-        /// The names to normalise, semicolon-delimited or one per argument.
+        /// The names to normalize, semicolon-delimited or one per argument.
         names: Vec<String>,
         /// A replacement mapping table.
         table: Option<PathBuf>,
@@ -90,7 +90,7 @@ pub(crate) struct SearchArgs {
     pub(crate) artist: Option<String>,
     /// The release title.
     pub(crate) album: Option<String>,
-    /// The label's catalogue number, which usually identifies one pressing.
+    /// The label's catalog number, which usually identifies one pressing.
     pub(crate) catalog: Option<String>,
     /// The barcode on the sleeve.
     pub(crate) barcode: Option<String>,
@@ -205,7 +205,7 @@ fn run_search(args: &SearchArgs) -> Result<()> {
     let owned = providers(args.which, args.offline, args.cache.as_ref(), &credentials);
     let borrowed: Vec<&dyn Provider> = owned.iter().map(AsRef::as_ref).collect();
 
-    // Deliberately not `search_all`'s collapse-to-one-error behaviour. That is
+    // Deliberately not `search_all`'s collapse-to-one-error behavior. That is
     // right for a UI, which shows a dialog; here a script asked a question and
     // deserves the whole answer, including which provider refused and why. The
     // report is printed either way and the exit code is what carries the failure.
@@ -357,7 +357,7 @@ fn print_release(release: &Release) {
     }
     for (label, value) in [
         ("label", &release.label),
-        ("catalogue", &release.catalog),
+        ("catalog", &release.catalog),
         ("country", &release.country),
     ] {
         if !value.is_empty() {
@@ -428,7 +428,7 @@ fn print_release(release: &Release) {
     }
 }
 
-/// Normalises genre names, which needs no network at all (§32).
+/// Normalizes genre names, which needs no network at all (§32).
 fn run_genres(names: &[String], table: Option<&std::path::Path>, json: bool) -> Result<()> {
     let (genres, from_file) = match table {
         Some(path) => {
@@ -440,7 +440,7 @@ fn run_genres(names: &[String], table: Option<&std::path::Path>, json: bool) -> 
         }
         None => (Genres::builtin(), false),
     };
-    let normalised = genres.normalise_all(names);
+    let normalized = genres.normalize_all(names);
     if json {
         println!(
             "{}",
@@ -448,7 +448,7 @@ fn run_genres(names: &[String], table: Option<&std::path::Path>, json: bool) -> 
                 "table": if from_file { "file" } else { "builtin" },
                 "keys": genres.len(),
                 "input": names,
-                "genres": normalised,
+                "genres": normalized,
             }))?
         );
         return Ok(());
@@ -458,10 +458,10 @@ fn run_genres(names: &[String], table: Option<&std::path::Path>, json: bool) -> 
         genres.len(),
         if from_file { "given" } else { "built-in" }
     );
-    if normalised.is_empty() {
-        println!("nothing to normalise");
+    if normalized.is_empty() {
+        println!("nothing to normalize");
     } else {
-        println!("{}", normalised.join("; "));
+        println!("{}", normalized.join("; "));
     }
     Ok(())
 }

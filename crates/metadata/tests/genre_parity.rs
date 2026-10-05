@@ -33,8 +33,8 @@
 //! The genre port answers what VRipr answered, row for row.
 //!
 //! `crates/metadata/src/genres.rs` is a port of VRipr's `sanitize_genres`, and a
-//! port that is nearly right is worse than no port: a catalogue built with VRipr
-//! and a catalogue built with VCW would disagree about what a record is. So the
+//! port that is nearly right is worse than no port: a catalog built with VRipr
+//! and a catalog built with VCW would disagree about what a record is. So the
 //! reference is VRipr's own output, not my reading of VRipr's code.
 //!
 //! `tests/fixtures/vripr_genres.jsonl` was produced out of tree by
@@ -89,7 +89,7 @@ fn every_recorded_answer_is_reproduced_exactly() {
 
     let mut differences = Vec::new();
     for case in &cases {
-        let ours = genres.normalise(&case.input);
+        let ours = genres.normalize(&case.input);
         if ours != case.output {
             differences.push(format!(
                 "{:?}: VRipr {:?}, VCW {:?}",
@@ -139,14 +139,14 @@ fn the_fixture_is_not_trivially_satisfiable() {
 #[test]
 fn the_answers_do_not_move_between_two_tables_built_from_the_same_data() {
     // The port resolves the table's duplicate and case-folding keys by file order
-    // rather than by hash order, which is the one behaviour VRipr could not
+    // rather than by hash order, which is the one behavior VRipr could not
     // promise. Two independently built tables must agree on all of it.
     let first = Genres::builtin();
     let second = Genres::builtin();
     for case in cases() {
         assert_eq!(
-            first.normalise(&case.input),
-            second.normalise(&case.input),
+            first.normalize(&case.input),
+            second.normalize(&case.input),
             "unstable answer for {:?}",
             case.input
         );

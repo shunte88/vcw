@@ -232,7 +232,7 @@ fn a_bundle_reports_what_section_42_asks_for() {
     assert_eq!(capture["storage_format"], "Int16");
     assert_eq!(capture["capture_mode"], "exclusive");
     // §42's bundle is what somebody reading a support report has. A rip that
-    // sounds wrong because it was equalised twice is diagnosable from this line
+    // sounds wrong because it was equalized twice is diagnosable from this line
     // and from nothing else in the file.
     assert_eq!(capture["capture_eq"], "flat");
     assert_eq!(capture["state"], "finalised");
@@ -439,7 +439,7 @@ fn a_bundle_with_no_project_is_a_report_about_the_machine() {
 }
 
 #[test]
-fn a_device_survey_is_summarised_unless_the_whole_thing_is_asked_for() {
+fn a_device_survey_is_summarized_unless_the_whole_thing_is_asked_for() {
     // The full snapshot of a development machine is 7.7 MB of JSON, most of it
     // ALSA plugin nodes advertising 1 to 64 channels in five formats. A bundle
     // nobody can send is a bundle nobody sends, so the default is a summary.
@@ -450,11 +450,11 @@ fn a_device_survey_is_summarised_unless_the_whole_thing_is_asked_for() {
     let rendered = serde_json::to_string(&summary).expect("render");
     assert!(
         rendered.len() < 1_000_000,
-        "a summarised bundle is {} bytes, which is too big to send",
+        "a summarized bundle is {} bytes, which is too big to send",
         rendered.len()
     );
 
-    // Every summarised device still carries what diagnoses a capture: identity,
+    // Every summarized device still carries what diagnoses a capture: identity,
     // transport, the backend's own default, and anything that went wrong while
     // asking.
     if let Some(devices) = summary["audio"]["devices"].as_array() {

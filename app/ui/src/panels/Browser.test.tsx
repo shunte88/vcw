@@ -20,7 +20,7 @@
 // So this is a rendered test rather than a source-reading one: it renders the
 // panel with a fake store, submits the form, and asks whether the library was
 // asked for again. `wiring.test.ts` explains why the keyboard map is checked by
-// reading text instead - the difference is that this behaviour is one component
+// reading text instead - the difference is that this behavior is one component
 // deep and needs no Tauri command stubbed but the two the panel calls.
 
 import { act } from "react";
@@ -246,11 +246,11 @@ describe("the project browser", () => {
     expect(first.querySelectorAll(".tile svg.preview")).toHaveLength(1);
     expect(first.querySelectorAll(".tile .sleeve")).toHaveLength(0);
 
-    // The shape itself, because an area mirrored about a centre line is the
+    // The shape itself, because an area mirrored about a center line is the
     // one piece of arithmetic here and an off-by-one in the return leg would
     // still draw something plausible. Out along the top, back along the
     // bottom, closed. The peaks go in at half scale and come out full height,
-    // so this one string covers the normalisation as well as the mirror.
+    // so this one string covers the normalization as well as the mirror.
     expect(
       first.querySelector(".tile svg.preview path")?.getAttribute("d"),
     ).toBe("M0,1L0,1L1,0.5L2,0L2,2L1,1.5L0,1Z");

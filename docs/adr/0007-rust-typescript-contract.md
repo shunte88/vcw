@@ -6,7 +6,7 @@
 ## Context
 
 §35 asks for a command and event surface between the core and the interface. §2 says the
-application's behaviour belongs to the application and not to the view. WP-16's exit
+application's behavior belongs to the application and not to the view. WP-16's exit
 criterion turns that into a review gate - *no business logic in TS* - and a review gate is
 the weakest kind of rule there is, because it fails slowly. Nobody adds a business rule to
 a React component in the commit that introduces the component. It arrives in the third
@@ -65,7 +65,7 @@ contract into the shell, where `vcw --json` cannot reach it, or accepting a Taur
 dependency in `crates/`.
 
 `ts-rs` reads serde's own attributes, so `#[serde(rename_all)]` and `#[serde(tag)]` are
-honoured by the thing that generates the types rather than mirrored by hand, and it has no
+honored by the thing that generates the types rather than mirrored by hand, and it has no
 run-time component at all: the declarations are produced by a test.
 
 ## What this rules out

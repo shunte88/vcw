@@ -130,7 +130,7 @@ fn body(text: &str, signature: &str) -> String {
 }
 
 /// Every forbidden macro in a piece of source, with the line it is on.
-fn offences(text: &str) -> Vec<(usize, String)> {
+fn offenses(text: &str) -> Vec<(usize, String)> {
     text.lines()
         .enumerate()
         .filter(|(_, line)| {
@@ -145,7 +145,7 @@ fn offences(text: &str) -> Vec<(usize, String)> {
 fn the_modules_the_callback_runs_through_do_not_log() {
     for name in CALLBACK_PATH {
         let text = std::fs::read_to_string(source(name)).expect("read the module");
-        let found = offences(&text);
+        let found = offenses(&text);
         assert!(
             found.is_empty(),
             "{name} is on the audio thread's path and may not log (§42):\n{}",
@@ -162,7 +162,7 @@ fn the_modules_the_callback_runs_through_do_not_log() {
 fn the_callbacks_themselves_do_not_log() {
     for (name, signature) in ENTRY_POINTS {
         let text = std::fs::read_to_string(source(name)).expect("read the module");
-        let found = offences(&body(&text, signature));
+        let found = offenses(&body(&text, signature));
         assert!(
             found.is_empty(),
             "{name}'s {signature} runs on the audio thread and may not log (§42):\n{}",

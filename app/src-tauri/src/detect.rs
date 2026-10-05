@@ -48,14 +48,14 @@
 //! # Why it opens the project twice per side
 //!
 //! [`refine_project`](detection::refine_project) opens it read-only, which is
-//! what lets a side be analysed while another one is being recorded, and
+//! what lets a side be analyzed while another one is being recorded, and
 //! adoption needs a writable handle. Opening once writable for both would hold
 //! a write lock across the whole extraction for no reason, and the pass has
 //! nothing to write until it has finished thinking.
 //!
 //! # What is validated before the thread starts
 //!
-//! The settings, the side letter and the existence of a capture to analyse.
+//! The settings, the side letter and the existence of a capture to analyze.
 //! Those are the three things a person can get wrong, and each of them is worth
 //! a refusal with a field name rather than an event several seconds later. What
 //! is *not* pre-validated is anything about the audio, because finding out
@@ -83,7 +83,7 @@ use crate::state::{Error, Shell};
 /// Resolved on the command thread so the refusals happen there. A side with no
 /// capture is not an error at this point - it is simply not in the list, which
 /// is what makes `detect_tracks` with no side argument mean "every side there
-/// is something to analyse on" rather than a failure on the empty ones.
+/// is something to analyze on" rather than a failure on the empty ones.
 struct Target {
     /// Which side.
     side: Side,
@@ -126,10 +126,10 @@ pub(crate) fn detect_tracks(
             field: "side".to_owned(),
             why: match wanted {
                 Some(side) => format!(
-                    "side {} has no capture to analyse - record it first",
+                    "side {} has no capture to analyze - record it first",
                     side.letter()
                 ),
-                None => "no side in this project has a capture to analyse".to_owned(),
+                None => "no side in this project has a capture to analyze".to_owned(),
             },
         });
     }
@@ -142,7 +142,7 @@ pub(crate) fn detect_tracks(
     Ok(())
 }
 
-/// The sides worth analysing, with their captures.
+/// The sides worth analyzing, with their captures.
 fn resolve(path: &Path, wanted: Option<Side>) -> Result<Vec<Target>, Error> {
     let project = Project::open_read_only(path)?;
     let mut targets = Vec::new();

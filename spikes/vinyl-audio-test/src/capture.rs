@@ -87,8 +87,8 @@ pub struct FormatReport {
     pub bytes_per_sample: usize,
     pub buffer_size: String,
     /// True only when every requested field came back unchanged. A `None`
-    /// request cannot be honoured or violated, so it does not count against this.
-    pub honoured: bool,
+    /// request cannot be honored or violated, so it does not count against this.
+    pub honored: bool,
     pub divergences: Vec<String>,
 }
 
@@ -342,13 +342,13 @@ pub fn run(req: Request) -> Result<Report> {
     let dropped = frames_dropped.load(Ordering::Relaxed);
     let stream_errors = errors.lock().map(|v| v.clone()).unwrap_or_default();
 
-    let honoured = divergences.is_empty();
+    let honored = divergences.is_empty();
     let verdict = verdict(
         dropped,
         &stream_errors,
         report_verify.as_ref(),
         kernel_agrees,
-        honoured,
+        honored,
     );
 
     Ok(Report {
@@ -362,7 +362,7 @@ pub fn run(req: Request) -> Result<Report> {
             negotiated_format: format!("{format:?}"),
             bytes_per_sample,
             buffer_size: format!("{:?}", config.buffer_size),
-            honoured,
+            honored,
             divergences,
         },
         kernel_hw_params,
@@ -407,7 +407,7 @@ fn verdict(
     errors: &[String],
     v: Option<&verify::VerifyReport>,
     kernel_agrees: Option<bool>,
-    honoured: bool,
+    honored: bool,
 ) -> String {
     let mut faults = Vec::new();
     if dropped > 0 {
@@ -434,8 +434,8 @@ fn verdict(
     }
     // A clean capture that silently got a different format than asked for is
     // not a pass in this tool's terms - that is the §8 failure mode.
-    match (honoured, kernel_agrees) {
-        (false, _) => "PASS (capture clean, but the requested format was not honoured)".into(),
+    match (honored, kernel_agrees) {
+        (false, _) => "PASS (capture clean, but the requested format was not honored)".into(),
         (true, Some(false)) => "PASS (capture clean, but the kernel negotiated a different format \
              - NOT bit-perfect)"
             .into(),

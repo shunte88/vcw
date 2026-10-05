@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   CLOSEST,
   type Span,
-  centre,
+  center,
   clamp,
   fit,
   follow,
@@ -110,10 +110,10 @@ describe("the visible window", () => {
     }
   });
 
-  it("centres on a frame without changing width", () => {
+  it("centers on a frame without changing width", () => {
     const window = zoom(fit(), SIDE, 0.1, 0.5);
     const at = SIDE / 3;
-    const after = centre(window, SIDE, at);
+    const after = center(window, SIDE, at);
     const { start, end } = resolve(after, SIDE);
     expect(end - start).toBe(wide(window));
     expect((start + end) / 2).toBeCloseTo(at, -1);
@@ -127,7 +127,7 @@ describe("the visible window", () => {
       clamp(fit(), 0),
       zoom(fit(), 0, 0.5, 0.5),
       pan(fit(), 0, 1000),
-      centre(fit(), 0, 1000),
+      center(fit(), 0, 1000),
       toRange(0, 100, 0),
     ]) {
       expect(span).toEqual({ startFrame: 0, endFrame: null });
@@ -224,7 +224,7 @@ describe("following a playhead", () => {
     expect(follow(window, SIDE, 200_000_000)).toBe(window);
   });
 
-  // Paged rather than centred: after the jump there are nine tenths of a
+  // Paged rather than centered: after the jump there are nine tenths of a
   // window in front of the playhead, so the picture sits still until it has
   // played through them.
   it("pages forward when the playhead leaves the right edge", () => {

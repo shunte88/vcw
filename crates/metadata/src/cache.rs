@@ -58,7 +58,7 @@
 //! A disk entry is named after a CRC-32 of its key, which is 32 bits and therefore
 //! collides. The key itself is stored in the file and checked on read, so a
 //! collision is a miss - one wasted request - rather than a release served under
-//! the wrong catalogue number.
+//! the wrong catalog number.
 
 use std::collections::HashMap;
 use std::fs;

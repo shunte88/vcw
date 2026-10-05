@@ -34,7 +34,7 @@
 //!
 //! [`Position::from_str`](std::str::FromStr::from_str) accepts the unambiguous form, `A1`, and
 //! nothing else, which is right for a project file. Providers are not a project
-//! file. Discogs carries whatever the person who catalogued the record typed off
+//! file. Discogs carries whatever the person who cataloged the record typed off
 //! the label, and MusicBrainz carries whatever its editors agreed on, so a real
 //! tracklist contains all of this:
 //!
@@ -59,9 +59,9 @@
 //!
 //! # Numeric tracklists
 //!
-//! A numeric tracklist on a record means the cataloguer did not record sides, and
+//! A numeric tracklist on a record means the cataloger did not record sides, and
 //! the only available guess is that the first half is side A. It is a guess and it
-//! is labelled as one: [`split_numeric`] returns the positions, and a caller that
+//! is labeled as one: [`split_numeric`] returns the positions, and a caller that
 //! shows them should say the sides were inferred. On a multi-disc release the
 //! split is per medium, because half of *this* record is the useful unit.
 
@@ -151,7 +151,7 @@ pub fn side_for(letter: char, medium: u32) -> Option<Side> {
 ///
 /// The first half goes to the medium's first side and the rest to its second, with
 /// an odd count putting the extra track on the first side - which is what a
-/// cataloguer does, because the longer side goes first. Returns one position per
+/// cataloger does, because the longer side goes first. Returns one position per
 /// input, in the order given.
 ///
 /// ```

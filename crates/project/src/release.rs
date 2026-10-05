@@ -65,11 +65,11 @@ pub struct Record {
     pub album_artist: String,
     /// Release year, where it is known.
     pub year: Option<u32>,
-    /// Normalised genres, in order (§32).
+    /// Normalized genres, in order (§32).
     pub genres: Vec<String>,
     /// Record label.
     pub label: String,
-    /// Catalogue number off the label.
+    /// Catalog number off the label.
     pub catalog: String,
     /// Country of the pressing.
     pub country: String,
@@ -94,7 +94,7 @@ pub struct Record {
     /// An export decision and nothing else: the capture of a mono record is a
     /// two-channel capture like any other, and this says the two channels are to
     /// be folded to one on the way out. Not detectable from the audio, which is
-    /// why it is asked rather than analysed.
+    /// why it is asked rather than analyzed.
     pub is_mono: bool,
     /// Whether the RIAA curve is to be applied on playback and on export (§51).
     ///
@@ -703,7 +703,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unrecognised_role_is_stored_as_other_rather_than_refused() {
+    fn an_unrecognized_role_is_stored_as_other_rather_than_refused() {
         let dir = tempfile::tempdir().expect("tempdir");
         let mut p = project(&dir);
         ensure(&mut p).expect("ensure");

@@ -44,7 +44,7 @@
 //!
 //! 1. **Identical is a memcpy.** When the stored format is the device's format
 //!    and the channel counts agree, [`Conversion::apply`] copies. There is no
-//!    "normalise to float and back" step to lose anything in, which is the usual
+//!    "normalize to float and back" step to lose anything in, which is the usual
 //!    way a playback path quietly stops being bit-perfect.
 //! 2. **Widening is exact, narrowing is reported.** 16- and 24-bit samples widen
 //!    into anything without losing a bit. Going the other way - a 32-bit capture
@@ -296,7 +296,7 @@ const FULL_SCALE: f32 = 2_147_483_648.0;
 
 /// Decodes one stored sample, left-justified into an `i32`.
 ///
-/// Left-justified rather than normalised to `f32`, because that is what makes
+/// Left-justified rather than normalized to `f32`, because that is what makes
 /// the integer paths exact: a 24-bit sample in the top 24 bits of an `i32` can
 /// be widened or narrowed by a shift, with no rounding and no scaling factor.
 /// [`StorageFormat::decode_sample`] is the other way round and is for display,

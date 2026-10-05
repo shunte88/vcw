@@ -11,13 +11,19 @@ used to be a crash. The work packages behind them are in `PROJECT_PLAN.md`, and
 The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 versions are [semantic](https://semver.org/spec/v2.0.0.html). While the major
 version is 0 the project format may change between releases; every release from
-0.1.0 onwards reads every project written by an earlier one, and says so out
+0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
-## Unreleased
+## 0.1.1-alpha
 
-Phase 1 is not complete. Nothing has been released yet, so everything below is
-what the first release will contain rather than a history of changes to it.
+*2026-10-05. The first public release.*
+
+An alpha: the capture, recovery, editing, export and cataloging paths all work
+end to end and are covered by the test suite, but the product has not been used
+in anger by anybody except its author, and the format limits in
+[`README.md`](README.md) are real. Everything below is what this release
+contains rather than a history of changes to it, because there is nothing
+earlier to have changed from.
 
 ### Installing
 
@@ -38,7 +44,7 @@ what the first release will contain rather than a history of changes to it.
 
 * Bit-perfect capture on ALSA, WASAPI and CoreAudio, with the configuration
   **negotiated and reported** rather than assumed: a request the device cannot
-  honour is refused or recorded as a divergence, never silently resampled.
+  honor is refused or recorded as a divergence, never silently resampled.
 * The operating system is asked to **confirm** the stream it opened, because a
   backend reporting 24-bit while the mixer resamples is the failure a level
   meter cannot show. A capture that could not be confirmed is recorded as
@@ -66,7 +72,7 @@ what the first release will contain rather than a history of changes to it.
 * Non-destructive editing throughout: split, merge, move, delete, lock and
   retitle are statements about where the music is, and no edit rewrites a
   sample.
-* Metadata from MusicBrainz and Discogs, with genre normalisation, artwork, and
+* Metadata from MusicBrainz and Discogs, with genre normalization, artwork, and
   an offline mode that is a first-class path rather than a simulation.
 * **Credentials are never stored in a project or in a settings file**: they come
   from the environment, and the application reports which are configured without

@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn every_format_is_recognised_by_its_magic_bytes() {
+    fn every_format_is_recognized_by_its_magic_bytes() {
         assert_eq!(
             ArtworkFormat::sniff(&[0xFF, 0xD8, 0xFF, 0xE0]),
             Some(ArtworkFormat::Jpeg)
@@ -289,7 +289,7 @@ mod tests {
     }
 
     #[test]
-    fn an_error_page_is_not_an_image_however_it_is_labelled() {
+    fn an_error_page_is_not_an_image_however_it_is_labeled() {
         for body in [
             &b"<!DOCTYPE html><html><body>404 Not Found</body></html>"[..],
             &b"{\"error\":\"not found\"}"[..],

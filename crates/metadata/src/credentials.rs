@@ -68,7 +68,7 @@ use std::fmt;
 /// assert_eq!(format!("{token:?}"), "Token(6 characters, redacted)");
 /// ```
 ///
-/// A token cannot be serialised, which is what keeps §39 true by construction:
+/// A token cannot be serialized, which is what keeps §39 true by construction:
 ///
 /// ```compile_fail
 /// use vcw_metadata::credentials::Token;
@@ -80,7 +80,7 @@ use std::fmt;
 /// stored_in_a_settings_file(&token);
 /// ```
 ///
-/// The same call with something that *is* serialisable compiles, which is what
+/// The same call with something that *is* serializable compiles, which is what
 /// makes the failure above evidence about `Token` rather than about the snippet:
 ///
 /// ```
@@ -138,7 +138,7 @@ pub const CONTACT_VAR: &str = "VCW_CONTACT";
 
 /// What VCW has been given to identify itself with.
 ///
-/// Cloneable and cheap, so a provider can hold one; not serialisable, so a
+/// Cloneable and cheap, so a provider can hold one; not serializable, so a
 /// settings file cannot hold one by accident.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Credentials {

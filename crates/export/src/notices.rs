@@ -37,13 +37,13 @@
 //! in the shell for one reason: **a build compiled without `mp3` has no LGPL
 //! component to declare.** The only place that question can be answered is the
 //! crate the features belong to, so the answer is generated here and the
-//! dialog that shows it carries no licence prose of its own.
+//! dialog that shows it carries no license prose of its own.
 //!
 //! That is the rule `encoder::alternatives` arrived at the hard way.
 //! Refusal advice written as a string literal drifted four separate ways in one
 //! work package, because a literal agrees with whatever it said yesterday. A
 //! notice is worse than stale advice when it is wrong: it is either a claim
-//! about a licence that does not apply, or silence about one that does.
+//! about a license that does not apply, or silence about one that does.
 //!
 //! # What is not here
 //!
@@ -55,18 +55,18 @@
 
 use crate::encoder::Container;
 
-/// A third-party component this build links, and what its licence asks for.
+/// A third-party component this build links, and what its license asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Notice {
     /// The crate, or the library it vendors, as its own authors spell it.
     pub component: &'static str,
     /// The SPDX expression the crate declares.
-    pub licence: &'static str,
+    pub license: &'static str,
     /// What VCW can do because it is linked, in a person's words.
     pub provides: &'static str,
     /// Where the complete corresponding source is published.
     pub source: &'static str,
-    /// Whether the licence grants a right to modify the component and relink
+    /// Whether the license grants a right to modify the component and relink
     /// it into VCW.
     ///
     /// A field rather than a sentence, because the sentence is the same for
@@ -93,25 +93,25 @@ impl Container {
             Self::Wav => None,
             Self::Flac(_) => Some(Notice {
                 component: "flacenc",
-                licence: "Apache-2.0",
+                license: "Apache-2.0",
                 provides: "FLAC export",
                 source: "https://crates.io/crates/flacenc",
                 copyleft: false,
             }),
-            // The one that made WP-28 a licence obligation rather than a
+            // The one that made WP-28 a license obligation rather than a
             // courtesy: `mp3lame-sys` vendors libmp3lame's C source and
             // compiles it in, so a VCW binary built with this feature contains
             // LGPL-3.0 object code inside an MIT product.
             Self::Mp3(_) => Some(Notice {
                 component: "libmp3lame, via mp3lame-encoder and mp3lame-sys",
-                licence: "LGPL-3.0",
+                license: "LGPL-3.0",
                 provides: "MP3 export",
                 source: "https://crates.io/crates/mp3lame-sys",
                 copyleft: true,
             }),
             Self::OggVorbis(_) => Some(Notice {
                 component: "libvorbis and libogg, via vorbis_rs",
-                licence: "BSD-3-Clause",
+                license: "BSD-3-Clause",
                 provides: "Ogg Vorbis export",
                 source: "https://crates.io/crates/vorbis_rs",
                 copyleft: false,
@@ -126,11 +126,11 @@ impl Container {
 /// depends on `vcw-fingerprint`, which depends on `chromaprint-next`, so every
 /// VCW binary - the shell included, which does not name either crate in its own
 /// manifest - links it. A dialog that derives its list from the encoders alone
-/// therefore said nothing about the one component here whose licence asks to be
+/// therefore said nothing about the one component here whose license asks to be
 /// spoken about: LGPL-2.1 section 6 wants the relink offer *made*, not inferred.
 const ALWAYS: [Notice; 1] = [Notice {
     component: "libchromaprint, via chromaprint-next",
-    licence: "LGPL-2.1-or-later",
+    license: "LGPL-2.1-or-later",
     provides: "acoustic fingerprinting",
     source: "https://crates.io/crates/chromaprint-next",
     copyleft: true,
@@ -201,7 +201,7 @@ mod tests {
         let copyleft: Vec<&'static str> = notices()
             .iter()
             .filter(|notice| notice.copyleft)
-            .map(|notice| notice.licence)
+            .map(|notice| notice.license)
             .collect();
         let expected: &[&str] = if cfg!(feature = "mp3") {
             &["LGPL-2.1-or-later", "LGPL-3.0"]
@@ -237,7 +237,7 @@ mod tests {
                 "{notice:#?} names no source, which is the one thing a relink \
                  right is useless without"
             );
-            assert!(!notice.licence.is_empty(), "{notice:#?}");
+            assert!(!notice.license.is_empty(), "{notice:#?}");
             assert!(!notice.provides.is_empty(), "{notice:#?}");
         }
     }

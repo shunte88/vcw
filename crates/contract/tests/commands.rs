@@ -132,7 +132,7 @@ fn a_refusal_names_the_field_and_says_what_was_wrong() {
 }
 
 #[test]
-fn an_equalisation_a_frontend_sends_is_taken_or_refused_by_name() {
+fn an_equalization_a_frontend_sends_is_taken_or_refused_by_name() {
     for (text, expected) in [
         ("flat", CaptureEq::Flat),
         ("riaa", CaptureEq::Riaa),

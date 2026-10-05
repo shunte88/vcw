@@ -2,14 +2,14 @@
 
 VCW's own source code is licensed under the MIT License - see [LICENSE](LICENSE).
 
-VCW binaries are **statically linked** Rust executables: the compiled artefacts embed
-the object code of VCW's dependencies. Some of those dependencies carry licences whose
+VCW binaries are **statically linked** Rust executables: the compiled artifacts embed
+the object code of VCW's dependencies. Some of those dependencies carry licenses whose
 notice and source-availability terms apply to anyone redistributing those binaries.
 This file records them.
 
 A full machine-readable inventory of every dependency and its version is
 [`Cargo.lock`](Cargo.lock); each release tag pins the exact versions used to build that
-release's binaries. [`deny.toml`](deny.toml) encodes which licences are acceptable, and
+release's binaries. [`deny.toml`](deny.toml) encodes which licenses are acceptable, and
 CI fails the build on anything outside that set - so this file cannot silently fall out
 of date with what is actually linked.
 
@@ -58,7 +58,7 @@ released binary that links the crate.
 
 The crate is used **unmodified**, as an ordinary Cargo dependency. The dependency of
 record is the published release on crates.io, not a local checkout or a fork - see
-`docs/adr/0004-licence-and-toolchain.md`.
+`docs/adr/0004-license-and-toolchain.md`.
 
 ### Notice to users of VCW binaries containing LGPL code
 
@@ -66,12 +66,12 @@ Under section 6 of the LGPL you have the right to modify the LGPL portion and re
 into VCW. VCW supports this as follows:
 
 1. **Complete corresponding source.** The complete source of VCW is this repository,
-   under the MIT licence. The complete source of the LGPL component is published on
+   under the MIT license. The complete source of the LGPL component is published on
    [crates.io](https://crates.io/crates/chromaprint-next) and at the upstream
    repository linked above. The exact version used by any release is recorded in
    `Cargo.lock` at that release's tag.
 2. **Relinking.** Because the complete source of the "work that uses the Library" is
-   available under the MIT licence, you can modify `chromaprint-next` and rebuild VCW
+   available under the MIT license, you can modify `chromaprint-next` and rebuild VCW
    yourself to produce a binary incorporating your modified version:
 
    ```toml
@@ -85,7 +85,7 @@ into VCW. VCW supports this as follows:
    ```
 
 3. **No further restrictions.** VCW does not impose terms on the LGPL portion beyond
-   those in LGPL-2.1, and the binaries are not obfuscated or licence-restricted in a
+   those in LGPL-2.1, and the binaries are not obfuscated or license-restricted in a
    way that would prevent reverse engineering for debugging your modifications.
 
 ---
@@ -97,7 +97,7 @@ VCW writes MP3 (REQUIREMENTS §33) through
 [`mp3lame-sys`](https://crates.io/crates/mp3lame-sys), which vendors libmp3lame's C
 source and compiles it into the binary. **Both crates declare `LGPL-3.0`.**
 
-Two licences are in play and it is worth being exact about which is which:
+Two licenses are in play and it is worth being exact about which is which:
 
 - **libmp3lame itself** is under the GNU Library General Public License, version 2,
   "or any later version" - its own `COPYING`, carried in the `mp3lame-sys` crate
@@ -138,7 +138,7 @@ section 4 rather than LGPL-2.1 section 6. The complete source of the LGPL compon
 published on [crates.io](https://crates.io/crates/mp3lame-sys) and at the upstream
 repository; the exact version used by any release is recorded in `Cargo.lock` at that
 release's tag. Because the complete source of the work that uses the library is this
-repository under the MIT licence, you can modify the library and rebuild:
+repository under the MIT license, you can modify the library and rebuild:
 
 ```toml
 # Cargo.toml
@@ -158,7 +158,7 @@ only, no copyleft, and nothing new for anyone redistributing a VCW binary.
 D5 recorded Ogg Vorbis as LGPL, which was simply a mistake - corrected in
 `PROJECT_PLAN.md`. Ogg export carries no relink obligation at all. It sits behind a
 `ogg` cargo feature anyway, also on by default, so that the two lossy containers can be
-turned off together; there is no licence reason to turn this one off.
+turned off together; there is no license reason to turn this one off.
 
 ---
 

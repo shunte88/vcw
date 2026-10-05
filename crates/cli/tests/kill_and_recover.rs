@@ -295,7 +295,7 @@ const RESYNC_WINDOW: u64 = 16;
 ///
 /// Comparing past that point reports a mismatch on every remaining frame and
 /// says nothing new, so the audit does what the product's verifier does and
-/// re-synchronises instead - but it has to *find* the shift rather than be told
+/// re-synchronizes instead - but it has to *find* the shift rather than be told
 /// it, which is the stronger claim: the audio after a gap is still exactly the
 /// audio the source produced, at a named offset, so nothing was invented and
 /// nothing was moved. A mismatch that no gap explains is still a failure, and
@@ -597,7 +597,7 @@ fn kill_at(dir: &Path, iteration: u64, after: Duration) -> u64 {
     // 1.5004 s against a recovery of 1.500 s - a failure by 0.4 ms on a block
     // that had filled a hair before the kill and was genuinely still
     // committing. A bound that tight on an estimate that loose is two bugs that
-    // cancelled.
+    // canceled.
     //
     // What is given up with the estimate is tightness: the line lands once a
     // second, so a kill can be up to that much past the last announcement. The

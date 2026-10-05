@@ -68,7 +68,7 @@ pub const APPLICATION_ID: u32 = 0x5643_5700;
 /// (§51); v4 adds the two release-level intents the new-project prompt asks for,
 /// `releases.is_mono` and `releases.riaa_eq`. [`FORMAT_VERSION`] has not moved with
 /// any of them, because nothing an older version wrote means anything different
-/// now: a v1 or v2 capture has an unrecorded equalisation provenance, and
+/// now: a v1 or v2 capture has an unrecorded equalization provenance, and
 /// `'unknown'` is what that is, not a changed meaning for a column that already
 /// existed; a pre-v4 release has no stated intent, and `0` is what that is.
 pub const SCHEMA_VERSION: u32 = 4;
@@ -181,7 +181,7 @@ CREATE TABLE captures (
     -- 'recording', 'finalised' or 'interrupted'. validate() rejects anything else.
     state          TEXT    NOT NULL DEFAULT 'recording'
     -- Schema v3 adds capture_eq here: 'flat', 'riaa' or 'unknown' (§51), the
-    -- equalisation applied by the hardware upstream. Added by migration rather
+    -- equalization applied by the hardware upstream. Added by migration rather
     -- than written into this statement, because migration 1 *is* this text and a
     -- fresh project has to take the same path an upgrade does.
 );
@@ -328,13 +328,13 @@ CREATE TABLE releases (
     album_artist   TEXT    NOT NULL DEFAULT '',
     -- Release year. NULL is unknown, and unknown is common on a reissue.
     year           INTEGER,
-    -- Normalised genres (§32), '; '-separated in order. The same spelling
+    -- Normalized genres (§32), '; '-separated in order. The same spelling
     -- `vcw metadata genres` prints, and the order a tagger writes them in.
     genres         TEXT    NOT NULL DEFAULT '',
     -- The record label, as the provider or the person spells it. Discogs and
     -- MusicBrainz disagree about this more often than about anything else.
     label          TEXT    NOT NULL DEFAULT '',
-    -- The catalogue number off the label: the one identifier a vinyl pressing
+    -- The catalog number off the label: the one identifier a vinyl pressing
     -- reliably carries, and the one a person searches by.
     catalog        TEXT    NOT NULL DEFAULT '',
     -- Country of the pressing. Part of telling two pressings apart (§28).
@@ -376,7 +376,7 @@ CREATE TABLE release_artwork (
     -- 'front', 'back', 'label' or 'other'. Front is what a tagger embeds.
     role       TEXT    NOT NULL DEFAULT 'front',
     -- The sniffed type, not the one the server claimed: vcw-metadata refuses a
-    -- download whose bytes do not start with an image it recognises.
+    -- download whose bytes do not start with an image it recognizes.
     mime       TEXT    NOT NULL,
     -- Pixel width, where the provider stated one. NULL is "not known", never 0.
     width      INTEGER,
@@ -499,7 +499,7 @@ CREATE TABLE tracks (
 );
 "#;
 
-/// Schema v3: the capture's equalisation provenance (§51).
+/// Schema v3: the capture's equalization provenance (§51).
 ///
 /// One column, and the whole of its design is the default. `'unknown'` is what a
 /// capture written by v1 or v2 gets, which is the truth about those rows: nobody was
@@ -512,9 +512,9 @@ CREATE TABLE tracks (
 /// in SQLite: it rewrites no rows and so costs nothing on a 2.33 GiB project, which
 /// is the only reason a migration can be run on open rather than offered as a job.
 pub const SCHEMA_V3: &str = r#"
--- Equalisation the signal already carried when it reached the sound card (§51):
+-- Equalization the signal already carried when it reached the sound card (§51):
 -- 'flat' for a preamp that applied no curve, 'riaa' for one that applied RIAA,
--- 'unknown' when nobody said. Playback equalisation needs it and it cannot be recovered
+-- 'unknown' when nobody said. Playback equalization needs it and it cannot be recovered
 -- from the audio, so it is recorded from the first capture, years before the curves ship.
 ALTER TABLE captures ADD COLUMN capture_eq TEXT NOT NULL DEFAULT 'unknown';
 "#;
@@ -525,11 +525,11 @@ ALTER TABLE captures ADD COLUMN capture_eq TEXT NOT NULL DEFAULT 'unknown';
 /// prompt rather than anything identification or analysis can find out. A mono
 /// pressing is not detectable from a stereo transfer of it - a mono groove played
 /// with a stereo cartridge gives two channels that are *nearly* identical and
-/// never exactly so - and no equalisation curve is recoverable from the audio it
+/// never exactly so - and no equalization curve is recoverable from the audio it
 /// was applied to.
 ///
 /// Neither one changes a byte of what is captured. §9 governs the capture path and
-/// §51 says equalisation is "a non-destructive stored decision, held with the
+/// §51 says equalization is "a non-destructive stored decision, held with the
 /// project's other edit instructions and applied on playback, render and export";
 /// the fold to mono is the same kind of decision, made at export and never on the
 /// way in. The stereo capture of a mono record stays stereo in the project, which

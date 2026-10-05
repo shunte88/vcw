@@ -35,7 +35,7 @@
 //! Every other crate in the workspace speaks these types, and this crate depends on
 //! nothing but `serde` and `thiserror`. That is deliberate: it keeps CPAL, SQLite and
 //! the network stack out of the dependency closure of crates that have no business
-//! linking them. `vcw-signal` analysing samples should not pull in ALSA.
+//! linking them. `vcw-signal` analyzing samples should not pull in ALSA.
 //!
 //! The types here are the ones the specification already fixes - sample formats (§8),
 //! capture modes (§9) and the hardware sample rates (§8). Nothing speculative lives

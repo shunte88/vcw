@@ -490,7 +490,7 @@ fn check_captures(conn: &Connection, report: &mut Report) -> rusqlite::Result<()
 /// the numbering means a renumber was interrupted, and §29's positions would skip.
 ///
 /// Boundaries that bound no track are *not* a finding. They are the normal state
-/// of a side that has been analysed and not yet edited, and of a side where an
+/// of a side that has been analyzed and not yet edited, and of a side where an
 /// operator locked a boundary they were not ready to use.
 fn check_topology(conn: &Connection, report: &mut Report) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare(

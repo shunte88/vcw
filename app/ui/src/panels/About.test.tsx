@@ -35,7 +35,7 @@ import { About } from "./About";
 
 const flacenc: Notice = {
   component: "flacenc",
-  licence: "Apache-2.0",
+  license: "Apache-2.0",
   provides: "FLAC export",
   source: "https://crates.io/crates/flacenc",
   copyleft: false,
@@ -43,7 +43,7 @@ const flacenc: Notice = {
 
 const lame: Notice = {
   component: "libmp3lame, via mp3lame-encoder and mp3lame-sys",
-  licence: "LGPL-3.0",
+  license: "LGPL-3.0",
   provides: "MP3 export",
   source: "https://crates.io/crates/mp3lame-sys",
   copyleft: true,
@@ -57,7 +57,7 @@ function build(notices: Notice[]): Build {
     built: "2026-10-05",
     repository: "https://github.com/shunte88/vcw",
     authors: ["Stue Hunter"],
-    licence: "MIT",
+    license: "MIT",
     os: "linux",
     arch: "x86_64",
     sqlite: "3.50.4",
@@ -139,7 +139,7 @@ describe("the about dialog", () => {
     expect(text).not.toContain("LGPL");
   });
 
-  it("states VCW's own licence from the build rather than from this file", async () => {
+  it("states VCW's own license from the build rather than from this file", async () => {
     const container = await shown([flacenc]);
     expect(container.textContent ?? "").toContain("MIT");
   });

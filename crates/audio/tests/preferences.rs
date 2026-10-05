@@ -36,7 +36,7 @@
 //! Two obligations meet here. Preferences must survive between sessions, and a
 //! device that has gone must be *reported* gone rather than quietly replaced -
 //! see the module documentation on [`vcw_audio::selection`] for why substitution
-//! is the dangerous behaviour.
+//! is the dangerous behavior.
 
 mod common;
 

@@ -111,7 +111,7 @@ pub struct Config {
     /// Consecutive samples at or beyond full scale needed to latch a clip.
     ///
     /// One by default: on a recording meter a single sample at full scale is
-    /// worth knowing about, because it means the analogue gain is already too
+    /// worth knowing about, because it means the analog gain is already too
     /// high. Raise it to three for the broadcast convention.
     pub clip_consecutive: u32,
 }

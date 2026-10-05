@@ -381,7 +381,7 @@ mode: string | null,
  */
 ringMillis: number | null,
 /**
- * What equalisation the hardware upstream already applied (§51): `flat`,
+ * What equalization the hardware upstream already applied (§51): `flat`,
  * `riaa` or `unknown`. `null` means unknown, which is what it stays until
  * somebody says otherwise.
  */
@@ -570,7 +570,7 @@ artist: string | null,
  */
 album: string | null,
 /**
- * Catalogue number, which is what identifies a pressing.
+ * Catalog number, which is what identifies a pressing.
  */
 catalog: string | null,
 /**
@@ -645,7 +645,7 @@ artist: string | null,
  */
 album: string | null,
 /**
- * Catalogue number, which is what actually identifies a pressing (§32).
+ * Catalog number, which is what actually identifies a pressing (§32).
  */
 catalog: string | null,
 /**
@@ -826,7 +826,7 @@ osVerified: boolean,
  */
 startedAt: number,
 /**
- * Unix seconds at finalisation, or `null` while it is still running.
+ * Unix seconds at finalization, or `null` while it is still running.
  */
 finishedAt: number | null,
 /**
@@ -1028,7 +1028,7 @@ album: string,
  */
 albumArtist: string,
 /**
- * Catalogue number (§32), which is how a vinyl library is actually
+ * Catalog number (§32), which is how a vinyl library is actually
  * indexed.
  */
 catalog: string,
@@ -1115,7 +1115,7 @@ albumArtist: string,
  */
 year: number | null,
 /**
- * Normalised genres, in order (§32).
+ * Normalized genres, in order (§32).
  */
 genres: Array<string>,
 /**
@@ -1123,7 +1123,7 @@ genres: Array<string>,
  */
 label: string,
 /**
- * Catalogue number off the label, which is what identifies a pressing.
+ * Catalog number off the label, which is what identifies a pressing.
  */
 catalog: string,
 /**
@@ -1189,7 +1189,7 @@ year: number | null,
  */
 label: string,
 /**
- * Catalogue number.
+ * Catalog number.
  */
 catalog: string,
 /**
@@ -1362,7 +1362,7 @@ authors: Array<string>,
 /**
  * The SPDX expression VCW's own code is under.
  */
-licence: string,
+license: string,
 /**
  * The operating system the binary was built for.
  */
@@ -1396,7 +1396,7 @@ component: string,
 /**
  * The SPDX expression the crate declares.
  */
-licence: string,
+license: string,
 /**
  * What VCW can do because it is linked.
  */
@@ -1406,7 +1406,7 @@ provides: string,
  */
 source: string,
 /**
- * Whether the licence grants the right to modify the component and relink
+ * Whether the license grants the right to modify the component and relink
  * it into VCW, which is the sentence LGPL-3.0 §4 requires be offered.
  */
 copyleft: boolean, };
@@ -1416,7 +1416,7 @@ copyleft: boolean, };
 //
 // Five groups, named as §39 names them. Every default is either `null`
 // - let the engine negotiate and report what it got - or a constant read
-// out of the crate that owns the behaviour, which is why none of them
+// out of the crate that owns the behavior, which is why none of them
 // appears in this declaration. `Credential` is the one type here that
 // carries nothing: whether a token is configured and how long it is,
 // never the value.
@@ -1428,7 +1428,7 @@ export type Settings = {
  */
 audio: AudioSettings,
 /**
- * Default location, transaction and block size, recovery behaviour.
+ * Default location, transaction and block size, recovery behavior.
  */
 recording: RecordingSettings,
 /**
@@ -1480,7 +1480,7 @@ ringMillis: number | null,
  */
 mode: string | null,
 /**
- * Equalisation the signal carries when it arrives: `flat`, `riaa` or
+ * Equalization the signal carries when it arrives: `flat`, `riaa` or
  * `unknown` (§51). `None` means the same as `unknown`.
  *
  * A setting rather than a per-capture field because it describes the

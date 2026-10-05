@@ -4,7 +4,7 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  Turning what a provider calls a genre into what the catalogue calls one (§32).
+ *  Turning what a provider calls a genre into what the catalog calls one (§32).
  *
  * MIT License
  *
@@ -30,12 +30,12 @@
  *
  */
 
-//! Turning what a provider calls a genre into what the catalogue calls one (§32).
+//! Turning what a provider calls a genre into what the catalog calls one (§32).
 //!
 //! Providers are not tidy. Discogs hands back `Electronic` as a genre and
 //! `Dub Techno, Ambient` as styles; MusicBrainz hands back lowercase tags voted on
-//! by strangers; and the tags on a 1994 pressing were typed by whoever catalogued
-//! it. §32 asks for a normalised genre, and the answer is a lookup table with a
+//! by strangers; and the tags on a 1994 pressing were typed by whoever cataloged
+//! it. §32 asks for a normalized genre, and the answer is a lookup table with a
 //! pass-through default, ported from VRipr's `assets/genre.dat` - 639 mappings
 //! built from a database dump, and the only part of VRipr's metadata code worth
 //! keeping verbatim.
@@ -59,21 +59,21 @@
 //!
 //! VRipr held the map in a `OnceLock<RwLock<GenreState>>` global and reloaded it
 //! by mutating that global. [`Genres`] is a plain owned value instead. A global
-//! that a custom file can swap under a running catalogue means two exports in the
+//! that a custom file can swap under a running catalog means two exports in the
 //! same session can disagree about what a genre is, and it cannot be tested
 //! without leaking state between tests. A value is passed in, and a caller that
 //! wants a custom file constructs a second one.
 //!
 //! The case-insensitive fallback is also no longer a linear scan of all 639 keys
 //! per miss. A second lowercase-keyed index is built once, which matters because
-//! genre normalisation runs over every track of every release on import.
+//! genre normalization runs over every track of every release on import.
 //!
 //! That index also made a latent bug visible. Twenty-two of the table's keys
 //! collide when lowercased, and five of those collisions have *different* answers:
 //! `HardRock` gives `Hard Rock; Rock` while `Hardrock` gives only `Hard Rock`, and
 //! `J-pop`, `Jpop`, `Electro-acoustic` and `Non-music` each have a differently
 //! capitalised twin. VRipr resolved them with `HashMap::iter().find()`, so
-//! normalising `HARDROCK` gave one answer or the other depending on hash order
+//! normalizing `HARDROCK` gave one answer or the other depending on hash order
 //! within the run. Here the first spelling in file order wins, every time. The
 //! ported parity fixture excludes exactly those five folds, because VRipr's answer
 //! for them is not a fact to be held to.
@@ -92,7 +92,7 @@ pub const BUILTIN: &str = include_str!("../assets/genre.dat");
 /// A genre mapping table.
 ///
 /// Cheap to clone the results of, expensive enough to build that one is made per
-/// catalogue rather than per track. [`Genres::builtin`] parses 639 rows into 632
+/// catalog rather than per track. [`Genres::builtin`] parses 639 rows into 632
 /// keys.
 #[derive(Debug, Clone)]
 pub struct Genres {
@@ -207,7 +207,7 @@ impl Genres {
         self.folded.get(&name.to_lowercase()).map(Vec::as_slice)
     }
 
-    /// Normalises a semicolon-delimited genre string.
+    /// Normalizes a semicolon-delimited genre string.
     ///
     /// This is VRipr's `sanitize_genres`, and the input format is semicolon
     /// delimited because that is what the providers' fields concatenate to.
@@ -215,21 +215,21 @@ impl Genres {
     /// ```
     /// # use vcw_metadata::Genres;
     /// let genres = Genres::builtin();
-    /// assert_eq!(genres.normalise("Folk Pop"), ["Folk Pop", "Folk", "Pop"]);
-    /// assert_eq!(genres.normalise("HH; Hip-Hop"), ["Hip-Hop", "Hip Hop"]);
-    /// assert_eq!(genres.normalise("Shoegaze Revival"), ["Shoegaze Revival"]);
+    /// assert_eq!(genres.normalize("Folk Pop"), ["Folk Pop", "Folk", "Pop"]);
+    /// assert_eq!(genres.normalize("HH; Hip-Hop"), ["Hip-Hop", "Hip Hop"]);
+    /// assert_eq!(genres.normalize("Shoegaze Revival"), ["Shoegaze Revival"]);
     /// ```
     #[must_use]
-    pub fn normalise(&self, input: &str) -> Vec<String> {
-        self.normalise_all(input.split(';'))
+    pub fn normalize(&self, input: &str) -> Vec<String> {
+        self.normalize_all(input.split(';'))
     }
 
-    /// Normalises a list of genre names, which is how a provider hands them over.
+    /// Normalizes a list of genre names, which is how a provider hands them over.
     ///
     /// Each name is itself split on `;`, so a provider field that concatenated two
     /// genres into one string still comes out as two.
     #[must_use]
-    pub fn normalise_all<I, S>(&self, names: I) -> Vec<String>
+    pub fn normalize_all<I, S>(&self, names: I) -> Vec<String>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -292,29 +292,29 @@ mod tests {
     #[test]
     fn an_abbreviation_expands() {
         let genres = Genres::builtin();
-        assert_eq!(genres.normalise("Mn"), ["Minimal"]);
-        assert_eq!(genres.normalise("DT"), ["Dub Techno"]);
-        assert_eq!(genres.normalise("J"), ["Jazz"]);
+        assert_eq!(genres.normalize("Mn"), ["Minimal"]);
+        assert_eq!(genres.normalize("DT"), ["Dub Techno"]);
+        assert_eq!(genres.normalize("J"), ["Jazz"]);
     }
 
     #[test]
     fn one_key_can_mean_several_genres_most_specific_first() {
         let genres = Genres::builtin();
         assert_eq!(
-            genres.normalise("Southern Rock"),
+            genres.normalize("Southern Rock"),
             ["Southern Rock", "Rock"],
             "the broad genre comes after the specific one, which is the ranking"
         );
-        assert_eq!(genres.normalise("IndieRock"), ["Indie Rock", "Indie"]);
+        assert_eq!(genres.normalize("IndieRock"), ["Indie Rock", "Indie"]);
     }
 
     #[test]
     fn case_does_not_matter_but_the_exact_spelling_wins() {
         let genres = Genres::parse("Rock|Rock\nrock|Lowercase Rock\n");
-        assert_eq!(genres.normalise("Rock"), ["Rock"], "rule 1");
-        assert_eq!(genres.normalise("rock"), ["Lowercase Rock"], "also rule 1");
+        assert_eq!(genres.normalize("Rock"), ["Rock"], "rule 1");
+        assert_eq!(genres.normalize("rock"), ["Lowercase Rock"], "also rule 1");
         assert_eq!(
-            genres.normalise("ROCK"),
+            genres.normalize("ROCK"),
             ["Rock"],
             "rule 2, and the first key in file order is the one it found"
         );
@@ -324,13 +324,13 @@ mod tests {
     fn a_repeated_key_means_what_the_later_row_says() {
         let genres = Genres::builtin();
         assert_eq!(
-            genres.normalise("Reggae-Pop"),
+            genres.normalize("Reggae-Pop"),
             ["Reggae Pop"],
             "the file says Reggae;Pop;Reggae-Pop at line 100-odd and Reggae Pop later"
         );
-        assert_eq!(genres.normalise("J-Pop"), ["J-Pop"]);
+        assert_eq!(genres.normalize("J-Pop"), ["J-Pop"]);
         assert_eq!(
-            genres.normalise("Techno, Experimental, Ambient"),
+            genres.normalize("Techno, Experimental, Ambient"),
             ["Techno", "Experimental", "Ambient"],
             "the later row dropped Electronic from the front"
         );
@@ -341,11 +341,11 @@ mod tests {
         // Five real pairs in the shipped table disagree about their answer. The
         // file lists HardRock before Hardrock, so HardRock is what HARDROCK means.
         let genres = Genres::builtin();
-        assert_eq!(genres.normalise("HardRock"), ["Hard Rock", "Rock"]);
-        assert_eq!(genres.normalise("Hardrock"), ["Hard Rock"]);
+        assert_eq!(genres.normalize("HardRock"), ["Hard Rock", "Rock"]);
+        assert_eq!(genres.normalize("Hardrock"), ["Hard Rock"]);
         for _ in 0..32 {
             assert_eq!(
-                Genres::builtin().normalise("HARDROCK"),
+                Genres::builtin().normalize("HARDROCK"),
                 ["Hard Rock", "Rock"],
                 "a fresh table each time, and the same answer each time"
             );
@@ -356,41 +356,41 @@ mod tests {
     fn an_unknown_genre_passes_through_unchanged() {
         let genres = Genres::builtin();
         assert_eq!(
-            genres.normalise("Hauntological Library Music"),
+            genres.normalize("Hauntological Library Music"),
             ["Hauntological Library Music"],
             "the data file's own header promises this"
         );
-        assert!(Genres::empty().normalise("Anything") == ["Anything"]);
+        assert!(Genres::empty().normalize("Anything") == ["Anything"]);
     }
 
     #[test]
     fn duplicates_collapse_across_expansions() {
         let genres = Genres::builtin();
         assert_eq!(
-            genres.normalise("Folk Pop; Pop; Folk"),
+            genres.normalize("Folk Pop; Pop; Folk"),
             ["Folk Pop", "Folk", "Pop"],
             "Pop and Folk arrived from the expansion already"
         );
-        assert_eq!(genres.normalise("Jazz; jazz; JAZZ"), ["Jazz"]);
+        assert_eq!(genres.normalize("Jazz; jazz; JAZZ"), ["Jazz"]);
     }
 
     #[test]
     fn whitespace_and_empties_are_not_genres() {
         let genres = Genres::builtin();
-        assert!(genres.normalise("").is_empty());
-        assert!(genres.normalise("  ;  ; ").is_empty());
-        assert_eq!(genres.normalise("  Mn  "), ["Minimal"]);
+        assert!(genres.normalize("").is_empty());
+        assert!(genres.normalize("  ;  ; ").is_empty());
+        assert_eq!(genres.normalize("  Mn  "), ["Minimal"]);
     }
 
     #[test]
-    fn a_provider_list_is_normalised_as_one_run() {
+    fn a_provider_list_is_normalized_as_one_run() {
         let genres = Genres::builtin();
         assert_eq!(
-            genres.normalise_all(["Electronic", "DT", "Mn"]),
+            genres.normalize_all(["Electronic", "DT", "Mn"]),
             ["Electronic", "Dub Techno", "Minimal"]
         );
         assert_eq!(
-            genres.normalise_all(["HH; Jazz"]),
+            genres.normalize_all(["HH; Jazz"]),
             ["Hip-Hop", "Hip Hop", "Jazz"],
             "a single string holding two genres still comes out as two"
         );
@@ -402,10 +402,10 @@ mod tests {
             "# a comment\n\nGood|Fine\nno pipe here\n|Empty key\nEmptyTargets|\nAlso|Good\n",
         );
         assert_eq!(genres.len(), 2);
-        assert_eq!(genres.normalise("Good"), ["Fine"]);
-        assert_eq!(genres.normalise("Also"), ["Good"]);
+        assert_eq!(genres.normalize("Good"), ["Fine"]);
+        assert_eq!(genres.normalize("Also"), ["Good"]);
         assert_eq!(
-            genres.normalise("EmptyTargets"),
+            genres.normalize("EmptyTargets"),
             ["EmptyTargets"],
             "skipped, so it passes through"
         );
@@ -426,7 +426,7 @@ mod tests {
         let (genres, from_file) = Genres::from_file_or_builtin(&path);
         assert!(from_file);
         assert_eq!(genres.len(), 1);
-        assert_eq!(genres.normalise("Krautrock"), ["Krautrock", "Rock"]);
+        assert_eq!(genres.normalize("Krautrock"), ["Krautrock", "Rock"]);
     }
 
     #[test]

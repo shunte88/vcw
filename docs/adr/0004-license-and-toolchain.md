@@ -1,12 +1,12 @@
-# ADR-0004: Licence posture and toolchain floor
+# ADR-0004: License posture and toolchain floor
 
 **Status:** Accepted 2026-09-25.
 **Decisions:** D7, D10 · **Requirements:** §39, §49 · **Work package:** WP-01
 
 ## Context
 
-VCW ships statically linked Rust binaries, so every dependency's licence terms travel
-into the artefact. Two of the planned Phase 2 dependencies - `chromaprint-next` for
+VCW ships statically linked Rust binaries, so every dependency's license terms travel
+into the artifact. Two of the planned Phase 2 dependencies - `chromaprint-next` for
 fingerprinting (§25) and the MP3/Ogg encoders (D5) - carry LGPL relink obligations.
 VRipr already solved this once and its `THIRD-PARTY-NOTICES.md` was correct; the work
 here is porting the structure while stating VCW's *actual* position rather than
@@ -16,12 +16,12 @@ Separately, D10 fixes the toolchain floor, and a floor nobody tests is not a flo
 
 ## Decision
 
-### Licence posture
+### License posture
 
 - **VCW's own code is MIT.** The `LICENSE` file, and `license = "MIT"` in the
   workspace manifest.
 - **`deny.toml` is the enforcement point**, not a review habit. It carries an allowlist
-  of permissive licences; anything outside it fails CI. `cargo deny check` runs on
+  of permissive licenses; anything outside it fails CI. `cargo deny check` runs on
   every push.
 - **`THIRD-PARTY-NOTICES.md` is written ahead of the obligation**, describing what is
   linked today (permissive only) and what arrives at Phase 2, with the relink
@@ -67,7 +67,7 @@ from a real session may carry one either.
 
 ## Consequences
 
-- A dependency bump that changes the licence picture fails CI rather than reaching a
+- A dependency bump that changes the license picture fails CI rather than reaching a
   release.
 - Adding an LGPL dependency is a deliberate two-step: uncomment the exception, update
   the notices. Neither happens by accident.

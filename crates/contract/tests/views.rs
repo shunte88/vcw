@@ -156,7 +156,7 @@ fn a_waveform_crosses_as_three_arrays_and_not_a_list_of_objects() {
     assert_eq!(view.min.len(), view.rms.len());
 
     // And the JSON is arrays of numbers - the thing that makes this worth doing.
-    let text = serde_json::to_string(&view).expect("serialising");
+    let text = serde_json::to_string(&view).expect("serializing");
     assert!(text.contains("\"min\":[-0.5,-1.0,0.0]"), "{text}");
 }
 

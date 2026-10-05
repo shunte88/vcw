@@ -90,9 +90,9 @@ pub enum Error {
         provider: ProviderId,
     },
 
-    /// The caller cancelled the operation.
-    #[error("cancelled")]
-    Cancelled,
+    /// The caller canceled the operation.
+    #[error("canceled")]
+    Canceled,
 
     /// The request did not complete within its time box.
     #[error("{provider} did not answer within {millis} ms")]

@@ -36,7 +36,7 @@
 //!
 //! The provider trait is the point of this crate: §40 requires the application to be
 //! fully usable with networking disabled, so every provider is fixture-backed in test
-//! and every call is cancellable and time-boxed in production.
+//! and every call is cancelable and time-boxed in production.
 //!
 //! # The shape of it
 //!
@@ -67,7 +67,7 @@
 //!
 //! Credentials come from the environment and go out in headers. They are never
 //! written to a project file, never part of a URL, never part of a cache key and
-//! never in a log line. [`Token`] cannot be serialised and prints as a character
+//! never in a log line. [`Token`] cannot be serialized and prints as a character
 //! count. See [`credentials`].
 //!
 //! # Getting one release

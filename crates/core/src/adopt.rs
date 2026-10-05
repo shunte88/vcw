@@ -42,8 +42,8 @@
 //! §24's resolver already merges every detector's opinion into one decision per
 //! boundary, and records how many detectors contributed. What it does not do is
 //! decide which of them the project should believe - deliberately, because that is
-//! a judgement about false positives rather than about signals. [`Policy`] is that
-//! judgement, and its default is the conservative one: **two detectors, or it does
+//! a judgment about false positives rather than about signals. [`Policy`] is that
+//! judgment, and its default is the conservative one: **two detectors, or it does
 //! not go in**. A boundary only the silence detector saw is a level dip, and a
 //! level dip in the middle of a quiet passage is a track split in the wrong place,
 //! which costs an operator more to undo than a missed split costs to add.
@@ -294,7 +294,7 @@ pub fn observations(project: &Project, side: Side) -> Result<Vec<BoundaryObserva
 /// took it, while `resolve` prefixes an observation's evidence with its provenance
 /// as it absorbs it. Handing a row straight back therefore renames
 /// `hmm.posterior` to `hmm.hmm.posterior` on the next pass and again on the pass
-/// after that: a side that is re-analysed repeatedly grows this column without
+/// after that: a side that is re-analyzed repeatedly grows this column without
 /// learning anything, which was visible on the real side as 40-odd measurements
 /// per boundary, most of them the same number under a longer name. Stripping the
 /// row's own provenance back off makes the round trip idempotent, and dropping
@@ -314,7 +314,7 @@ fn as_observation(boundary: track::Boundary) -> BoundaryObservation {
     for item in boundary.evidence {
         // Every leading copy, not just one. Stripping a single prefix is a no-op
         // on a name that was already doubled before this function existed, so a
-        // project analysed by the old code would keep `hmm.hmm.at` forever at a
+        // project analyzed by the old code would keep `hmm.hmm.at` forever at a
         // fixed depth. Peeling the run of them heals it on the next pass.
         let mut name = item.name.as_str();
         while let Some(rest) = name.strip_prefix(&own) {

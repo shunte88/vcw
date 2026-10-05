@@ -211,7 +211,7 @@ mod tests {
 
     /// The property S4 rests on: how the caller cuts the stream must not change
     /// the fingerprint. Cheap enough to keep in CI and exactly the kind of thing
-    /// an upstream optimisation could break silently.
+    /// an upstream optimization could break silently.
     #[test]
     fn chunk_shape_does_not_change_the_fingerprint() {
         let algo = Algorithm::default();

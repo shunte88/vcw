@@ -270,7 +270,7 @@ fn a_side_with_tracks_on_it_is_clean() {
 
 #[test]
 fn boundaries_nothing_uses_are_not_a_finding() {
-    // The normal state of an analysed, unedited side.
+    // The normal state of an analyzed, unedited side.
     let dir = tempfile::tempdir().unwrap();
     let mut p = project(&dir);
     let capture: i64 = p

@@ -168,9 +168,9 @@ impl Live {
         scan(&Trace::from_windows(&self.frames, &self.windows), &self.cfg)
     }
 
-    /// How many frames of audio have been analysed.
+    /// How many frames of audio have been analyzed.
     #[must_use]
-    pub const fn analysed(&self) -> u64 {
+    pub const fn analyzed(&self) -> u64 {
         self.windows.frames()
     }
 
@@ -199,7 +199,7 @@ impl Live {
             + self.cfg.pre_padding
             + self.cfg.post_padding)
             * hz) as u64;
-        self.analysed().saturating_sub(lag)
+        self.analyzed().saturating_sub(lag)
     }
 
     /// The settled boundaries not yet returned by an earlier call.
@@ -467,7 +467,7 @@ mod tests {
         );
         assert_eq!(live_outcome.regions, once.regions);
         assert_eq!(live_outcome.boundaries, once.boundaries);
-        assert_eq!(live.analysed(), audio.len() as u64 / 2);
+        assert_eq!(live.analyzed(), audio.len() as u64 / 2);
 
         // And the levels came out where the generator put them.
         let music = linear_to_db(frames[50].rms);
@@ -543,7 +543,7 @@ mod tests {
             completed += live.push(piece);
         }
         assert_eq!(completed, 70, "a window went missing between pushes");
-        assert_eq!(live.analysed(), 7 * 48_000);
+        assert_eq!(live.analyzed(), 7 * 48_000);
         let outcome = live.outcome();
         assert_eq!(outcome.regions.len(), 1);
         assert_eq!(windows_of(&outcome.regions[0]), (9, 70));

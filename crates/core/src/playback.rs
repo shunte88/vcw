@@ -111,7 +111,7 @@ pub const BOUNDARY_CONTEXT_SECONDS: f64 = 3.0;
 /// §21 names the operations without defining the step, and what they are
 /// actually for is moving between tracks: [`Audition::marks`] carries the frames
 /// to jump between, and a skip lands on the next one. Ten seconds is what a
-/// skip means when there are none - an unanalysed side, or a capture whose
+/// skip means when there are none - an unanalyzed side, or a capture whose
 /// boundaries nobody has adopted - because a transport whose skip key did
 /// nothing until detection had run would be worse than one that nudges.
 pub const SKIP_SECONDS: f64 = 10.0;
@@ -658,7 +658,7 @@ pub struct Audition {
     /// Both ends of every track, normally - which is what
     /// [`vcw_project::track::edges_of_capture`] returns, and what the shell and
     /// the CLI both hand in. Empty means a skip is [`SKIP_SECONDS`] instead,
-    /// which is what an unanalysed side gets. They are frames and not boundary
+    /// which is what an unanalyzed side gets. They are frames and not boundary
     /// ids on purpose: playback has no business opening the project a second
     /// time to find out where a row is, and a caller that has already read the
     /// tracks has the numbers in hand.

@@ -74,7 +74,7 @@ pub const MIGRATIONS: &[Migration] = &[
     },
     Migration {
         version: 3,
-        description: "capture equalisation provenance: captures.capture_eq",
+        description: "capture equalization provenance: captures.capture_eq",
         sql: SCHEMA_V3,
     },
     Migration {
@@ -190,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn the_equalisation_migration_only_adds_a_column() {
+    fn the_equalization_migration_only_adds_a_column() {
         // Same promise as migration 2, kept a different way: this one has to ALTER,
         // so the check is that the ALTER is the additive kind. ADD COLUMN with a
         // NOT NULL DEFAULT is metadata-only in SQLite - it rewrites no rows, which

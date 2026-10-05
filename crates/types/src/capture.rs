@@ -192,7 +192,7 @@ pub struct CaptureInfo {
     /// What the OS reported, verbatim, so the claim can be audited rather than
     /// believed.
     pub os_report: Option<String>,
-    /// What equalisation the hardware upstream had already applied (§51).
+    /// What equalization the hardware upstream had already applied (§51).
     ///
     /// Provenance, like the three fields above it, and the one piece of
     /// provenance VCW cannot observe for itself: a phono stage does not announce
@@ -230,7 +230,7 @@ impl CaptureInfo {
         }
     }
 
-    /// The same record with the operator's stated equalisation on it.
+    /// The same record with the operator's stated equalization on it.
     ///
     /// Separate from [`CaptureInfo::unverified`] so that stating the provenance is
     /// a visible act at the call site. §51 wants it stated rather than defaulted,

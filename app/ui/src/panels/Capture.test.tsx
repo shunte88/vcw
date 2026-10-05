@@ -19,7 +19,7 @@
 // Two things are asserted: the empty choice says what it is, and a panel given
 // devices picks the one the host calls its default input.
 //
-// The third is a different seam: §51's equalisation provenance is settings-wide
+// The third is a different seam: §51's equalization provenance is settings-wide
 // and only this panel can put it on an `arm`. It cannot be recovered from the
 // audio afterwards, so a panel that quietly dropped it would make every capture
 // taken through the window permanently 'unknown'.
@@ -127,7 +127,7 @@ describe("the capture panel", () => {
     expect(select?.value).toBe("alsa:default");
   });
 
-  it("arms with the equalisation the operator stated once", async () => {
+  it("arms with the equalization the operator stated once", async () => {
     vi.mocked(api.arm).mockClear();
     expect((await armed(settings({ eq: "riaa" }))).eq).toBe("riaa");
   });

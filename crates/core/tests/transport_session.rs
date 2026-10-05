@@ -156,7 +156,7 @@ fn a_whole_session_runs_from_commands_and_reports_through_events() {
     let (capture_id, frames, state) = finished;
     assert_eq!(state, CaptureState::Finalised);
     // Exactly once. A side that appears to finish twice is a side a consumer
-    // would catalogue twice, and the report exists in two places - the
+    // would catalog twice, and the report exists in two places - the
     // `Stopped` phase holds it and the reset yields it - so this is worth
     // pinning rather than assuming.
     assert_eq!(
@@ -283,7 +283,7 @@ fn a_device_that_cannot_be_opened_leaves_the_transport_idle() {
     engine.shutdown().expect("shutdown");
 }
 
-/// §11: stopping finalises the capture and does *not* close the project.
+/// §11: stopping finalizes the capture and does *not* close the project.
 #[test]
 fn a_second_side_records_into_the_same_project() {
     // §50's workflow is `Record -> Flip -> Record`, which is the requirement
@@ -359,7 +359,7 @@ fn arming_and_changing_your_mind_does_not_litter_the_project() {
 
 /// Dropping the engine mid-capture must finish the side, not lose it.
 #[test]
-fn a_shutdown_while_recording_finalises_rather_than_abandons() {
+fn a_shutdown_while_recording_finalizes_rather_than_abandons() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("interrupted.vcw");
     let events;

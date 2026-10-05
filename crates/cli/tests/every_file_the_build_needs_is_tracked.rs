@@ -97,7 +97,7 @@ const BUILD_OUTPUT: &[&str] = &[
 
 /// The `.gitignore` pattern that hides this path, or `None` if git would keep
 /// it. Asks git, so the answer is the one that matters, and asks for the rule
-/// rather than a yes, so a build artefact can be told from a lost file.
+/// rather than a yes, so a build artifact can be told from a lost file.
 fn ignore_rule(path: &Path) -> Option<String> {
     let output = Command::new("git")
         .arg("-C")

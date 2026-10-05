@@ -39,7 +39,7 @@
 //! Every number in this file is in this file. That is the point of it: a wrong
 //! identification is diagnosed by reading one table and the [`crate::candidate`]
 //! agreements that fed it, not by tracing arithmetic through four modules. The values
-//! are judgements rather than measurements, and they are each justified where they sit
+//! are judgments rather than measurements, and they are each justified where they sit
 //! so that changing one is an argument with a comment and not a guess.
 
 use crate::candidate::{Assessed, Verdict};
@@ -47,8 +47,8 @@ use crate::evidence::{Fact, Kind};
 
 /// At or above this, the application may state the release without asking.
 ///
-/// Reaching it needs more than one kind of agreement: an exact catalogue number is
-/// 0.55, which is deliberately not enough on its own, because a catalogue number
+/// Reaching it needs more than one kind of agreement: an exact catalog number is
+/// 0.55, which is deliberately not enough on its own, because a catalog number
 /// mistyped into a search box can match the wrong record and the artist and title
 /// are free to check.
 pub const CERTAIN: f32 = 0.80;
@@ -65,7 +65,7 @@ pub const LIKELY: f32 = 0.40;
 /// How far ahead the best candidate must be before it is chosen without asking.
 ///
 /// Two pressings of the same record agree with artist, title and track count equally
-/// well, and the catalogue number is often the only thing between them. Where it is
+/// well, and the catalog number is often the only thing between them. Where it is
 /// absent they tie, and a tie must be a question rather than a coin toss: picking the
 /// 2020 reissue for a 1980 original gets the mastering and the year wrong in the tags
 /// of every track.
@@ -77,7 +77,7 @@ pub const MARGIN: f32 = 0.15;
 /// accumulate. The cap is because they accumulate on the *work*, not the pressing: ten
 /// confirmed tracks prove the audio is this album and say nothing about which pressing
 /// of it, so without a cap a well-fingerprinted record would be stated with certainty
-/// and the wrong catalogue number.
+/// and the wrong catalog number.
 pub const RECORDING_CAP: f32 = 0.60;
 
 /// What one agreement is worth, and what one disagreement costs.
@@ -89,19 +89,19 @@ pub const fn credit(kind: Kind) -> (f32, f32) {
         // The one identifier a vinyl pressing reliably carries, and the only field
         // that distinguishes two pressings of one record. Worth more than anything
         // else and still not sufficient alone.
-        Kind::Catalogue => (0.55, 0.40),
+        Kind::Catalog => (0.55, 0.40),
         // Agreement is cheap because almost every candidate in a search for an
         // artist agrees about the artist. Disagreement is expensive because it means
         // the search returned something else entirely. The two together are set to
         // reach `LIKELY` exactly and `CERTAIN` not at all: knowing the album without
-        // the catalogue number is precisely the state in which VCW must ask.
+        // the catalog number is precisely the state in which VCW must ask.
         Kind::Artist => (0.20, 0.50),
         Kind::Album => (0.20, 0.50),
         // A real constraint: a single LP offered for a double's capture disagrees
         // here, and nothing else in a text search would catch it.
         Kind::Count => (0.15, 0.30),
         // Measured from the audio, so a disagreement is a fact about the object and
-        // not about a database. Worth less than the count only because catalogued
+        // not about a database. Worth less than the count only because cataloged
         // durations are approximate.
         Kind::Side => (0.10, 0.30),
         // Labels get renamed, licensed and spelled differently by each provider, so
@@ -210,9 +210,9 @@ mod tests {
     }
 
     #[test]
-    fn a_catalogue_number_alone_is_offered_and_not_asserted() {
+    fn a_catalog_number_alone_is_offered_and_not_asserted() {
         let score = weigh_with(|o| {
-            o.add(Source::Stated, Fact::Catalogue("CHRH 1296".into()));
+            o.add(Source::Stated, Fact::Catalog("CHRH 1296".into()));
         });
         assert_eq!(score.stance(), Stance::Likely, "{score:?}");
         assert!(score.value() < CERTAIN, "a number can be mistyped");
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn the_whole_sleeve_agreeing_is_stated_without_asking() {
         let score = weigh_with(|o| {
-            o.add(Source::Stated, Fact::Catalogue("CHRH 1296".into()))
+            o.add(Source::Stated, Fact::Catalog("CHRH 1296".into()))
                 .add(Source::Stated, Fact::Artist("Ultravox".into()))
                 .add(Source::Stated, Fact::Album("Vienna".into()))
                 .add(Source::Signal, Fact::Count(9));
@@ -230,9 +230,9 @@ mod tests {
     }
 
     #[test]
-    fn a_right_catalogue_number_does_not_rescue_the_wrong_artist() {
+    fn a_right_catalog_number_does_not_rescue_the_wrong_artist() {
         let score = weigh_with(|o| {
-            o.add(Source::Stated, Fact::Catalogue("CHRH 1296".into()))
+            o.add(Source::Stated, Fact::Catalog("CHRH 1296".into()))
                 .add(Source::Stated, Fact::Artist("Depeche Mode".into()));
         });
         assert_eq!(score.stance(), Stance::Ask, "{score:?}");
@@ -258,10 +258,10 @@ mod tests {
     #[test]
     fn a_providers_own_agreement_counts_half_of_a_persons() {
         let stated = weigh_with(|o| {
-            o.add(Source::Stated, Fact::Catalogue("CHRH 1296".into()));
+            o.add(Source::Stated, Fact::Catalog("CHRH 1296".into()));
         });
         let theirs = weigh_with(|o| {
-            o.add(Source::Discogs, Fact::Catalogue("CHRH 1296".into()));
+            o.add(Source::Discogs, Fact::Catalog("CHRH 1296".into()));
         });
         assert!(
             (stated.value() - theirs.value() * 2.0).abs() < 1e-6,
@@ -321,7 +321,7 @@ mod tests {
         let sunk = weigh_with(|o| {
             o.add(Source::Stated, Fact::Artist("Wrong".into()))
                 .add(Source::Stated, Fact::Album("Also Wrong".into()))
-                .add(Source::Stated, Fact::Catalogue("XX 1".into()));
+                .add(Source::Stated, Fact::Catalog("XX 1".into()));
         });
         assert_eq!(sunk.value(), 0.0, "clamped, not negative");
         assert_eq!(sunk.stance(), Stance::Ask);

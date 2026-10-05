@@ -41,7 +41,7 @@
 //!
 //! `/data2/vripr_training` is 595 snippets VRipr itself cut, one per boundary in
 //! its own track tables, by `src/workers/training_samples.rs`: 16 s of mono
-//! 16 kHz audio centred on the boundary, peak-normalised, with a JSON sidecar
+//! 16 kHz audio centered on the boundary, peak-normalized, with a JSON sidecar
 //! naming the kind. So a label is **where VRipr put a boundary**, not where a
 //! boundary provably is. That is the right reference for a parity criterion and
 //! the wrong one for an accuracy claim, and the difference matters: a snippet
@@ -63,7 +63,7 @@
 //! it was computed from is 294 MB and is not, so on any other machine this test
 //! prints that and passes.
 //!
-//! `kind: mid` is the negative case - the centre of a track at least 60 s long,
+//! `kind: mid` is the negative case - the center of a track at least 60 s long,
 //! so the whole window is clear of both its boundaries. A boundary found at 8 s
 //! in one of those is a false positive on VRipr's own reading.
 //!
@@ -88,7 +88,7 @@
 //!
 //! # What the corpus does to the audio
 //!
-//! Peak normalisation is the part that bites. A quiet side is lifted until its
+//! Peak normalization is the part that bites. A quiet side is lifted until its
 //! loudest transient is full scale, so the *absolute* level of a run-out groove
 //! in a snippet is not the level it had on the record, and a fixed -40 dBFS
 //! threshold is being asked a different question here than it is asked of a real
@@ -110,7 +110,7 @@ use vcw_types::{BoundaryObservation, Edge, Provenance, SampleRate, StorageFormat
 /// says so and passes rather than failing for a missing directory.
 const CORPUS: &str = "/data2/vripr_training";
 
-/// How far from the labelled position a boundary may be and still count as the
+/// How far from the labeled position a boundary may be and still count as the
 /// same boundary. The resolver's own clustering tolerance, which is the tightest
 /// figure that can be defended: a detector that agrees to within half a second
 /// agrees.

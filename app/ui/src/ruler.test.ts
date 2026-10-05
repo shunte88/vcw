@@ -13,8 +13,8 @@ import { describe, expect, it } from "vitest";
 
 import { mark, ticks } from "./ruler";
 
-/** The labelled marks only, which is what a person actually reads. */
-function labelled(
+/** The labeled marks only, which is what a person actually reads. */
+function labeled(
   startSeconds: number,
   endSeconds: number,
   pixels: number,
@@ -24,7 +24,7 @@ function labelled(
     .map((tick) => tick.label);
 }
 
-/** The gap between consecutive labelled marks, in pixels. */
+/** The gap between consecutive labeled marks, in pixels. */
 function gaps(
   startSeconds: number,
   endSeconds: number,
@@ -43,7 +43,7 @@ describe("a ruler's marks", () => {
   // The real case: side A of Spirit of Eden, 26:05.77, across the width the
   // window actually has.
   it("labels a whole side at an interval a person thinks in", () => {
-    expect(labelled(0, 1565.77, 1580)).toEqual([
+    expect(labeled(0, 1565.77, 1580)).toEqual([
       "0:00",
       "2:00",
       "4:00",
@@ -62,7 +62,7 @@ describe("a ruler's marks", () => {
   });
 
   // The point of the fixed step list. Ten marks across any range would put
-  // this one on 2.6-second centres, and reading a time off that is division.
+  // this one on 2.6-second centers, and reading a time off that is division.
   it("never invents an interval, whatever the range", () => {
     const allowed = new Set([
       0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
@@ -92,7 +92,7 @@ describe("a ruler's marks", () => {
   // Panning must not slide the numbers about, so the marks are on absolute
   // time and the first one is the first round time inside the window.
   it("puts marks on round times, not on the start of the window", () => {
-    expect(labelled(483.2, 581.4, 1400)).toEqual([
+    expect(labeled(483.2, 581.4, 1400)).toEqual([
       "8:10",
       "8:20",
       "8:30",

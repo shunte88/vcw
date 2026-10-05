@@ -290,7 +290,7 @@ impl Readers {
     /// is not a window - it is a fuzzer, and it holds a read snapshot open
     /// essentially all the time. The window redraws at frame rate and each
     /// query costs about 0.2 ms, so its duty cycle is under 2%. The difference
-    /// decides whether a starved checkpoint is a product defect or an artefact
+    /// decides whether a starved checkpoint is a product defect or an artifact
     /// of the instrument, so the instrument is adjustable and the default
     /// models the window. Zero means flat out.
     pub(crate) fn start(subject: &Subject, count: usize, hz: u32) -> Self {

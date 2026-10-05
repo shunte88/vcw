@@ -102,7 +102,7 @@ No drift, no creep - the distribution is stationary over 90 minutes.
 2. **Recovery was not exercised by this run.** The soak exited cleanly. Crash recovery is
    evidenced by the separate three-cycle `SIGKILL` test above (and S1's live-capture
    crash test), not by the soak.
-3. **The `reader_latency` field is mislabelled.** It reports `count: 2` because
+3. **The `reader_latency` field is mislabeled.** It reports `count: 2` because
    `main.rs:327` folds each reader's *p99* in as a single sample, so the object is a
    two-point distribution over p99s and its own `p50`/`p95`/`p99` labels are noise. The
    one figure that does mean something is `max_us: 9501` - i.e. **both** readers held a

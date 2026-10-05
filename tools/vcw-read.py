@@ -45,7 +45,7 @@ APPLICATION_ID = 0x56435700  # 'VCW\0'
 SUPPORTED_USER_VERSIONS = (1, 2, 3, 4)
 SUPPORTED_FORMAT_VERSION = 1
 
-# Audacity's, for the one case a reader has to recognise and refuse.
+# Audacity's, for the one case a reader has to recognize and refuse.
 AUDACITY_APPLICATION_ID = 0x41554459
 
 # From the spec's "Sample format codes" table, plus the layout rules beneath it.

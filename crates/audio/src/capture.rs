@@ -50,7 +50,7 @@
 //! **No bit-perfect claim without OS confirmation (§9, S1 finding 1).** The
 //! backend's report of its own success is not evidence. [`Capture::verdict`]
 //! returns [`BitPerfect::Confirmed`] only when [`crate::verify`] got a positive
-//! answer from the operating system, every requested field was honoured, and no
+//! answer from the operating system, every requested field was honored, and no
 //! counter moved. Any gap in that chain produces `Unconfirmed` with the gap
 //! named, never a pass by default.
 //!
@@ -89,7 +89,7 @@ pub const VERIFY_SETTLE: Duration = Duration::from_millis(200);
 ///
 /// Every optional field means "the caller has no opinion", not "use the
 /// default". The distinction matters: a field nobody asked for cannot be
-/// dishonoured, so it never counts as a divergence.
+/// dishonored, so it never counts as a divergence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     /// Which device, by the id [`crate::devices`] hands out. Never by name.
@@ -209,9 +209,9 @@ pub struct Negotiated {
 impl Negotiated {
     /// Whether everything the caller asked for came back unchanged.
     ///
-    /// A request that specified nothing is honoured trivially, which is correct:
+    /// A request that specified nothing is honored trivially, which is correct:
     /// nothing was promised, so nothing was broken.
-    pub fn honoured(&self) -> bool {
+    pub fn honored(&self) -> bool {
         self.divergences.is_empty()
     }
 
@@ -368,7 +368,7 @@ impl Sink {
 /// Whether this capture can be called bit-perfect, and why or why not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BitPerfect {
-    /// The OS confirmed the format, the request was honoured in full, and no
+    /// The OS confirmed the format, the request was honored in full, and no
     /// counter moved. The only outcome that supports the claim.
     Confirmed,
     /// Something rules it out. Each reason is stated.
@@ -441,9 +441,9 @@ pub fn verdict(
     if let Verification::Unavailable { why } = verification {
         missing.push(why.clone());
     }
-    if !negotiated.honoured() {
+    if !negotiated.honored() {
         missing.push(format!(
-            "the request was not honoured in full ({})",
+            "the request was not honored in full ({})",
             negotiated
                 .divergences
                 .iter()
@@ -611,7 +611,7 @@ impl Capture {
             buffer = %negotiated.buffer,
             "capture stream started"
         );
-        if !negotiated.honoured() {
+        if !negotiated.honored() {
             // A capture that is not what was asked for is the single most common
             // cause of a rip that sounds wrong, and §9 says so out loud rather
             // than quietly settling for less.
@@ -623,7 +623,7 @@ impl Capture {
                     .map(|d| format!("{}: asked {}, got {}", d.field, d.requested, d.granted))
                     .collect::<Vec<_>>()
                     .join("; "),
-                "the backend did not honour the request"
+                "the backend did not honor the request"
             );
         }
 
@@ -789,7 +789,7 @@ fn choose(matrix: &Matrix, request: &Request, report: &DeviceReport) -> Result<C
 ///
 /// Shared with playback, which negotiates the same way for the same reason: the
 /// rule is about the path to the device, not about which direction audio is
-/// travelling along it.
+/// traveling along it.
 pub(crate) fn negotiate_mode(
     requested: CaptureMode,
     transport: Transport,
@@ -1036,7 +1036,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unhonoured_request_leaves_the_claim_unestablished() {
+    fn an_unhonored_request_leaves_the_claim_unestablished() {
         let n = negotiated(
             CaptureMode::Exclusive,
             Transport::DirectHardware,
@@ -1046,7 +1046,7 @@ mod tests {
                 granted: "96000 Hz".to_owned(),
             }],
         );
-        assert!(!n.honoured());
+        assert!(!n.honored());
         let v = verdict(&n, Diagnostics::default(), &agrees());
         assert!(matches!(v, BitPerfect::Unconfirmed { .. }));
         assert!(v.summary().contains("192000 Hz"));

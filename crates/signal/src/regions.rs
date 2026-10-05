@@ -57,7 +57,7 @@ use vcw_types::{BoundaryObservation, Edge, Provenance, SampleRate};
 /// How a detector is tuned.
 ///
 /// The defaults are VRipr's defaults, unchanged, because the exit criterion for this
-/// port is parity against VRipr's own output on the labelled corpus. A different set
+/// port is parity against VRipr's own output on the labeled corpus. A different set
 /// of numbers might well detect better; it would also make every parity difference an
 /// argument about tuning rather than about the port, which is the one thing the
 /// harness has to be able to rule out.
@@ -194,7 +194,7 @@ impl<'a> Trace<'a> {
         }
     }
 
-    /// Whether there is anything to analyse.
+    /// Whether there is anything to analyze.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.frames.is_empty()
@@ -223,9 +223,9 @@ pub struct Diagnostics {
     pub threshold_db: f64,
     /// The estimated noise floor, present only when the threshold was derived.
     pub floor_db: Option<f64>,
-    /// How many windows were analysed.
+    /// How many windows were analyzed.
     pub windows: usize,
-    /// How long the analysed audio was, in frames.
+    /// How long the analyzed audio was, in frames.
     pub total_frames: u64,
 }
 
@@ -318,7 +318,7 @@ pub fn adaptive_floor(levels: &[f64]) -> f64 {
 /// and the HMM from 98.01% down to 96.22%, because VRipr's own answer depends on how
 /// the error happened to accumulate. Matching it would mean giving up the frame
 /// arithmetic that makes the live pass and the refine pass agree to the frame, to
-/// inherit a rounding artefact. A gap of exactly `min_silence_secs` is a boundary,
+/// inherit a rounding artifact. A gap of exactly `min_silence_secs` is a boundary,
 /// which is what the setting says.
 #[must_use]
 pub fn merge_gaps(regions: Vec<Region>, max_gap: u64) -> Vec<Region> {
@@ -351,7 +351,7 @@ pub fn merge_gaps(regions: Vec<Region>, max_gap: u64) -> Vec<Region> {
 ///
 /// Padding last means a track can be padded into the space a dropped span left, which
 /// is what should happen: the span was noise, and the gap around it belongs to its
-/// neighbours.
+/// neighbors.
 #[must_use]
 pub fn shape(raw: Vec<Region>, trace: &Trace<'_>, cfg: &Config) -> Vec<Region> {
     let hz = f64::from(trace.shape.rate.hz());
@@ -375,7 +375,7 @@ pub fn shape(raw: Vec<Region>, trace: &Trace<'_>, cfg: &Config) -> Vec<Region> {
 
     for i in 1..tracks.len() {
         if tracks[i].start < tracks[i - 1].end {
-            // Split the overlap rather than favouring either neighbour: the padding
+            // Split the overlap rather than favoring either neighbor: the padding
             // that caused it was a guess in both directions.
             let midpoint = tracks[i - 1].end / 2 + tracks[i].start / 2;
             tracks[i - 1].end = midpoint;
@@ -619,7 +619,7 @@ mod tests {
     }
 
     #[test]
-    fn a_span_shorter_than_a_track_is_dropped_and_its_gap_goes_to_the_neighbours() {
+    fn a_span_shorter_than_a_track_is_dropped_and_its_gap_goes_to_the_neighbors() {
         let layout = test_shape();
         let frames = trace_of(&[(-20.0, 400)]);
         let trace = view(&frames, &layout);

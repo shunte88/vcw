@@ -102,7 +102,7 @@ impl From<Mode> for CaptureMode {
     }
 }
 
-/// Equalisation provenance selectable on the command line (§51).
+/// Equalization provenance selectable on the command line (§51).
 ///
 /// A flag rather than a prompt, and with no default beyond `unknown`, because the
 /// answer is a property of the operator's hifi and not of this run: it is the same
@@ -208,7 +208,7 @@ pub(crate) fn run(options: &Options) -> Result<()> {
     // Drops the stream, which drops the ring's writing end, which is how the
     // writer thread learns that no more audio is coming.
     let diagnostics = capture.stop();
-    // Interrupted, not finalised, if anything was lost. The stop was orderly
+    // Interrupted, not finalized, if anything was lost. The stop was orderly
     // either way; the capture was not.
     let state = if diagnostics.is_clean() {
         CaptureState::Finalised

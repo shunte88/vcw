@@ -127,7 +127,7 @@ fn help(path: &[String]) -> Help {
     }
 }
 
-/// A documented line, split into words, honouring double quotes.
+/// A documented line, split into words, honoring double quotes.
 fn words(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut word = String::new();

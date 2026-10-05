@@ -42,7 +42,7 @@
 //! wire, which would be `app/src-tauri`. They are here instead, and the reason
 //! is §2. The moment a type exists only inside the shell, the shell is the
 //! thing that decides what a track looks like to a user - and that decision is
-//! application behaviour, not presentation. Two consumers already need the same
+//! application behavior, not presentation. Two consumers already need the same
 //! answer: the Tauri shell and `vcw --json`, which is the CLI's machine-readable
 //! output and was hand-building its own JSON object by object before this crate
 //! existed.
@@ -58,7 +58,7 @@
 //! built for the core's own work - [`vcw_core::Event`] carries a
 //! [`vcw_signal::meter::Snapshot`] of linear amplitudes because that is what a
 //! meter produces, and a `Phase` is `Copy` because the state machine compares
-//! phases - and serialising them directly would publish those choices as the
+//! phases - and serializing them directly would publish those choices as the
 //! contract. Then every internal rename is a breaking change to the frontend.
 //!
 //! So the rules for this crate are:

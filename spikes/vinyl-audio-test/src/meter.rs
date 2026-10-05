@@ -117,7 +117,7 @@ pub struct Reading {
 
 impl Reading {
     /// A clipped sample in an integer format is a real event, not a rounding
-    /// artefact - vinyl capture chains routinely arrive too hot.
+    /// artifact - vinyl capture chains routinely arrive too hot.
     pub fn clipped(&self) -> bool {
         self.peak_linear.iter().any(|p| *p >= 0.999_969)
     }
@@ -131,7 +131,7 @@ fn dbfs(linear: f64) -> f64 {
     }
 }
 
-/// Byte-slice → normalised f32, per sample format. Returns `None` for formats
+/// Byte-slice → normalized f32, per sample format. Returns `None` for formats
 /// we have not been asked to meter rather than guessing at the layout.
 fn reader(format: SampleFormat) -> Option<fn(&[u8]) -> f32> {
     Some(match format {

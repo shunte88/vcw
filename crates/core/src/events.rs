@@ -173,13 +173,13 @@ pub enum Event {
         /// A sentence for a consumer that wants to show it.
         detail: String,
     },
-    /// The capture was finalised.
+    /// The capture was finalized.
     Finished {
         /// The capture's row id in the project.
         capture_id: i64,
         /// Frames committed, per channel.
         frames: u64,
-        /// How it was recorded: finalised, or interrupted if anything was lost.
+        /// How it was recorded: finalized, or interrupted if anything was lost.
         state: CaptureState,
         /// The ring's four counters as of the end.
         diagnostics: Diagnostics,
@@ -188,7 +188,7 @@ pub enum Event {
     },
     /// Playback opened on a device, and this is what it is playing through.
     ///
-    /// The playback analogue of [`Event::Armed`], and it carries the same
+    /// The playback analog of [`Event::Armed`], and it carries the same
     /// awkward truth: §21 wants bit-perfect playback where supported, so a
     /// consumer needs to know whether the samples reaching the converter are
     /// the samples in the project or a conversion of them.
@@ -275,7 +275,7 @@ pub enum Event {
     ///
     /// Nothing was attempted, because there was nothing to attempt: §11's
     /// illegal transitions have no implementation to reach. Reported rather
-    /// than ignored so a UI can grey the button out next time.
+    /// than ignored so a UI can gray the button out next time.
     Rejected {
         /// The command that does not apply.
         command: &'static str,

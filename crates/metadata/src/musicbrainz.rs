@@ -107,7 +107,7 @@ pub const COVER_ART: &str = "https://coverartarchive.org/release";
 /// What a release fetch has to ask for.
 ///
 /// Every one of these is load-bearing: `recordings` is the tracklist, `labels` is
-/// the catalogue number that identifies the pressing, `artist-credits` is the
+/// the catalog number that identifies the pressing, `artist-credits` is the
 /// per-track artist on a compilation, `release-groups` is where the genres often
 /// are, and `genres` is §32's input.
 pub const RELEASE_INCLUDES: &str = "recordings+artist-credits+labels+release-groups+genres";
@@ -309,8 +309,8 @@ impl MusicBrainz {
         // Concatenated rather than merged by vote count, because the counts are
         // not comparable: a release's votes are cast by the handful of people
         // who edited that pressing, a group's by everyone who ever tagged the
-        // record. `normalise_all` dedupes through §32's table, so a name in both
-        // arrays is written once, and whether two near-neighbours collapse is
+        // record. `normalize_all` dedupes through §32's table, so a name in both
+        // arrays is written once, and whether two near-neighbors collapse is
         // the table's call rather than this function's: genre.dat keeps
         // `Electronica` distinct from `Electronic`, so both go on the sleeve.
         let mut names = genre_names(&value["genres"]);
@@ -321,7 +321,7 @@ impl MusicBrainz {
             album: value["title"].as_str().unwrap_or("").trim().to_string(),
             album_artist: credit(&value["artist-credit"]),
             year: year_of(value["date"].as_str()),
-            genres: self.genres.normalise_all(names),
+            genres: self.genres.normalize_all(names),
             label: label
                 .and_then(|l| l["label"]["name"].as_str())
                 .unwrap_or("")
@@ -865,7 +865,7 @@ mod tests {
             .expect("the repress");
         assert_ne!(
             repress.id, original.id,
-            "two pressings, and the catalogue number is what separates them"
+            "two pressings, and the catalog number is what separates them"
         );
         assert_eq!(repress.year, Some(2016));
     }
@@ -941,7 +941,7 @@ mod tests {
         let genres = MusicBrainz::new(Arc::new(Offline));
         assert_eq!(title_case("ambient techno"), "Ambient Techno");
         assert_eq!(
-            genres.genres.normalise("idm"),
+            genres.genres.normalize("idm"),
             ["IDM"],
             "the table, not the title-caser"
         );
@@ -976,8 +976,8 @@ mod tests {
         //
         // `Electronica` stays beside `Electronic` rather than folding onto it:
         // genre.dat has both as keys of their own (rows 327 and 330), which is
-        // VRipr's judgement that they are different genres, and §32 says the
-        // table decides. The dedupe here is of names, not of neighbours.
+        // VRipr's judgment that they are different genres, and §32 says the
+        // table decides. The dedupe here is of names, not of neighbors.
         let body = r#"{
             "id": "x", "title": "T",
             "genres": [{"name": "electronic", "count": 1}],

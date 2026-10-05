@@ -263,7 +263,7 @@ fn make_row(p: &Params, channel: i64, samples: Vec<u8>) -> Row {
     }
 }
 
-/// Decode one sample to a normalised f32, treating the low bytes as little-endian
+/// Decode one sample to a normalized f32, treating the low bytes as little-endian
 /// two's complement at the given width.
 pub fn sample_at(bytes: &[u8], idx: usize, bps: usize) -> f32 {
     let o = idx * bps;

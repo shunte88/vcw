@@ -171,7 +171,7 @@ const SETTLE: Duration = Duration::from_millis(300);
 ///
 /// Both sleeps matter, and for opposite reasons. The one before: a region closes at
 /// the worker's *cursor* rather than at the frame the event names, which is the right
-/// behaviour for audio arriving in real time - by the time a boundary is announced the
+/// behavior for audio arriving in real time - by the time a boundary is announced the
 /// cursor is already about 1.2 s past it - but a test that pumps eight seconds in a
 /// millisecond would otherwise say "end" while all eight are still in the tap. The one
 /// after: the event has to be on the bus before the audio it opens is pumped, or the

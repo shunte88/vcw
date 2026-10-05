@@ -138,7 +138,7 @@ impl Decision {
 /// of the same boundary from the live pass and the refine pass. The output is sorted by
 /// position, with a track's start before its end where both land on the same frame.
 ///
-/// Four rules, each of which is a judgement rather than a derivation, so each is stated
+/// Four rules, each of which is a judgment rather than a derivation, so each is stated
 /// here and tested by name:
 ///
 /// 1. **Observations of the same edge within [`Tolerance`] of each other are one

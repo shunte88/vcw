@@ -222,7 +222,7 @@ describe("the export panel", () => {
     expect(chosen.mock.calls[0]?.[0]).not.toHaveProperty("defaultPath");
   });
 
-  it("keeps the typed path when the picker is cancelled", async () => {
+  it("keeps the typed path when the picker is canceled", async () => {
     chosen.mockResolvedValue(null);
     const container = await render({});
     const input = container.querySelector<HTMLInputElement>("input.wide");
@@ -235,7 +235,7 @@ describe("the export panel", () => {
       browseButton(container)?.click();
     });
     expect(chosen).toHaveBeenCalledTimes(1);
-    // Whatever was there is still there: a cancelled dialog is not a choice of
+    // Whatever was there is still there: a canceled dialog is not a choice of
     // the empty string, which is what clearing the field would mean.
     expect(container.querySelector<HTMLInputElement>("input.wide")?.value).not.toBe(
       "null",

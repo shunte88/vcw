@@ -398,7 +398,7 @@ impl Painter {
 
     /// Adds raw audio, one sample per frame, starting at `start`.
     ///
-    /// The [`Level::Samples`] path. Nothing is summarised first: each sample
+    /// The [`Level::Samples`] path. Nothing is summarized first: each sample
     /// goes straight into the column it belongs to, so a column drawn this way
     /// is drawn from the audio and not from a summary of it.
     pub fn add_samples(&mut self, start: u64, format: StorageFormat, samples: &[u8]) {

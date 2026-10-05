@@ -190,7 +190,7 @@ impl Setup {
     /// Always built, and offline or keyless is not this method's decision to make:
     /// a lookup answers [`crate::Error::Offline`] or
     /// [`crate::Error::MissingCredential`] by itself, which is what lets a window
-    /// grey a button out for the right reason.
+    /// gray a button out for the right reason.
     #[must_use]
     pub fn acoustid(&self, credentials: &Credentials) -> AcoustId {
         AcoustId::new(self.transport())
@@ -201,7 +201,7 @@ impl Setup {
     /// The transport: the real one, or the one that refuses.
     ///
     /// The `cfg` is the whole of §40's strongest form. With the `net` feature
-    /// off there is no `Agent` to construct, so `online: true` is honoured as
+    /// off there is no `Agent` to construct, so `online: true` is honored as
     /// far as it can be - which is not at all - and the build contains no code
     /// that can reach a network. A caller that needs to know asks
     /// [`Provider::is_offline`].

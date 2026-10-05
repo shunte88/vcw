@@ -123,7 +123,7 @@ impl Args {
 
         // Track edges, so `skip` in a `--script` moves between tracks rather
         // than by a fixed ten seconds. Read from the same open as the layout,
-        // and empty on a side nothing has been analysed from - which is the
+        // and empty on a side nothing has been analyzed from - which is the
         // case the fixed step exists for.
         let marks = vcw_project::track::edges_of_capture(project.conn(), capture_id)?;
 

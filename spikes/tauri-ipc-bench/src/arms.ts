@@ -84,7 +84,7 @@ export const ARMS: Arm[] = [
   },
   {
     name: 'channel-serde',
-    question: 'Baseline: D6 without the "pre-serialised" clause.',
+    question: 'Baseline: D6 without the "pre-serialized" clause.',
     cfg: { transport: 'channel', encoding: 'serde' },
   },
   {

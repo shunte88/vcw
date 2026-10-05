@@ -326,7 +326,7 @@ fn channel_rank(channels: u16) -> u16 {
 ///
 /// Confirms that the backend **accepts** the configuration. It says nothing about
 /// whether the hardware is really running it - that is the §9 question, and S1
-/// found a backend reporting an honoured request while the card ran something else
+/// found a backend reporting an honored request while the card ran something else
 /// entirely. WP-04's per-platform verifier is what settles that.
 ///
 /// # Errors

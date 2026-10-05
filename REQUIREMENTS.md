@@ -407,7 +407,7 @@ Add:
 Required: `chromaprint-next`; AcoustID; progressive identification; evidence resolver; metadata-assisted boundaries; album/release inference; MP3/OGG export; advanced capture diagnostics.
 ## 46. Phase 3
 Add:
-Required: non-destructive processing; playback equalisation curves (§51); click detection/removal; optional normalization; advanced archival metadata; improved multi-disc workflow; Android support; plugin/provider architecture.
+Required: non-destructive processing; playback equalization curves (§51); click detection/removal; optional normalization; advanced archival metadata; improved multi-disc workflow; Android support; plugin/provider architecture.
 ## 47. Initial Engineering Spike
 Before significant UI development, create a Rust `vinyl-audio-test` utility that:
 1. lists devices
@@ -439,7 +439,7 @@ The user's experience should not be.
 
 One bit I particularly want to prototype early is **24/192 stereo → bounded buffer → batched SQLite BLOB writes → simultaneous analysis reads**. If that stays rock-solid under deliberate abuse and simulated crashes, we've got the foundation nailed.
 
-## 51. Playback Equalisation
+## 51. Playback Equalization
 Numbered after §50 so that no existing section is renumbered: the numbers are cited
 from source files, tests and the delivery plan.
 
@@ -447,13 +447,13 @@ RIAA has been the standard only since 1954. Records cut before it, and many 78s 
 it, were cut to the issuing label's own curve, and played back through a RIAA stage
 they are wrong in both the bass and the treble.
 
-The application shall support selectable playback equalisation.
-Equalisation shall be a **non-destructive stored decision**, held with the project's
+The application shall support selectable playback equalization.
+Equalization shall be a **non-destructive stored decision**, held with the project's
 other edit instructions and applied on playback, render and export.
-Equalisation shall never be applied in the capture path, and §9 continues to govern
+Equalization shall never be applied in the capture path, and §9 continues to govern
 capture unchanged: a captured block is what the device supplied.
 
-Every capture shall record the equalisation already applied by the hardware upstream
+Every capture shall record the equalization already applied by the hardware upstream
 of it:
 ```rust
 enum CaptureEq {
@@ -466,7 +466,7 @@ enum CaptureEq {
 provenance was not stated.
 This field shall be recorded from the first release that supports capture, ahead of the
 processing chain that consumes it: a capture whose provenance is unknown cannot afterwards
-be correctly re-equalised, and the field cannot be recovered later.
+be correctly re-equalized, and the field cannot be recovered later.
 
 Curves shall include:
 Required: flat (none); RIAA; Columbia LP; Decca FFRR; EMI; HMV; AES; NAB/NARTB; Teldec.
@@ -490,4 +490,4 @@ A curve shall be selectable per side, because a box set may mix them, and overri
 per track.
 The curve in force shall be visible wherever audio is auditioned, shall be recorded in
 the project, and shall be written into exported metadata, because an archival file whose
-equalisation is unrecorded is one that cannot be reproduced.
+equalization is unrecorded is one that cannot be reproduced.

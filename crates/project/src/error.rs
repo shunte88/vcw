@@ -184,7 +184,7 @@ pub enum Error {
     ///
     /// Distinct from [`Error::Invalid`], which is what a whole-project
     /// validation returns: this one is raised by the reader, in the middle of
-    /// playback, about one block it was asked for and cannot honour. Playback
+    /// playback, about one block it was asked for and cannot honor. Playback
     /// refusing to invent audio for a hole in the timeline is the point -
     /// silence in place of a missing block would be indistinguishable from
     /// silence that was recorded.
@@ -204,7 +204,7 @@ pub enum Error {
     ///
     /// Sides are created deliberately, by [`crate::side::ensure`], because a side
     /// row is the thing a capture attaches to and conjuring one on demand would
-    /// hide a mislabelled recording rather than report it.
+    /// hide a mislabeled recording rather than report it.
     #[error("side {side} is not in this project")]
     NoSuchSide {
         /// The letter that was asked for.
@@ -262,7 +262,7 @@ pub enum Error {
     /// A boundary that bounds a track was asked to go.
     ///
     /// Deleting it would leave the track with one end, so the track is what has to
-    /// be edited: merge it with its neighbour, or delete it.
+    /// be edited: merge it with its neighbor, or delete it.
     #[error("boundary {boundary_id} bounds track {track_id} and cannot be deleted on its own")]
     BoundaryInUse {
         /// The boundary concerned.
@@ -318,7 +318,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 }
 
-/// Adds a hint when the `application_id` is one we recognise.
+/// Adds a hint when the `application_id` is one we recognize.
 fn describe_application_id(id: u32) -> &'static str {
     match id {
         0x4155_4459 => {

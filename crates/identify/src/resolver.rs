@@ -49,7 +49,7 @@
 //!
 //! Three outcomes and no fourth. The failure mode worth designing against is not
 //! "could not identify the record", which is ordinary and recoverable; it is a
-//! plausible wrong pressing written silently over a catalogue number somebody read
+//! plausible wrong pressing written silently over a catalog number somebody read
 //! off the label. So a tie asks, a contradiction asks, and asking is not a fallback.
 
 use crate::candidate::{Assessed, Verdict};
@@ -67,12 +67,12 @@ pub const SHORTLIST: usize = 5;
 /// In escalation order, cheapest and most reliable first. See [`Lookup::ORDER`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lookup {
-    /// Discogs, by the catalogue number off the label.
+    /// Discogs, by the catalog number off the label.
     ///
     /// First because it is the only lookup that identifies a *pressing* rather than
-    /// a work, and because Discogs indexes catalogue numbers and has the better
+    /// a work, and because Discogs indexes catalog numbers and has the better
     /// vinyl coverage of the two databases.
-    CatalogueAtDiscogs,
+    CatalogAtDiscogs,
     /// Discogs, by artist and title.
     SearchDiscogs,
     /// MusicBrainz, by artist and title.
@@ -95,7 +95,7 @@ pub enum Lookup {
 impl Lookup {
     /// Every lookup, in escalation order.
     pub const ORDER: [Self; 4] = [
-        Self::CatalogueAtDiscogs,
+        Self::CatalogAtDiscogs,
         Self::SearchDiscogs,
         Self::SearchMusicBrainz,
         Self::IdentifyAudio,
@@ -103,13 +103,13 @@ impl Lookup {
 
     /// Whether this lookup has the evidence it needs to be worth making.
     ///
-    /// A catalogue lookup with no catalogue number is not a cheap failure, it is a
+    /// A catalog lookup with no catalog number is not a cheap failure, it is a
     /// request that cannot succeed, and §40 says a request is something a person
     /// asked for.
     #[must_use]
     pub fn is_possible(self, observed: &Observed) -> bool {
         match self {
-            Self::CatalogueAtDiscogs => observed.stated(Kind::Catalogue).is_some(),
+            Self::CatalogAtDiscogs => observed.stated(Kind::Catalog).is_some(),
             Self::SearchDiscogs | Self::SearchMusicBrainz => {
                 observed.stated(Kind::Artist).is_some() || observed.stated(Kind::Album).is_some()
             }
@@ -123,7 +123,7 @@ impl Lookup {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::CatalogueAtDiscogs => "discogs-catalogue",
+            Self::CatalogAtDiscogs => "discogs-catalog",
             Self::SearchDiscogs => "discogs-search",
             Self::SearchMusicBrainz => "musicbrainz-search",
             Self::IdentifyAudio => "acoustid",
@@ -283,7 +283,7 @@ const fn name_of(kind: Kind) -> &'static str {
     match kind {
         Kind::Artist => "artist",
         Kind::Album => "title",
-        Kind::Catalogue => "catalogue number",
+        Kind::Catalog => "catalog number",
         Kind::Label => "label",
         Kind::Year => "year",
         Kind::Count => "track count",
@@ -303,7 +303,7 @@ mod tests {
         observed
             .add(Source::Stated, Fact::Artist("Ultravox".into()))
             .add(Source::Stated, Fact::Album("Vienna".into()))
-            .add(Source::Stated, Fact::Catalogue("CHRH 1296".into()))
+            .add(Source::Stated, Fact::Catalog("CHRH 1296".into()))
             .add(Source::Signal, Fact::Count(9));
         observed
     }
@@ -322,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn the_escalation_order_is_catalogue_then_discogs_then_musicbrainz_then_audio() {
+    fn the_escalation_order_is_catalog_then_discogs_then_musicbrainz_then_audio() {
         let observed = sleeve();
         let mut tried: Vec<Lookup> = Vec::new();
         let mut order: Vec<Lookup> = Vec::new();
@@ -341,7 +341,7 @@ mod tests {
         assert_eq!(
             next_lookup(&observed, &[]),
             Some(Lookup::SearchDiscogs),
-            "no catalogue number was typed, so there is nothing to search by number"
+            "no catalog number was typed, so there is nothing to search by number"
         );
 
         // A record with nothing typed at all: the audio is the only evidence there
@@ -358,7 +358,7 @@ mod tests {
         };
         assert_eq!(chosen.assessed.claim.ids, vec!["1".to_owned()]);
         assert!(
-            because(&chosen).contains("catalogue number"),
+            because(&chosen).contains("catalog number"),
             "{}",
             because(&chosen)
         );
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn two_pressings_that_cannot_be_separated_are_a_question() {
-        // Neither provider recorded a catalogue number, which is the ordinary case
+        // Neither provider recorded a catalog number, which is the ordinary case
         // for an old pressing and the reason this is not a coin toss.
         let mut observed = Observed::new();
         observed
@@ -390,7 +390,7 @@ mod tests {
         match outcome {
             Outcome::Ask { because, .. } => assert_eq!(because, Doubt::ContradictsAPerson),
             Outcome::Nothing => {}
-            other => panic!("a disputed catalogue number must never resolve: {other:?}"),
+            other => panic!("a disputed catalog number must never resolve: {other:?}"),
         }
     }
 

@@ -103,7 +103,7 @@ const SILENT: Levels = {
  * One side of the bridge: a named group of channel rows.
  *
  * Drawn whether or not it has a meter behind it. A meter that is not running
- * is a disabled control - greyed, at the floor, with its channels still there
+ * is a disabled control - grayed, at the floor, with its channels still there
  * - rather than a sentence where the meter should be. The sentence was worse
  * than useless: it told a person who could see the transport was idle
  * something they already knew, and it did it by making the instrument vanish,
@@ -111,7 +111,7 @@ const SILENT: Levels = {
  * armed.
  *
  * Two channels when there is nothing to count, because a turntable has two
- * and a greyed stereo pair is the right guess at what is about to appear.
+ * and a grayed stereo pair is the right guess at what is about to appear.
  */
 function Bridge({
   name,

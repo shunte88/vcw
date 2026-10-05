@@ -47,7 +47,7 @@ export type Span = {
  * than from the audio. The waveform asks the shell for one column per device
  * pixel and this window is over three thousand of them wide, so 4096 frames is
  * already about one frame to the column - zooming closer would ask for columns
- * that cannot differ from their neighbours. At 96 kHz it is 43 milliseconds
+ * that cannot differ from their neighbors. At 96 kHz it is 43 milliseconds
  * across the full width, which is four times finer than the centisecond a
  * boundary is placed to.
  */
@@ -119,7 +119,7 @@ function width(wanted: number, frames: number): number {
  * A span brought back inside a capture that may have changed length.
  *
  * Every function below starts here, so none of them has to cope with a window
- * that is already impossible: one normalising step, in one place, and the
+ * that is already impossible: one normalizing step, in one place, and the
  * arithmetic after it can assume a window that fits.
  */
 export function clamp(current: Span, frames: number): Span {
@@ -174,7 +174,7 @@ export function pan(current: Span, frames: number, byFrames: number): Span {
 }
 
 /** Keep the current width and put `atFrame` in the middle. */
-export function centre(current: Span, frames: number, atFrame: number): Span {
+export function center(current: Span, frames: number, atFrame: number): Span {
   if (frames <= 0 || !Number.isFinite(atFrame)) {
     return clamp(current, frames);
   }
@@ -208,7 +208,7 @@ export function toRange(
 /**
  * Page the window along so a moving playhead stays in it.
  *
- * Paged, not centred: a window that recentres on every tick is a picture that
+ * Paged, not centered: a window that recenters on every tick is a picture that
  * never sits still, and a person reading a waveform is reading the shape of it.
  * So nothing happens while the playhead is inside the window, and when it
  * leaves the right edge the window jumps so that it sits a tenth of the way in
@@ -216,7 +216,7 @@ export function toRange(
  *
  * Returns the span it was given, by identity, when nothing needs to move. The
  * caller compares by reference to decide whether to re-render, so this is part
- * of the contract and not an optimisation.
+ * of the contract and not an optimization.
  */
 export function follow(current: Span, frames: number, atFrame: number): Span {
   if (frames <= 0 || !Number.isFinite(atFrame)) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#  analyse.py
+#  analyze.py
 #
 #  VCW - The Vinyl Capture Workstation
 #  (c) 2026 Stue Hunter

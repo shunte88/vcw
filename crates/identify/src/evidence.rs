@@ -4,7 +4,7 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  Everything known about the record being captured, collected without judgement.
+ *  Everything known about the record being captured, collected without judgment.
  *
  * MIT License
  *
@@ -30,7 +30,7 @@
  *
  */
 
-//! Everything known about the record being captured, collected without judgement.
+//! Everything known about the record being captured, collected without judgment.
 //!
 //! Requirements: §23 (the evidence model), §26 (identification is evidence-based
 //! rather than a single match).
@@ -38,7 +38,7 @@
 //! The reason this is a flat list of `(source, fact)` pairs and not a struct of
 //! `Option`s is that the same fact can arrive from several places and disagree with
 //! itself. A person types `CHRH 1296` off the label, Discogs says the pressing is
-//! `CHRH1296`, MusicBrainz has no catalogue number at all: that is three states, not
+//! `CHRH1296`, MusicBrainz has no catalog number at all: that is three states, not
 //! one field, and the resolver's job is to say which release accounts for them best.
 //! Collapsing them on the way in would throw away the only information that can
 //! explain a wrong answer afterwards.
@@ -106,11 +106,11 @@ pub enum Fact {
     Artist(String),
     /// The release title.
     Album(String),
-    /// The catalogue number off the label, however it was spelled.
+    /// The catalog number off the label, however it was spelled.
     ///
     /// The one identifier a vinyl pressing reliably carries, which is why
     /// [`crate::confidence`] weighs it above everything else.
-    Catalogue(String),
+    Catalog(String),
     /// The record label.
     Label(String),
     /// Year of the pressing.
@@ -143,7 +143,7 @@ impl Fact {
         match self {
             Self::Artist(_) => Kind::Artist,
             Self::Album(_) => Kind::Album,
-            Self::Catalogue(_) => Kind::Catalogue,
+            Self::Catalog(_) => Kind::Catalog,
             Self::Label(_) => Kind::Label,
             Self::Year(_) => Kind::Year,
             Self::Count(_) => Kind::Count,
@@ -160,8 +160,8 @@ pub enum Kind {
     Artist,
     /// [`Fact::Album`].
     Album,
-    /// [`Fact::Catalogue`].
-    Catalogue,
+    /// [`Fact::Catalog`].
+    Catalog,
     /// [`Fact::Label`].
     Label,
     /// [`Fact::Year`].
@@ -217,7 +217,7 @@ impl Observed {
     /// The first thing a person stated of this kind, if they stated one.
     ///
     /// For the places that need the typed value itself rather than a comparison
-    /// against it: a catalogue lookup has to send the number somebody typed.
+    /// against it: a catalog lookup has to send the number somebody typed.
     #[must_use]
     pub fn stated(&self, kind: Kind) -> Option<&Fact> {
         self.items
@@ -227,14 +227,14 @@ impl Observed {
     }
 }
 
-/// Folds a catalogue number to the form two spellings of it share.
+/// Folds a catalog number to the form two spellings of it share.
 ///
-/// Catalogue numbers are printed with whatever spacing fits the label: `CHRH 1296`,
+/// Catalog numbers are printed with whatever spacing fits the label: `CHRH 1296`,
 /// `CHRH1296` and `CHRH-1296` are one pressing, and a person copying one off a sleeve
 /// will not match a provider's spelling by accident. Keeping only alphanumerics,
 /// uppercased, is the fold both ends can agree on.
 #[must_use]
-pub fn fold_catalogue(text: &str) -> String {
+pub fn fold_catalog(text: &str) -> String {
     text.chars()
         .filter(|c| c.is_ascii_alphanumeric())
         .map(|c| c.to_ascii_uppercase())
@@ -243,7 +243,7 @@ pub fn fold_catalogue(text: &str) -> String {
 
 /// Folds a title or a name to the form two spellings of it share.
 ///
-/// Looser than [`fold_catalogue`] on purpose: punctuation and case vary between
+/// Looser than [`fold_catalog`] on purpose: punctuation and case vary between
 /// providers and sleeves (`Mr X` against `Mr. X`), but a word that is there in one and
 /// missing in the other is a real difference, so the words survive as words.
 #[must_use]
@@ -269,15 +269,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_catalogue_number_folds_across_the_ways_a_label_prints_it() {
-        let folded = fold_catalogue("CHRH 1296");
+    fn a_catalog_number_folds_across_the_ways_a_label_prints_it() {
+        let folded = fold_catalog("CHRH 1296");
         assert_eq!(folded, "CHRH1296");
-        assert_eq!(fold_catalogue("chrh-1296"), folded);
-        assert_eq!(fold_catalogue("CHRH1296"), folded);
-        assert_eq!(fold_catalogue(" CHRH/1296 "), folded);
+        assert_eq!(fold_catalog("chrh-1296"), folded);
+        assert_eq!(fold_catalog("CHRH1296"), folded);
+        assert_eq!(fold_catalog(" CHRH/1296 "), folded);
         // A different number must not fold onto the same string, which is the half
         // of this that a looser fold would break.
-        assert_ne!(fold_catalogue("CHRH 1297"), folded);
+        assert_ne!(fold_catalog("CHRH 1297"), folded);
     }
 
     #[test]
@@ -298,13 +298,13 @@ mod tests {
         let mut observed = Observed::new();
         assert!(observed.is_empty());
         observed
-            .add(Source::Discogs, Fact::Catalogue("OTHER 1".into()))
-            .add(Source::Stated, Fact::Catalogue("CHRH 1296".into()))
+            .add(Source::Discogs, Fact::Catalog("OTHER 1".into()))
+            .add(Source::Stated, Fact::Catalog("CHRH 1296".into()))
             .add(Source::Stated, Fact::Album("Vienna".into()));
         assert_eq!(
-            observed.stated(Kind::Catalogue),
-            Some(&Fact::Catalogue("CHRH 1296".into())),
-            "the provider's catalogue number is not what the person said"
+            observed.stated(Kind::Catalog),
+            Some(&Fact::Catalog("CHRH 1296".into())),
+            "the provider's catalog number is not what the person said"
         );
         assert_eq!(observed.stated(Kind::Year), None);
         assert_eq!(observed.items().len(), 3);

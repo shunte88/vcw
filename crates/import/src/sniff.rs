@@ -74,7 +74,7 @@ impl Version {
     /// than refused: the patch digits moved between the corpus AUP3s
     /// (`3.7.0.0`) and their conversions (`4.0.0.1`) without the document
     /// grammar changing at all. A new *minor* is refused, because that is the
-    /// axis the one known format change travelled on.
+    /// axis the one known format change traveled on.
     fn of(user_version: u32) -> Option<Self> {
         match (user_version >> 24, (user_version >> 16) & 0xFF) {
             (3, 7) => Some(Self::Aup3),

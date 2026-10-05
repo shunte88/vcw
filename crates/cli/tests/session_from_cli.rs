@@ -40,7 +40,7 @@
 //! "drivable from a Rust program that happens to have no window".
 //!
 //! So the subject is the shipped `vcw` binary, given a script, and the evidence
-//! is what lands in the project afterwards: a finalised capture, of about the
+//! is what lands in the project afterwards: a finalized capture, of about the
 //! length the script asked for, that validates with every checksum recomputed.
 
 use std::io::Write;
@@ -194,7 +194,7 @@ fn a_session_can_be_typed_one_verb_at_a_time() {
             .write_all(b"# side one\narm\n\nrecord\nsleep 0.5\nstop\n")
             .expect("write");
     }
-    // No `quit`: end of input ends the session, and it must finalise rather
+    // No `quit`: end of input ends the session, and it must finalize rather
     // than abandon what it has.
     let out = child.wait_with_output().expect("wait");
     let transcript = String::from_utf8_lossy(&out.stdout);
@@ -205,7 +205,7 @@ fn a_session_can_be_typed_one_verb_at_a_time() {
     assert!(record.frames > 0, "nothing was recorded:\n{transcript}");
 }
 
-/// End of input finalises a capture nobody stopped.
+/// End of input finalizes a capture nobody stopped.
 #[test]
 fn a_script_that_forgets_to_stop_still_keeps_its_audio() {
     let _alone = alone();
@@ -218,7 +218,7 @@ fn a_script_that_forgets_to_stop_still_keeps_its_audio() {
     assert_eq!(
         record.state,
         CaptureState::Finalised,
-        "a shutdown must finalise the side, not abandon it:\n{transcript}"
+        "a shutdown must finalize the side, not abandon it:\n{transcript}"
     );
     assert!(record.frames > 0, "{transcript}");
 }
@@ -344,13 +344,13 @@ fn the_meters_are_quiet_unless_asked_for_and_measured_when_they_are() {
 
 /// What the operator says about their preamp reaches the capture row.
 ///
-/// §51 records the equalisation the signal already carried, and the only thing
+/// §51 records the equalization the signal already carried, and the only thing
 /// that knows it is the person who wired the turntable up. It cannot be measured
 /// from the audio afterwards, so the flag is the whole mechanism - and a flag
 /// that is accepted and dropped would be worse than no flag, because the project
 /// would then claim 'unknown' about a capture somebody described.
 #[test]
-fn the_operator_can_state_the_equalisation_and_it_is_what_the_project_keeps() {
+fn the_operator_can_state_the_equalization_and_it_is_what_the_project_keeps() {
     let _alone = alone();
     for (flag, expected) in [
         ("flat", CaptureEq::Flat),

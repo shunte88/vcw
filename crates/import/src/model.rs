@@ -284,7 +284,7 @@ pub struct Track {
     pub sample_format: SampleFormat,
     /// Playback gain, `1.0` being unity.
     pub gain: f64,
-    /// Pan, `0.0` being centre.
+    /// Pan, `0.0` being center.
     pub pan: f64,
     /// Whether the track is muted.
     pub muted: bool,
@@ -329,7 +329,7 @@ pub struct Label {
 /// One `labeltrack`.
 ///
 /// **In AUP4 a `labeltrack` carries `wavetrack`'s whole attribute set** - gain,
-/// colour index, spectrogram parameters and all - so it must be recognised by
+/// color index, spectrogram parameters and all - so it must be recognized by
 /// its element name and never by which attributes it has.
 #[derive(Clone, Debug)]
 pub struct LabelTrack {
@@ -684,7 +684,7 @@ impl Reader<'_> {
     fn drain(&mut self, attrs: &mut Attrs) {
         while let Some(child) = self.child(attrs) {
             // An element we expected to be a leaf has a child. Skipping it keeps
-            // the cursor synchronised, which is the only thing that matters
+            // the cursor synchronized, which is the only thing that matters
             // here; the attributes we came for are already collected.
             let _ = child;
             self.skip();
@@ -1117,7 +1117,7 @@ mod tests {
     }
 
     #[test]
-    fn a_labeltrack_is_recognised_by_its_name_and_not_by_its_attributes() {
+    fn a_labeltrack_is_recognized_by_its_name_and_not_by_its_attributes() {
         // In AUP4 a labeltrack carries wavetrack's whole attribute set - gain,
         // rate, sampleformat and all - so a reader that sniffed attributes would
         // build a silent audio track out of the user's track boundaries.

@@ -70,7 +70,7 @@ export function bytes(count: number): string {
  * Date only, not a time: the column exists so somebody can find the rip they
  * made last Tuesday, and a minute field makes the column wide for precision
  * nobody is looking for. Zero is spelled rather than printed, because
- * `summarise` uses it for a file whose metadata would not read, and 1970 in a
+ * `summarize` uses it for a file whose metadata would not read, and 1970 in a
  * library of vinyl rips reads as a bug.
  */
 export function when(unix: number): string {

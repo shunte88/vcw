@@ -45,7 +45,7 @@
 //! how a capture ends up silently resampled:
 //!
 //! 1. [`devices::enumerate`] lists what is present, keyed by a stable id and
-//!    labelled with what sits between the application and the converter.
+//!    labeled with what sits between the application and the converter.
 //! 2. [`probe::Matrix`] reduces a device's advertisements to the configurations
 //!    §8 cares about, and [`probe::confirm`] turns an advertisement into a fact by
 //!    opening the device.

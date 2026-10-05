@@ -38,9 +38,9 @@
 //! # Why the verdict is three-way
 //!
 //! Silent is not a small disagreement, it is a different thing entirely. MusicBrainz
-//! very often has no catalogue number; a release that *has none* is merely unsupported
+//! very often has no catalog number; a release that *has none* is merely unsupported
 //! by the number on somebody's sleeve, while a release that has a *different* one is
-//! contradicted and should lose to a candidate with less evidence in its favour. Fold
+//! contradicted and should lose to a candidate with less evidence in its favor. Fold
 //! those two into "did not match" and the better-documented database loses every time
 //! it is honest about a mismatch.
 
@@ -48,14 +48,14 @@ use std::time::Duration;
 
 use vcw_metadata::release::{Candidate as Found, Release};
 
-use crate::evidence::{Fact, Item, Kind, Observed, Source, fold_catalogue, fold_text};
+use crate::evidence::{Fact, Item, Kind, Observed, Source, fold_catalog, fold_text};
 
 /// How much two durations may differ and still be the same side.
 ///
-/// A side's audio is not the sum of its catalogued track lengths: there is a lead-in,
-/// run-out and a gap between every track, and the catalogued lengths themselves are
+/// A side's audio is not the sum of its cataloged track lengths: there is a lead-in,
+/// run-out and a gap between every track, and the cataloged lengths themselves are
 /// the master's rather than the groove's. Measured across a real double LP, confirmed
-/// track starts sat 2 to 10 s past their catalogued cumulative position, so a minute
+/// track starts sat 2 to 10 s past their cataloged cumulative position, so a minute
 /// and a half of slack over a whole side is loose enough not to reject a correct
 /// release and tight enough to reject a single LP offered for a double's capture.
 pub const SIDE_SLACK: Duration = Duration::from_secs(90);
@@ -74,7 +74,7 @@ pub struct Claim {
     pub artist: String,
     /// The release title.
     pub album: String,
-    /// The catalogue number, empty when the provider has none.
+    /// The catalog number, empty when the provider has none.
     pub catalog: String,
     /// The label, empty when the provider has none.
     pub label: String,
@@ -223,10 +223,10 @@ fn verdict(claim: &Claim, item: &Item) -> Verdict {
     match &item.fact {
         Fact::Artist(name) => text(&claim.artist, name),
         Fact::Album(title) => text(&claim.album, title),
-        Fact::Catalogue(number) => {
+        Fact::Catalog(number) => {
             if claim.catalog.is_empty() {
                 Verdict::Silent
-            } else if fold_catalogue(&claim.catalog) == fold_catalogue(number) {
+            } else if fold_catalog(&claim.catalog) == fold_catalog(number) {
                 Verdict::Agrees
             } else {
                 Verdict::Disagrees
@@ -311,17 +311,17 @@ mod tests {
     }
 
     #[test]
-    fn a_catalogue_number_agrees_through_a_difference_of_spelling() {
+    fn a_catalog_number_agrees_through_a_difference_of_spelling() {
         let mut observed = Observed::new();
-        observed.add(Source::Stated, Fact::Catalogue("CHRH 1296".into()));
+        observed.add(Source::Stated, Fact::Catalog("CHRH 1296".into()));
         let assessed = assess(vienna(), &observed);
         assert_eq!(assessed.agreements[0].verdict, Verdict::Agrees);
     }
 
     #[test]
-    fn a_release_with_no_catalogue_number_is_silent_and_not_wrong() {
+    fn a_release_with_no_catalog_number_is_silent_and_not_wrong() {
         let mut observed = Observed::new();
-        observed.add(Source::Stated, Fact::Catalogue("CHRH 1296".into()));
+        observed.add(Source::Stated, Fact::Catalog("CHRH 1296".into()));
         let mut claim = vienna();
         claim.catalog = String::new();
         let assessed = assess(claim, &observed);
@@ -330,13 +330,13 @@ mod tests {
     }
 
     #[test]
-    fn a_different_catalogue_number_contradicts_the_person_who_read_it() {
+    fn a_different_catalog_number_contradicts_the_person_who_read_it() {
         let mut observed = Observed::new();
-        observed.add(Source::Stated, Fact::Catalogue("CHRH 1297".into()));
+        observed.add(Source::Stated, Fact::Catalog("CHRH 1297".into()));
         let assessed = assess(vienna(), &observed);
         assert_eq!(assessed.agreements[0].verdict, Verdict::Disagrees);
         assert!(assessed.contradicts_a_person());
-        assert_eq!(contradicted(&assessed), vec![Kind::Catalogue]);
+        assert_eq!(contradicted(&assessed), vec![Kind::Catalog]);
     }
 
     #[test]

@@ -11,7 +11,7 @@
 
 // The stylesheet is written in `rem`, so the whole window is one number: the
 // root font size. 13px is right on a 1080p or a scaled 4K desktop and is a
-// third of a millimetre of letter on an unscaled one, which is what a 4K panel
+// third of a millimeter of letter on an unscaled one, which is what a 4K panel
 // at DPR 1 gives you - the window is correct, legible through a magnifying
 // glass, and nothing in the application could change it.
 //

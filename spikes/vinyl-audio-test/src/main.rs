@@ -32,9 +32,9 @@
 
 //! `vinyl-audio-test` - spike S1, the utility REQUIREMENTS §47 asks for.
 //!
-//! Twelve behaviours, and which subcommand covers each:
+//! Twelve behaviors, and which subcommand covers each:
 //!
-//! | § | behaviour | where |
+//! | § | behavior | where |
 //! |---|---|---|
 //! | 1 | list devices | `devices` |
 //! | 2 | list supported formats | `devices --verbose`, `formats` |
@@ -615,7 +615,7 @@ fn print_capture(r: &capture::Report) {
         r.format.buffer_size
     );
     if r.format.divergences.is_empty() {
-        println!("                  request honoured exactly");
+        println!("                  request honored exactly");
     } else {
         for d in &r.format.divergences {
             println!("  ! diverged      {d}");

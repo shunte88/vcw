@@ -14,7 +14,7 @@
 # thousands of commits, the WAL over hundreds of checkpoint attempts, and a
 # real album side's worth of file. It used to run on a GitHub runner, where a
 # shared CPU and a shared disk cost it 54 overruns and 25,920 dropped frames
-# and the byte verifier failed it on the neighbours' account. So it runs here,
+# and the byte verifier failed it on the neighbors' account. So it runs here,
 # where nothing else does, and the latency gates stay on because they can.
 #
 # Install on the soak host (not the dev box - see docs/STATUS.md):

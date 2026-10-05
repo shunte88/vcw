@@ -180,7 +180,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     Ok(())
 }
 
-/// Draws columns as characters, centred on zero.
+/// Draws columns as characters, centered on zero.
 ///
 /// Each row is one horizontal slice of the amplitude range. A column is drawn
 /// where its min-to-max span reaches that slice, with a denser character where

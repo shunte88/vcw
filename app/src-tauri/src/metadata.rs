@@ -81,7 +81,7 @@
 //! §28 says a release has artwork and the project has had somewhere to put it
 //! since WP-05, but nothing fetched it: `vcw release artwork` took a file off
 //! disk and the window had no path at all, so accepting a release gave you the
-//! title, the label and the catalogue number and left the cover behind.
+//! title, the label and the catalog number and left the cover behind.
 //! [`select_release`] now downloads the front cover on the same thread as the
 //! release fetch and stores it in the project, where it is part of the
 //! document and gets backed up with it.
@@ -263,7 +263,7 @@ pub(crate) async fn select_release(
 /// contact §39's settings file is allowed to hold.
 ///
 /// Only the contact. A token in a settings file is the thing §39 forbids and
-/// [`vcw_metadata::credentials::Credentials`] is not serialisable so that one
+/// [`vcw_metadata::credentials::Credentials`] is not serializable so that one
 /// cannot arrive there by accident; an address is public by design - it is
 /// sent in a header to every provider on every request - and so it is a
 /// setting like any other.
@@ -289,7 +289,7 @@ fn cache(app: &AppHandle) -> Option<PathBuf> {
 
 /// Which providers to ask: what the request said, narrowed by what §39 allows.
 ///
-/// A request naming a provider the settings have turned off is honoured rather
+/// A request naming a provider the settings have turned off is honored rather
 /// than refused. §39 is a default and a request is specific, and a person who
 /// clicked "ask Discogs" has said what they want more recently than the
 /// settings panel did.
@@ -337,7 +337,7 @@ const fn name(id: ProviderId) -> &'static str {
 ///
 /// §28's "which combinations work" is the provider's knowledge, so nothing here
 /// decides whether a query is a *good* one. An empty query is refused, because
-/// asking a provider for everything it has is not a search - that judgement is
+/// asking a provider for everything it has is not a search - that judgment is
 /// [`Query::is_empty`]'s, not this function's.
 fn query(search: &Search) -> Result<Query, Error> {
     let mut query = Query::new().vinyl_only(true);
@@ -356,7 +356,7 @@ fn query(search: &Search) -> Result<Query, Error> {
     if query.is_empty() {
         return Err(Error::Invalid {
             field: "artist".to_owned(),
-            why: "give at least one of an artist, an album, a catalogue number or a barcode"
+            why: "give at least one of an artist, an album, a catalog number or a barcode"
                 .to_owned(),
         });
     }

@@ -130,7 +130,7 @@ pub struct Tags {
     pub country: String,
     /// Record label.
     pub label: String,
-    /// Catalogue number.
+    /// Catalog number.
     pub catalog: String,
     /// Barcode, where the pressing has one.
     pub barcode: String,

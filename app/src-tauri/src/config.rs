@@ -206,7 +206,7 @@ pub(crate) fn new_project(app: AppHandle, seed: NewProject) -> Result<ProjectRow
         project.close()?;
     }
 
-    Ok(browse::summarise(&path))
+    Ok(browse::summarize(&path))
 }
 
 /// Opens the library's own directory, or nothing when none is set.
@@ -343,10 +343,10 @@ fn save(app: &AppHandle, settings: &Settings) -> Result<(), Error> {
 ///
 /// In order of preference: what the person typed, then the sleeve, then the
 /// date. A name is derived here rather than in the frontend because it is a
-/// decision - and because the sanitiser it has to go through is
-/// [`vcw_export::naming::sanitise`], which already knows about the nine
+/// decision - and because the sanitizer it has to go through is
+/// [`vcw_export::naming::sanitize`], which already knows about the nine
 /// characters Windows forbids, control characters in a badly encoded tag, and
-/// that `AUX` is a file nobody can create. A second sanitiser in TypeScript
+/// that `AUX` is a file nobody can create. A second sanitizer in TypeScript
 /// would be a second answer.
 fn file_name(seed: &NewProject) -> String {
     let typed = seed
@@ -355,7 +355,7 @@ fn file_name(seed: &NewProject) -> String {
         .map(str::trim)
         .filter(|s| !s.is_empty());
     if let Some(name) = typed {
-        return vcw_export::naming::sanitise(name);
+        return vcw_export::naming::sanitize(name);
     }
 
     let parts: Vec<&str> = [
@@ -375,7 +375,7 @@ fn file_name(seed: &NewProject) -> String {
         // anyway once one is filled in.
         return format!("Untitled {}", stamp());
     }
-    vcw_export::naming::sanitise(&parts.join(" - "))
+    vcw_export::naming::sanitize(&parts.join(" - "))
 }
 
 /// Today, as `YYYY-MM-DD-HHMMSS`.
@@ -469,7 +469,7 @@ mod tests {
         );
     }
 
-    /// The name goes through the export sanitiser, so a slash off a sleeve is
+    /// The name goes through the export sanitizer, so a slash off a sleeve is
     /// one file and not two directories.
     #[test]
     fn a_slash_does_not_become_a_directory() {

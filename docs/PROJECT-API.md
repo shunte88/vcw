@@ -85,7 +85,7 @@ if !report.is_clean() {
 * **`integrity_check`** is SQLite's own. Run both: they see different faults.
   `integrity_check` finds a torn page and **cannot** find a corrupted sample
   blob, because a wrong byte inside a BLOB is still a valid BLOB. That division
-  of labour is the entire reason the `checksum` column exists.
+  of labor is the entire reason the `checksum` column exists.
 * **`Finding::code`** is stable and meant to be matched on. `Finding::detail` is
   for a person and is not.
 

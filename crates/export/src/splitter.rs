@@ -601,7 +601,7 @@ fn cover(conn: &Connection, request: &Request) -> Result<Option<Cover>> {
 
 /// A file extension for an image, from what the project sniffed.
 ///
-/// `jpg` for anything unrecognised, because that is what a cover downloaded from
+/// `jpg` for anything unrecognized, because that is what a cover downloaded from
 /// a provider almost always is and a folder image with the wrong extension is
 /// still shown by every file manager that looks at the bytes.
 fn extension(mime: &str) -> &'static str {

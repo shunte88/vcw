@@ -110,8 +110,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-targets
 
-  # D7: licence drift is the failure mode this catches. Advisories too, but those
-  # are the reason everyone installs it and licences are the reason we did.
+  # D7: license drift is the failure mode this catches. Advisories too, but those
+  # are the reason everyone installs it and licenses are the reason we did.
   deny:
     name: cargo deny
     runs-on: ubuntu-latest
@@ -212,7 +212,7 @@ jobs:
         working-directory: app/ui
       # `tauri-build` refuses to run at all while `bundle.externalBin` names a
       # file that is not there, and WP-19 made it name the CLI. The sidecar is a
-      # *packaging* artefact: `tools/stage-cli.sh` builds the real one in the
+      # *packaging* artifact: `tools/stage-cli.sh` builds the real one in the
       # `package` job, which is the job that fails if staging breaks. Checking
       # and testing the shell needs the path to exist, not the binary to work -
       # nothing here executes it - so a placeholder is what this job wants
@@ -220,7 +220,7 @@ jobs:
       #
       # This is also why the local gate was green while this job was red: the
       # dev box had a real staged sidecar left over from a package build, so the
-      # `appclippy` and `apptest` legs passed on an untracked artefact that no
+      # `appclippy` and `apptest` legs passed on an untracked artifact that no
       # fresh clone has. `gate.sh` now writes the same placeholder.
       - name: Placeholder for the CLI sidecar
         run: |
@@ -277,7 +277,7 @@ jobs:
           workspaces: spikes
       # `tauri::generate_context!` resolves frontendDist at compile time and
       # panics if the directory is absent. The spike's `dist/` is a build
-      # artefact and gitignored, so it exists on the machine that built it and
+      # artifact and gitignored, so it exists on the machine that built it and
       # nowhere else - which is why this job has never passed on a clean
       # checkout. A placeholder is enough: nothing here runs the window.
       - name: Give the IPC spike a frontendDist to point at
@@ -293,7 +293,7 @@ jobs:
   #
   # The long leg never did: a hosted runner shares its CPU and its disk, and
   # the one time it ran it dropped 25,920 frames and failed the byte verifier
-  # on the neighbours' account rather than on ours. The short leg did, on every
+  # on the neighbors' account rather than on ours. The short leg did, on every
   # push, for up to thirty minutes of runner time - and it was measuring the
   # same shared machine, so it could gate loss but never latency.
   #

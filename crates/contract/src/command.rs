@@ -89,7 +89,7 @@ impl Invalid {
 
 /// A command with no payload: every transport verb except arming.
 ///
-/// Serialised as a bare string, so `invoke("transport", { verb: "pause" })`
+/// Serialized as a bare string, so `invoke("transport", { verb: "pause" })`
 /// rather than an object wrapping one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "kebab-case")]
@@ -102,7 +102,7 @@ pub enum Transport {
     Pause,
     /// Begin committing again. `Paused -> Recording`.
     Resume,
-    /// Finalise the capture. The project stays open, per §11.
+    /// Finalize the capture. The project stays open, per §11.
     Stop,
     /// Release the finished capture and return to rest. `Stopped -> Idle`.
     Reset,
@@ -156,7 +156,7 @@ pub struct Arm {
     pub mode: Option<String>,
     /// Ring capacity in milliseconds. `null` takes §10's default.
     pub ring_millis: Option<u32>,
-    /// What equalisation the hardware upstream already applied (§51): `flat`,
+    /// What equalization the hardware upstream already applied (§51): `flat`,
     /// `riaa` or `unknown`. `null` means unknown, which is what it stays until
     /// somebody says otherwise.
     pub eq: Option<String>,
@@ -193,7 +193,7 @@ impl TryFrom<Arm> for Setup {
                 Invalid::new(
                     "eq",
                     format!(
-                        "{text:?} is not an equalisation provenance; use flat, riaa or unknown"
+                        "{text:?} is not an equalization provenance; use flat, riaa or unknown"
                     ),
                 )
             })?,
@@ -214,7 +214,7 @@ impl TryFrom<Arm> for Setup {
 /// A playback verb (§21).
 ///
 /// Separate from [`Transport`], which is the capture transport, because the two
-/// vocabularies only look alike. `stop` on a capture finalises audio that
+/// vocabularies only look alike. `stop` on a capture finalizes audio that
 /// cannot be recorded again; `stop` on an audition closes a device. A frontend
 /// that shared one enum between them would be one typo away from the worst
 /// possible confusion.
@@ -454,7 +454,7 @@ impl Region {
 /// What to ask a metadata provider for (§28).
 ///
 /// Every field is optional and at least one must be filled in, which the
-/// provider decides rather than this type: a catalogue number alone is a better
+/// provider decides rather than this type: a catalog number alone is a better
 /// query than an artist alone, and which combinations work is knowledge that
 /// belongs in `vcw-metadata`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -464,7 +464,7 @@ pub struct Search {
     pub artist: Option<String>,
     /// Album title.
     pub album: Option<String>,
-    /// Catalogue number, which is what identifies a pressing.
+    /// Catalog number, which is what identifies a pressing.
     pub catalog: Option<String>,
     /// Barcode.
     pub barcode: Option<String>,
@@ -626,7 +626,7 @@ impl Export {
 ///
 /// Every field optional, because that is what makes it a helper rather than a
 /// form. A person putting a record on the platter knows the artist, the title
-/// and the catalogue number off the sleeve, and typing them once here is
+/// and the catalog number off the sleeve, and typing them once here is
 /// cheaper than correcting what a provider guessed later - but a project with
 /// none of them is perfectly valid, and identification fills the gaps.
 ///
@@ -641,7 +641,7 @@ impl Export {
 /// lookup: skip them and identification finds them anyway. `isMono` and
 /// `riaaEq` are not findable by anything. A mono groove transferred with a
 /// stereo cartridge gives two channels that are nearly identical and never
-/// exactly so, and no equalisation curve is recoverable from the audio it was
+/// exactly so, and no equalization curve is recoverable from the audio it was
 /// applied to - which is why §51 requires the capture's own provenance to be
 /// recorded from the first release that can capture at all. They are `bool`
 /// rather than `Option<bool>` because the prompt is a pair of boxes and an
@@ -655,7 +655,7 @@ pub struct NewProject {
     pub artist: Option<String>,
     /// Release title.
     pub album: Option<String>,
-    /// Catalogue number, which is what actually identifies a pressing (§32).
+    /// Catalog number, which is what actually identifies a pressing (§32).
     pub catalog: Option<String>,
     /// Whether this is a mono pressing. Folded to one channel on export only.
     pub is_mono: bool,
@@ -688,7 +688,7 @@ pub struct Placement {
 /// Delete a boundary (§31).
 ///
 /// Separate from [`Marker`] rather than a `to: null` on it, because deleting a
-/// boundary and moving one fail differently: a move is refused by a neighbour,
+/// boundary and moving one fail differently: a move is refused by a neighbor,
 /// and a delete is refused by the track that is using it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

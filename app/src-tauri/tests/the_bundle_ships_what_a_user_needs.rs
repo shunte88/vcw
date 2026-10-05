@@ -88,8 +88,8 @@ fn every_file_the_bundle_names_is_where_it_says() {
         );
     }
 
-    let licence = beside_config(bundle["licenseFile"].as_str().expect("a licenseFile"));
-    assert!(licence.is_file(), "bundle.licenseFile points at nothing");
+    let license = beside_config(bundle["licenseFile"].as_str().expect("a licenseFile"));
+    assert!(license.is_file(), "bundle.licenseFile points at nothing");
 
     for (installed, source) in bundle["linux"]["deb"]["files"]
         .as_object()

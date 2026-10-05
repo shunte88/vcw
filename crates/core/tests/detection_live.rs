@@ -410,7 +410,7 @@ fn a_confirmed_boundary_is_not_moved_by_the_refine_pass() {
     let (path, capture_id) = recorded(&dir, "locked.vcw", &side(&plan));
 
     // Slightly off where the detectors would put it, and inside their tolerance,
-    // so the only way it stays put is if §24 is honoured.
+    // so the only way it stays put is if §24 is honored.
     let at = (3.1 * f64::from(RATE.hz())) as u64;
     let confirmed = vcw_types::BoundaryObservation::new(at, Edge::End, 1.0, Provenance::User);
 

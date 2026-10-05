@@ -98,7 +98,7 @@ fn musicbrainz_still_answers_the_captured_search() {
     );
     assert!(
         found.iter().any(|c| c.catalog == "WARPLP25"),
-        "and the catalogue number that identifies it"
+        "and the catalog number that identifies it"
     );
 }
 
@@ -200,7 +200,7 @@ fn the_cover_art_archive_url_convention_still_holds() {
 
 #[test]
 #[ignore = "talks to api.discogs.com and needs VCW_DISCOGS_TOKEN"]
-fn discogs_still_answers_a_catalogue_number_search() {
+fn discogs_still_answers_a_catalog_number_search() {
     let Some(token) = discogs_token() else {
         eprintln!("skipped: VCW_DISCOGS_TOKEN is not set");
         return;
@@ -211,10 +211,7 @@ fn discogs_still_answers_a_catalogue_number_search() {
     let found = provider
         .search(&Query::new().catalog("WARPLP25").limit(25), &Cancel::new())
         .expect("a search");
-    assert!(
-        !found.is_empty(),
-        "a catalogue number should find a pressing"
-    );
+    assert!(!found.is_empty(), "a catalog number should find a pressing");
     assert!(
         found
             .iter()

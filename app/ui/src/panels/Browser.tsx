@@ -15,7 +15,7 @@
 // prints the same columns from the same view model.
 //
 // Two views of the same rows, and the choice is remembered. The list is the
-// one that was here first: a table indexed by catalogue number and artist,
+// one that was here first: a table indexed by catalog number and artist,
 // with the cover riding beside the text at the height of one row, because a
 // vinyl library is looked up by what is printed on the label and a column of
 // pictures is not an index.
@@ -32,7 +32,7 @@
 // arrives on the row, 96 peaks of it, out of the `sampleblocks_levels` index.
 //
 // The create form is the helper the requirement asked for and nothing more.
-// Artist, title and catalogue number, none of them required, because the point
+// Artist, title and catalog number, none of them required, because the point
 // is to save typing them again later and a required field would make it a form
 // to fill in rather than a hint to leave. Everything it does not ask for -
 // sides, discs, a numbering scheme - is what identification and detection fill
@@ -151,18 +151,18 @@ function Preview({ peaks }: { peaks: readonly number[] }): React.JSX.Element {
       </span>
     );
   }
-  // Normalised to its own loudest column, which is the one place in VCW that
+  // Normalized to its own loudest column, which is the one place in VCW that
   // scales a waveform without saying so. It is right here because this is an
   // icon and not a meter: nobody reads a level off a 140-pixel thumbnail, and
   // a record cut with headroom - the demo side peaks around a third of full
   // scale - drew a flat blue smear through the middle of its tile that told
   // you nothing about which record it was. Scaled, the shape is the thing you
-  // recognise. The real waveform, where the number matters, is untouched.
+  // recognize. The real waveform, where the number matters, is untouched.
   const loudest = Math.max(...peaks);
   const scale = loudest > 0 ? 1 / loudest : 0;
   const height = (column: number) => peaks[column]! * scale;
 
-  // One filled shape, mirrored about the centre line: out along the top, back
+  // One filled shape, mirrored about the center line: out along the top, back
   // along the bottom, closed. Drawn as an area and not as a polyline because a
   // 1-pixel stroke at this scale disappears into the background on the quiet
   // passages, and the quiet passages are where the sides are.
@@ -331,7 +331,7 @@ export function Browser({
 
   // Keeps the selected row on screen, so arrowing down a long library does not
   // walk the selection out of the viewport. `nearest` rather than `center`:
-  // a list that re-centres on every press is a list that will not sit still.
+  // a list that re-centers on every press is a list that will not sit still.
   const show = useCallback((row: HTMLElement | null) => {
     row?.scrollIntoView({ block: "nearest" });
   }, []);
@@ -480,7 +480,7 @@ export function Browser({
             />
           </label>
           <label>
-            Catalogue number
+            Catalog number
             <input
               value={seed.catalog}
               onChange={(event) =>
@@ -490,7 +490,7 @@ export function Browser({
           </label>
           {/*
             A group of its own, because these two are not fields of the
-            project the way the artist and the catalogue number are: they are
+            project the way the artist and the catalog number are: they are
             what VCW will do to the audio afterwards, and the note that says
             so belongs above them rather than after the fact. A person reading
             downwards should know the switches are harmless before they touch
@@ -514,7 +514,7 @@ export function Browser({
               />
             </div>
             <div className="seed-switch">
-              <span>Equalisation</span>
+              <span>Equalization</span>
               <Switch
                 checked={seed.riaaEq}
                 onChange={(riaa) => setSeed({ ...seed, riaaEq: riaa })}
@@ -529,12 +529,12 @@ export function Browser({
                 decision just taken and not a standing caveat. There is no safe
                 default here and VCW cannot work the answer out: a phono stage
                 and a head amp both normally apply the curve themselves, and a
-                record equalised twice sounds wrong in a way that is hard to
+                record equalized twice sounds wrong in a way that is hard to
                 name and impossible to undo after the fact.
               */
               <p className="hint warn">
                 Most phono stages and head amps apply the RIAA curve themselves.
-                If yours did, applying it again here equalises the record twice.
+                If yours did, applying it again here equalizes the record twice.
                 Nothing in the signal reaching VCW says which happened, so this
                 one is your call: switch it on only if the capture arrives flat,
                 and leave it off if anything upstream has already curved it.
@@ -610,7 +610,7 @@ export function Browser({
               <th className="art" />
               <th>Album</th>
               <th>Artist</th>
-              <th>Catalogue</th>
+              <th>Catalog</th>
               <th className="n">Sides</th>
               <th className="n">Tracks</th>
               <th className="n">Length</th>
@@ -643,8 +643,8 @@ export function Browser({
                   <td className="n">{when(project.modified)}</td>
                 </tr>
                 {/*
-                  On the row, not in a tooltip. `browse::summarise` promises
-                  "the row a browser draws greyed out with a reason beside
+                  On the row, not in a tooltip. `browse::summarize` promises
+                  "the row a browser draws grayed out with a reason beside
                   it", and until WP-16a the reason was a `title=` attribute -
                   so first light showed an amber row of zeros against a file
                   holding twenty seconds of audio and said nothing about why.

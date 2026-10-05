@@ -250,21 +250,21 @@ pub use vcw_types::Summary;
 
 /// Builds one level of the waveform pyramid: a triplet per `stride` samples.
 ///
-/// The last group is summarised over the samples it actually has, and no
+/// The last group is summarized over the samples it actually has, and no
 /// triplet is emitted for a group with none.
 ///
 /// # Divergence from Audacity, measured 2026-09-25
 ///
 /// Audacity does two things here that we deliberately do not. It sizes the
 /// arrays for the block's *capacity* and pads the unused tail with
-/// `(FLT_MAX, -FLT_MAX, 0)`, which is an artefact of a fixed maximum block size
+/// `(FLT_MAX, -FLT_MAX, 0)`, which is an artifact of a fixed maximum block size
 /// that we have no equivalent of. And it builds the 64k level from the 256 level
 /// by weighting every group as if it held a full 256 samples, then dividing by
 /// the true sample count - so its 64k rms is slightly high wherever a block does
 /// not divide evenly by 256. Both were confirmed against
 /// `/data2/vinyl_rips/simples_test.aup3`. We compute each level from the samples
 /// directly, which is the same answer everywhere Audacity's arithmetic is exact
-/// and a more accurate one where it is not. Imported audio is summarised here
+/// and a more accurate one where it is not. Imported audio is summarized here
 /// too, since WP-20 re-blocks it through this writer, and the source project is
 /// never opened for writing - so the divergence is a difference between two
 /// files rather than something either of them has to be made to agree with.
@@ -793,7 +793,7 @@ impl Writer {
         );
     }
 
-    /// Splits one block's interleaved bytes per channel and summarises each.
+    /// Splits one block's interleaved bytes per channel and summarizes each.
     fn prepare(&mut self, raw: Vec<u8>) {
         let started = Instant::now();
         let width = self.format.bytes_per_sample();
@@ -1208,7 +1208,7 @@ pub fn spawn_on<S: PcmSource + 'static>(
                         // that reads the device's final counters has to release
                         // the device to get them - so the result usually arrives
                         // in the moment *after* the ring's writing end is gone.
-                        // Finalising here would race that and record a vanished
+                        // Finalizing here would race that and record a vanished
                         // device as a clean capture. Commit what is held, so the
                         // wait costs nothing that a crash could take, and then
                         // wait for the stop that `Handle::stop` and `Handle::drop`
@@ -1284,7 +1284,7 @@ mod tests {
         Project::create(dir.path().join("writer.vcw")).expect("create")
     }
 
-    /// A recognisable byte stream. Every byte is a function of its own offset,
+    /// A recognizable byte stream. Every byte is a function of its own offset,
     /// so a single wrong byte anywhere identifies where it came from.
     fn pattern(len: usize) -> Vec<u8> {
         (0..len).map(|i| (i % 251) as u8).collect()
@@ -1601,7 +1601,7 @@ mod tests {
     }
 
     #[test]
-    fn a_full_scale_square_wave_summarises_to_plus_and_minus_one() {
+    fn a_full_scale_square_wave_summarizes_to_plus_and_minus_one() {
         // A value we can check by hand, in the format the corpus work showed is
         // easiest to get wrong: padded 24-bit is not left-justified.
         let mut samples = Vec::new();
@@ -1629,7 +1629,7 @@ mod tests {
     }
 
     #[test]
-    fn a_short_final_group_is_summarised_over_what_it_holds() {
+    fn a_short_final_group_is_summarized_over_what_it_holds() {
         // Audacity's 64k rms weights every group as a full 256 and is slightly
         // high on a short tail. Ours uses the true count, and this pins that.
         let format = StorageFormat::Int16;

@@ -44,9 +44,9 @@
 //! [`state::Step`](crate::state::Step) carries the deck to arm with, because
 //! the state machine has to be handed the thing it will drive. A `Command` must
 //! not: it crosses a process boundary in the Tauri shell (WP-15), and a live
-//! audio device is not something a UI can serialise and send. So [`Command`]
+//! audio device is not something a UI can serialize and send. So [`Command`]
 //! carries a *description* of what to open - a [`Setup`] - and the engine turns
-//! it into a deck on its own thread. That is not only a serialisation
+//! it into a deck on its own thread. That is not only a serialization
 //! convenience: a `vcw_audio::capture::Capture` is `!Send`, so the thread that
 //! opens it must be the thread that keeps it, and no other arrangement is
 //! possible.
@@ -86,7 +86,7 @@ pub struct Setup {
     pub mode: CaptureMode,
     /// Ring capacity in milliseconds. `None` takes the default from §10.
     pub ring_millis: Option<u32>,
-    /// What equalisation the hardware upstream has already applied (§51).
+    /// What equalization the hardware upstream has already applied (§51).
     ///
     /// Not a request, unlike every field above it: nothing is asked of the
     /// device and nothing can be negotiated. It is the operator telling VCW what
@@ -150,7 +150,7 @@ impl Setup {
         self
     }
 
-    /// States the capture's equalisation provenance (§51).
+    /// States the capture's equalization provenance (§51).
     #[must_use]
     pub const fn eq(mut self, eq: CaptureEq) -> Self {
         self.eq = eq;
@@ -182,7 +182,7 @@ pub enum Command {
     Pause,
     /// Begin committing again. `Paused -> Recording`.
     Resume,
-    /// Finalise the capture. Keeps the project open, per §11.
+    /// Finalize the capture. Keeps the project open, per §11.
     Stop,
     /// Release the finished capture and return to rest. `Stopped -> Idle`.
     Reset,

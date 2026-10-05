@@ -23,6 +23,6 @@ tauri = { version = "2", features = [] }
 # no vite server is up. The tauri CLI adds it for release builds; this spike is
 # driven straight from `cargo` so that the unattended runs need no CLI, so it
 # is on by default here. `--no-default-features` gets the vite-dev-server
-# behaviour back.
+# behavior back.
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

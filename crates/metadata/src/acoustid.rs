@@ -183,7 +183,7 @@ impl AcoustId {
         self.key.is_some()
     }
 
-    /// Whether this provider can reach anything, for greying out a button.
+    /// Whether this provider can reach anything, for graying out a button.
     #[must_use]
     pub fn is_offline(&self) -> bool {
         self.client.is_offline()
@@ -311,7 +311,7 @@ fn check(value: &Value) -> Result<()> {
 ///
 /// A recording can appear under more than one result - two fingerprint clusters of
 /// the same performance - and the highest score wins. VRipr sorted and then called
-/// `dedup_by` on the recording id, which only removes *neighbours*: after a sort by
+/// `dedup_by` on the recording id, which only removes *neighbors*: after a sort by
 /// score the duplicates are nowhere near each other, so they survived and the same
 /// recording was offered twice.
 fn matches(value: &Value) -> Vec<Match> {
@@ -351,7 +351,7 @@ fn recording(value: &Value) -> Recording {
 
 /// The artist credit, joined the way the service presents it.
 ///
-/// `joinphrase` is honoured where the service gives one, so a collaboration reads
+/// `joinphrase` is honored where the service gives one, so a collaboration reads
 /// `Autechre & Hafler Trio` rather than `Autechre, Hafler Trio`. A missing phrase on
 /// anything but the last credit falls back to `, `, which is what AcoustID's own
 /// display does.
@@ -451,7 +451,7 @@ mod tests {
     #[test]
     fn the_meta_separator_survives_form_encoding() {
         // Not the offline transport: `form` reports offline before it builds
-        // anything, which is the behaviour the next test down asserts.
+        // anything, which is the behavior the next test down asserts.
         let form = provider(Arc::new(Recorded::new()))
             .form(&fingerprint())
             .expect("a key and a transport that can reach something");
@@ -590,7 +590,7 @@ mod tests {
     #[test]
     fn the_same_recording_under_two_results_is_offered_once_at_its_best_score() {
         // VRipr sorted by score and then called `dedup_by` on the recording id,
-        // which only removes neighbours: after the sort the duplicates are nowhere
+        // which only removes neighbors: after the sort the duplicates are nowhere
         // near each other, so the same recording was offered twice.
         let body = br#"{"status":"ok","results":[
             {"score":0.4,"recordings":[{"id":"aaa","title":"One"}]},

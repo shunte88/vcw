@@ -262,7 +262,7 @@ impl Response {
 
     /// Whether the credential was missing, wrong or exhausted.
     #[must_use]
-    pub const fn is_unauthorised(&self) -> bool {
+    pub const fn is_unauthorized(&self) -> bool {
         self.status == 401 || self.status == 403
     }
 
@@ -344,7 +344,7 @@ pub trait Transport: fmt::Debug + Send + Sync {
 ///
 /// RFC 3986 unreserved characters pass through and everything else becomes `%XX`,
 /// including the space - `%20` rather than `+`. VRipr used `+`, which is the form
-/// encoding and is only correct in a form body; a `+` in a catalogue number
+/// encoding and is only correct in a form body; a `+` in a catalog number
 /// searched for literally would come back as a space.
 ///
 /// ```
@@ -445,8 +445,8 @@ mod tests {
         assert!(Response::ok("{}").is_success());
         assert!(Response::status(429, "slow down").is_rate_limited());
         assert!(Response::status(503, "").is_server_error());
-        assert!(Response::status(401, "").is_unauthorised());
-        assert!(Response::status(403, "").is_unauthorised());
+        assert!(Response::status(401, "").is_unauthorized());
+        assert!(Response::status(403, "").is_unauthorized());
         assert!(!Response::status(404, "").is_server_error());
     }
 

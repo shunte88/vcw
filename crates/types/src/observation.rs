@@ -455,13 +455,13 @@ mod tests {
             BoundaryObservation::new(48_000, Edge::End, 0.75, Provenance::SpectralChange)
                 .with("flatness", 0.91),
         );
-        let json = serde_json::to_string(&observation).expect("serialise");
+        let json = serde_json::to_string(&observation).expect("serialize");
         assert!(json.contains("\"kind\":\"boundary\""), "{json}");
         assert!(
             json.contains("\"provenance\":\"spectral-change\""),
             "{json}"
         );
-        let back: AudioObservation = serde_json::from_str(&json).expect("deserialise");
+        let back: AudioObservation = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, observation);
     }
 }

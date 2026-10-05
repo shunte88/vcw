@@ -27,9 +27,9 @@ starts from a record in somebody's hand, so project setup asks for what is print
 it:
 
 - the **artist** and the **release title**
-- the **catalogue number** off the label
+- the **catalog number** off the label
 - **mono or stereo**
-- whether **RIAA equalisation** is to be applied on playback and on export
+- whether **RIAA equalization** is to be applied on playback and on export
 
 Four of those five are release identity, stated by a person who is looking at the
 object. That is the strongest evidence in the system and it arrives before the first
@@ -37,13 +37,13 @@ sample does. The resolver's job is therefore *not* to discover what the record i
 the audio. It is to turn a stated identity into a specific pressing, confirm the audio
 is consistent with it, and lay the side out.
 
-The catalogue number is the lever. The schema already says why, in a comment written
+The catalog number is the lever. The schema already says why, in a comment written
 before any of this was measured:
 
-> the catalogue number off the label: the one identifier a vinyl pressing reliably
+> the catalog number off the label: the one identifier a vinyl pressing reliably
 > carries, and the one a person searches by
 
-Artist and title identify a *work*; a catalogue number identifies a *pressing*, which
+Artist and title identify a *work*; a catalog number identifies a *pressing*, which
 is what §28 asks VCW to tell apart and what decides the track list, the side topology
 and the durations.
 
@@ -51,11 +51,11 @@ and the durations.
 
 Cheapest and most reliable first. Each step is skipped if the step before it answered.
 
-1. **Discogs by catalogue number.** An exact `catno` match on a vinyl release is
+1. **Discogs by catalog number.** An exact `catno` match on a vinyl release is
    near-conclusive: it names the pressing, and with it the track list, the per-side
    topology and the durations. Discogs is first because its vinyl coverage, pressing
-   granularity and catalogue-number indexing are all better than MusicBrainz's.
-2. **Discogs by artist and title**, where no catalogue number was given or none
+   granularity and catalog-number indexing are all better than MusicBrainz's.
+2. **Discogs by artist and title**, where no catalog number was given or none
    matched. Resolves the work, leaves the pressing open, and several candidates is a
    normal and useful outcome at this stage.
 3. **MusicBrainz by the same two fields.** Not a duplicate of step 2: MusicBrainz is
@@ -81,7 +81,7 @@ reasons, all measured:
 Not discovery. Two jobs, both of which need a track list to already exist:
 
 **Confirmation.** Does this audio actually contain the record the person said it is? One
-probe against the first track's catalogued duration answers it, and a release that was
+probe against the first track's cataloged duration answers it, and a release that was
 chosen from three Discogs candidates can be confirmed or eliminated by one request.
 
 **Layout.** A confirmed track start is a boundary, and §24 already lists **metadata
@@ -106,7 +106,7 @@ median, `2` gives a single 134 s region spanning all three tracks, and `3` gives
 from between-track grooves to a silence detector. That is not a tuning oversight, it is
 why §24 lists seven sources.
 
-So the resolver is one of the detectors, and the catalogued durations are what it
+So the resolver is one of the detectors, and the cataloged durations are what it
 detects with.
 
 ## The four numbers the audio path turns on
@@ -133,9 +133,9 @@ in *fingerprint* terms. AcoustID's index lookup is not a BER comparison.
 
 ### Where a track actually starts
 
-The offset of a confirmed start from its catalogued cumulative position is **small and
+The offset of a confirmed start from its cataloged cumulative position is **small and
 does not accumulate**. Measured across a 17-track double LP: 2, 4, 6, 8, 10 s, with no
-trend. Pressed durations match catalogued ones closely and the gaps are absorbed.
+trend. Pressed durations match cataloged ones closely and the gaps are absorbed.
 
 Two consequences, both learned the hard way:
 
@@ -166,25 +166,25 @@ wrong identification traces back to the evidence that caused it instead of vanis
 into one opaque number.
 
 **`evidence`** - a flat list of facts, each with its source. A fact is a statement
-about the record (`Artist`, `Album`, `Catalogue`, `Label`, `Year`, `TrackCount`,
+about the record (`Artist`, `Album`, `Catalog`, `Label`, `Year`, `TrackCount`,
 `SideSeconds`, `Channels`) or about the audio (`Recording { id, score, at }`). A source
 is where it came from: stated by a person, a provider, or the signal. Nothing here
 scores anything.
 
 **`candidate`** - a release from a provider, plus how it accounts for each fact:
 agrees, disagrees, or is silent. The three-way verdict is load-bearing. A release that
-is *silent* on the catalogue number is merely unsupported; one that *disagrees* about
+is *silent* on the catalog number is merely unsupported; one that *disagrees* about
 the track count is contradicted, and must be able to lose to a candidate with less
 support rather than more.
 
 **`confidence`** - the weights, and the thresholds below which the application asks
-rather than asserts. Stated facts outweigh provider agreement; an exact catalogue match
+rather than asserts. Stated facts outweigh provider agreement; an exact catalog match
 outweighs an artist-and-title match; identifications accumulate, because §26 says
 "multiple identified tracks may constrain the likely release".
 
 **`resolver`** - picks one, or declines to. Three outcomes and no fourth: resolved with
 its reasons, ask the person with a ranked shortlist, or nothing found. Declining is a
-first-class result; a wrong release silently written over a typed catalogue number is
+first-class result; a wrong release silently written over a typed catalog number is
 the one failure mode worth designing against.
 
 ## What it writes
@@ -200,14 +200,14 @@ Nothing directly. It emits observations (§23) which existing plumbing consumes:
 The `releases` row already holds everything a resolved release needs - `catalog`,
 `label`, `country`, `musicbrainz_id`, `discogs_id`, `discs`, `numbering` - including the
 `confirmed` flag that §26's rule hangs on. Two setup facts have nowhere to live yet:
-**mono/stereo** and the **playback and export equalisation intent**. `captures.capture_eq`
+**mono/stereo** and the **playback and export equalization intent**. `captures.capture_eq`
 (schema v3) records what a capture *arrived* with, which is the input to that decision
 and not the decision; a schema addition is needed, and is called out here rather than
 smuggled in.
 
 ## Cost, and what bounds it
 
-The main line is one or two HTTP requests for a whole record: a catalogue lookup, and a
+The main line is one or two HTTP requests for a whole record: a catalog lookup, and a
 release fetch for the track list. Confirmation adds one probe per track at most, and
 one probe is one fingerprint plus one request. AcoustID publishes 3 requests per second
 and VCW's limiter runs at 1, so a side is seconds of background work on the main line
@@ -227,7 +227,7 @@ and a minute or two on the audio fallback.
   returned nothing on every track at every position, and `/v2/track/list_by_mbid`
   confirms its recordings have no fingerprints submitted. The resolver must say "not in
   the index" and not "not identified".
-- **Pressing ambiguity without a catalogue number.** Artist and title cannot choose
+- **Pressing ambiguity without a catalog number.** Artist and title cannot choose
   between a 1980 UK pressing and a 2020 reissue with different mastering. Nothing in
   the audio reliably can either. This is a case for asking.
 - **Boundary precision.** A confirmed start is accurate to the probe step, not to the

@@ -33,7 +33,7 @@
 //!
 //! Every refusal names the offset or the attribute at fault. The reason is in
 //! the format: the record stream is self-delimiting, so a reader that guesses a
-//! width for a tag it does not know **desynchronises and produces plausible
+//! width for a tag it does not know **desynchronizes and produces plausible
 //! garbage** rather than stopping. S5 found AUP4's one new record because the
 //! AUP3 grammar refused it by offset and name instead of mis-parsing it.
 

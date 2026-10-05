@@ -257,11 +257,11 @@ fn the_real_migration_set_builds_the_real_schema() {
 /// A project captured before v3 keeps its audio and gains `capture_eq` as 'unknown'.
 ///
 /// §16's promise is that a newer build opens an older project, and §51's is that
-/// the equalisation is never guessed. A row written at v2 by definition says
+/// the equalization is never guessed. A row written at v2 by definition says
 /// nothing about the curve, so the only honest value for it is 'unknown' - and the
 /// column arriving must not touch a byte of what was already there.
 #[test]
-fn an_older_project_gains_the_equalisation_column_as_unknown() {
+fn an_older_project_gains_the_equalization_column_as_unknown() {
     let mut conn = db();
     let upto_v2 = &vcw_project::MIGRATIONS
         .iter()

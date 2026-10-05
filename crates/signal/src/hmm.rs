@@ -134,7 +134,7 @@ const EDGE_WINDOWS: usize = POSTERIOR_RADIUS + 1;
 /// One Gaussian: a mean and a standard deviation that is never allowed to collapse.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Gaussian {
-    /// The centre of the distribution.
+    /// The center of the distribution.
     pub mean: f64,
     /// The spread, floored at construction.
     pub sigma: f64,

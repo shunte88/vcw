@@ -131,7 +131,7 @@ pub struct Candidate {
     pub year: Option<u32>,
     /// The label, first one only when there are several.
     pub label: String,
-    /// Catalogue number, the field that most often identifies one pressing.
+    /// Catalog number, the field that most often identifies one pressing.
     pub catalog: String,
     /// Country of release.
     pub country: String,
@@ -344,11 +344,11 @@ pub struct Release {
     pub album_artist: String,
     /// Release year, when stated.
     pub year: Option<u32>,
-    /// Genres and styles, normalised through the §32 mapping table.
+    /// Genres and styles, normalized through the §32 mapping table.
     pub genres: Vec<String>,
     /// The label, first one only when there are several.
     pub label: String,
-    /// Catalogue number.
+    /// Catalog number.
     pub catalog: String,
     /// Country of release.
     pub country: String,
@@ -490,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn vinyl_is_recognised_however_the_provider_spells_it() {
+    fn vinyl_is_recognized_however_the_provider_spells_it() {
         for format in ["Vinyl", "2 x Vinyl, LP", "12\" Vinyl", "LP", "vinyl"] {
             let medium = Medium {
                 format: format.into(),
@@ -540,7 +540,7 @@ mod tests {
         assert!(ProviderId::AcoustId.needs_credential());
         assert!(
             !ProviderId::MusicBrainz.needs_credential(),
-            "MusicBrainz asks for identification, not authorisation"
+            "MusicBrainz asks for identification, not authorization"
         );
         assert_eq!(ProviderId::MusicBrainz.as_str(), "musicbrainz");
         assert_eq!(ProviderId::MusicBrainz.to_string(), "MusicBrainz");

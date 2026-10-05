@@ -17,7 +17,7 @@
 // by the planner rather than discovered afterwards.
 //
 // Nothing here renders a filename. The template is substituted in `vcw-export`,
-// where the sanitising rules live, because a path this panel composed and a
+// where the sanitizing rules live, because a path this panel composed and a
 // path the writer composed would differ on the first track whose title has a
 // slash in it.
 //
@@ -85,7 +85,7 @@ export function Export({
     overwrite,
   });
 
-  // Cancelling returns null and a cancelled picker must not clear the field: a
+  // Canceling returns null and a canceled picker must not clear the field: a
   // person who opens the dialog to look and changes their mind still has the
   // path they typed. The plan is dropped either way, because a plan resolved
   // against the old directory describes files nobody asked for.

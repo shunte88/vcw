@@ -120,7 +120,7 @@ impl Binary for PositionUpdate {
     }
 }
 
-/// Hand-built compact JSON into a reused buffer - D6's "pre-serialised compact
+/// Hand-built compact JSON into a reused buffer - D6's "pre-serialized compact
 /// payload". Short keys and fixed precision, so it is both smaller than serde's
 /// output and free of per-frame allocation.
 pub trait ManualJson {

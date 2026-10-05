@@ -127,8 +127,8 @@ pub(crate) fn poll(shell: State<'_, Shell>) -> Result<(), Error> {
 
 /// Stops the engine and waits for it.
 ///
-/// Finalises a capture in progress rather than abandoning it - that is
-/// [`Engine::shutdown`]'s behaviour and the reason this is not just a dropped
+/// Finalizes a capture in progress rather than abandoning it - that is
+/// [`Engine::shutdown`]'s behavior and the reason this is not just a dropped
 /// handle: the audio is the part that cannot be recorded again.
 ///
 /// # Errors

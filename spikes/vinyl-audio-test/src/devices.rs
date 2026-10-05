@@ -258,7 +258,7 @@ pub fn find(query: &str, want_input: bool) -> Result<(cpal::Device, String)> {
     anyhow::bail!("{query:?} is ambiguous, matches: {candidates:?} - select by id");
 }
 
-fn labelled(device: cpal::Device) -> (cpal::Device, String) {
+fn labeled(device: cpal::Device) -> (cpal::Device, String) {
     let id = device_id(&device);
     let name = device_name(&device).unwrap_or_else(|_| "<unnamed>".into());
     let label = match &id {
@@ -274,7 +274,7 @@ pub fn default_input() -> Result<(cpal::Device, String)> {
     let device = host
         .default_input_device()
         .ok_or_else(|| anyhow::anyhow!("no default input device on host {:?}", host.id()))?;
-    Ok(labelled(device))
+    Ok(labeled(device))
 }
 
 /// The default output, for playback.
@@ -283,5 +283,5 @@ pub fn default_output() -> Result<(cpal::Device, String)> {
     let device = host
         .default_output_device()
         .ok_or_else(|| anyhow::anyhow!("no default output device on host {:?}", host.id()))?;
-    Ok(labelled(device))
+    Ok(labeled(device))
 }

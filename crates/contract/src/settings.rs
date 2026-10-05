@@ -42,7 +42,7 @@
 //!
 //! Not from here. Every default in [`Settings::default`] is either `None` -
 //! meaning *let the engine decide, and report what it negotiated* - or a
-//! constant read out of the crate that owns the behaviour:
+//! constant read out of the crate that owns the behavior:
 //! [`vcw_core::adopt::Policy`] for the promotion floor,
 //! [`vcw_export::naming::DEFAULT_TEMPLATE`] for the naming template. A number
 //! typed into this file would be a second opinion about a default, and §2 is
@@ -85,7 +85,7 @@ use ts_rs::TS;
 /// Everything §39 covers.
 ///
 /// `#[serde(default)]` on every group, so a settings file written by an older
-/// version deserialises: a field added here appears with its default rather
+/// version deserializes: a field added here appears with its default rather
 /// than making the whole document unreadable, which would lose a person's
 /// entire configuration over one new checkbox.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
@@ -93,7 +93,7 @@ use ts_rs::TS;
 pub struct Settings {
     /// Input, output, backend, rate, format, buffer size, capture mode.
     pub audio: Audio,
-    /// Default location, transaction and block size, recovery behaviour.
+    /// Default location, transaction and block size, recovery behavior.
     pub recording: Recording,
     /// Algorithm, thresholds, minimum silence, minimum track length.
     pub detection: Detection,
@@ -133,7 +133,7 @@ pub struct Audio {
     pub ring_millis: Option<u32>,
     /// `shared`, `native` or `exclusive` (§8).
     pub mode: Option<String>,
-    /// Equalisation the signal carries when it arrives: `flat`, `riaa` or
+    /// Equalization the signal carries when it arrives: `flat`, `riaa` or
     /// `unknown` (§51). `None` means the same as `unknown`.
     ///
     /// A setting rather than a per-capture field because it describes the
@@ -173,7 +173,7 @@ pub struct Recording {
 /// The defaults are WP-11's findings, and they live in
 /// [`vcw_core::adopt::Policy`]. `min_sources` is the blunt one: 2 turned 270
 /// candidate boundaries into 6 on a real side, which is over-segmentation
-/// honoured and also a rule that will lose a quiet fade on a worn pressing.
+/// honored and also a rule that will lose a quiet fade on a worn pressing.
 /// Exposing it here is the remedy, and so is the track editor being able to
 /// show the boundaries it dropped.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -374,7 +374,7 @@ impl Default for Metadata {
         Self {
             discogs: true,
             musicbrainz: true,
-            // Phase 2 (§45). Declared so the panel can show it greyed out
+            // Phase 2 (§45). Declared so the panel can show it grayed out
             // rather than have the field appear later and surprise a
             // configuration that was already saved.
             acoustid: false,
@@ -493,8 +493,8 @@ mod tests {
         let mut settings = Settings::default();
         settings.recording.library = Some("/data2/vinyl_rips".to_owned());
         settings.audio.rate = Some(192_000);
-        let text = serde_json::to_string(&settings).expect("serialising");
-        let back: Settings = serde_json::from_str(&text).expect("deserialising");
+        let text = serde_json::to_string(&settings).expect("serializing");
+        let back: Settings = serde_json::from_str(&text).expect("deserializing");
         assert_eq!(settings, back);
     }
 
@@ -513,7 +513,7 @@ mod tests {
         assert!(discogs.present);
         assert_eq!(discogs.characters, 16);
 
-        let json = serde_json::to_string(&survey).expect("serialising the survey");
+        let json = serde_json::to_string(&survey).expect("serializing the survey");
         assert!(
             !json.contains("abcdef"),
             "the survey leaked the token: {json}"

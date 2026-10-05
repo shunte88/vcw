@@ -40,7 +40,7 @@
 //! only in name.
 //!
 //! Nothing here writes. A boundary becomes a track in WP-13, and the tracks this
-//! prints are labelled implied for that reason: they are the pairing a UI would
+//! prints are labeled implied for that reason: they are the pairing a UI would
 //! draw, not rows in the project.
 
 use std::path::PathBuf;
@@ -54,9 +54,9 @@ use vcw_types::Edge;
 
 /// Everything the verb was asked to do.
 pub(crate) struct Args {
-    /// Project to analyse.
+    /// Project to analyze.
     pub(crate) project: PathBuf,
-    /// Capture to analyse. `None` takes the most recent.
+    /// Capture to analyze. `None` takes the most recent.
     pub(crate) capture: Option<i64>,
     /// Level a window must reach to count as music, in dBFS.
     pub(crate) threshold_db: Option<f64>,
@@ -335,7 +335,7 @@ mod tests {
             min_sound: Some(4.0),
             ..args()
         });
-        assert!(cfg.adaptive, "--adaptive was not honoured");
+        assert!(cfg.adaptive, "--adaptive was not honored");
         assert!((cfg.threshold_db + 52.0).abs() < f64::EPSILON);
         assert!((cfg.min_silence_secs - 1.5).abs() < f64::EPSILON);
         assert!((cfg.min_sound_secs - 4.0).abs() < f64::EPSILON);

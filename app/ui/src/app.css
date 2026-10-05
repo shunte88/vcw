@@ -28,7 +28,7 @@
 :root {
   color-scheme: dark;
 
-  /* The palette, named for what it is rather than for its colour. */
+  /* The palette, named for what it is rather than for its color. */
   --ground: #14161a;
   --raised: #191c22;
   --sunken: #101216;
@@ -186,7 +186,7 @@ h3 {
   margin: 0;
 }
 
-/* The empty library, which is what a new installation opens on. Centred in
+/* The empty library, which is what a new installation opens on. Centered in
    the panel rather than pinned to the top left, because there is nothing else
    on the screen for it to line up with. The logo is held well under its
    natural size and dimmed a little: it is the backdrop to the sentence, not
@@ -211,7 +211,7 @@ h3 {
   width: 16rem;
 }
 
-/* Which build this is, under the logo. Bold and at the foreground colour,
+/* Which build this is, under the logo. Bold and at the foreground color,
    because the point of putting it on the splash is that it reads from across
    a desk in a screenshot; the dim treatment the rest of this panel's small
    print gets would defeat it. The gap above is tighter than the column's own
@@ -242,7 +242,7 @@ h3 {
 /* A note that is a warning rather than an explanation: the RIAA switch's
    second-curve note, and a naming template with a token that does not exist.
    Both were written as `hint warn` before there was a rule for it, so both
-   were grey. */
+   were gray. */
 .hint.warn {
   color: var(--warn);
 }
@@ -267,7 +267,7 @@ input,
 select,
 textarea {
   /* Without this a tickbox is the platform's accent, which on this theme is a
-     saturated orange-red - the same colour the panel uses for a clip latch and
+     saturated orange-red - the same color the panel uses for a clip latch and
      a locked boundary. Three ticked checkboxes in Metadata read as three
      warnings. */
   accent-color: var(--accent);
@@ -737,7 +737,7 @@ code {
   /* `.stage-pane` pads 0.75rem and sticky offsets are measured from the
      scrollport, which includes that padding, so rows were still visible in the
      band above a stuck header. A zero-blur shadow offset upwards paints that
-     band in the pane's own colour without changing the header's height. */
+     band in the pane's own color without changing the header's height. */
   box-shadow: 0 -0.75rem 0 var(--ground);
   text-align: left;
   font-weight: 600;
@@ -758,7 +758,7 @@ code {
  *
  * Fixed width and fixed height on both the header and the body cell, so the
  * column does not resize when the first cover arrives and the rows do not
- * jump. The header cell is empty on purpose: a column of pictures labelled
+ * jump. The header cell is empty on purpose: a column of pictures labeled
  * "Cover" is a label nobody needs, and the width has to come from somewhere.
  */
 .rows th.art,
@@ -852,7 +852,7 @@ code {
 /*
  * 16:10 and not square. The picture is a waveform far more often than it is a
  * sleeve, and a square box either letterboxes the waveform or crops the
- * sleeve; this is the compromise that keeps both recognisable, and `object-fit:
+ * sleeve; this is the compromise that keeps both recognizable, and `object-fit:
  * cover` on the image means a square sleeve loses a little top and bottom
  * rather than sitting in a black frame.
  */
@@ -893,7 +893,7 @@ code {
   font-size: 0.8rem;
   line-height: 1.2;
   /* Two lines and then an ellipsis, so one long album title cannot make its
-     tile taller than its neighbours. */
+     tile taller than its neighbors. */
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1383,7 +1383,7 @@ code {
 }
 
 /* The needle is the one thing on the dial that is not furniture, so it is the
-   one thing with the accent colour. `stroke-linecap: round` because a real
+   one thing with the accent color. `stroke-linecap: round` because a real
    one has a tip and a square end reads as a bar. */
 .vu-needle {
   stroke: var(--accent);
@@ -1564,7 +1564,7 @@ code {
   overflow: auto;
   /* A share of the window rather than a fixed 56rem, with a floor and a
      ceiling. The fixed width was the thing that most obviously did not move
-     when the window did: a maximised 4K window had the keyboard map and the
+     when the window did: a maximized 4K window had the keyboard map and the
      About text sitting in the same small box they occupied at 1280, with
      three feet of empty ground around them. `clamp` keeps the floor that
      makes the two-column help readable and the ceiling that stops a line of
@@ -1611,7 +1611,7 @@ code {
 }
 
 /* The product name is the masthead, across the full width and above the art:
-   it is the line a person reads, and the art is what they recognise.
+   it is the line a person reads, and the art is what they recognize.
    Everything below is a table or a paragraph and stays left, where a reader's
    eye already is. */
 .about-title {
@@ -1624,7 +1624,7 @@ code {
 /* The art and the build facts share one band. The logo is as tall as the five
    rows beside it, so an `auto` track for the art and the rest for the table
    fills the band with no column of air either side - which is what stacking
-   them cost. Centred across the band because the table is the shorter of the
+   them cost. Centered across the band because the table is the shorter of the
    two by a row's worth. */
 .about-masthead {
   display: grid;
@@ -1651,7 +1651,7 @@ code {
 }
 
 /* The prose fills the panel as a block rather than sitting in a column of its
-   own: these are paragraphs of licence text beside full-width tables, and a
+   own: these are paragraphs of license text beside full-width tables, and a
    measure narrower than the tables above them read as a ragged strip down the
    middle. No `max-width`, and justified so both edges line up with the table
    rules. */
@@ -1659,7 +1659,7 @@ code {
   text-align: justify;
 }
 
-/* Buy me a coffee, and the shirts. The bug carries its own colour, so the
+/* Buy me a coffee, and the shirts. The bug carries its own color, so the
    button around it is only a hit area: no border, no background, and the label
    beside it rather than inside the artwork, where it would have to be part of
    the image and could not be read out. */
@@ -1698,7 +1698,7 @@ code {
   cursor: pointer;
 }
 
-/* The notices table carries a component name, a licence, a purpose and a URL in
+/* The notices table carries a component name, a license, a purpose and a URL in
    56rem. The names and the URL have to wrap or the table pushes the overlay
    wider than the window, but "Apache-2.0" broken after its hyphen reads as a
    version number, so the two short columns are held on one line. */

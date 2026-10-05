@@ -36,7 +36,7 @@
 //! never by its name**. On ALSA the same physical converter appears as `hw:`,
 //! `plughw:` and whatever PipeWire publishes, all under the same human-readable
 //! name, and only the `hw:` path can be bit-perfect. S1 caught CPAL 0.16 reporting
-//! an honoured 48 kHz stereo I32 request while the hardware ran 8 kHz mono I16,
+//! an honored 48 kHz stereo I32 request while the hardware ran 8 kHz mono I16,
 //! because the list described the plug layer rather than the card. CPAL 0.18
 //! enumerates both and gives every device a stable `DeviceId`; this module keys
 //! everything on that id and reports which path each entry is.
@@ -350,7 +350,7 @@ pub struct DeviceReport {
     pub manufacturer: Option<String>,
     /// Driver, where the backend knows.
     pub driver: Option<String>,
-    /// The backend's device-type categorisation, as a string.
+    /// The backend's device-type categorization, as a string.
     pub device_type: String,
     /// How the device is attached: USB, PCI, Bluetooth and so on.
     pub interface: String,
@@ -827,7 +827,7 @@ fn buffer_frames(size: &cpal::SupportedBufferSize) -> Option<(u32, u32)> {
 /// Re-opens a device by its persisted identity.
 ///
 /// This is the only supported way back to a device across runs. Names are not
-/// stable and, on ALSA, are shared by paths with different conversion behaviour.
+/// stable and, on ALSA, are shared by paths with different conversion behavior.
 ///
 /// # Errors
 ///

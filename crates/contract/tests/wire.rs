@@ -145,7 +145,7 @@ fn every_event_keeps_its_name_across_the_boundary() {
         // The catch-all arm also reports as `capture-warning`, so the name
         // alone cannot tell a mapped warning from a swallowed event. The code
         // can: the arm sets `unmapped-event` and nothing else does.
-        let value = serde_json::to_value(&wire).expect("serialising");
+        let value = serde_json::to_value(&wire).expect("serializing");
         assert_ne!(
             value.get("code").and_then(serde_json::Value::as_str),
             Some("unmapped-event"),
@@ -236,7 +236,7 @@ fn the_tag_is_the_only_discriminator() {
     // internally-tagged representation is what does that, and it is easy to
     // lose in a refactor.
     for event in every_event() {
-        let value = serde_json::to_value(Wire::from(&event)).expect("serialising");
+        let value = serde_json::to_value(Wire::from(&event)).expect("serializing");
         let object = value.as_object().expect("an object, not a wrapper");
         assert_eq!(
             object.get("kind").and_then(serde_json::Value::as_str),
@@ -255,7 +255,7 @@ fn fields_cross_as_camel_case() {
         diagnostics: Diagnostics::default(),
         bit_perfect: false,
     };
-    let text = serde_json::to_string(&Wire::from(&finished)).expect("serialising");
+    let text = serde_json::to_string(&Wire::from(&finished)).expect("serializing");
     assert!(text.contains("\"captureId\":7"), "{text}");
     assert!(text.contains("\"bitPerfect\":false"), "{text}");
     assert!(
@@ -273,7 +273,7 @@ fn a_frame_count_crosses_as_a_number() {
         frames: 9_007_199_254_740_991,
         seconds: 46_912_496_118.4,
     };
-    let text = serde_json::to_string(&Wire::from(&position)).expect("serialising");
+    let text = serde_json::to_string(&Wire::from(&position)).expect("serializing");
     assert!(text.contains("\"frames\":9007199254740991"), "{text}");
 }
 

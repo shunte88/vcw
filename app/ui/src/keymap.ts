@@ -341,7 +341,7 @@ export const BINDINGS = {
   // key and `=` is the unshifted twin under the same finger, so a person who
   // does not reach for Shift still zooms in. `+` is also the one chord the
   // map's own `+`-joined spelling cannot be taken apart by splitting; see
-  // `spelt` in `keymap.test.ts`.
+  // `spelled` in `keymap.test.ts`.
   zoomIn: {
     chord: "+",
     also: "=",
@@ -383,7 +383,7 @@ export const BINDINGS = {
   // alone" is a claim about these six as much as about the verbs they lead to.
   //
   // `Ctrl` and a digit, in the order the panels sit in: a bare digit would be
-  // taken away the moment somebody types a catalogue number, and `typing`
+  // taken away the moment somebody types a catalog number, and `typing`
   // cannot tell a digit meant for a field from one meant for us until it is
   // already too late.
   gotoBrowser: {

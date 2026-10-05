@@ -4493,7 +4493,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "vcw-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.23.1",
  "serde",
@@ -4517,7 +4517,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-audio"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cpal",
  "rtrb",
@@ -4530,7 +4530,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-contract"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rusqlite",
  "serde",
@@ -4547,7 +4547,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror 2.0.21",
  "vcw-audio",
@@ -4562,7 +4562,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-export"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "flacenc",
  "lofty",
@@ -4576,7 +4576,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-fingerprint"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chromaprint-next",
  "thiserror 2.0.21",
@@ -4585,7 +4585,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-identify"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "vcw-fingerprint",
  "vcw-metadata",
@@ -4594,7 +4594,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-metadata"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crc32fast",
  "serde",
@@ -4607,7 +4607,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-project"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crc32fast",
  "rusqlite",
@@ -4619,7 +4619,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-signal"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rustfft",
  "vcw-types",
@@ -4627,7 +4627,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "thiserror 2.0.21",

@@ -34,7 +34,7 @@
 //!
 //! §9 says the application must never claim bit-perfect operation solely because
 //! CPAL is in use, and S1 finding 1 is why that sentence exists: CPAL 0.16
-//! reported an honoured 48 kHz stereo I32 request while the hardware ran 8 kHz
+//! reported an honored 48 kHz stereo I32 request while the hardware ran 8 kHz
 //! mono I16. The bug is fixed, the class of bug is not. A backend reports what it
 //! asked for; only the kernel knows what it got.
 //!

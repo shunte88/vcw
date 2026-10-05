@@ -34,7 +34,7 @@
 The grammar below was derived by observation of file bytes alone: no Audacity
 source was consulted, so nothing here inherits Audacity's GPL. It is validated
 against a corpus by requiring every byte of every document to be consumed -
-a wrong grammar desynchronises and fails loudly rather than quietly guessing.
+a wrong grammar desynchronizes and fails loudly rather than quietly guessing.
 
     ./probe.py corpus/*.aup3          # structural report
     ./probe.py --xml one.aup3         # reconstructed XML

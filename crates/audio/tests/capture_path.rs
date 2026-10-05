@@ -33,7 +33,7 @@
 //! The capture path end to end, driven by a simulated source.
 //!
 //! `src/capture.rs` tests the pieces and `tests/rt_safety.rs` tests the
-//! callback's real-time behaviour. This file tests the thing they compose into:
+//! callback's real-time behavior. This file tests the thing they compose into:
 //! bytes leaving a producer, crossing the ring, and arriving at a consumer with
 //! nothing changed and nothing missing - and what the counters and the verdict
 //! say when something does go wrong.
@@ -110,7 +110,7 @@ fn every_byte_arrives_unaltered_and_in_order() {
 
 #[test]
 fn a_simulated_capture_can_never_be_called_bit_perfect() {
-    // Defence in depth against the worst possible bug in this crate: a CI run
+    // Defense in depth against the worst possible bug in this crate: a CI run
     // with no hardware reporting a confirmed bit-perfect capture.
     let (source, mut reader) =
         Simulated::deterministic(SampleRate(96_000), 2, Pace::Fast).expect("start");

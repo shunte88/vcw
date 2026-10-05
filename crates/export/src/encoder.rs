@@ -1093,7 +1093,7 @@ impl Flac {
     ) -> Result<()> {
         sink.clear();
         info.write(sink).map_err(|why| Error::Flac {
-            why: format!("the stream header would not serialise: {why:?}"),
+            why: format!("the stream header would not serialize: {why:?}"),
         })?;
         let bytes = sink.as_slice();
         if bytes.len() != STREAMINFO_BYTES {
@@ -1157,7 +1157,7 @@ impl Flac {
 
         self.sink.clear();
         frame.write(&mut self.sink).map_err(|why| Error::Flac {
-            why: format!("block {} would not serialise: {why:?}", self.frame_number),
+            why: format!("block {} would not serialize: {why:?}", self.frame_number),
         })?;
         let bytes = self.sink.as_slice();
         self.file.write_all(bytes)?;
@@ -1857,7 +1857,7 @@ mod tests {
         for container in Container::ALL {
             // What this build can actually write, named feature by feature -
             // which also asserts that `feature()` returns a name that exists.
-            // A build with one of the two is a real configuration: the licence
+            // A build with one of the two is a real configuration: the license
             // reason to drop MP3 says nothing about Ogg.
             let available = match container.feature() {
                 None => true,

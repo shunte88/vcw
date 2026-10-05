@@ -89,7 +89,7 @@ import { STEP, type Span, fit, toRange, toSelection, zoom } from "./zoom";
 /**
  * The panels a person can be in, in the order the work happens.
  *
- * `browser` is labelled *Library* rather than *Projects*: what it lists are
+ * `browser` is labeled *Library* rather than *Projects*: what it lists are
  * records, and "project" is the file they happen to be kept in. The scope is
  * unchanged, so `keymap.ts`, the bindings and `wiring.test.ts` do not move.
  */
@@ -197,7 +197,7 @@ export function App(): React.JSX.Element {
   // `run` puts the reason in the status line instead. `store.run` is stable,
   // so the dependency stays `generation` alone.
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     void store.run(async () => {
       const [found, values, secrets, projects] = await Promise.all([
         api.devices(),
@@ -205,7 +205,7 @@ export function App(): React.JSX.Element {
         api.credentials(),
         api.projects(),
       ]);
-      if (!cancelled) {
+      if (!canceled) {
         setDevices(found);
         setSettings(values);
         setCredentials(secrets);
@@ -213,7 +213,7 @@ export function App(): React.JSX.Element {
       }
     });
     return () => {
-      cancelled = true;
+      canceled = true;
     };
   }, [generation]);
 

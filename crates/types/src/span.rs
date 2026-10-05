@@ -85,15 +85,15 @@ impl Span {
         }
     }
 
-    /// A boundary audition: `before` frames leading up to `centre`, `after` past it.
+    /// A boundary audition: `before` frames leading up to `center`, `after` past it.
     ///
     /// Saturating at zero rather than wrapping, so auditioning a boundary near the
     /// start of a side gives a short span instead of one that begins near `u64::MAX`.
     #[must_use]
-    pub const fn around(centre: u64, before: u64, after: u64) -> Self {
+    pub const fn around(center: u64, before: u64, after: u64) -> Self {
         Self {
-            start: centre.saturating_sub(before),
-            end: centre.saturating_add(after),
+            start: center.saturating_sub(before),
+            end: center.saturating_add(after),
         }
     }
 

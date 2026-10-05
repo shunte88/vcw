@@ -242,7 +242,7 @@ pub fn typescript() -> String {
         "Settings (\u{a7}39)",
         "Five groups, named as \u{a7}39 names them. Every default is either `null`\n\
          - let the engine negotiate and report what it got - or a constant read\n\
-         out of the crate that owns the behaviour, which is why none of them\n\
+         out of the crate that owns the behavior, which is why none of them\n\
          appears in this declaration. `Credential` is the one type here that\n\
          carries nothing: whether a token is configured and how long it is,\n\
          never the value.",

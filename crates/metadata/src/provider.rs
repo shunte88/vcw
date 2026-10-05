@@ -34,7 +34,7 @@
 //!
 //! Two operations: search for candidates, fetch one in full. Search is deliberately
 //! cheap and lossy - a list of [`Candidate`]s a person can scan - and fetch is the
-//! expensive one that pulls a tracklist. That split is not an optimisation, it is
+//! expensive one that pulls a tracklist. That split is not an optimization, it is
 //! how both providers are actually shaped, and it matches what the user does: look
 //! at a shortlist, pick the right pressing, then commit.
 //!
@@ -89,7 +89,7 @@ pub trait Provider: std::fmt::Debug + Send + Sync {
     /// The criteria this provider can actually act on.
     fn understands(&self) -> &'static [Criterion];
 
-    /// Whether this provider can reach anything, for greying out a button.
+    /// Whether this provider can reach anything, for graying out a button.
     fn is_offline(&self) -> bool;
 
     /// What the provider's client has done, for diagnostics (§42).
@@ -128,7 +128,7 @@ pub fn search_all(providers: &[&dyn Provider], query: &Query, cancel: &Cancel) -
         cancel.check()?;
         match provider.search(query, cancel) {
             Ok(found) => candidates.extend(found),
-            Err(crate::Error::Cancelled) => return Err(crate::Error::Cancelled),
+            Err(crate::Error::Canceled) => return Err(crate::Error::Canceled),
             Err(error) => failures.push((provider.id(), error)),
         }
     }
@@ -271,7 +271,7 @@ mod tests {
         cancel.cancel();
         assert!(matches!(
             search_all(&[&discogs], &Query::new().artist("x"), &cancel),
-            Err(Error::Cancelled)
+            Err(Error::Canceled)
         ));
     }
 

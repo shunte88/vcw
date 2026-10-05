@@ -602,7 +602,7 @@ pub fn recover_all(project: &mut Project, plan: Plan) -> Result<Vec<Recovered>> 
 /// Folds the write-ahead log back into the project and truncates it (§15).
 ///
 /// Returns the size of the log beforehand, which is what was at risk. Part of
-/// the lifecycle rather than an optimisation: a project left with a large log
+/// the lifecycle rather than an optimization: a project left with a large log
 /// is a project whose next reader has more to replay and whose next backup is
 /// incomplete if it copies only the one file.
 ///

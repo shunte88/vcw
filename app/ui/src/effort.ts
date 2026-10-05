@@ -12,7 +12,7 @@
 // Two settings wear the same hole in the panel and they are not the same
 // setting. A lossy quality decides what gets thrown away; a FLAC compression
 // level decides how long the encoder spends finding a shorter way to say
-// exactly the same samples. Labelling the second one "Lossy quality" - which
+// exactly the same samples. Labeling the second one "Lossy quality" - which
 // is what the Settings panel did - says FLAC discards audio, which is the one
 // thing a person choosing FLAC is choosing it not to do.
 //

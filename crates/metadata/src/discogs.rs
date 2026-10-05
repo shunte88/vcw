@@ -34,7 +34,7 @@
 //!
 //! Discogs is the reason VCW has a metadata crate at all. It is the only database
 //! that reliably distinguishes *pressings* - the 1994 Warp original from the 2016
-//! repress, same tracklist, different catalogue number - and pressing is exactly
+//! repress, same tracklist, different catalog number - and pressing is exactly
 //! what a person holding a record needs to identify.
 //!
 //! # A token is not optional
@@ -150,7 +150,7 @@ impl Discogs {
         self.token.is_some()
     }
 
-    /// The authorisation header, or the error explaining its absence.
+    /// The authorization header, or the error explaining its absence.
     ///
     /// Built fresh per request rather than stored, so the credential lives in one
     /// short-lived string and not in a field something might print.
@@ -160,7 +160,7 @@ impl Discogs {
     /// that is the one of the two that would actually change the outcome - and
     /// because a build that cannot reach the network has no business reading a
     /// credential at all.
-    fn authorisation(&self) -> Result<Vec<Header>> {
+    fn authorization(&self) -> Result<Vec<Header>> {
         if self.client.is_offline() {
             return Err(Error::Offline {
                 provider: ProviderId::Discogs,
@@ -180,7 +180,7 @@ impl Discogs {
     ///
     /// Structured parameters where Discogs has one - `artist`, `release_title`,
     /// `catno`, `barcode`, `label`, `year`, `country`, `format` - because a
-    /// catalogue number in a structured field finds the pressing and the same
+    /// catalog number in a structured field finds the pressing and the same
     /// string in `q=` finds whatever else mentions it.
     #[must_use]
     pub fn search_url(&self, query: &Query) -> String {
@@ -271,7 +271,7 @@ impl Discogs {
                 .map(positions::clean_artist)
                 .unwrap_or_default(),
             year: year_of(&value["year"]),
-            genres: self.genres.normalise_all(
+            genres: self.genres.normalize_all(
                 strings(&value["genres"])
                     .into_iter()
                     .chain(strings(&value["styles"])),
@@ -314,7 +314,7 @@ impl Provider for Discogs {
                 provider: ProviderId::Discogs,
             });
         }
-        let headers = self.authorisation()?;
+        let headers = self.authorization()?;
         let body = self
             .client
             .body(&self.search_url(query), &headers, cancel)?;
@@ -336,7 +336,7 @@ impl Provider for Discogs {
                 provider: ProviderId::Discogs,
             });
         }
-        let headers = self.authorisation()?;
+        let headers = self.authorization()?;
         let body = self.client.body(&Self::release_url(id), &headers, cancel)?;
         Ok(self.release(id, &parse(&body)?))
     }
@@ -849,7 +849,7 @@ mod tests {
     #[test]
     fn more_sides_than_the_stated_disc_count_believes_the_tracklist() {
         let body = r#"{
-            "title": "Mislabelled",
+            "title": "Mislabeled",
             "formats": [{"name": "Vinyl", "qty": "1"}],
             "tracklist": [
                 {"position": "A1", "title": "One"},

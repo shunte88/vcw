@@ -50,7 +50,7 @@
 //! crashed project consumes the hot log whatever flags it was given, and the
 //! main file grows by roughly the log's size.
 //!
-//! That is the right behaviour - the log is committed data, and folding it in
+//! That is the right behavior - the log is committed data, and folding it in
 //! is how it stops being at risk - but it means a dry run is a report and not a
 //! snapshot. Anyone who wants the crashed state kept has to copy the file and
 //! both sidecars together, before running anything at all.
@@ -110,7 +110,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
         None
     };
 
-    // Folding the log back is part of the lifecycle, not an optimisation, and
+    // Folding the log back is part of the lifecycle, not an optimization, and
     // a project that has just been recovered is exactly the one worth leaving
     // tidy. Only when something was written: a dry run must not touch the file.
     let folded = if plan == Plan::DryRun {

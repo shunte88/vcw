@@ -7,7 +7,7 @@ WP-25, WP-28, WP-21 and WP-22 have been taken out of Phase 2, all on Linux x86_6
 > This snapshot was last read end to end on 2026-09-28. The sections written since
 > then are dated where they sit: WP-19's packaging, *closing the loose ends*, the UI
 > redesign and WP-25's lossy encoders. Everything before them is as it was; where a
-> count or a licence statement has moved on, the later section is the current one.
+> count or a license statement has moved on, the later section is the current one.
 All five Phase 0 spikes returned verdicts on their primary platform; gate G0 remains
 open on hardware coverage, WP-05's soak settled D3's firmed-config run, **WP-06 closes
 milestone M1, *it records*,** WP-07 locks D8, WP-08 adds the meters and the §10 fan-out
@@ -15,7 +15,7 @@ they read through, WP-09 draws the waveform - and cost the schema two covering
 indexes to do it in milliseconds rather than seconds - **WP-10 closes milestone M2,
 *it plays back*,** with a seek that joins in a median 19.8 ms on hardware and byte-exactly
 in CI, and **WP-11 closes milestone M3, *it finds tracks*,** at 97.6% to 99.7% parity
-with VRipr over 595 labelled snippets, exact to the frame, and **WP-12 makes §40's
+with VRipr over 595 labeled snippets, exact to the frame, and **WP-12 makes §40's
 offline promise a property of the build** rather than a flag - the HTTP agent is behind a
 feature, and `cargo test -p vcw-metadata --no-default-features` is a gate leg, and
 **WP-13 turns a detection into a record** - schema v2, the release/side/track topology
@@ -86,7 +86,7 @@ Proven: CPAL's *audio path* is genuinely conversion-free. Re-measured 2026-09-23
 confirming the negotiated format; clean playback; 3/3 crash recovery.
 
 The spike's durable output is the **kernel cross-check**. On 0.16 CPAL's ALSA device list
-was the plug layer's fiction: a request for 48 kHz / 2 ch / I32 was reported as honoured
+was the plug layer's fiction: a request for 48 kHz / 2 ch / I32 was reported as honored
 while the hardware ran 8 kHz mono S16 - a silent upsample no CPAL API surfaced. The check
 against `/proc/asound/.../hw_params` caught it, and it is a mandatory WP-04 obligation:
 *bit-perfection is never claimed without OS confirmation.*
@@ -237,7 +237,7 @@ between calls. The fingerprint worker still has to do the same when it arrives.
 The `ProjectSerializer` document format is decoded and verified against **all 30**
 real vinyl projects in the corpus - 25 AUP3 and 5 AUP4: full byte consumption, zero
 dangling block references. The acceptance test was chosen to be unforgiving - a wrong
-tag-length grammar desynchronises within a few records, so 30/30 clean parses is evidence
+tag-length grammar desynchronizes within a few records, so 30/30 clean parses is evidence
 rather than optimism. Clean-room throughout: Audacity is GPL, this codebase is MIT.
 
 Consequences worth carrying forward:
@@ -359,7 +359,7 @@ silently. `probe.py` reports `project_rate` and `track_rates` as separate fields
    and rates are spoken everywhere; without a shared leaf they would live in
    `vcw-audio` and drag CPAL into the dependency closure of every crate that merely
    wants an enum. The test that makes the case concrete: WP-11's A/B harness has to run
-   against the labelled corpus on a machine with no audio stack.
+   against the labeled corpus on a machine with no audio stack.
 3. **The Phase 0 spikes leave the product workspace.** Finished evidence, not shipped
    code. A Linux-only CI job keeps them compiling so `docs/spikes/` stays reproducible,
    while the product's four-target matrix stays about the product.
@@ -368,7 +368,7 @@ silently. `probe.py` reports `project_rate` and `track_rates` as separate fields
    recovery depends on WAL semantics that vary across the SQLite versions distributions
    ship. A recovery test that passes in CI and fails on a Pi because the OS shipped an
    older SQLite is not a test.
-5. **D7 and D10 locked** ([ADR-0004](adr/0004-licence-and-toolchain.md)). The two
+5. **D7 and D10 locked** ([ADR-0004](adr/0004-license-and-toolchain.md)). The two
    clauses that are easy to get wrong: the LGPL exception in `deny.toml` stays
    commented out until `chromaprint-next` actually lands, and the MSRV is enforced by a
    pinned CI job because an untested floor is not a floor.
@@ -459,9 +459,9 @@ What landed:
   warnings`, an MSRV job pinned to 1.90, `cargo deny check`, the spikes job, and an
   assertion that **no crate under `crates/` depends on `tauri`, `wry`, `tao` or
   `webkit2gtk`** - §2 as a test rather than a code-review habit.
-- **Licence gates**: `deny.toml` with the permissive allowlist, `THIRD-PARTY-NOTICES.md`
+- **License gates**: `deny.toml` with the permissive allowlist, `THIRD-PARTY-NOTICES.md`
   rewritten for VCW's actual dependency set, and `LICENSE-LGPL-2.1` ported. D7 and D10
-  locked in [ADR-0004](adr/0004-licence-and-toolchain.md).
+  locked in [ADR-0004](adr/0004-license-and-toolchain.md).
 - **ADRs 0001-0004** written, with an index at [`docs/adr/`](adr/).
 
 #### What is verified, and what is not
@@ -519,7 +519,7 @@ warnings` and `cargo deny check`.
   the two Audacity versions agree with each other. This is D1's central claim, now
   checked by CI instead of asserted in prose.
 - `tests/roundtrip.rs` writes and reads blocks in all five storage formats across seven
-  shapes and compares bytes. It also proves a read-only open honours the `-wal` - the
+  shapes and compares bytes. It also proves a read-only open honors the `-wal` - the
   writer is held open so the rows exist *only* in the WAL, which is the S5 trap that
   `immutable=1` falls into.
 - `tests/migrations.rs` runs a synthetic multi-step set, because one real migration
@@ -718,7 +718,7 @@ Every block in every test was synthetic. This is what closes that.
 
 | module | what it is |
 |---|---|
-| `types/format.rs` | `StorageFormat::decode_sample` - one stored sample to a normalised `f32`, with the scaling **measured against the corpus**, not assumed |
+| `types/format.rs` | `StorageFormat::decode_sample` - one stored sample to a normalized `f32`, with the scaling **measured against the corpus**, not assumed |
 | `types/capture.rs` | the `PcmSource` trait: `read` and `is_finished`, and nothing else |
 | `audio/buffers.rs` | `impl PcmSource for RingReader` - four lines, and the only thing joining the two halves |
 | `project/persistence.rs` | `Config`, `Checkpoint`, `Summary`, `pyramid`, `Latencies`, `Progress`, `Writer`, `Outcome`, `spawn`/`Handle` |
@@ -745,7 +745,7 @@ would punch a hole no later write could close, so the writer stops, the session 
 marked interrupted and the error is surfaced. A short capture that says why it is short
 beats a long one with a hole in it.
 
-**The summary pyramid was measured, not ported.** The spike's summariser scaled every
+**The summary pyramid was measured, not ported.** The spike's summarizer scaled every
 format by `2^(8*bps-1)`, which for Audacity's padded 24-bit would have been 256 times
 too quiet - that format is a little-endian `i32` holding a value in +/-2^23, not a
 left-justified one. Reading the corpus instead of the spike also turned up two things
@@ -839,7 +839,7 @@ Device-free, in CI:
   held over rather than padded, the frame count checked against the committed blocks
   after *every* commit, per-block checksums, batch size changing the transaction count
   and nothing else, summaries on and off, the pyramid's group count and its short final
-  group, the WAL ceiling honoured in pages derived from bytes, progress visible while
+  group, the WAL ceiling honored in pages derived from bytes, progress visible while
   the writer runs rather than only after, and a zero-channel capture refused at
   `begin` rather than spun on - the one input that would make the block loop drain
   nothing for ever.
@@ -862,7 +862,7 @@ the session marked interrupted and the project still valid.
 
 **What is not verified.** The soak is one platform and one filesystem: x86_64 on ext4.
 The Pi 5 - on SD *and* on NVMe, which S2 expected to differ - and Windows are both
-unrun, and S2's other open questions stay open: disk-full behaviour, induced fsync
+unrun, and S2's other open questions stay open: disk-full behavior, induced fsync
 stalls, `VACUUM` and compaction, copying a live project, a page-size sweep, and WAL2.
 The writer has also never been driven by a real converter for 90 minutes; the long run
 is simulated, deliberately, because only a generated source can be checked byte for
@@ -954,7 +954,7 @@ The consequence for the operator is worth stating plainly, because it is the one
 about `vcw recover` that could surprise someone: **a dry run writes nothing to the
 database, but it is not side-effect-free on the filesystem.** Opening the project
 replays the log and closing it folds the log into the main file and removes the
-sidecars. That is the right behaviour - the log is committed data and folding it in is
+sidecars. That is the right behavior - the log is committed data and folding it in is
 how it stops being at risk - but it means a dry run is a report, not a snapshot.
 Preserving the crashed state means copying the file and both sidecars together, before
 running anything. The test `recovery_reports_before_it_writes` asserts this so nobody
@@ -1118,7 +1118,7 @@ available for a platform that needs it rather than applied speculatively.
 ### Three things the build got wrong first
 
 **The finished frame count.** `Stopped` took its position from the deck *before* the
-stop, and finalising flushes the part-filled block, so the transport reported a length
+stop, and finalizing flushes the part-filled block, so the transport reported a length
 up to one block shorter than the row in the project. Fixed by giving `Deck` an
 associated `frames(&Report)` function: only the deck knows what its own report means,
 and by the time there is a report there is no deck to ask.
@@ -1127,7 +1127,7 @@ and by the time there is a report there is no deck to ask.
 *reset*, because that is where the report is yielded. An operator who stops a side and
 walks away would never have been told what was recorded. It is now published on the stop,
 and a test pins it to exactly one occurrence - the report lives in two places and
-publishing it twice would have a UI catalogue the side twice.
+publishing it twice would have a UI catalog the side twice.
 
 **The terminator.** `closed` was the last statement in the thread function, which means
 it was not sent if the thread panicked, and a consumer blocked on `Events::next` would
@@ -1159,7 +1159,7 @@ $ vcw session side-a.vcw --script "arm,record,sleep 1,pause,sleep 0.3,poll,resum
 [  1.302] phase-change        paused -> recording
 [  1.602] recording-position  60000 frames, 1.250 s
 [  1.941] phase-change        recording -> stopped
-[  1.941] capture-finished    capture 1 finalised: 76800 frames, 0 overrun(s), 0 underrun(s), 0 dropped, 0 error(s), bit-perfect no
+[  1.941] capture-finished    capture 1 finalized: 76800 frames, 0 overrun(s), 0 underrun(s), 0 dropped, 0 error(s), bit-perfect no
 [  1.941] status              stopped, 76800 frames
 [  1.941] phase-change        stopped -> idle
 [  1.941] closed              closed
@@ -1176,7 +1176,7 @@ whole run reads back in order afterwards.
 `crates/cli/tests/session_from_cli.rs` runs six of these through the **shipped binary**,
 then re-opens the project and checks that the audio matches what the transcript claimed,
 with every checksum recomputed. Including: a script that forgets to `stop` (the shutdown
-finalises the side rather than abandoning it), a verb with a typo in it (the run fails,
+finalizes the side rather than abandoning it), a verb with a typo in it (the run fails,
 *after* the audio is safe), three commands issued out of turn (rejected, and the project
 is left as it was found), and an arm that is thought better of (no capture row at all).
 
@@ -1186,7 +1186,7 @@ Verified: the whole of §11's diagram walked in both directions; every step that
 the diagram illegal from every phase, checked exhaustively; a deck that refuses each of
 its four operations, including a stop that fails; the clock discounting paused time; two
 sides into one project; a device that cannot be opened leaving the transport idle; a
-shutdown mid-capture finalising rather than abandoning; two subscribers seeing an
+shutdown mid-capture finalizing rather than abandoning; two subscribers seeing an
 identical stream; a panicking engine still closing the stream; and a full capture driven
 through the binary with no frontend compiled. 277 tests, full gate green.
 
@@ -1322,7 +1322,7 @@ meter is not a thing to budget for.
 
 Linux x86_64 only, like everything above it. And the fan-out has been exercised against
 the simulated source and the ALSA device on this machine, not against a converter running
-for an hour - the lossy-tap behaviour under sustained real load is the WP-05-style soak
+for an hour - the lossy-tap behavior under sustained real load is the WP-05-style soak
 that has not been run with meters attached.
 
 ## Phase 1 - WP-09, the waveform pyramid
@@ -1569,7 +1569,7 @@ Linux x86_64 only, like everything above it. The measurements are from a SATA SS
 64 KiB page size; the Pi 5's SD card is where the `summary256` rung is most likely to
 hurt, and that is the run to take before anyone adds a fourth rung on instinct. Nothing
 publishes a waveform event yet either - §19's progressive build exists on the *write*
-side, where the writer summarises every block as it commits, but the read side is polled
+side, where the writer summarizes every block as it commits, but the read side is polled
 rather than pushed, which is a WP-16 question about what the view wants.
 
 ## Phase 1 - WP-10, playback
@@ -1606,7 +1606,7 @@ The transport reduces the same way. Six verbs - `PLAY PAUSE STOP SEEK SKIP FORWA
 SKIP BACK` - and the last three are all `seek` with the arithmetic done first. `SKIP` was
 [`SKIP_SECONDS`] of 10 s here, with a note that once WP-13 recorded boundaries the skips
 would become "next boundary" and "previous boundary", which is what they are for. **WP-16
-did that**, and 10 s is now only the fallback for a side nothing has been analysed from.
+did that**, and 10 s is now only the fallback for a side nothing has been analyzed from.
 
 ### Epoch-tagged chunks, not a byte ring
 
@@ -1654,7 +1654,7 @@ callback underruns on *every* callback and cannot be rescued by a faster feeder.
 playback now asks for a buffer it chose - [`TARGET_BUFFER_MILLIS`], four chunks, 80 ms -
 and derives the queue from it; a backend that will not be told gets a
 [`FALLBACK_QUEUE_MILLIS`] second-deep queue instead of an argument. On this device the
-request is honoured: `buffer 3840 frames, fixed`.
+request is honored: `buffer 3840 frames, fixed`.
 
 **A gapless seek needs the feeder to be holding an empty chunk when the seek lands.**
 With the buffer fixed and the queue sized, five seeks on a real device still cost exactly
@@ -1757,7 +1757,7 @@ Built 2026-09-26. VRipr's three detectors, ported into `vcw-signal`, published a
 observations rather than tracks, resolved into decisions, and reachable from the command
 line at both ends of §22: live while the record turns, and again over the committed
 side. Exit criterion met on both halves. **Parity: 97.6% to 99.7% of VRipr's boundaries
-reproduced over all 595 snippets of the labelled corpus, every agreement at the
+reproduced over all 595 snippets of the labeled corpus, every agreement at the
 identical frame**, with the residue traced to one documented cause. **Provenance and
 confidence: every boundary carries both, plus the measurements behind them**, and
 `vcw detect --evidence` prints the lot.
@@ -1904,7 +1904,7 @@ computed from the audio that has arrived so far, and
 boundaries to the frame when one is fed ragged 7,331-byte chunks and the other the lot.
 
 A marker is published only once it cannot move, which is `min_silence + gap_fill +
-pre + post` behind the analysed position: **1.2 s at the defaults**. A marker is never
+pre + post` behind the analyzed position: **1.2 s at the defaults**. A marker is never
 retracted, and an adaptive live pass settles nothing at all - the threshold depends on
 the whole side - which `Live::settled` reports honestly by returning 0.
 
@@ -1917,7 +1917,7 @@ same side cannot be a disagreement about what they were looking at.
 
 `crates/signal/tests/vripr_parity.rs`, `#[ignore]`d because it reads 294 MB from outside
 the repo. `/data2/vripr_training` is 595 snippets VRipr cut from its own track tables -
-16 s of mono 16 kHz audio centred on a boundary, peak-normalised, with a JSON sidecar
+16 s of mono 16 kHz audio centered on a boundary, peak-normalized, with a JSON sidecar
 naming the kind. The reference is **VRipr's own detectors run over the same snippets**,
 computed out of tree at `/data2/vcw-scratch/parity` from a verbatim copy of
 `/data2/vripr/src/audio/mod.rs` and checked in as
@@ -1977,7 +1977,7 @@ detectors; `--min-sources` filters by agreement; `--json` gives a UI the same th
 half is visible with nothing else running.
 
 Nothing here writes. A boundary becomes a track in WP-13, and the tracks `vcw detect`
-prints are labelled implied for that reason.
+prints are labeled implied for that reason.
 
 ### Tests
 
@@ -1989,7 +1989,7 @@ binary, and one is the parity harness, which is `#[ignore]`d and was run.
 ### What is not verified
 
 The parity figure is parity, not accuracy. Nothing here has been checked against a
-boundary anyone confirmed by ear; the labelled corpus is VRipr's own reading of its own
+boundary anyone confirmed by ear; the labeled corpus is VRipr's own reading of its own
 records, and on the hardest third of it both implementations are mostly wrong together.
 
 The live pass has only ever been fed the simulated source through the engine - uniform
@@ -2007,7 +2007,7 @@ actually fix it, and that is WP-12 and WP-13 work.
 ## Phase 1 - WP-12, metadata
 
 Built 2026-09-26. `vcw-metadata`: a provider trait with Discogs and MusicBrainz behind
-it, §32's genre normalisation ported from VRipr, artwork fetching, an on-disk cache,
+it, §32's genre normalization ported from VRipr, artwork fetching, an on-disk cache,
 per-service rate limits, timeouts and cancellation - and, the part that shaped everything
 else, §40's promise that the application stays fully usable with networking disabled.
 **Exit criterion met on both halves:** the tests are fixture-backed and offline, and the
@@ -2077,7 +2077,7 @@ only - with geometric backoff, obeying `Retry-After` unless it asks for longer t
 Cancellation is cooperative, because there is no runtime here to cancel into. The token
 is checked before each attempt and every 50 ms of any wait, so waiting is interruptible
 immediately; a request already on the wire is bounded by its timeout instead. That is the
-true behaviour and the docs say so rather than implying something tidier.
+true behavior and the docs say so rather than implying something tidier.
 
 ### §39: the token goes in a header, because the URL is the cache key
 
@@ -2088,7 +2088,7 @@ thing a person pastes into a bug report. `Token` has no `Serialize`, no `Display
 `no_url_anywhere_in_a_discogs_exchange_carries_the_token` asserts it as a property of the
 traffic rather than of the code that generates it.
 
-One behaviour worth recording because both answers are defensible: an offline build with
+One behavior worth recording because both answers are defensible: an offline build with
 no token configured reports the *networking*, not the missing credential. It is the one
 of the two that would change the outcome, and a build that cannot reach the network has
 no business reading a credential at all.
@@ -2129,7 +2129,7 @@ artist:"Autechre" AND release:"Amber" AND (format:"Vinyl" OR format:"12\" Vinyl"
 **A release's `genres` can be empty while its release-group's are populated**, so genre
 extraction falls back to the group. MusicBrainz tags are lowercase by convention where
 Discogs' are not, so the MB path title-cases before the §32 lookup - provider-local
-presentation, deliberately not pushed down into `Genres::normalise`, which stays
+presentation, deliberately not pushed down into `Genres::normalize`, which stays
 VRipr-compatible for the parity fixture. And MusicBrainz returns no artwork URLs at all:
 `cover-art-archive.front == true` means one exists at
 `coverartarchive.org/release/<mbid>/front`, which the client then fetches uncached.
@@ -2138,7 +2138,7 @@ VRipr-compatible for the parity fixture. And MusicBrainz returns no artwork URLs
 
 `vcw_types::Position::from_str` takes the unambiguous form, `A1`, and nothing else, which
 is right for a project file. A provider tracklist is not a project file: it carries
-whatever the person who catalogued the record typed off the label. So the grammars live
+whatever the person who cataloged the record typed off the label. So the grammars live
 in `vcw-metadata::positions`, out of `vcw-types`, and handle the letter-run convention
 (`AA` is A2, not side AA), separators people add, heading rows that are not tracks at
 all, and a wholly numeric tracklist split A/B at the medium's halfway point with the odd
@@ -2163,14 +2163,14 @@ vcw metadata fetch bd5b1270-7468-47f0-9c9a-928199f9e4ad
 vcw metadata search --offline --artist Autechre   # and see what refusing looks like
 ```
 
-`fetch` guesses the provider from the shape of the id, an MBID being recognisable. The
+`fetch` guesses the provider from the shape of the id, an MBID being recognizable. The
 offline report prints the per-provider detail and the JSON document either way, and only
 then fails - an error line on its own loses the thing the caller asked for.
 
 ### Tests
 
 153 lib, 3 genre-parity, 11 offline, 9 doc (one of them a `compile_fail` proving `Token`
-cannot be serialised), and 8 live tests ignored by default. Workspace total is now
+cannot be serialized), and 8 live tests ignored by default. Workspace total is now
 **681 passing, 0 failing, 12 ignored**, gate-green including `fmt`, `clippy -D warnings`,
 `cargo deny`, the rustdoc leg and the new offline-build leg.
 
@@ -2241,7 +2241,7 @@ The extent comes from the join, which is why moving a boundary moves whichever t
 bounds with nothing to cascade: there is no second copy of the position to update, and
 therefore no second copy to be wrong. `tracks_have_no_frames_of_their_own` reads the
 table's column names and fails if any of them contains *frame*, because caching the
-extent is the obvious optimisation and it is also the bug.
+extent is the obvious optimization and it is also the bug.
 
 It decides the shape of everything above it. `split` writes two boundaries rather than
 one shared one - `UNIQUE (start_boundary)` and `UNIQUE (end_boundary)` would forbid
@@ -2262,7 +2262,7 @@ two-disc release with three sides recorded is a normal Tuesday, not a broken pro
 ### A side is created on purpose, never implied
 
 `side::ensure` is explicit. A capture arriving does not conjure side A, because inventing
-one for an unnamed recording would quietly relabel a *mislabelled* recording instead of
+one for an unnamed recording would quietly relabel a *mislabeled* recording instead of
 leaving the question open, and the operator is the only one who knows which face went
 under the needle. `sides.capture_id` is pointedly **not** unique: both faces may share
 one take, which is what a single unattended recording of a whole record looks like, and
@@ -2282,7 +2282,7 @@ overrides a lock is the new author of that position.
 not the person who set it, so joining two tracks across a locked boundary leaves the
 boundary in place as a marker of where the join was rather than refusing the edit. The
 doc comment and a test name both claimed refusal until the CLI exercise showed otherwise;
-the behaviour is right and the words were wrong, so
+the behavior is right and the words were wrong, so
 `merging_across_a_locked_boundary_keeps_the_boundary` now says what happens.
 
 One consequence had to be paid for elsewhere. A boundary left inside a merged track would
@@ -2309,10 +2309,10 @@ is worth recording; what it may not do is turn their boundary into a silence one
 
 ### Promotion is a policy, and 2 is the number WP-11 chose
 
-`adopt::Policy` is the judgement WP-11 deliberately declined to make: `min_sources`
+`adopt::Policy` is the judgment WP-11 deliberately declined to make: `min_sources`
 defaults to **2**, so a boundary only one detector saw is kept as a row and never becomes
 a track. On the real side that is the difference between 270 candidate boundaries and 6,
-because the HMM fires at every quiet bar - which is VRipr's behaviour faithfully ported,
+because the HMM fires at every quiet bar - which is VRipr's behavior faithfully ported,
 not a defect. `min_confidence`, `tolerance`, `pair_tracks` and `min_track_frames` (2 s by
 default) are the rest of it, and `--dry-run` reports the decision without writing, so the
 figure can be argued from a record rather than from taste.
@@ -2338,7 +2338,7 @@ The operator's boundary survives, and adoption's `already_locked` counter report
 skips while it does. That looked like a hole and is not: the resolver sees the operator's
 boundary alongside the detectors' - `observations` is what hands it over - and merges
 them into one decision that `Provenance::User` wins, so there was never a separate
-detector decision for adoption to skip. §24 is honoured one layer earlier than the
+detector decision for adoption to skip. §24 is honored one layer earlier than the
 counter measures. `a_detector_landing_beside_a_locked_boundary_is_skipped` covers the
 path that *does* increment it, with the observation withheld.
 
@@ -2363,7 +2363,7 @@ right that the pair of them is the only record that the boundary moved.
 second and third to agree, and fails on any name that repeats a detector - it fails on
 the old code at the third pass. Stripping *one* prefix would not have been enough:
 peeling a single copy is a no-op on a name the old code had already doubled, so a project
-analysed before the fix would have kept `hmm.hmm.at` at a fixed depth forever. It peels
+analyzed before the fix would have kept `hmm.hmm.at` at a fixed depth forever. It peels
 the whole run, and the real side's rows healed on the next pass: the boundary that was
 carrying 40 measurements now carries 24, and the second pass over it wrote 8 boundaries
 and created no tracks, which is idempotence on a real record rather than on a fixture.
@@ -2394,7 +2394,7 @@ work package's exit criterion, which is why it is written down here.
 
 `validate` grew `check_topology`: `empty-track`, `overlapping-tracks`, `track-numbering`
 and `boundaries-without-audio`. It deliberately does **not** report a boundary that
-bounds no track. That is the normal state of a side which has been analysed and not yet
+bounds no track. That is the normal state of a side which has been analyzed and not yet
 edited - 264 of the real side's boundaries are exactly that - and a validator that cries
 about the ordinary case trains people to ignore it.
 
@@ -2671,11 +2671,11 @@ The three files that carry the criterion:
 ### Fixed on the way past
 
 - **A provider's slash became a directory, in the original.** VRipr's
-  `apply_path_template` substitutes first, then splits on `/` and sanitises each segment,
+  `apply_path_template` substitutes first, then splits on `/` and sanitizes each segment,
   so a Discogs title of `AC/DC Medley` becomes a directory called `AC` containing a file
   called `DC Medley`, and its `sanitize_filename` maps the nine Windows-hostile
   characters without touching `..`, so a title of `..` climbs out of the output
-  directory. The port does not inherit either: `Values::sanitised()` runs *before*
+  directory. The port does not inherit either: `Values::sanitized()` runs *before*
   substitution, which is what keeps the operator's `/` in `{album}/{title}` - a directory
   they asked for - apart from a provider's `/` inside a name. The per-segment pass
   afterwards is kept and is not redundant: it catches the hazards typed into the template
@@ -2693,7 +2693,7 @@ The three files that carry the criterion:
   that too.
 - **`vcw session --format` was silently ignored by the simulated source.** It was
   hard-coded to S32, so `--format s16` produced a 32-bit project and there was no way to
-  make a FLAC-exportable capture without hardware. `Simulated::deterministic_as` honours
+  make a FLAC-exportable capture without hardware. `Simulated::deterministic_as` honors
   it; the pattern generator already wrote at the stored width, so a simulated capture stays
   recomputable frame by frame in any format.
 - **`Writer::Flac` was 472 bytes against `Wav`'s 64**, so every writer moved by value
@@ -2741,7 +2741,7 @@ regenerates the TypeScript and then runs `git diff --exit-code` over it. `app/Ca
 repeats the root's `[workspace.lints]` table verbatim: a rule that fired in one workspace
 and not the other would make moving code between them an argument about lints.
 
-### The contract is a core crate, because units are application behaviour
+### The contract is a core crate, because units are application behavior
 
 `vcw-contract` depends on `vcw-core`, `vcw-project`, `vcw-audio`, `vcw-types` and
 `serde` - and on nothing from Tauri. It holds three things §35 names:
@@ -2750,7 +2750,7 @@ and not the other would make moving code between them an argument about lints.
   tagged on `kind`, where the tag is exactly the string `Event::name` already returned.
   A test builds one of all fourteen core events and asserts that each maps to a `Wire`
   whose `kind` equals that name, so a new core event that falls through to the catch-all
-  fails the build rather than arriving at the frontend as an unlabelled warning.
+  fails the build rather than arriving at the frontend as an unlabeled warning.
 - **Commands.** `Request` is the eight verbs that change something, each parsed from JSON
   with refusals that name the field at fault (`Failure { code, message, field }`).
 - **View models.** What a UI is given to draw, with the units already resolved: dBFS
@@ -2973,7 +2973,7 @@ forward from the keyboard**. The criterion was unmeetable no matter how much was
 Eight bindings were added, all `workflow: "navigate"`, all `scope: "global"`:
 `Ctrl+1`..`Ctrl+6` for the six panels, `Ctrl+D` for the diagnostics log and `Escape` to
 dismiss. `Ctrl` and a digit rather than a bare digit, because a bare digit is the first
-thing taken away the moment somebody types a catalogue number into a field. The map is
+thing taken away the moment somebody types a catalog number into a field. The map is
 now **32 actions covering all 20 of §44's workflows**.
 
 ### No business logic in TS is a review gate, so it was reviewed - and it failed twice
@@ -3014,7 +3014,7 @@ answered in prose only; each is a decision in a file with the argument beside it
   the detectors that agreed, dimmed and italic, not hidden. A person cannot promote what
   the picture does not show, and `Policy::min_sources = 2` is a policy that gets tuned -
   which it cannot be from a UI that renders only what survived it. The waveform draws it
-  too, thin against the thick locked ones, so the distinction survives greyscale.
+  too, thin against the thick locked ones, so the distinction survives grayscale.
 - **WP-07: a recovered capture is shown and never resumed.** `Capture.tsx` reports a
   `recovered` or `interrupted` capture with how much of it survived and offers nothing but
   play. Appending to a capture that stopped for a reason nobody has established is the one
@@ -3044,7 +3044,7 @@ Three pieces, because the core half alone would have been inert:
   the needle does not stop at the join either.
 - **`Audition::marks`**, sorted and deduplicated by its builder rather than trusted, with
   `Player::skip_forward` and `skip_back` landing on the next mark and falling back to
-  `SKIP_SECONDS` when there are none - an unanalysed side, which is the case the fixed
+  `SKIP_SECONDS` when there are none - an unanalyzed side, which is the case the fixed
   step exists for. The `render` driver mirrors it exactly, because a render is how a skip
   is tested without a sound card and a driver that skipped differently would make that
   test worthless.
@@ -3060,7 +3060,7 @@ Three pieces, because the core half alone would have been inert:
 The marks handed in are the whole capture's, not the scope's, and that is deliberate:
 `Player::seek` clamps into the span, so a skip out of a one-track audition lands at its own
 end, and filtering in the shell would be the shell deciding twice what playback decides
-once. One behaviour is worth stating because it looks like a bug and is not: `SKIP BACK`
+once. One behavior is worth stating because it looks like a bug and is not: `SKIP BACK`
 from inside a track lands on that track's top, and walking further back needs a second
 press. That is what a transport's back button does.
 
@@ -3090,7 +3090,7 @@ command a frontend can send and nothing answers is worse than one that refuses o
 **All 17 commands in `Request` are now wired**, so `NOT_WIRED`, `fn refused` and
 `Error::NotWired` have been deleted rather than left as an empty array. That turns
 `every_command_in_the_contract_is_wired` from a reminder into a hard requirement: a verb
-added to the contract now fails the suite until something in the shell honours it.
+added to the contract now fails the suite until something in the shell honors it.
 
 ### What the panels are, and what each decides
 
@@ -3106,7 +3106,7 @@ added to the contract now fails the suite until something in the shell honours i
 - **`Waveform.tsx`** fetches on resize and on the event that says the rows moved, and
   draws in a second effect so a fetch does not block a paint.
 - **`Browser.tsx`** is §34's project list plus the three-field create helper the user
-  asked for - artist, recording title, catalogue number, none of them required, which is
+  asked for - artist, recording title, catalog number, none of them required, which is
   what `config::new_project` already accepts.
 - **`Capture.tsx`** shows the device, the rate, the format, `problems`, and the negotiated
   format beside the enumerated one, because §7's divergence is the thing an operator needs
@@ -3165,7 +3165,7 @@ whole argument for the run, so it is worth being precise about why each one was 
 ### The window works, which is the part that is easy to skip past
 
 Before the defects: the Projects panel listed four real projects with their release,
-catalogue number, side and track counts, length and size; the waveform strip read **1,920
+catalog number, side and track counts, length and size; the waveform strip read **1,920
 columns out of a 2.33 GiB capture** spanning 26:05.77 with the track boundaries drawn in;
 the Capture panel reported `48000 Hz s32 x2 (unverified)`, which is S1's
 never-trust-CPAL's-format-report surfacing honestly in the UI rather than being quietly
@@ -3288,7 +3288,7 @@ now goes through `store.run`, which is what puts a reason on screen.
 
 ### An amber row of zeros with no reason on it
 
-`browse::summarise`'s doc promises "the row a browser draws greyed out with a reason
+`browse::summarize`'s doc promises "the row a browser draws grayed out with a reason
 beside it". What it actually had was `title={project.problem ?? project.path}` - a hover
 tooltip. First light showed two amber rows reading `0 sides / 0 tracks / 0:00.00` against
 files holding twenty and six seconds of audio, with no reason anywhere on screen, and no
@@ -3305,7 +3305,7 @@ rather than `no such table: releases`. Opening it then does what the row says. V
 end to end: `twenty-seconds.vcw` and `six-seconds.vcw` both went from `user_version` 1 to
 2 by four arrow presses and `Enter`, their amber rows healed, and their lengths filled in
 as 0:20.01 and 0:06.02 where both had read 0:00.00. Sides and tracks stay at zero, which
-is correct - a capture-only project has nothing analysed in it yet.
+is correct - a capture-only project has nothing analyzed in it yet.
 
 Opening a project now also re-reads the library, through a new `onLibraryChanged` prop.
 `store.reload` only re-reads the *open* project, so without it the row a person had just
@@ -3486,7 +3486,7 @@ dangerous. A 24-bit file has a 40-byte `WAVE_FORMAT_EXTENSIBLE` `fmt `; a tagged
 carries a `LIST` or `id3 ` chunk that can come **before** `data`. Guessing wrong offsets
 every sample in the run and still verifies clean, because the verifier would be comparing
 the wrong bytes against themselves. So the chunks are walked, the pad byte on an
-odd-length chunk is honoured, and `data` before `fmt ` resolves rather than failing - a
+odd-length chunk is honored, and `data` before `fmt ` resolves rather than failing - a
 case that legal, rare, and one the first implementation got wrong until its test said so.
 
 The file's rate, channel count and format **win over the flags**, because reinterpreting a
@@ -3547,7 +3547,7 @@ check depend on the rate.
 
 The nightly's timing numbers are worth reading and not worth trusting. A hosted runner
 shares its CPU and its disk, so a commit tail measured there says as much about the
-neighbours as about the writer. The commit budget stays on because 250 ms against a ~25 ms
+neighbors as about the writer. The commit budget stays on because 250 ms against a ~25 ms
 p99 leaves an order of magnitude of headroom - it takes a genuinely pathological runner to
 breach it, and that is worth seeing too. **The real-time numbers of record come off the
 rigs, not off CI.**
@@ -3651,15 +3651,15 @@ error**, naming `--max-growth-mib 0` as the remedy:
 
 ```
 this platform cannot report resident memory, so --max-growth-mib 32 cannot be
-honoured. Pass --max-growth-mib 0 to soak without the memory gate; every other
+honored. Pass --max-growth-mib 0 to soak without the memory gate; every other
 check still applies.
 ```
 
 It is checked before the project is created, like the input file, so a run that cannot
-honour what it was asked costs nothing to find out. `Growth::sample_at` splits the reading
+honor what it was asked costs nothing to find out. `Growth::sample_at` splits the reading
 from the policy, which is what lets the baseline logic be tested on a machine with no
 procfs - and that test failing on Windows and macOS is how the whole hole surfaced.
-`a_memory_gate_the_platform_cannot_honour_is_refused` covers all three cases: refused when
+`a_memory_gate_the_platform_cannot_honor_is_refused` covers all three cases: refused when
 unmeasurable, allowed when not requested, allowed when measurable.
 
 **Unverified:** the refusal has never executed on Windows or macOS. It is unit-tested and
@@ -3711,12 +3711,12 @@ the disk. `VCW_SHARED=1` turns it on, both CI soak jobs set it, and the same var
 sets `--max-growth-mib 0` on non-Linux, where the gate would now be refused.
 
 Checked from both ends, which is the standing rule: at a 5 ms block budget the same run
-**fails** with the gate on (52.0 ms, exit 1) and passes with it off, labelled.
+**fails** with the gate on (52.0 ms, exit 1) and passes with it off, labeled.
 
 ### The spikes job had never passed on a clean checkout
 
 `tauri::generate_context!` resolves `frontendDist` at compile time and panics if the
-directory is missing. The IPC spike's `dist/` is a build artefact and gitignored, so it
+directory is missing. The IPC spike's `dist/` is a build artifact and gitignored, so it
 exists on the machine that built it and nowhere else. Both CI and the `spikes` gate leg
 now write a placeholder `index.html` first; nothing there runs the window. A fresh clone
 needs the same `mkdir`, which is now the gate's job rather than folklore.
@@ -3755,7 +3755,7 @@ Windows reserves **1 MiB** for a process's main thread against 8 MiB on Linux an
 and the size lives in the executable header rather than being asked for at run time. A
 debug `vcw --version` wants between **1.0 and 1.5 MiB before it has parsed an argument**,
 because clap's derive expands an `augment_subcommands` function per subcommand enum that
-builds every `Command` and every `Arg` as a local, and unoptimised they are all live at
+builds every `Command` and every `Arg` as a local, and unoptimized they are all live at
 once. `gdb` puts the fault in `augment_subcommands`, five frames under `main`, with
 nothing of ours in between.
 
@@ -3917,7 +3917,7 @@ audio came from. It cannot claim bit-perfect, because unknown provenance is repo
 "no" rather than inherited.
 
 Labels become locked user boundaries with titles, tags become the release - `ALBUM`,
-`ARTIST`, `YEAR`, `GENRE` through §32's normalisation, `COMMENTS` - and every tag is also
+`ARTIST`, `YEAR`, `GENRE` through §32's normalization, `COMMENTS` - and every tag is also
 kept verbatim under `import.tag.*` so nothing is lost by not having been mapped. What is
 deliberately dropped is editor state: gain, pan, mute, solo and envelopes describe how
 Audacity was set up to play a project, not what is on the record.
@@ -3991,7 +3991,7 @@ format cannot catch the writer being wrong about it.
   oracle; real vinyl audio at 24-bit and float32, with trims, gaps and shared blocks,
   lands where the document says, checked against the source blocks; both generations of
   one project land and export as identical audio; an imported project validates clean and
-  is read by `tracks`, `release` and `export` unchanged; the rate trap is honoured all the
+  is read by `tracks`, `release` and `export` unchanged; the rate trap is honored all the
   way into a `.vcw`; the refusals for no audio, mixed rates, overlapping clips, a
   fractional rate, an unknown tag, a non-Audacity file, an existing destination and
   float32-to-FLAC all fire.
@@ -4059,7 +4059,7 @@ read from `sqlite_master` rather than from a list, because the first draft asked
 `waveform_blocks` that does not exist and reported it as `null` - which reads like an
 empty table rather than like a bug in the bundle.
 
-It started at 7.7 MB. Summarising the device survey took it to 593 KB, digesting each
+It started at 7.7 MB. Summarizing the device survey took it to 593 KB, digesting each
 `capability_fingerprint` to 16 hex characters took it to 128 KB, and compressing long
 channel lists to a min, a max and a count took it to **99 KB**, or 2.6 KB with
 `--no-devices`. `--all-devices` still writes the whole survey for the case where the
@@ -4153,7 +4153,7 @@ The gate is green across all fifteen legs at **1013 tests**, up from 991. New fi
 Built 2026-09-28. The work package ships what the previous eighteen built, and
 the thing worth recording is that **shipping it is the first exercise that runs
 the product the way a stranger will**. Every leg of the gate runs code from a
-source tree; a package runs a copy of a build artefact, from a path nobody
+source tree; a package runs a copy of a build artifact, from a path nobody
 chose, against a configuration file. Three of the five findings in this pass
 could not have come from anywhere else, and one of them was not in the product
 at all.
@@ -4186,7 +4186,7 @@ a release profile that is also the shipping profile makes those two needs fight.
 
 Beside those, the small obligations: `libasound2` declared once rather than
 twice, because the deb bundler appends its own `Depends` and a duplicate is a
-lintian error; the licence installed as `/usr/share/doc/vcw/copyright` through
+lintian error; the license installed as `/usr/share/doc/vcw/copyright` through
 `deb.files`, which is the only mechanism that puts an arbitrary file in a deb;
 a real icon set rendered from a real SVG by `tools/make-icons.sh`; `bundle.active`
 true and a `csp` that is no longer `null`, which were the three items WP-16 left
@@ -4259,7 +4259,7 @@ The AppImage launches and draws the real interface. Under the desktop session it
 then ignored every synthetic keystroke and mouse click, which looked exactly
 like a packaged-build input bug and was not: the session is Wayland, XTEST is
 dropped, and `xdotool getwindowfocus` returns the compositor's guard window.
-Re-run under `Xvfb`, the same artefact is fully interactive. The finding is
+Re-run under `Xvfb`, the same artifact is fully interactive. The finding is
 about the harness, and filing it as a product defect would have cost a day.
 
 ### Two product defects, found by clicking the package
@@ -4283,7 +4283,7 @@ option now says **"Simulated source (no device)"**, and a new `defaultInput()`
 picks the host's own default input when nothing is pinned, so the honest choice
 is also the default one.
 
-Each fix was confirmed in the artefact, not just in the tree: the project-list
+Each fix was confirmed in the artifact, not just in the tree: the project-list
 one in the rebuild that followed it, and the device one in a rebuilt AppImage
 driven under `Xvfb`, whose device field opens on the one device the host calls
 its default input while the shipped frontend bundle contains the new label and
@@ -4367,7 +4367,7 @@ files: `app/src-tauri/tests/the_bundle_ships_what_a_user_needs.rs`,
 `.gitignore`: `tools/vcw-read.py`, `tools/verify-release.py` and
 `tools/make-icons.sh`.
 
-Artefacts on this machine: `VCW_0.1.0_amd64.deb` at 11.2 MB and
+Artifacts on this machine: `VCW_0.1.0_amd64.deb` at 11.2 MB and
 `VCW_0.1.0_amd64.AppImage` at 88.6 MB, both in `app/target/release/bundle/` and
 both rebuilt after the last fix.
 
@@ -4649,7 +4649,7 @@ the other side).
 
 So **sub-second waveform latency holds with a factor of four in hand, and the
 budget is now a gate**: `--waveform-budget-millis`, default 1000, gating the
-p99 rather than the maximum. That choice is the one judgement in here. One
+p99 rather than the maximum. That choice is the one judgment in here. One
 redraw in a hundred arriving a second late is a product that feels slow; one
 redraw held up behind a checkpoint is not, and the maximum is printed beside the
 verdict either way so nothing is hidden by the choice.
@@ -4736,7 +4736,7 @@ at 60 Hz**, which is about 5 ms of main thread per redraw - so **2 Hz is
 roughly 1% of the main thread for a picture a quarter of a second old**. That is
 cheap enough that "the waveform does not move while you record" should be a
 decision somebody makes on purpose rather than a consequence of the dependency
-list of an effect. **Recorded, not changed**: it is a product judgement about
+list of an effect. **Recorded, not changed**: it is a product judgment about
 what a recording screen should do, it belongs beside whether the panel
 auto-scrolls and where the playhead sits during capture, and this change is
 about measurement.
@@ -4803,7 +4803,7 @@ recorded as Phase 2's rather than as an omission.
 
 `WP-19` made `bundle.externalBin` name the CLI, so `tauri-build` now refuses to
 run while `app/src-tauri/binaries/vcw-<triple>` is missing. That directory is in
-`.gitignore`, correctly - it holds a 10 MB build artefact. The dev box has had a
+`.gitignore`, correctly - it holds a 10 MB build artifact. The dev box has had a
 real one in it since the first package build, so `appfmt`, `appclippy` and
 `apptest` all passed here, and **the same three steps failed on every CI run for
 two days** with `resource path binaries/vcw-x86_64-unknown-linux-gnu doesn't
@@ -4914,14 +4914,14 @@ thing holding MP3 and Ogg in G3 was D5's licensing question. That question was h
 size it looked: `cargo info` disagrees with D5 on both crates. `mp3lame-encoder` and
 `mp3lame-sys` declare **LGPL-3.0**, not the LGPL-2.1 D5 recorded - libmp3lame's own
 `COPYING` is the GNU *Library* GPL v2 "or any later version", and the wrapper exercises
-the later-version option, which is why `deny.toml` needs a version of the licence the
+the later-version option, which is why `deny.toml` needs a version of the license the
 `chromaprint-next` exception does not cover. And `vorbis_rs`, `aotuv_lancer_vorbis_sys`
 and `ogg_next_sys` are all **BSD-3-Clause**, not LGPL: **Ogg export carries no copyleft
 obligation at all.** Both corrections are now in D5 itself, in the notices and in
-`deny.toml`'s comment, because a licence recorded wrong in a plan is the kind of error
+`deny.toml`'s comment, because a license recorded wrong in a plan is the kind of error
 that gets read twice and checked never.
 
-### Features that exist for the licence, not for the size
+### Features that exist for the license, not for the size
 
 Both formats are **default-on cargo features**. R4's pre-committed mitigation was
 "optional cargo features; ship FLAC/WAV only in MVP", and default-off would fail §33,
@@ -5180,14 +5180,14 @@ real project the two outputs differ only in the last line.
 **Parallel export is on hold** by instruction. The measurement that prompted the
 question stands in the record above: the Ogg run spent 2:00 of wall clock on one core.
 
-### Captures now record what equalisation they arrived with
+### Captures now record what equalization they arrived with
 
-§51 was drafted this session and specifies playback equalisation curves for Phase 3.
+§51 was drafted this session and specifies playback equalization curves for Phase 3.
 Almost all of it can wait. One part cannot: **which curve the hardware already
 applied** is a fact about the capture that is gone the moment the capture ends.
 Nothing in the audio distinguishes a flat transfer from an RIAA one with enough
 confidence to act on, and a project full of captures that say nothing can never be
-equalised without a guess. So the provenance field ships now, years before the curves
+equalized without a guess. So the provenance field ships now, years before the curves
 it exists for.
 
 `CaptureEq` is three cases - `Flat`, `Riaa`, `Unknown` - and `Unknown` is the
@@ -5205,13 +5205,13 @@ ALTER TABLE captures ADD COLUMN capture_eq TEXT NOT NULL DEFAULT 'unknown';
 `FORMAT_VERSION` stays 1 - nothing an existing column means has changed. `ADD COLUMN`
 with a `NOT NULL DEFAULT` is metadata-only in SQLite: it rewrites no rows, so the
 migration is free on the 2.33 GiB test project and can run on open rather than being
-offered as a job. `the_equalisation_migration_only_adds_a_column` pins that by
+offered as a job. `the_equalization_migration_only_adds_a_column` pins that by
 forbidding every other verb in the DDL, and
-`an_older_project_gains_the_equalisation_column_as_unknown` builds a database at v2,
+`an_older_project_gains_the_equalization_column_as_unknown` builds a database at v2,
 writes the insert a v2 build would have written, upgrades, and checks both halves: the
 column reads `unknown` and the row's frames are untouched.
 
-The path runs `--capture-eq` / **Settings -> Audio -> Equalisation on input** ->
+The path runs `--capture-eq` / **Settings -> Audio -> Equalization on input** ->
 `Arm.eq` -> `Setup.eq` -> `CaptureInfo::with_eq` -> the column, and a typo is
 **refused** at the contract rather than defaulted: somebody who typed `raia` believes
 they have recorded RIAA. The settings home is the right one because the field
@@ -5260,7 +5260,7 @@ answered is the crate the cargo features belong to - `cfg!(feature = "mp3")` wri
 `app/src-tauri` asks about the *shell's* features, and written in a webview cannot ask
 at all. `Container::compiled_in` answers it on the variant rather than on
 `feature()`'s string, so a fifth container cannot compile until it says which way it
-goes, and `Container::notice` hangs the licence facts off the same enum. The two are
+goes, and `Container::notice` hangs the license facts off the same enum. The two are
 deliberately separate: what obligation a container *would* bring is a fact about the
 container, and which ones this build *does* bring is `notices()`' filter - which is
 what lets the test check the filter rather than check itself.
@@ -5268,7 +5268,7 @@ what lets the test check the filter rather than check itself.
 This is the rule `encoder::alternatives` arrived at the hard way in WP-25, applied
 before the drift rather than after it. Refusal advice written as a string literal
 drifted four separate ways in one work package. A notice is worse when it is wrong: it
-is either a claim about a licence that does not apply or silence about one that does.
+is either a claim about a license that does not apply or silence about one that does.
 
 The exit criterion is a test and not a screenshot, and it can fail on purpose:
 **the notices the binary reports agree with the features it was compiled with**,
@@ -5279,7 +5279,7 @@ Making `compiled_in` lie about MP3 fails both the new test and WP-25's own
 `a_build_without_an_encoder_refuses_at_plan_time_and_not_at_write_time`, which now
 cross-checks the accessor against an independently derived answer.
 
-**The CLI carries the same obligation and now says so.** `vcw doctor` prints the licence
+**The CLI carries the same obligation and now says so.** `vcw doctor` prints the license
 list from the same generator, because the command-line binary is redistributed in the
 same package and links the same encoders; a person who only ever runs the CLI should not
 have to open the repository to find out their copy contains LGPL-3.0 object code. The
@@ -5298,7 +5298,7 @@ The credits are the one part of the dialog that is written out, because there is
 fact to derive them from.
 
 Skipped: a keyboard chord for the dialog. It is a header button and `Escape` closes it,
-and §44's workflows do not include reading a licence. Add one if it is ever wanted.
+and §44's workflows do not include reading a license. Add one if it is ever wanted.
 
 ### What first light found in it, and the two things it can now open
 
@@ -5554,7 +5554,7 @@ tolerance, and chromaprint's ~0.124 s frame step is the obvious suspect, since t
 needs exact subfingerprint hashes. Unverified and parked.
 
 The consequence for the design is in `docs/design/WP-23-identification-resolver.md`: the
-catalogue number a person reads off the label stays the strongest evidence VCW has, and
+catalog number a person reads off the label stays the strongest evidence VCW has, and
 AcoustID is the fallback for the records that cannot be found by name plus the
 *confirmation* for the ones that can. The populated fixture was still captured by
 `trackid` rather than by fingerprint (recorded in `tests/fixtures/README.md`, with why).
@@ -5562,7 +5562,7 @@ AcoustID is the fallback for the records that cannot be found by name plus the
 **Sixteen legs green on this box at Rust 1.99.0, 1,130 Rust tests and 138 frontend
 tests** - the whole gate, including `spikes`, `appclippy` and `apptest`, which do not run
 on media2026. The bench box was busy with the corpus soak, and the split exists for
-resources rather than capability; the one leg it is still needed for is a judgement call
+resources rather than capability; the one leg it is still needed for is a judgment call
 about whether `rustup check` works here, and it did.
 
 **Leg zero was lying, which is why it is leg zero.** `rustup check` exits **100** when an
@@ -5588,7 +5588,7 @@ those sites - `fingerprint`, `detect`, `waveform`, `export`, the lot. `open_read
 could not catch it: it rejects a *newer* schema and accepts an older one, which is the
 right policy and exactly why the caller has to read tolerantly. The select now asks
 whether the column exists and the row parser already defaulted it to `Unknown`, which is
-what a v1 project honestly knows about its equalisation. The regression test builds a v1
+what a v1 project honestly knows about its equalization. The regression test builds a v1
 fixture by winding the migrations back, asserts the fixture really is older before it
 asserts anything about the read, and was mutation-proved: with the column check forced
 true it fails with the original error.
@@ -5616,31 +5616,31 @@ somebody's hand, so four of the five things setup asks for are release identity 
 a person looking at the object, arriving before the first sample does. The resolver's job
 is not to guess what the record is; it is to turn a stated identity into a specific
 **pressing**, confirm the audio is consistent with it, and lay the side out. Artist and
-title identify a work, a catalogue number identifies a pressing, and §28 asks VCW to tell
+title identify a work, a catalog number identifies a pressing, and §28 asks VCW to tell
 pressings apart.
 
 `Lookup::ORDER` is that policy as code, and it is a pure function over the evidence so
 the escalation order is asserted by a test rather than emerging from the order somebody
-wrote the calls in: Discogs by catalogue number, Discogs by name, MusicBrainz by name,
+wrote the calls in: Discogs by catalog number, Discogs by name, MusicBrainz by name,
 and only then the audio. AcoustID is last for three measured reasons - about a third of
 `/data2/source_rips` does not resolve at MusicBrainz from artist and album at all, a text
 lookup is one request where identification from audio alone cost 63 to 138, and §26's
 rule that automatic identification never silently replaces what a person confirmed is
 structural if the typed facts are the *first* evidence rather than a late tie-breaker.
-`is_possible` keeps §40 honest too: a catalogue lookup with no catalogue number is not a
+`is_possible` keeps §40 honest too: a catalog lookup with no catalog number is not a
 cheap failure, it is a request that cannot succeed.
 
 **Four modules, and the split is the design.** `evidence` collects `(source, fact)` pairs
 and judges nothing, because the same fact arrives from several places and disagrees with
 itself - a person types `CHRH 1296`, Discogs says `CHRH1296`, MusicBrainz has no
-catalogue number at all, and that is three states rather than one field. `candidate`
+catalog number at all, and that is three states rather than one field. `candidate`
 gives one release's account of them. `confidence` holds every weight in one table.
 `resolver` picks one, or declines to.
 
 **The three-way verdict is load-bearing.** Silent is not a small disagreement. A release
-with *no* catalogue number is merely unsupported by the number on somebody's sleeve,
+with *no* catalog number is merely unsupported by the number on somebody's sleeve,
 while a release with a *different* one is contradicted and must lose to a candidate with
-less evidence in its favour; fold those together and the better-documented database loses
+less evidence in its favor; fold those together and the better-documented database loses
 every time it is honest. An identified recording, by contrast, can agree but **never**
 disagree: AcoustID's release lists come from digital submissions and routinely omit a
 vinyl pressing entirely, so a candidate missing from the list is unmentioned and not
@@ -5651,14 +5651,14 @@ agreeing on artist, title and track count scored 0.45 against a `LIKELY` floor o
 so the ordinary result of a text search was being discarded instead of shortlisted. The
 floor now sits at exactly what artist-plus-title is worth, because "right album, unknown
 pressing" is a question to put to a person. Deliberate consequences of the same table: a
-catalogue number alone reaches `LIKELY` and not `CERTAIN`, since a number can be mistyped
+catalog number alone reaches `LIKELY` and not `CERTAIN`, since a number can be mistyped
 into a search box; identified recordings accumulate (§26 requires it) but are capped,
 because ten confirmed tracks prove the audio is this album and say nothing about which
-pressing; and nothing short of a catalogue match can reach `CERTAIN` at all.
+pressing; and nothing short of a catalog match can reach `CERTAIN` at all.
 
 **Declining is a result, not a fallback.** Three outcomes and no fourth. The failure mode
 worth designing against is not "could not identify the record", which is ordinary and
-recoverable; it is a plausible wrong pressing written silently over a catalogue number
+recoverable; it is a plausible wrong pressing written silently over a catalog number
 somebody read off the label. So a tie asks (`Doubt::TooClose` - two pressings of one
 record agree about artist, title and track count equally well), a contradiction asks
 (`Doubt::ContradictsAPerson`, which can never resolve however high the score), and the
@@ -5681,10 +5681,10 @@ ALTER TABLE releases ADD COLUMN riaa_eq INTEGER NOT NULL DEFAULT 0;
 ```
 
 **Why they are asked and the other three fields are offered.** Artist, title and
-catalogue number are a head start: leave them blank and identification finds them. These
+catalog number are a head start: leave them blank and identification finds them. These
 two are not findable by anything. A mono groove transferred with a stereo cartridge gives
 two channels that are *nearly* identical and never exactly so, which is a measurement no
-threshold survives; and an equalisation curve leaves no trace in the audio it was applied
+threshold survives; and an equalization curve leaves no trace in the audio it was applied
 to, which is the whole reason §51 requires `captures.capture_eq` recorded from the first
 release that can capture at all. Unticked is an answer rather than a gap, so they are
 `bool` and not `Option<bool>` on the wire.
@@ -5694,7 +5694,7 @@ is per capture and records what the signal *already carried* when it reached the
 card. `releases.riaa_eq` is per project and is what the operator wants done about it.
 The first is the input to the decision; the second is the decision.
 
-**Neither one touches the capture path.** §9 governs what lands and §51 says equalisation
+**Neither one touches the capture path.** §9 governs what lands and §51 says equalization
 is "a non-destructive stored decision ... applied on playback, render and export". The
 mono fold is the same kind of decision: the stereo capture of a mono record stays stereo
 in the project, and the sum happens on the way out. That is what makes both flags free to
@@ -5772,8 +5772,8 @@ by checksum before the run.
 
 Two things came out of the split. The first is a real regression the single-box gate had
 been calibrating away, and it is written up above. The second is smaller: the frontend
-count silently disappeared from the tally on the bench box, because vitest colourises
-its summary there even off a tty and the tally's `sed` matched the uncoloured line only.
+count silently disappeared from the tally on the bench box, because vitest colorizes
+its summary there even off a tty and the tally's `sed` matched the uncolored line only.
 The escapes are now stripped and a missing count prints `UNKNOWN` instead of nothing, so
 the tally cannot quietly lose half of itself again.
 
@@ -5851,7 +5851,7 @@ the only remaining one that added a capability rather than describing or shippin
 already exists, and it was taken next because it was the best-prepared work in the
 repository: S5 had decoded both generations against 30 real projects and written the
 traps down rather than leaving them to be rediscovered. Two of them still cost something
-to honour - `waveclip/@offset` turned out to be the sequence origin, which is what
+to honor - `waveclip/@offset` turned out to be the sequence origin, which is what
 decided the landing mechanism, and a label over deleted audio had to be reported rather
 than landed. Its section above has the account.
 
@@ -5894,7 +5894,7 @@ M4 asks for the whole workflow end to end from the CLI, so the run itself is wha
 outstanding, not any part of it.
 
 **WP-13's skip is done.** `SKIP FORWARD` and `SKIP BACK` land on the next and previous
-track edge, falling back to ten seconds only on a side nothing has been analysed from.
+track edge, falling back to ten seconds only on a side nothing has been analyzed from.
 `track::edges_of_capture` is the query, `Audition::marks` carries the frames, and both the
 shell and the CLI fill it - detail in the WP-16 section above. An earlier version of this
 paragraph said a skip might land on "the padded track start §33 exports" - **there is no
@@ -5925,7 +5925,7 @@ is to adopt one side or to record the faces separately; the fix is a frame range
 section above.
 
 One thing WP-09 deliberately left undone and did not need: **the waveform is read, not
-pushed**, and WP-16 decided to keep it that way. The writer summarises every block as it
+pushed**, and WP-16 decided to keep it that way. The writer summarizes every block as it
 commits, so the rows are there the instant they land; `Waveform.tsx` measures its own
 width and asks for exactly that many columns, which a pushed event could not have done.
 Nothing publishes `waveform-update` and nothing needs to.
@@ -6059,7 +6059,7 @@ the spike harness.
   latter five being conversions of AUP3 projects already in the set. Several titles
   appear in both corpora, which will make a good import round-trip test at WP-20, and
   the five matched pairs are the AUP3/AUP4 equivalence fixture.
-- `.bench/` holds **~8 GB** of scratch databases - the 8.4 GB soak artefact plus older
+- `.bench/` holds **~8 GB** of scratch databases - the 8.4 GB soak artifact plus older
   `.vripr`-suffixed files from before the rename. All gitignored and safe to delete; the
   S1 and S2 numbers are recorded here and in the spike write-ups.
 - **The first entry in `deny.toml`'s advisory ignore list arrived with WP-14.**

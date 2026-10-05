@@ -412,7 +412,7 @@ pub fn markdown() -> String {
          **Open it read-only, and open it with `mode=ro`.** A project is in WAL mode, \
          so content that has not been checkpointed lives in the `-wal` sidecar. \
          SQLite's `immutable=1` tells the library to ignore that file, which turns an \
-         unflushed project into a silently stale one. `mode=ro` honours the sidecar \
+         unflushed project into a silently stale one. `mode=ro` honors the sidecar \
          and costs only the creation of a `-shm`.\n\n\
          **Identify it from the header, not from the name.** `application_id` and \
          `user_version` are at offsets 68 and 60 of the first database page, \

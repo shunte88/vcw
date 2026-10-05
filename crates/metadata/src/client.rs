@@ -51,7 +51,7 @@
 //! before each attempt and every [`CANCEL_SLICE`] of any backoff or rate-limit
 //! wait, so waiting is interruptible immediately, while a request already on the
 //! wire is bounded by its timeout rather than by the token. That is the true
-//! behaviour and the reason the timeout set by [`Client::with_timeout`] defaults to
+//! behavior and the reason the timeout set by [`Client::with_timeout`] defaults to
 //! something a person will sit through.
 //!
 //! # No network on the audio thread
@@ -79,7 +79,7 @@ pub const CANCEL_SLICE: Duration = Duration::from_millis(50);
 /// A token a caller keeps in order to stop waiting.
 ///
 /// Clone it: every clone refers to the same flag, so a UI can cancel a search from
-/// a different thread than the one waiting on it. Cancelling is one-way, because a
+/// a different thread than the one waiting on it. Canceling is one-way, because a
 /// user who changed their mind twice is better served by starting a new search than
 /// by a token that un-cancels under the worker.
 #[derive(Debug, Clone, Default)]
@@ -88,7 +88,7 @@ pub struct Cancel {
 }
 
 impl Cancel {
-    /// A token that has not been cancelled.
+    /// A token that has not been canceled.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -99,16 +99,16 @@ impl Cancel {
         self.flag.store(true, Ordering::SeqCst);
     }
 
-    /// Whether it has been cancelled.
+    /// Whether it has been canceled.
     #[must_use]
-    pub fn is_cancelled(&self) -> bool {
+    pub fn is_canceled(&self) -> bool {
         self.flag.load(Ordering::SeqCst)
     }
 
-    /// `Err(Error::Cancelled)` if it has been cancelled, for the `?` operator.
+    /// `Err(Error::Canceled)` if it has been canceled, for the `?` operator.
     pub fn check(&self) -> Result<()> {
-        if self.is_cancelled() {
-            Err(Error::Cancelled)
+        if self.is_canceled() {
+            Err(Error::Canceled)
         } else {
             Ok(())
         }
@@ -246,7 +246,7 @@ impl Client {
 
     /// Whether this client can reach anything at all.
     ///
-    /// A caller uses it to grey out a "search" button rather than to offer one that
+    /// A caller uses it to gray out a "search" button rather than to offer one that
     /// is certain to fail.
     #[must_use]
     pub fn is_offline(&self) -> bool {
@@ -371,7 +371,7 @@ impl Client {
         match self.nap(delay, cancel) {
             Ok(()) => Ok(()),
             Err(error) => {
-                // Cancelled while queueing: hand the slot back so the next search
+                // Canceled while queueing: hand the slot back so the next search
                 // does not pay for a request that never happened.
                 self.limiter
                     .release(self.limiter.reserved_until(now, delay));
@@ -395,7 +395,7 @@ impl Client {
     /// Turns an error status into the error a person should see.
     fn classify(&self, response: &Response, attempts: u32) -> Error {
         let provider = self.provider;
-        if response.is_unauthorised() {
+        if response.is_unauthorized() {
             return Error::Rejected { provider };
         }
         if response.is_rate_limited() {
@@ -658,20 +658,20 @@ mod tests {
     }
 
     #[test]
-    fn cancelling_before_the_call_makes_no_request_at_all() {
+    fn canceling_before_the_call_makes_no_request_at_all() {
         let transport = Arc::new(Recorded::new().json(URL, "{}"));
         let (_clock, client) = client(transport.clone());
         let cancel = Cancel::new();
         cancel.cancel();
         assert!(matches!(
             client.body(URL, &[], &cancel),
-            Err(Error::Cancelled)
+            Err(Error::Canceled)
         ));
         assert_eq!(transport.calls(), 0);
     }
 
     #[test]
-    fn cancelling_during_a_wait_gives_the_slot_back() {
+    fn canceling_during_a_wait_gives_the_slot_back() {
         let transport = Arc::new(Recorded::new().json_matching("/releases/", "{}"));
         let clock = Arc::new(TestClock::new());
         let client = Client::new(ProviderId::MusicBrainz, transport.clone())
@@ -686,9 +686,9 @@ mod tests {
         assert!(
             matches!(
                 client.body("https://x/releases/2", &[], &cancel),
-                Err(Error::Cancelled)
+                Err(Error::Canceled)
             ),
-            "the second was cancelled while queueing"
+            "the second was canceled while queueing"
         );
         assert_eq!(transport.calls(), 1);
 
@@ -699,7 +699,7 @@ mod tests {
         assert_eq!(
             clock.slept_total(),
             30_000,
-            "one interval of waiting, not two: the cancelled request handed its slot back"
+            "one interval of waiting, not two: the canceled request handed its slot back"
         );
     }
 

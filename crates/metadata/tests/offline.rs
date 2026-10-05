@@ -174,7 +174,7 @@ fn the_whole_search_to_release_path_runs_from_fixtures() {
         .with_client(client(ProviderId::MusicBrainz, transport.clone()));
     let cancel = Cancel::new();
 
-    // Search, choose the original pressing by its catalogue number, fetch it.
+    // Search, choose the original pressing by its catalog number, fetch it.
     let candidates = provider
         .search(&Query::new().artist("Autechre").album("Amber"), &cancel)
         .expect("a search");
@@ -262,7 +262,7 @@ fn a_user_who_closes_the_dialog_stops_the_search() {
     cancel.cancel();
     assert!(matches!(
         provider.search(&Query::new().artist("Autechre"), &cancel),
-        Err(Error::Cancelled)
+        Err(Error::Canceled)
     ));
     assert_eq!(transport.calls(), 0);
 }
@@ -274,7 +274,7 @@ fn everything_that_is_not_a_provider_works_with_no_transport_at_all() {
     // reading a tracklist off a sleeve is not blocked by being offline.
     let genres = Genres::builtin();
     assert_eq!(
-        genres.normalise("HH; Mn"),
+        genres.normalize("HH; Mn"),
         ["Hip-Hop", "Hip Hop", "Minimal"]
     );
 

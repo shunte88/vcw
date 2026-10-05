@@ -79,7 +79,7 @@ pub enum Error {
     ///
     /// Roughly 0.4 s at the algorithm's internal 11,025 Hz. An empty fingerprint
     /// encodes to a string a service will accept and never match, so it is refused
-    /// here instead of travelling.
+    /// here instead of traveling.
     #[error("{frames} frames is too little audio to fingerprint")]
     TooShort {
         /// What was fed.
@@ -236,7 +236,7 @@ impl Builder {
         self.samples.clear();
         self.samples.reserve(self.format.samples_in(frames.len()));
         for index in 0..self.format.samples_in(frames.len()) {
-            // `decode_sample` is the one decoder in the product and it normalises to
+            // `decode_sample` is the one decoder in the product and it normalizes to
             // f32, so this is a float round trip - which D4 forbids on the capture and
             // export paths and this is neither. Narrowing to 16 bits is what the
             // algorithm does to its input anyway: S4 fed `>> 16` of an i32 capture and
@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn the_eq_a_capture_arrived_with_is_none_of_the_algorithms_business() {
-        // A smoke check on `open` across the formats, and a note: §51's equalisation
+        // A smoke check on `open` across the formats, and a note: §51's equalization
         // provenance does not reach the fingerprint. Two copies of a record captured
         // flat and RIAA-corrected are different audio and will fingerprint
         // differently, which is a fact about vinyl and not something to compensate for

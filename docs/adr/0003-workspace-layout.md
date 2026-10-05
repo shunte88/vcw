@@ -9,7 +9,7 @@ workspace. The layering rule here is unchanged.
 
 §6 proposes a workspace as a two-level tree - `audio/{capture, playback, devices,
 buffers}`, `signal/{meter, waveform, silence, spectral, hmm}`, and so on, about
-thirty-five leaves in total. It is labelled "proposed", and it is a description of
+thirty-five leaves in total. It is labeled "proposed", and it is a description of
 *structure*, not a statement about crate count. WP-01 has to turn it into actual
 manifests and settle the naming, which `docs/STATUS.md` had recorded as open.
 
@@ -53,12 +53,12 @@ when there is a reason, and the module path barely changes.
 
 Added deliberately. Sample formats (§8), capture modes (§9) and sample rates are
 spoken by nearly every crate. Without a shared leaf they would have to live in
-`vcw-audio`, which links CPAL - and then `vcw-signal` analysing a buffer of samples, or
+`vcw-audio`, which links CPAL - and then `vcw-signal` analyzing a buffer of samples, or
 `vcw-export` writing a WAV header, would pull ALSA into its dependency closure for the
 sake of an enum.
 
 `vcw-types` depends on `serde` and `thiserror` and nothing else. The test that proves
-the point: the detector port's A/B harness (WP-11) has to run against the labelled
+the point: the detector port's A/B harness (WP-11) has to run against the labeled
 corpus on a machine with no audio stack at all.
 
 ## Dependency direction

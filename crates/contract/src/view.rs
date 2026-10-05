@@ -173,7 +173,7 @@ pub struct Capture {
     pub os_verified: bool,
     /// Unix seconds at the start.
     pub started_at: i64,
-    /// Unix seconds at finalisation, or `null` while it is still running.
+    /// Unix seconds at finalization, or `null` while it is still running.
     pub finished_at: Option<i64>,
     /// Overruns, underruns, dropped frames and stream errors.
     pub diagnostics: Diagnostics,
@@ -270,11 +270,11 @@ pub struct Release {
     pub album_artist: String,
     /// Release year, where it is known.
     pub year: Option<u32>,
-    /// Normalised genres, in order (§32).
+    /// Normalized genres, in order (§32).
     pub genres: Vec<String>,
     /// Record label.
     pub label: String,
-    /// Catalogue number off the label, which is what identifies a pressing.
+    /// Catalog number off the label, which is what identifies a pressing.
     pub catalog: String,
     /// Country of the pressing.
     pub country: String,
@@ -312,7 +312,7 @@ pub struct Candidate {
     pub year: Option<u32>,
     /// Label.
     pub label: String,
-    /// Catalogue number.
+    /// Catalog number.
     pub catalog: String,
     /// Country.
     pub country: String,
@@ -740,7 +740,7 @@ pub struct Project {
     pub album: String,
     /// Release artist.
     pub album_artist: String,
-    /// Catalogue number (§32), which is how a vinyl library is actually
+    /// Catalog number (§32), which is how a vinyl library is actually
     /// indexed.
     pub catalog: String,
     /// Release year.
@@ -910,12 +910,12 @@ pub struct Notice {
     /// The crate, or the library it vendors.
     pub component: String,
     /// The SPDX expression the crate declares.
-    pub licence: String,
+    pub license: String,
     /// What VCW can do because it is linked.
     pub provides: String,
     /// Where the complete corresponding source is published.
     pub source: String,
-    /// Whether the licence grants the right to modify the component and relink
+    /// Whether the license grants the right to modify the component and relink
     /// it into VCW, which is the sentence LGPL-3.0 §4 requires be offered.
     pub copyleft: bool,
 }
@@ -924,7 +924,7 @@ impl From<&vcw_export::notices::Notice> for Notice {
     fn from(notice: &vcw_export::notices::Notice) -> Self {
         Self {
             component: notice.component.to_owned(),
-            licence: notice.licence.to_owned(),
+            license: notice.license.to_owned(),
             provides: notice.provides.to_owned(),
             source: notice.source.to_owned(),
             copyleft: notice.copyleft,
@@ -935,7 +935,7 @@ impl From<&vcw_export::notices::Notice> for Notice {
 /// Which build of VCW this is, and what it links (WP-28).
 ///
 /// Two things at once, and on purpose. The identity is the first thing anyone
-/// asks for in a bug report, and the notices are a licence obligation: shipping
+/// asks for in a bug report, and the notices are a license obligation: shipping
 /// `mp3lame-sys` compiles libmp3lame into the binary under LGPL-3.0, inside a
 /// product whose own code is MIT, and someone who installs the package and
 /// never opens the repository is otherwise told nothing about it.
@@ -943,7 +943,7 @@ impl From<&vcw_export::notices::Notice> for Notice {
 /// **Nothing here is written out as prose.** Every field is read from the crate
 /// that owns the fact - the manifest, the features, the schema - which is the
 /// rule [`ExportPlan`]'s refusal advice arrived at the hard way. A dialog with a
-/// licence sentence typed into it is a dialog that is wrong about a build nobody
+/// license sentence typed into it is a dialog that is wrong about a build nobody
 /// rebuilt it for.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -967,7 +967,7 @@ pub struct About {
     /// Whoever holds the copyright on VCW's own code.
     pub authors: Vec<String>,
     /// The SPDX expression VCW's own code is under.
-    pub licence: String,
+    pub license: String,
     /// The operating system the binary was built for.
     pub os: String,
     /// The processor architecture.
@@ -1011,7 +1011,7 @@ impl About {
                 .filter(|who| !who.is_empty())
                 .map(str::to_owned)
                 .collect(),
-            licence: env!("CARGO_PKG_LICENSE").to_owned(),
+            license: env!("CARGO_PKG_LICENSE").to_owned(),
             os: std::env::consts::OS.to_owned(),
             arch: std::env::consts::ARCH.to_owned(),
             sqlite: vcw_project::sqlite::runtime_version().to_owned(),

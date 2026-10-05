@@ -60,7 +60,7 @@
 //! ## Everything here goes through `f32`
 //!
 //! The lossless writers copy stored bytes; these two cannot. libmp3lame and
-//! libvorbis both want normalised floating point, so `fan_out` converts
+//! libvorbis both want normalized floating point, so `fan_out` converts
 //! every stored format to `f32` in ±1.0 and splits the interleaved frames into
 //! one buffer per channel - planar is what `vorbis_analysis_buffer` hands back
 //! and what LAME's `DualPcm` wants, so there is one conversion and two
@@ -144,7 +144,7 @@ fn to_f32(format: StorageFormat, bytes: &[u8]) -> f32 {
         StorageFormat::Int32 => {
             i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as f32 / 2_147_483_648.0
         }
-        // Already normalised. A sample past ±1.0 is a capture that clipped
+        // Already normalized. A sample past ±1.0 is a capture that clipped
         // before VCW saw it, and both libraries clamp rather than wrap.
         StorageFormat::Float32 => f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
     }

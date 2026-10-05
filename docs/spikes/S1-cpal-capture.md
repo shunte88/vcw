@@ -3,7 +3,7 @@
 **Status:** Linux/x86_64 complete. Windows, Android and macOS outstanding.
 **Date:** 2026-09-22, **revised 2026-09-23** (CPAL 0.16.0 → 0.18.2)
 **Requirement:** REQUIREMENTS §5, §8, §47 · **Plan:** PROJECT_PLAN §4 (S1), risk R2
-**Artefact:** [`spikes/vinyl-audio-test`](../../spikes/vinyl-audio-test)
+**Artifact:** [`spikes/vinyl-audio-test`](../../spikes/vinyl-audio-test)
 
 ## Question
 
@@ -26,7 +26,7 @@ Verified on this host (Linux 7.0.0-31, ALSA 1.2.15.3, **CPAL 0.18.2, stock from
 crates.io, no patches**, HDA Intel PCH line input, `hw:CARD=0,DEV=0`):
 
 ```
-negotiated        192000 Hz  2 ch  I32  (4 B/sample)   request honoured exactly
+negotiated        192000 Hz  2 ch  I32  (4 B/sample)   request honored exactly
 kernel hw_params  /proc/asound/card0/pcm0c/sub0/hw_params : S32_LE 192000 Hz 2 ch
                   period=16384 buffer=32768
 elapsed 15.04 s · callbacks 176 · frames captured 2883584 · frames dropped 0
@@ -63,7 +63,7 @@ exposed no way to open a device by PCM id. Consequences, all observed:
 ### The failure mode, caught on the first run
 
 Capturing from the default (PipeWire) device, CPAL reported the request
-*honoured exactly*: 48000 Hz, 2 channels, I32. The kernel disagreed:
+*honored exactly*: 48000 Hz, 2 channels, I32. The kernel disagreed:
 
 ```
 negotiated        48000 Hz  2 ch  I32
@@ -81,7 +81,7 @@ The original write-up recommended upstreaming an API to open a device by PCM id
 (route B of three). **0.18 already has it.** Verified in the released crate:
 
 - `enumerate.rs:56` iterates `[HW_PREFIX, PLUGHW_PREFIX]`, so `hw:` devices are
-  listed alongside `plughw:` ones, the latter labelled *"Hardware device with
+  listed alongside `plughw:` ones, the latter labeled *"Hardware device with
   all software conversions"*.
 - `traits.rs:67` adds `HostTrait::device_by_id(&DeviceId)`, and every device now
   carries a stable `DeviceId` - on ALSA, the PCM id itself.
@@ -224,13 +224,13 @@ Mechanical, about 30 call sites, no design impact:
 - `build_*_stream_raw` takes `StreamConfig` **by value** (it is `Copy`).
 - `device.name()` → `device.description()?.name()`; `device.id()?` gives the id.
 - All per-operation error types collapse into one `cpal::Error` with `.kind()`.
-- **Behavioural, and silent if missed:** ALSA, CoreAudio and JACK no longer
+- **Behavioral, and silent if missed:** ALSA, CoreAudio and JACK no longer
   auto-start streams - an explicit `stream.play()` is required. We already had
   one on both paths.
 
 ## Coverage of §47
 
-| § | behaviour | state |
+| § | behavior | state |
 |---|---|---|
 | 1 | list devices | done - `devices`, now with ids and a hw/plug distinction |
 | 2 | list supported formats | done - `devices -v`, `formats` (selectable by id) |

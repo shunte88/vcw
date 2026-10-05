@@ -55,7 +55,7 @@ function press(
  * the separator, which is exactly what a browser reports for Shift and the
  * equals key.
  */
-function spelt(spelling: string): { modifiers: string[]; key: string } {
+function spelled(spelling: string): { modifiers: string[]; key: string } {
   const split = spelling.split("+");
   if (split[split.length - 1] === "") {
     return { modifiers: split.slice(0, -2), key: "+" };
@@ -116,7 +116,7 @@ describe("the keyboard map", () => {
     // overlay and never fire, which is worse than not having it.
     for (const [action, binding] of entries()) {
       for (const spelling of spellings(binding)) {
-        const { modifiers, key } = spelt(spelling);
+        const { modifiers, key } = spelled(spelling);
         expect(
           modifiers.every((m: string) => ["Ctrl", "Alt", "Shift"].includes(m)),
           `${action}: ${spelling} has a modifier that is not Ctrl, Alt or Shift`,
@@ -145,9 +145,9 @@ describe("the keyboard map", () => {
   // takes it apart the way it was put together.
   it("can spell the key that is also the separator", () => {
     expect(chord(press("+", { shift: true }))).toBe("+");
-    expect(spelt("+")).toEqual({ modifiers: [], key: "+" });
-    expect(spelt("Ctrl++")).toEqual({ modifiers: ["Ctrl"], key: "+" });
-    expect(spelt("Ctrl+ArrowLeft")).toEqual({
+    expect(spelled("+")).toEqual({ modifiers: [], key: "+" });
+    expect(spelled("Ctrl++")).toEqual({ modifiers: ["Ctrl"], key: "+" });
+    expect(spelled("Ctrl+ArrowLeft")).toEqual({
       modifiers: ["Ctrl"],
       key: "ArrowLeft",
     });

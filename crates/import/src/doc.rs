@@ -60,7 +60,7 @@
 //! refuses rather than recovers:
 //!
 //! - **Every record is self-delimiting, and no tag is skippable.** A reader that
-//!   guesses a width for a tag it does not know desynchronises and then produces
+//!   guesses a width for a tag it does not know desynchronizes and then produces
 //!   plausible garbage. Tags `0x00`, `0x09`, `0x0B`, `0x0D` and `0x0E` occur in
 //!   neither version and are refused by offset and name. That property is what
 //!   made AUP4's delta cheap to find: the AUP3 grammar did not mis-parse the new
@@ -280,7 +280,7 @@ pub fn parse_dict(blob: &[u8]) -> Result<Dict> {
 ///
 /// A tag with no arm here is not a tag we skip, it is a tag we refuse: every
 /// record is self-delimiting and none is skippable, so a reader that guesses a
-/// width desynchronises and then produces plausible garbage. `0x00`, `0x09`,
+/// width desynchronizes and then produces plausible garbage. `0x00`, `0x09`,
 /// `0x0B`, `0x0D` and `0x0E` occur in neither generation of the format, and if
 /// a third generation introduces one we want to be told, by offset and name,
 /// exactly as AUP4's `0x10` told us.
@@ -372,7 +372,7 @@ pub fn parse_doc(blob: &[u8], dict: Dict) -> Result<(Vec<Event>, Dict)> {
 ///
 /// The element checks are stricter than the oracle, which does not track
 /// nesting. They are cheap and they are the only thing that would notice a
-/// desynchronisation that happened to land on a plausible tag.
+/// desynchronization that happened to land on a plausible tag.
 pub fn parse_doc_spans(blob: &[u8], mut dict: Dict) -> Result<(Vec<Record>, Dict)> {
     let mut events = Vec::new();
     let mut open: Vec<Arc<str>> = Vec::new();
@@ -842,7 +842,7 @@ mod tests {
     #[test]
     fn a_double_carries_a_precision_hint_that_is_read_and_dropped() {
         // Twelve bytes, not eight: the hint is part of the record's width, so a
-        // reader that treats 0x0A as eight bytes desynchronises by four.
+        // reader that treats 0x0A as eight bytes desynchronizes by four.
         let mut payload = 48_000.0_f64.to_le_bytes().to_vec();
         payload.extend((-1_i32).to_le_bytes());
         let blob = Writer::default()
@@ -935,7 +935,7 @@ mod tests {
         ));
 
         // 'rate' closing while 'project' is open. The document never does this,
-        // which is the point: it is the check that notices a desynchronisation
+        // which is the point: it is the check that notices a desynchronization
         // that happened to land on a plausible tag.
         let crossed = Writer::default().named(0x01, 1).named(0x02, 2).bytes();
         assert!(
@@ -974,7 +974,7 @@ mod tests {
         // Unattested in all 30 corpus projects, so this is the arm that says
         // what we do if one ever turns up: define the name and carry on. The
         // record that follows uses it, which is the only way to tell whether the
-        // widths were right - the alternative is a desynchronised stream.
+        // widths were right - the alternative is a desynchronized stream.
         let blob = Writer::default()
             .entry(50, "labeltrack")
             .named(0x01, 50)

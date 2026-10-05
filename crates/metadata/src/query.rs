@@ -32,16 +32,16 @@
 
 //! What can be asked of a metadata provider (§28).
 //!
-//! §28 lists the search criteria: artist, album, catalogue number, barcode, label,
+//! §28 lists the search criteria: artist, album, catalog number, barcode, label,
 //! year, country, provider release id, and fingerprint evidence. All of them are
 //! optional and all of them are here, because a provider that cannot use one should
 //! say so rather than force the caller to build a different query per provider.
 //!
-//! # Catalogue number is the one that matters
+//! # Catalog number is the one that matters
 //!
-//! For vinyl, the catalogue number is usually the difference between finding *a*
+//! For vinyl, the catalog number is usually the difference between finding *a*
 //! release and finding *the pressing in your hands*. Artist and title identify the
-//! record; the catalogue number, the country and the year identify which stamping
+//! record; the catalog number, the country and the year identify which stamping
 //! of it, and those are the fields that decide whether the tracklist you are about
 //! to apply has the right number of tracks on side B.
 //!
@@ -50,7 +50,7 @@
 //! [`Query::vinyl_only`] starts `true`. A CD pressing's tracklist is a different
 //! tracklist - different order, different splits, no sides - so offering one for a
 //! vinyl capture is offering a wrong answer. It is a flag rather than a rule
-//! because a test pressing or an unusual release may not be catalogued as vinyl at
+//! because a test pressing or an unusual release may not be cataloged as vinyl at
 //! all, and a person who has looked should be able to say so.
 
 use std::fmt;
@@ -100,7 +100,7 @@ pub enum Criterion {
     Artist,
     /// The release title.
     Album,
-    /// The label's catalogue number.
+    /// The label's catalog number.
     Catalog,
     /// The barcode printed on the sleeve.
     Barcode,
@@ -117,13 +117,13 @@ pub enum Criterion {
 }
 
 impl Criterion {
-    /// The name a person would recognise, for "this was ignored" messages.
+    /// The name a person would recognize, for "this was ignored" messages.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Artist => "artist",
             Self::Album => "album",
-            Self::Catalog => "catalogue number",
+            Self::Catalog => "catalog number",
             Self::Barcode => "barcode",
             Self::Label => "label",
             Self::Year => "year",
@@ -147,7 +147,7 @@ pub struct Query {
     pub artist: Option<String>,
     /// The release title.
     pub album: Option<String>,
-    /// The label's catalogue number.
+    /// The label's catalog number.
     pub catalog: Option<String>,
     /// The barcode printed on the sleeve.
     pub barcode: Option<String>,
@@ -224,7 +224,7 @@ impl Query {
         self
     }
 
-    /// Sets the catalogue number.
+    /// Sets the catalog number.
     #[must_use]
     pub fn catalog(mut self, catalog: impl Into<String>) -> Self {
         self.catalog = clean(catalog);
@@ -340,7 +340,7 @@ impl Query {
             .collect()
     }
 
-    /// The free-text form of the query: artist, album, catalogue number, label.
+    /// The free-text form of the query: artist, album, catalog number, label.
     ///
     /// Discogs' `q=` parameter wants one string, and this is how VRipr built it.
     #[must_use]
@@ -411,7 +411,7 @@ mod tests {
             [],
             "nothing ignored when the provider sees both"
         );
-        assert_eq!(Criterion::Catalog.to_string(), "catalogue number");
+        assert_eq!(Criterion::Catalog.to_string(), "catalog number");
     }
 
     #[test]

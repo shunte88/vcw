@@ -32,7 +32,7 @@
 
 //! Device fixtures.
 //!
-//! §7's hot-plug and persistence behaviour is the part of the audio stack hardest
+//! §7's hot-plug and persistence behavior is the part of the audio stack hardest
 //! to test with real hardware: it needs two converters, a spare hand and a USB
 //! cable. Everything except opening a stream is pure over [`DeviceReport`], so
 //! these fixtures stand in for the cable.
@@ -111,7 +111,7 @@ pub(crate) fn snapshot(devices: Vec<DeviceReport>) -> Snapshot {
 }
 
 /// The three ALSA paths to one card, which is the case that makes selecting by
-/// name unsafe: same converter, same name, different conversion behaviour.
+/// name unsafe: same converter, same name, different conversion behavior.
 pub(crate) fn three_paths_to_one_card() -> Snapshot {
     let mut direct = device("hw:CARD=0,DEV=0", "HDA Intel PCH");
     direct.is_default_input = false;

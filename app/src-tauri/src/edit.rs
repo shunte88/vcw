@@ -55,7 +55,7 @@
 //! [`vcw_project::track::NewBoundary::by_user`]'s, and going through the
 //! constructor rather than filling the struct in means the CLI's `vcw tracks
 //! add` and this command cannot drift apart on what "a person put it there"
-//! means. §31's locked boundary is honoured the same way: `force` is the
+//! means. §31's locked boundary is honored the same way: `force` is the
 //! frontend saying the person meant it, and the refusal without it comes from
 //! the project crate.
 
@@ -74,7 +74,7 @@ use crate::state::{Error, Shell};
 /// [`Error::NoProject`] with nothing open, [`Error::Invalid`] if the boundary is
 /// not in the project or its side has no capture to measure against, and
 /// [`Error::Project`] for a locked boundary moved without `force`, a move past a
-/// neighbour, or a file that will not open for writing.
+/// neighbor, or a file that will not open for writing.
 #[tauri::command]
 pub(crate) fn move_marker(shell: State<'_, Shell>, marker: Marker) -> Result<(), Error> {
     let path = shell.project_path()?;

@@ -33,7 +33,7 @@
 //! S3 - Tauri 2 IPC throughput.
 //!
 //! D6 proposes "Tauri 2 channels (not the event bus) for meter and waveform
-//! deltas; pre-serialised compact payloads; coalesce to <=60 Hz in Rust", and
+//! deltas; pre-serialized compact payloads; coalesce to <=60 Hz in Rust", and
 //! marks it *validate in S3*. Reading tauri 2.11's `src/ipc/channel.rs` and
 //! `src/event/mod.rs` first turned up two things that make the naive version of
 //! that experiment the wrong one:
@@ -76,9 +76,9 @@ pub enum Transport {
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Encoding {
-    /// Let tauri's `T: Serialize` blanket impl serialise each frame.
+    /// Let tauri's `T: Serialize` blanket impl serialize each frame.
     Serde,
-    /// Hand-built compact JSON into a reused buffer - D6's "pre-serialised".
+    /// Hand-built compact JSON into a reused buffer - D6's "pre-serialized".
     Manual,
     /// Fixed-layout little-endian bytes. Not available on the event bus.
     Raw,
@@ -207,7 +207,7 @@ fn write_report(name: String, state: State<'_, Bench>) -> Result<String, String>
         "echoRttUs": state.rtt.lock().unwrap().summary(),
         "memory": metrics::memory(),
     });
-    // Sanitised so a transport/encoding label can be used as a file name.
+    // Sanitized so a transport/encoding label can be used as a file name.
     let safe: String = name
         .chars()
         .map(|c| {

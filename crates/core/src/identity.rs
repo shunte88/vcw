@@ -36,7 +36,7 @@
 //! MusicBrainz say, and [`vcw_project`], which knows what this record is. It
 //! lives in `vcw-core` because it is the only crate that depends on both, and
 //! because deciding *which* provider track is which project track is
-//! application behaviour: a shell command that worked it out would be a second
+//! application behavior: a shell command that worked it out would be a second
 //! answer the moment `vcw release` needs the same one.
 //!
 //! # The matching rule, and why it is this dull
@@ -63,7 +63,7 @@
 //! double album in a single pass has seventeen tracks called `A1` to `A17`.
 //! That is not a layout the record could have: a 12-inch side holds about
 //! twenty-two minutes, and seventeen tracks over an hour do not fit on one
-//! face. The old behaviour matched `A1` to `A4` against a `A`/`B`/`C`/`D`
+//! face. The old behavior matched `A1` to `A4` against a `A`/`B`/`C`/`D`
 //! tracklist, named four tracks, and reported the other thirteen as a
 //! disappointment - which blamed the provider for being right.
 //!

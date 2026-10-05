@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 
 /// A PCM sample representation, stored verbatim as the device supplies it (D4).
 ///
-/// §9 forbids format conversion on the capture path, so this is a tag travelling
+/// §9 forbids format conversion on the capture path, so this is a tag traveling
 /// beside the bytes rather than a conversion target. §8 requires all four variants
 /// where the hardware permits them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -106,7 +106,7 @@ impl SampleFormat {
 /// The mode is a *request*. What the hardware actually did is a separate,
 /// OS-confirmed fact: §9 forbids claiming bit-perfect operation on the strength of
 /// the API's own report, and S1 found CPAL 0.16 reporting a silent 8 kHz -> 48 kHz
-/// upsample as an honoured request. WP-04 carries the per-platform verifier that
+/// upsample as an honored request. WP-04 carries the per-platform verifier that
 /// settles it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CaptureMode {
@@ -151,7 +151,7 @@ impl CaptureMode {
     }
 
     /// Whether this mode *could* deliver untouched samples, on a platform that
-    /// honours it.
+    /// honors it.
     ///
     /// [`CaptureMode::Shared`] never can: the OS mixer owns the device and
     /// conversion is the mixer's job. The other two might, which is a long way
@@ -175,7 +175,7 @@ impl CaptureMode {
     pub const ALL: [Self; 3] = [Self::Exclusive, Self::Native, Self::Shared];
 }
 
-/// What playback equalisation the hardware upstream of the capture had already
+/// What playback equalization the hardware upstream of the capture had already
 /// applied (§51).
 ///
 /// Here because applying a curve later is only meaningful if what was captured is
@@ -186,10 +186,10 @@ impl CaptureMode {
 /// The field cannot be recovered afterwards, which is why §51 requires it from the
 /// first capture-capable release rather than from the Phase 3 processing chain that
 /// will consume it: a rip whose provenance was never recorded is one nobody can
-/// correctly re-equalise, however good the filter is.
+/// correctly re-equalize, however good the filter is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum CaptureEq {
-    /// No equalisation was applied upstream: a flat transfer, from a flat preamp
+    /// No equalization was applied upstream: a flat transfer, from a flat preamp
     /// or a phono stage with its curve defeated. The case a curve can simply be
     /// applied to.
     Flat,
@@ -327,7 +327,7 @@ impl StorageFormat {
         }
     }
 
-    /// Decodes one stored sample to a normalised `f32` in roughly -1.0..=1.0.
+    /// Decodes one stored sample to a normalized `f32` in roughly -1.0..=1.0.
     ///
     /// `index` counts samples, not bytes. Returns `None` if the slice is too
     /// short, because a summary computed over a truncated block would be a
@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn equalisation_round_trips_and_rejects_nonsense() {
+    fn equalization_round_trips_and_rejects_nonsense() {
         for eq in CaptureEq::ALL {
             assert_eq!(CaptureEq::parse(eq.as_str()), Some(eq));
         }

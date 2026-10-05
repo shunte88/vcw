@@ -16,7 +16,7 @@ members = ["crates/*"]
 exclude = ["app", "spikes"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.90"
 description = "VCW - The Vinyl Capture Workstation"
@@ -31,17 +31,17 @@ authors = ["Stue Hunter"]
 [workspace.dependencies]
 # Internal. Versioned as well as pathed so the crates stay publishable if that ever
 # becomes useful, and so a stale path cannot resolve to the wrong thing.
-vcw-audio = { path = "crates/audio", version = "0.1.0" }
-vcw-contract = { path = "crates/contract", version = "0.1.0" }
-vcw-core = { path = "crates/core", version = "0.1.0" }
-vcw-export = { path = "crates/export", version = "0.1.0" }
-vcw-fingerprint = { path = "crates/fingerprint", version = "0.1.0" }
-vcw-identify = { path = "crates/identify", version = "0.1.0" }
-vcw-import = { path = "crates/import", version = "0.1.0" }
-vcw-metadata = { path = "crates/metadata", version = "0.1.0" }
-vcw-project = { path = "crates/project", version = "0.1.0" }
-vcw-signal = { path = "crates/signal", version = "0.1.0" }
-vcw-types = { path = "crates/types", version = "0.1.0" }
+vcw-audio = { path = "crates/audio", version = "0.1.1" }
+vcw-contract = { path = "crates/contract", version = "0.1.1" }
+vcw-core = { path = "crates/core", version = "0.1.1" }
+vcw-export = { path = "crates/export", version = "0.1.1" }
+vcw-fingerprint = { path = "crates/fingerprint", version = "0.1.1" }
+vcw-identify = { path = "crates/identify", version = "0.1.1" }
+vcw-import = { path = "crates/import", version = "0.1.1" }
+vcw-metadata = { path = "crates/metadata", version = "0.1.1" }
+vcw-project = { path = "crates/project", version = "0.1.1" }
+vcw-signal = { path = "crates/signal", version = "0.1.1" }
+vcw-types = { path = "crates/types", version = "0.1.1" }
 
 # External. Single source of version truth for the whole tree; a bump happens here
 # and nowhere else.
@@ -49,16 +49,16 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 crc32fast = "1"
 # The FLAC encoder behind `vcw export --format flac` (D5). Pure Rust and
-# Apache-2.0, so no C library to relink and nothing new for the licence
+# Apache-2.0, so no C library to relink and nothing new for the license
 # allowlist; WAV is our own writer because a RIFF header is thirty lines and
 # every crate that writes one has an opinion about 24-bit that we do not share.
 flacenc = { version = "0.5", default-features = false }
 # MP3, behind `vcw-export/mp3` (D5, WP-25). High-level bindings over libmp3lame,
 # whose C source `mp3lame-sys` vendors and builds - so there is no system library
 # to find on any of the four targets, and the relink obligation in
-# THIRD-PARTY-NOTICES.md is ours to honour. The crate declares **LGPL-3.0**, not
+# THIRD-PARTY-NOTICES.md is ours to honor. The crate declares **LGPL-3.0**, not
 # the LGPL-2.1 D5 assumed, which is why `deny.toml` names a version of the
-# licence the chromaprint-next exception does not cover.
+# license the chromaprint-next exception does not cover.
 mp3lame-encoder = { version = "0.2", features = ["std"] }
 # Ogg Vorbis, behind `vcw-export/ogg` (D5, WP-25). Bindings over aoTuV-Lancer, a
 # tuned libvorbis, and libogg. **BSD-3-Clause** - D5 recorded this one as LGPL and

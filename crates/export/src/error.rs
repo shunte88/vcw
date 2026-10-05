@@ -45,7 +45,7 @@ pub enum Error {
     /// The side has no tracks to export.
     ///
     /// Not an empty success: a caller that asked for a side and got no files
-    /// wants to know whether the side is unanalysed or whether the export broke.
+    /// wants to know whether the side is unanalyzed or whether the export broke.
     #[error("side {side} has no tracks to export")]
     NothingToExport {
         /// The side asked for.

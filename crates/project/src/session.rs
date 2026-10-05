@@ -225,7 +225,7 @@ impl Session {
     ///
     /// `state` is the caller's honest assessment. A capture that ended because
     /// the device went away is [`CaptureState::Interrupted`] even though the
-    /// stop was orderly, and calling it finalised would lose the one fact a
+    /// stop was orderly, and calling it finalized would lose the one fact a
     /// later reader most needs.
     ///
     /// # Errors
@@ -322,7 +322,7 @@ pub fn unfinished(conn: &Connection) -> Result<Vec<Record>> {
 ///
 /// `NULL` rather than the string `'unknown'` so the fallback is not a literal that
 /// has to keep matching an enum spelling; [`row`] reads the column as an `Option`
-/// and an absent equalisation is [`CaptureEq::Unknown`], which is what the column's
+/// and an absent equalization is [`CaptureEq::Unknown`], which is what the column's
 /// own default says and what it means - this capture did not record what it
 /// arrived with.
 fn select(conn: &Connection) -> String {
@@ -342,7 +342,7 @@ fn select(conn: &Connection) -> String {
     )
 }
 
-/// Whether the `captures` table carries v3's equalisation column.
+/// Whether the `captures` table carries v3's equalization column.
 ///
 /// Asked of the table rather than of `user_version`, because what the query needs
 /// to know is whether the column is there. A project whose version says one thing
@@ -452,7 +452,7 @@ mod tests {
     /// before it asserts anything about the read, because a fixture that still
     /// has the column would pass this test without exercising a line of it.
     #[test]
-    fn a_capture_written_before_v3_still_reads_with_no_equalisation() {
+    fn a_capture_written_before_v3_still_reads_with_no_equalization() {
         let (_dir, mut p) = project();
         let id = Session::begin(&mut p, &info()).expect("begin").id();
 
@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn an_orderly_stop_after_the_device_vanished_is_still_interrupted() {
-        // R9. The stop was clean; the capture was not. Calling it finalised
+        // R9. The stop was clean; the capture was not. Calling it finalized
         // would lose the one fact a later reader most needs.
         let (_dir, mut p) = project();
         let s = Session::begin(&mut p, &info()).expect("begin");

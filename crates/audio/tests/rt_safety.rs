@@ -69,7 +69,7 @@ use vcw_audio::{buffers, chunks};
 
 /// An allocator that counts, but only while this thread has armed it.
 ///
-/// Both the switch and the tally are thread-local and const-initialised: arming
+/// Both the switch and the tally are thread-local and const-initialized: arming
 /// cannot itself allocate, which would make the measurement measure the
 /// measurement, and one test's armed window cannot pollute another's. Cargo runs
 /// these in parallel, and a shared counter made the starvation test fail about

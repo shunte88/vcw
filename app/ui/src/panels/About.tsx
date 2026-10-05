@@ -10,9 +10,9 @@
  */
 
 // Every fact here arrives from `api.about()`. Nothing is typed into this file:
-// not the version, not the licence, and above all not the notices.
+// not the version, not the license, and above all not the notices.
 //
-// The notices are a licence obligation rather than a courtesy. A build with the
+// The notices are a license obligation rather than a courtesy. A build with the
 // `mp3` feature compiles libmp3lame into the binary under LGPL-3.0, inside a
 // product whose own code is MIT, and LGPL-3.0 section 4 wants the person holding
 // that binary told where the source is and that they may relink it. A build
@@ -145,9 +145,9 @@ export function About({
               </div>
 
               <section className="about-group">
-                <h3>Licence</h3>
+                <h3>License</h3>
                 <p>
-                  VCW&apos;s own code is {build.licence}. Copyright (c) 2026{" "}
+                  VCW&apos;s own code is {build.license}. Copyright (c) 2026{" "}
                   {build.authors.join(", ")}.
                 </p>
               </section>
@@ -164,7 +164,7 @@ export function About({
                     {build.notices.map((notice) => (
                       <tr key={notice.component}>
                         <td>{notice.component}</td>
-                        <td>{notice.licence}</td>
+                        <td>{notice.license}</td>
                         <td className="dim">{notice.provides}</td>
                         <td>{notice.source}</td>
                       </tr>
@@ -176,13 +176,13 @@ export function About({
                     The components marked above as{" "}
                     {build.notices
                       .filter((notice) => notice.copyleft)
-                      .map((notice) => notice.licence)
+                      .map((notice) => notice.license)
                       .join(", ")}{" "}
                     are weak copyleft. You may modify them and relink them into
                     VCW: their complete source is at the addresses listed, the
                     exact versions this build used are recorded in Cargo.lock at
                     its release tag, and the complete source of VCW itself is
-                    available under its own licence at the repository above.
+                    available under its own license at the repository above.
                   </p>
                 )}
               </section>

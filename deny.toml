@@ -1,6 +1,6 @@
 # cargo-deny configuration (D7).
 #
-# The point of this file is licence drift: VCW's own code is MIT, and the moment a
+# The point of this file is license drift: VCW's own code is MIT, and the moment a
 # dependency bump pulls in something copyleft the binaries' obligations change
 # without anyone noticing. CI fails the build instead.
 #
@@ -37,7 +37,7 @@ ignore = [
 
 [licenses]
 version = 2
-# Permissive, attribution-only licences. Anything outside this list is a decision,
+# Permissive, attribution-only licenses. Anything outside this list is a decision,
 # not an accident, and has to be added here with a reason.
 allow = [
     "0BSD",
@@ -64,10 +64,10 @@ confidence-threshold = 0.93
 
 # MP3 (D5, WP-25). `mp3lame-encoder` is the safe wrapper and `mp3lame-sys` vendors
 # and builds libmp3lame's C; both crates declare `LGPL-3.0`, which SPDX deprecated
-# in favour of `LGPL-3.0-only` - cargo-deny warns about the spelling and matches it
+# in favor of `LGPL-3.0-only` - cargo-deny warns about the spelling and matches it
 # anyway, and correcting it is upstream's call rather than ours.
 #
-# Note that this is *not* the licence libmp3lame itself carries. The bundled
+# Note that this is *not* the license libmp3lame itself carries. The bundled
 # `lame-3.100/COPYING` is the GNU Library GPL version 2, "or any later version",
 # and the wrapper's LGPL-3.0 is the exercise of that option. The stricter of the
 # two is the one that governs what we ship, which is why the tree carries

@@ -23,7 +23,7 @@ same reason, and a binding that requires a runtime to issue a statement would sm
 one in through the back door.
 
 Bundled, because the SQLite build becomes a property of the binary rather than of the
-machine. §15 makes recovery a correctness requirement, and recovery behaviour depends
+machine. §15 makes recovery a correctness requirement, and recovery behavior depends
 on WAL semantics, `synchronous` handling and journal-mode details that vary across the
 SQLite versions Linux distributions ship. A recovery test that passes on the CI runner
 and fails on a Raspberry Pi because the OS shipped an older SQLite is not a test.
@@ -53,7 +53,7 @@ property of how the database commits, so pinning the SQLite build pins the floor
 - The `bundled` feature compiles SQLite from source, so every CI target needs a C
   toolchain. All four Tier 1 runners have one; the aarch64 Linux job runs natively
   rather than cross-compiling partly for this reason.
-- SQLite's own licence is public domain and `rusqlite` is MIT, so the choice adds no
+- SQLite's own license is public domain and `rusqlite` is MIT, so the choice adds no
   obligation to `THIRD-PARTY-NOTICES.md`.
 - `vcw-project` is the only crate that links it. Nothing else in the tree may open the
   project file directly - the schema is an invariant, not a shared resource.

@@ -11,7 +11,7 @@
 
 // Four fields and a list. The fields are the criteria §28 names, and the panel
 // does not judge which combination is a good query: the shell refuses an empty
-// one and the provider decides the rest, because "a catalogue number alone
+// one and the provider decides the rest, because "a catalog number alone
 // beats an artist alone" is knowledge about Discogs and MusicBrainz rather than
 // about forms.
 //
@@ -28,7 +28,7 @@
 //
 // The panel therefore shows `unmatched` and `unnamed` as a result rather than
 // as an error. The release row is written either way, because the album, the
-// label and the catalogue number are right even when the tracklist is not.
+// label and the catalog number are right even when the tracklist is not.
 
 import { useCallback, useState } from "react";
 
@@ -162,7 +162,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
           />
         </label>
         <label>
-          Catalogue number
+          Catalog number
           <input
             value={criteria.catalog}
             onChange={(event) =>
@@ -202,7 +202,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
               <th>Artist</th>
               <th className="n">Year</th>
               <th>Label</th>
-              <th>Catalogue</th>
+              <th>Catalog</th>
               <th>Format</th>
               <th className="n">Tracks</th>
               <th>From</th>

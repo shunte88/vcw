@@ -9,7 +9,7 @@
  *  MIT License - see the header in any Rust source file for the full text.
  */
 
-// The one piece of list behaviour three panels share, written once.
+// The one piece of list behavior three panels share, written once.
 //
 // WP-16a added it after first light. Every verb that acts on "the selected"
 // row had a handler and a chord; nothing could move the selection, because the

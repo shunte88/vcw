@@ -174,7 +174,7 @@ fn a_project_from_the_future_is_refused_rather_than_half_read() {
 }
 
 #[test]
-fn read_only_opens_honour_the_wal() {
+fn read_only_opens_honor_the_wal() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("side-a.vcw");
 

@@ -530,7 +530,7 @@ fn the_rust_reader_agrees_with_the_python_oracle() {
             "{path:?}: document size"
         );
         // Record for record. This is the assertion that would catch a width
-        // mistake on a tag that happens not to desynchronise the stream.
+        // mistake on a tag that happens not to desynchronize the stream.
         assert_eq!(summary.events as u64, u("events"), "{path:?}: record count");
         assert_eq!(
             summary.audit.refs as u64,

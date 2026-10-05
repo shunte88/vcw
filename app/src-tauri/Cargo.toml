@@ -42,7 +42,7 @@ tempfile = { workspace = true }
 # vite server is running. The tauri CLI adds it for release builds, but a
 # `cargo build --release` driven from CI or from a gate script does not use the
 # CLI, so it is on by default. `--no-default-features` gets the dev-server
-# behaviour back, which is what `pnpm tauri dev` wants.
+# behavior back, which is what `pnpm tauri dev` wants.
 #
 # S3 lost an afternoon to this. It is the reason the spike's binary opened a
 # blank window and reported perfect IPC latency.

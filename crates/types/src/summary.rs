@@ -36,7 +36,7 @@
 //! writer in `vcw-project` *produces* these and the renderer in `vcw-signal`
 //! *consumes* them, and neither crate should have to depend on the other to agree
 //! on what one is. The shape is Audacity's, verified against the corpus rather
-//! than assumed, so a block VCW writes and a block Audacity wrote summarise
+//! than assumed, so a block VCW writes and a block Audacity wrote summarize
 //! identically.
 //!
 //! # RMS composes exactly
@@ -59,7 +59,7 @@ use crate::StorageFormat;
 /// The bytes one triplet occupies on disk: three little-endian `f32`s.
 pub const TRIPLET_BYTES: usize = 12;
 
-/// A (min, max, rms) triplet over a run of samples, normalised to -1.0..=1.0.
+/// A (min, max, rms) triplet over a run of samples, normalized to -1.0..=1.0.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Summary {
     /// Least sample value in the run.
@@ -80,7 +80,7 @@ impl Summary {
         rms: 0.0,
     };
 
-    /// Summarises `samples` of one channel, stored in `format`.
+    /// Summarizes `samples` of one channel, stored in `format`.
     #[must_use]
     pub fn of(format: StorageFormat, samples: &[u8]) -> Self {
         let n = format.samples_in(samples.len());

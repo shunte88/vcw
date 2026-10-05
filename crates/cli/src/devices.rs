@@ -181,7 +181,7 @@ fn print_device(device: &DeviceReport, which: Which, verbose: bool) {
             continue;
         }
         let matrix = Matrix::from_report(report, *direction);
-        println!("    {:<10} {}", direction.to_string(), summarise(&matrix));
+        println!("    {:<10} {}", direction.to_string(), summarize(&matrix));
         if let Some(s) = matrix.suggest() {
             println!(
                 "               suggested {} {:?} {} ch",
@@ -216,7 +216,7 @@ fn print_device(device: &DeviceReport, which: Which, verbose: bool) {
     }
 }
 
-fn summarise(matrix: &Matrix) -> String {
+fn summarize(matrix: &Matrix) -> String {
     if matrix.is_empty() {
         return "nothing §8 can use".to_owned();
     }

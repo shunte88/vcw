@@ -133,11 +133,11 @@ fn recorded(dir: &tempfile::TempDir, name: &str, pcm: &[u8]) -> (PathBuf, i64) {
 
 /// Runs a refine pass over a side that already has rows, and adopts the result.
 ///
-/// The whole of re-analysis in one function, and the shape a UI's "analyse again"
+/// The whole of re-analysis in one function, and the shape a UI's "analyze again"
 /// button will have: hand the pass what the project already believes, let the
 /// resolver weigh it against what the detectors found, then write the result back
 /// under the policy.
-fn analyse(project: &mut Project, capture: i64, cfg: &Config, policy: &Policy) -> adopt::Adopted {
+fn analyze(project: &mut Project, capture: i64, cfg: &Config, policy: &Policy) -> adopt::Adopted {
     let already = adopt::observations(project, Side::A).unwrap_or_default();
     let refined = vcw_core::detection::refine(project, capture, cfg, &already).expect("refine");
     adopt::adopt(project, Side::A, &refined, policy).expect("adopt")
@@ -158,7 +158,7 @@ fn a_locked_boundary_survives_a_second_analysis_pass() {
     vcw_project::side::attach(&mut project, Side::A, capture).expect("attach");
 
     let policy = Policy::at(RATE);
-    let first = analyse(&mut project, capture, &Config::new(), &policy);
+    let first = analyze(&mut project, capture, &Config::new(), &policy);
     assert!(
         first.written() > 0,
         "the first pass found nothing to adopt: {first:?}"
@@ -188,7 +188,7 @@ fn a_locked_boundary_survives_a_second_analysis_pass() {
         threshold_db: Config::new().threshold_db + 6.0,
         ..Config::new()
     };
-    let second = analyse(&mut project, capture, &keener, &policy);
+    let second = analyze(&mut project, capture, &keener, &policy);
 
     let after = track::boundary(project.conn(), chosen.id)
         .expect("read")
@@ -218,10 +218,10 @@ fn a_locked_boundary_survives_a_second_analysis_pass() {
     assert_eq!(nearby, 1, "the pass left a rival end beside the locked one");
 
     // `already_locked` is zero here and that is not a failure: the resolver saw
-    // the operator's boundary alongside the detectors' - `analyse` hands it in -
+    // the operator's boundary alongside the detectors' - `analyze` hands it in -
     // and merged them into one decision that `Provenance::User` won, so there was
     // never a separate detector decision for adoption to skip. §24 is being
-    // honoured one layer earlier than this counter measures. The path the counter
+    // honored one layer earlier than this counter measures. The path the counter
     // does measure is covered by
     // `a_detector_landing_beside_a_locked_boundary_is_skipped`.
     assert_eq!(second.already_locked, 0, "{second:?}");
@@ -399,7 +399,7 @@ fn a_detector_landing_beside_a_locked_boundary_is_skipped() {
 
 #[test]
 fn running_the_same_analysis_twice_changes_nothing() {
-    // Idempotence is what makes an analyse button safe to press twice, and it is
+    // Idempotence is what makes an analyze button safe to press twice, and it is
     // not free: an adoption that inserted rather than upserted would double every
     // boundary, and a pairing pass that ignored existing tracks would double
     // those.
@@ -410,11 +410,11 @@ fn running_the_same_analysis_twice_changes_nothing() {
     vcw_project::side::attach(&mut project, Side::A, capture).expect("attach");
 
     let policy = Policy::at(RATE);
-    analyse(&mut project, capture, &Config::new(), &policy);
+    analyze(&mut project, capture, &Config::new(), &policy);
     let boundaries = track::boundaries(project.conn(), Side::A).expect("boundaries");
     let tracks = track::tracks(project.conn(), Side::A).expect("tracks");
 
-    analyse(&mut project, capture, &Config::new(), &policy);
+    analyze(&mut project, capture, &Config::new(), &policy);
     assert_eq!(
         track::boundaries(project.conn(), Side::A)
             .expect("boundaries")
@@ -448,7 +448,7 @@ fn re_analysis_does_not_grow_the_evidence_column() {
     // it is already named after the detector that took it, and `resolve` prefixes
     // an observation's evidence with its provenance as it absorbs it. Pass two
     // turned `hmm.posterior` into `hmm.hmm.posterior`, pass three into
-    // `hmm.hmm.hmm.posterior`, and a side someone analyses while tuning a
+    // `hmm.hmm.hmm.posterior`, and a side someone analyzes while tuning a
     // threshold accumulated text without accumulating knowledge. Caught on the
     // real side, where one boundary was carrying 40 measurements, most of them the
     // same number under a longer name.
@@ -467,10 +467,10 @@ fn re_analysis_does_not_grow_the_evidence_column() {
             .collect()
     };
 
-    analyse(&mut project, capture, &Config::new(), &policy);
-    analyse(&mut project, capture, &Config::new(), &policy);
+    analyze(&mut project, capture, &Config::new(), &policy);
+    analyze(&mut project, capture, &Config::new(), &policy);
     let settled = names(&project);
-    analyse(&mut project, capture, &Config::new(), &policy);
+    analyze(&mut project, capture, &Config::new(), &policy);
     assert_eq!(
         names(&project),
         settled,

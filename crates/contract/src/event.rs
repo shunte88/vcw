@@ -117,7 +117,7 @@ pub enum PhaseName {
     Recording,
     /// The device is held and nothing is being committed.
     Paused,
-    /// The capture is finalised. §11: the project is *not* closed.
+    /// The capture is finalized. §11: the project is *not* closed.
     Stopped,
 }
 
@@ -193,7 +193,7 @@ pub enum ProvenanceName {
     ///
     /// Reachable only through a `vcw-types` release that adds a variant. A
     /// frontend that meets it can still draw the boundary, which is better than
-    /// a deserialisation error over a label.
+    /// a deserialization error over a label.
     Unknown,
 }
 
@@ -327,7 +327,7 @@ pub enum Wire {
         detail: String,
     },
 
-    /// The capture was finalised.
+    /// The capture was finalized.
     #[serde(rename = "capture-finished")]
     CaptureFinished {
         /// The capture's row id in the project.
@@ -414,7 +414,7 @@ pub enum Wire {
 
     /// A command has no meaning in the phase the transport is in.
     ///
-    /// Nothing was attempted. Reported so a UI can grey the button out.
+    /// Nothing was attempted. Reported so a UI can gray the button out.
     #[serde(rename = "command-rejected")]
     CommandRejected {
         /// The command that does not apply.
@@ -536,7 +536,7 @@ pub enum Wire {
 }
 
 impl Wire {
-    /// The `kind` this variant serialises as.
+    /// The `kind` this variant serializes as.
     ///
     /// The same string [`vcw_core::Event::name`] returns for the event it came
     /// from, which is what makes the two contracts one contract.

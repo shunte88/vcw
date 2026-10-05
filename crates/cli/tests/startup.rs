@@ -37,7 +37,7 @@
 //! give 8 MiB, and the size is baked into the executable header rather than
 //! requested at run time. A debug build of this CLI wanted between 1.0 and
 //! 1.5 MiB before it had parsed a single argument, because clap's derive builds
-//! every `Command` and `Arg` as a local of one unoptimised function - so on
+//! every `Command` and `Arg` as a local of one unoptimized function - so on
 //! Windows every `vcw` invocation aborted with
 //! `thread 'main' has overflowed its stack`, and with it every integration test
 //! in this crate, since `cargo test` builds the binary in debug. CI found it;
@@ -155,10 +155,10 @@ fn a_real_subcommand_runs_in_a_windows_sized_stack() {
             notice.component
         );
         assert!(
-            said.contains(notice.licence),
+            said.contains(notice.license),
             "vcw doctor does not say {} is {}:\n{said}",
             notice.component,
-            notice.licence
+            notice.license
         );
     }
     assert!(

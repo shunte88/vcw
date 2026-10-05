@@ -47,7 +47,7 @@
 //!
 //! The second is that fixture audio is zeros, so no fixture can distinguish
 //! audio laid down in the right order from audio laid down in the wrong one. A
-//! synthetic source with a recognisable ramp in every block can, and does: these
+//! synthetic source with a recognizable ramp in every block can, and does: these
 //! tests read the landed capture back through
 //! [`vcw_project::pcm::Reader`] - the same reader playback uses - and compare it
 //! sample for sample against what the Audacity timeline said should be there.
@@ -443,7 +443,7 @@ fn the_capture_row_says_the_audio_was_imported() {
 }
 
 #[test]
-fn a_trim_is_honoured_in_the_sample_domain() {
+fn a_trim_is_honored_in_the_sample_domain() {
     // The finding that made `model` rewrite every clip accessor: `offset` is
     // where the clip's *sequence* begins, and `trimLeft` is how much of it is
     // hidden. So this clip's audio starts 100 samples into its block and lands
@@ -667,7 +667,7 @@ fn tags_become_release_metadata_and_every_tag_is_kept_verbatim() {
     assert_eq!(release.album, "Atomos");
     assert_eq!(release.album_artist, "A Winged Victory For The Sullen");
     assert_eq!(release.year, Some(2014));
-    // Normalised on the way in (§32), which is what the column claims to hold.
+    // Normalized on the way in (§32), which is what the column claims to hold.
     assert_eq!(release.genres, ["Folk Pop", "Folk", "Pop"]);
 
     // The lossy mapping is not the only copy: every tag is in `meta` as it was.

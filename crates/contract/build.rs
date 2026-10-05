@@ -20,7 +20,7 @@
 //! step with the binary it describes. The workspace root is a *virtual*
 //! manifest with no package in it, so a `build.rs` there is never run at all.
 //!
-//! `SOURCE_DATE_EPOCH` is honoured first, because that is the variable a
+//! `SOURCE_DATE_EPOCH` is honored first, because that is the variable a
 //! reproducible-build environment sets and a package that rebuilds to
 //! different bytes every time is a package nobody can verify. Without it, now.
 //!

@@ -172,11 +172,11 @@ import {
 } from "../zoom";
 
 /** How the waveform is drawn. Kept here because it is appearance, not policy. */
-const COLOURS = {
+const COLORS = {
   background: "#101216",
   rms: "#4f8cc9",
   peak: "#2b5f8f",
-  centre: "#2a2f39",
+  center: "#2a2f39",
   playhead: "#f2c14e",
   promoted: "#7ec46f",
   rejected: "#8a8f99",
@@ -360,7 +360,7 @@ export function Waveform({
    */
   const scrolling = useRef<{ x: number; start: number } | null>(null);
   /**
-   * Whether the press in progress has travelled far enough to be a drag.
+   * Whether the press in progress has traveled far enough to be a drag.
    *
    * Read by the click handler, which fires after the pointer is up and must
    * not also seek: the end of a selection is a zoom, not a position.
@@ -481,7 +481,7 @@ export function Waveform({
       setPeaks(null);
       return;
     }
-    let cancelled = false;
+    let canceled = false;
     void (async () => {
       try {
         const drawn = await api.waveform({
@@ -491,19 +491,19 @@ export function Waveform({
           endFrame: view.endFrame,
           pixels: size.width,
         });
-        if (!cancelled) {
+        if (!canceled) {
           setPeaks(drawn);
           setFailed(null);
         }
       } catch (error) {
-        if (!cancelled) {
+        if (!canceled) {
           setPeaks(null);
           setFailed(api.asFailure(error).message);
         }
       }
     })();
     return () => {
-      cancelled = true;
+      canceled = true;
     };
   }, [
     capture,
@@ -569,9 +569,9 @@ export function Waveform({
     // project held two captures at different rates.
     const visible = peaks.endSeconds - peaks.startSeconds;
 
-    context.fillStyle = COLOURS.background;
+    context.fillStyle = COLORS.background;
     context.fillRect(0, 0, width, height);
-    context.fillStyle = COLOURS.centre;
+    context.fillStyle = COLORS.center;
     context.fillRect(0, Math.floor(middle), width, 1);
 
     const columns = Math.min(
@@ -583,14 +583,14 @@ export function Waveform({
       const low = peaks.min[x] ?? 0;
       const high = peaks.max[x] ?? 0;
       const rms = peaks.rms[x] ?? 0;
-      context.fillStyle = COLOURS.peak;
+      context.fillStyle = COLORS.peak;
       context.fillRect(
         x,
         middle - high * reach,
         1,
         Math.max(1, (high - low) * reach),
       );
-      context.fillStyle = COLOURS.rms;
+      context.fillStyle = COLORS.rms;
       context.fillRect(
         x,
         middle - rms * reach,
@@ -617,13 +617,13 @@ export function Waveform({
           continue;
         }
         context.fillStyle = boundary.locked
-          ? COLOURS.locked
+          ? COLORS.locked
           : boundary.promoted
-            ? COLOURS.promoted
-            : COLOURS.rejected;
+            ? COLORS.promoted
+            : COLORS.rejected;
         // A rejected boundary gets a thin line and a promoted one a thick one,
-        // so the difference survives a greyscale screenshot and a person who
-        // does not distinguish the two colours.
+        // so the difference survives a grayscale screenshot and a person who
+        // does not distinguish the two colors.
         context.fillRect(
           Math.floor(x),
           bandTop,
@@ -640,9 +640,9 @@ export function Waveform({
     // Seconds throughout, because a track is stored in seconds and the window
     // carries seconds - the same reason the playhead needs no rate.
     if (lane > 0 && visible > 0) {
-      context.fillStyle = COLOURS.lane;
+      context.fillStyle = COLORS.lane;
       context.fillRect(0, laneTop, width, lane);
-      context.fillStyle = COLOURS.rulerLine;
+      context.fillStyle = COLORS.rulerLine;
       context.fillRect(0, laneTop, width, 1);
       const size = Math.round(LANE.TEXT * scale);
       context.font = `${size}px system-ui, -apple-system, "Segoe UI", sans-serif`;
@@ -661,13 +661,13 @@ export function Waveform({
         // be told which track they are inside.
         const left = Math.max(0, Math.floor(from));
         const right = Math.min(width, Math.ceil(to));
-        context.fillStyle = COLOURS.laneFill;
+        context.fillStyle = COLORS.laneFill;
         context.fillRect(left, top + 1, Math.max(1, right - left - 1), row - 1);
         // The start edge, drawn only where the start is really on screen. A
         // block clipped at the left edge with a line on it would claim the
         // track starts where the window does.
         if (from >= 0) {
-          context.fillStyle = COLOURS.laneLine;
+          context.fillStyle = COLORS.laneLine;
           context.fillRect(
             Math.floor(from),
             top + 1,
@@ -683,7 +683,7 @@ export function Waveform({
         context.beginPath();
         context.rect(left, top, Math.max(0, right - left), row);
         context.clip();
-        context.fillStyle = COLOURS.laneText;
+        context.fillStyle = COLORS.laneText;
         context.fillText(name, left + pad, top + row / 2);
         context.restore();
       }
@@ -698,17 +698,17 @@ export function Waveform({
       visible > 0 ? ((playhead - peaks.startSeconds) / visible) * width : -1;
     const onScreen = playAt >= 0 && playAt <= width;
     if (onScreen) {
-      context.fillStyle = COLOURS.playhead;
+      context.fillStyle = COLORS.playhead;
       // Across the labels as well as the picture, because the playhead is a
       // fact about the capture and every row of the lane is in that capture.
       context.fillRect(Math.floor(playAt), bandTop, stem, bandHeight + lane);
     }
 
     // The rulers, last, so nothing drawn above can run into them.
-    context.fillStyle = COLOURS.ruler;
+    context.fillStyle = COLORS.ruler;
     context.fillRect(0, 0, width, rule);
     context.fillRect(0, height - rule, width, rule);
-    context.fillStyle = COLOURS.rulerLine;
+    context.fillStyle = COLORS.rulerLine;
     context.fillRect(0, rule - 1, width, 1);
     context.fillRect(0, height - rule, width, 1);
 
@@ -726,7 +726,7 @@ export function Waveform({
         ((tick.seconds - peaks.startSeconds) / visible) * width,
       );
       const length = tick.major ? major : minor;
-      context.fillStyle = COLOURS.rulerLine;
+      context.fillStyle = COLORS.rulerLine;
       // Growing inwards from the picture on both sides, so a mark always
       // points at the column it belongs to.
       context.fillRect(x, rule - length, 1, length);
@@ -740,7 +740,7 @@ export function Waveform({
       if (x + gap + context.measureText(tick.label).width > width) {
         continue;
       }
-      context.fillStyle = COLOURS.rulerText;
+      context.fillStyle = COLORS.rulerText;
       context.fillText(tick.label, x + gap, Math.round(scale));
       context.fillText(tick.label, x + gap, height - rule + major + Math.round(scale));
     }
@@ -753,7 +753,7 @@ export function Waveform({
       const deep = Math.min(rule, Math.round(HANDLE.HEIGHT * scale));
       const tip = Math.floor(playAt) + stem / 2;
       const top = rule - deep;
-      context.fillStyle = COLOURS.playhead;
+      context.fillStyle = COLORS.playhead;
       context.beginPath();
       context.moveTo(tip - half, top);
       context.lineTo(tip + half, top);
@@ -1123,7 +1123,7 @@ export function Waveform({
             }
           }}
           onPointerCancel={() => {
-            // Cancelled, so nothing is chosen and nothing has moved: the draft
+            // Canceled, so nothing is chosen and nothing has moved: the draft
             // band goes away and the selection that was there before - if any
             // - is left alone. A gesture the system took away is not a gesture
             // a person finished.

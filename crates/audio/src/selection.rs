@@ -37,7 +37,7 @@
 //! shall be handled without corrupting the project."* Persistence is what makes
 //! removal detectable - without a record of what was chosen, an absent converter
 //! is indistinguishable from never having chosen one, and the only available
-//! behaviour is to silently use something else.
+//! behavior is to silently use something else.
 //!
 //! So [`resolve`] never falls back. If the remembered device is gone it says so
 //! and stops. S1 finding 3 is the reason: the platform default on the development
@@ -240,7 +240,7 @@ impl Preferences {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         }
-        let mut json = serde_json::to_string_pretty(self).expect("preferences always serialise");
+        let mut json = serde_json::to_string_pretty(self).expect("preferences always serialize");
         json.push('\n');
 
         let temporary = path.with_extension("tmp");

@@ -115,7 +115,7 @@ pub(crate) struct Options {
     /// Run flat out instead of in real time, at [`Pace::Metered`] - so nothing
     /// is dropped and the byte-for-byte readback still means something.
     ///
-    /// Useless as a *timing* measurement and labelled as such in the output.
+    /// Useless as a *timing* measurement and labeled as such in the output.
     /// Until WP-17 this ran at [`Pace::Fast`] and could not pass: the source
     /// outran the writer, the ring overran, and every overrun moved the written
     /// frame index away from the source's, so the verifier compared frame n
@@ -221,7 +221,7 @@ pub(crate) fn run(options: &Options) -> Result<()> {
     }
 
     // Checked before anything is created, like the file below: a soak that
-    // cannot honour the gate it was asked for should cost nothing to find out.
+    // cannot honor the gate it was asked for should cost nothing to find out.
     check_growth_gate(options.max_growth_mib, resident_bytes())?;
 
     // A file, if one was named, and then the format it dictates. Sniffed before
@@ -802,7 +802,7 @@ fn growth_allowance_mib(limit_mib: u64, readers: usize) -> u64 {
 /// inside this - so this is a ceiling and not a prediction.
 const READER_PAGE_CACHE_MIB: u64 = 2;
 
-/// Refuses a memory gate this platform cannot honour.
+/// Refuses a memory gate this platform cannot honor.
 ///
 /// `rss` is passed in rather than read here so that both answers are reachable
 /// from a test on any platform.
@@ -818,7 +818,7 @@ fn check_growth_gate(limit_mib: u64, rss: Option<u64>) -> Result<()> {
     if limit_mib > 0 && rss.is_none() {
         bail!(
             "this platform cannot report resident memory, so --max-growth-mib {limit_mib} \
-             cannot be honoured. Pass --max-growth-mib 0 to soak without the memory gate; \
+             cannot be honored. Pass --max-growth-mib 0 to soak without the memory gate; \
              every other check still applies."
         );
     }
@@ -1270,7 +1270,7 @@ mod tests {
         // the uncontended run forced: 27.2 MiB of growth with no readers at
         // all.
         // It passed the flat gate, which is the knife edge rather than a
-        // defence: 27.2 MiB of cache against a 32 MiB budget leaves under 5
+        // defense: 27.2 MiB of cache against a 32 MiB budget leaves under 5
         // MiB, so on that gate a run's verdict turned on where the baseline
         // landed. Against the allowance it has the whole budget to spare.
         let uncontended = growth(Some(14 * mib), 41 * mib + 717 * mib / 1000);
@@ -1389,7 +1389,7 @@ mod tests {
     }
 
     #[test]
-    fn a_memory_gate_the_platform_cannot_honour_is_refused() {
+    fn a_memory_gate_the_platform_cannot_honor_is_refused() {
         // Both ends, which is the whole point: the gate must be refusable and
         // it must not refuse a run that never asked for it.
         let refused = check_growth_gate(32, None);

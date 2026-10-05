@@ -181,7 +181,7 @@ impl From<vcw_contract::command::Invalid> for Error {
 impl Serialize for Error {
     /// Crosses as a [`Failure`], which is the type the generated TypeScript has.
     ///
-    /// Tauri serialises a command's error with serde, so this is the only place
+    /// Tauri serializes a command's error with serde, so this is the only place
     /// the shape is decided. Going through `Failure` rather than deriving
     /// something ad hoc means the frontend's type is generated from the same
     /// declaration as everything else.

@@ -159,7 +159,7 @@ fn os_release_pretty_name() -> Option<String> {
 
 /// The backend and what it can see.
 ///
-/// Summarised, not dumped. The full `Snapshot` of this development machine is
+/// Summarized, not dumped. The full `Snapshot` of this development machine is
 /// 7.7 MB of JSON - 71 devices, most of them ALSA plugin nodes, each with every
 /// advertised configuration family - and a 7.7 MB bundle is a bundle nobody
 /// sends. §42 asks for the device configuration, and what diagnoses a capture
@@ -176,7 +176,7 @@ fn audio(no_devices: bool, all_devices: bool) -> Value {
     let devices = if all_devices {
         serde_json::to_value(&snapshot.devices).unwrap_or(Value::Null)
     } else {
-        snapshot.devices.iter().map(summarise).collect()
+        snapshot.devices.iter().map(summarize).collect()
     };
     json!({
         "hosts": hosts,
@@ -189,7 +189,7 @@ fn audio(no_devices: bool, all_devices: bool) -> Value {
 }
 
 /// One device, in the few hundred bytes that matter.
-fn summarise(device: &vcw_audio::devices::DeviceReport) -> Value {
+fn summarize(device: &vcw_audio::devices::DeviceReport) -> Value {
     json!({
         "host": device.key.host(),
         "id": device.key.id(),
@@ -425,7 +425,7 @@ fn inspect(project: &Project, checksums: bool, report: &mut Map<String, Value>) 
 ///
 /// `integrity_check` sees a torn page and cannot see a corrupted sample blob -
 /// a wrong byte inside a BLOB is still a valid BLOB - which is exactly the
-/// division of labour between this and `--checksums`.
+/// division of labor between this and `--checksums`.
 fn integrity(project: &Project) -> Value {
     let conn = project.conn();
     let check = conn

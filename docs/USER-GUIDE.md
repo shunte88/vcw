@@ -35,7 +35,7 @@ reachable from the tabs or from `Ctrl+1` to `Ctrl+6`:
 
 | Workspace | What it is for |
 | --- | --- |
-| **Library** | Every project the library knows: its cover, album, artist, catalogue number, sides, track count, length, size and when it last changed. `n` creates one, `Enter` opens it. |
+| **Library** | Every project the library knows: its cover, album, artist, catalog number, sides, track count, length, size and when it last changed. `n` creates one, `Enter` opens it. |
 | **Capture** | The device list, the configuration that was negotiated, and the captures the open project already holds with their state and length. |
 | **Tracks** | The track list over the boundary list: title, artist, start and length above; confidence, how many detectors agreed, and whether a person has locked it below. Both headers stay put as you scroll. |
 | **Metadata** | A provider search and its candidates, and the release the project settles on. |
@@ -91,7 +91,7 @@ vcw doctor
 ```
 
 That prints the version, the platform, the SQLite build, the host APIs found, and
-the licences of the encoders this build was compiled with - the same list the
+the licenses of the encoders this build was compiled with - the same list the
 window's **About** dialog shows, and the place to look if you are redistributing
 a VCW binary and need to know what travels with it.
 
@@ -145,9 +145,9 @@ Almost every phono stage applies the RIAA curve before the signal reaches the
 sound card. A few do not: a flat transfer from a cartridge into a flat preamp,
 or a phono stage with its curve defeated. VCW records which, per capture, because
 nothing in the audio can tell you afterwards and the answer decides what
-playback equalisation is allowed to do with it later (§51).
+playback equalization is allowed to do with it later (§51).
 
-Set it once in **Settings -> Audio -> Equalisation on input**, and every capture
+Set it once in **Settings -> Audio -> Equalization on input**, and every capture
 the window takes carries it. From the command line it is a flag:
 
 ```text
@@ -293,7 +293,7 @@ export VCW_CONTACT=you@example.com  # the contact string §40 asks providers for
 
 One thing that catches people searching by hand: a provider's `format:` field is
 an exact medium-name match, so `format:vinyl` finds nothing. Vinyl is spelled
-four different ways across the catalogue, and VCW's own search asks for all four.
+four different ways across the catalog, and VCW's own search asks for all four.
 
 ### The release decides how the record is cut
 
@@ -433,7 +433,7 @@ nobody asked for - down to the file extension.
 ### The tags
 
 A track goes out with its title, artists, album, genres, year, composer,
-comment, label, catalogue number, country, barcode and both MusicBrainz ids,
+comment, label, catalog number, country, barcode and both MusicBrainz ids,
 plus the cover and the `VINYL_POSITION` the record was cut at. **FLAC and Ogg
 get Vorbis comments; WAV and MP3 get a full ID3v2 tag** - in a chunk after the
 audio for WAV, at the front of the file for MP3, which is what every player

@@ -49,7 +49,7 @@ Audacity's encoding, `(bytes_per_sample << 16) | type_code`, extended with the t
 
 §49 requires the format to be usable by a third-party tool without the GUI, and `tools/vcw-read.py` is the proof: a reader written from this document alone, in Python, with no VCW code in it. `crates/project/tests/third_party_spec.rs` runs it against a project the product wrote and compares the audio it extracts frame for frame. Everything a reader needs is below; where this document and the code disagree, the code is the bug.
 
-**Open it read-only, and open it with `mode=ro`.** A project is in WAL mode, so content that has not been checkpointed lives in the `-wal` sidecar. SQLite's `immutable=1` tells the library to ignore that file, which turns an unflushed project into a silently stale one. `mode=ro` honours the sidecar and costs only the creation of a `-shm`.
+**Open it read-only, and open it with `mode=ro`.** A project is in WAL mode, so content that has not been checkpointed lives in the `-wal` sidecar. SQLite's `immutable=1` tells the library to ignore that file, which turns an unflushed project into a silently stale one. `mode=ro` honors the sidecar and costs only the creation of a `-shm`.
 
 **Identify it from the header, not from the name.** `application_id` and `user_version` are at offsets 68 and 60 of the first database page, big-endian, which means a reader can refuse a file it should not touch without opening a connection at all. An Audacity project answers `0x41554459` to the same question.
 
@@ -121,7 +121,7 @@ One row per capture session (§13, §15). A session is unfinished exactly when f
 | `finished_at` | `INTEGER` | Unix seconds at clean stop. NULL means interrupted: recovery's signal. |
 | `frames` | `INTEGER NOT NULL DEFAULT 0` | Frames committed per channel. Updated as blocks land, so it survives a crash. |
 | `state` | `TEXT NOT NULL DEFAULT 'recording'` | 'recording', 'finalised' or 'interrupted'. validate() rejects anything else. |
-| `capture_eq` | `TEXT NOT NULL DEFAULT 'unknown'` | Equalisation the signal already carried when it reached the sound card (§51): 'flat' for a preamp that applied no curve, 'riaa' for one that applied RIAA, 'unknown' when nobody said. Playback equalisation needs it and it cannot be recovered from the audio, so it is recorded from the first capture, years before the curves ship. |
+| `capture_eq` | `TEXT NOT NULL DEFAULT 'unknown'` | Equalization the signal already carried when it reached the sound card (§51): 'flat' for a preamp that applied no curve, 'riaa' for one that applied RIAA, 'unknown' when nobody said. Playback equalization needs it and it cannot be recovered from the audio, so it is recorded from the first capture, years before the curves ship. |
 
 ### `capture_blocks`
 
@@ -181,9 +181,9 @@ The release being captured (§29, §32). One per project: §29's topology is Pro
 | `album` | `TEXT NOT NULL DEFAULT ''` | The release title. Empty string rather than NULL for the text a person types, so a caller never has to distinguish "not set" from "set to nothing". |
 | `album_artist` | `TEXT NOT NULL DEFAULT ''` | The credited artist for the release. A track carries its own only when it differs, which is how a compilation is told from an album. |
 | `year` | `INTEGER` | Release year. NULL is unknown, and unknown is common on a reissue. |
-| `genres` | `TEXT NOT NULL DEFAULT ''` | Normalised genres (§32), '; '-separated in order. The same spelling `vcw metadata genres` prints, and the order a tagger writes them in. |
+| `genres` | `TEXT NOT NULL DEFAULT ''` | Normalized genres (§32), '; '-separated in order. The same spelling `vcw metadata genres` prints, and the order a tagger writes them in. |
 | `label` | `TEXT NOT NULL DEFAULT ''` | The record label, as the provider or the person spells it. Discogs and MusicBrainz disagree about this more often than about anything else. |
-| `catalog` | `TEXT NOT NULL DEFAULT ''` | The catalogue number off the label: the one identifier a vinyl pressing reliably carries, and the one a person searches by. |
+| `catalog` | `TEXT NOT NULL DEFAULT ''` | The catalog number off the label: the one identifier a vinyl pressing reliably carries, and the one a person searches by. |
 | `country` | `TEXT NOT NULL DEFAULT ''` | Country of the pressing. Part of telling two pressings apart (§28). |
 | `barcode` | `TEXT` | Barcode, where a sleeve has one. NULL on anything old enough not to. |
 | `composer` | `TEXT NOT NULL DEFAULT ''` | Composer (§32), for the classical and soundtrack cases where it is the field that matters. |
@@ -206,7 +206,7 @@ Cover art (§32), stored in the project because §12 makes the file self-contain
 | `artwork_id` | `INTEGER PRIMARY KEY AUTOINCREMENT` | Surrogate key. A release may hold several images. |
 | `release_id` | `INTEGER NOT NULL REFERENCES releases(release_id)` | The release it belongs to, which is always release 1. |
 | `role` | `TEXT NOT NULL DEFAULT 'front'` | 'front', 'back', 'label' or 'other'. Front is what a tagger embeds. |
-| `mime` | `TEXT NOT NULL` | The sniffed type, not the one the server claimed: vcw-metadata refuses a download whose bytes do not start with an image it recognises. |
+| `mime` | `TEXT NOT NULL` | The sniffed type, not the one the server claimed: vcw-metadata refuses a download whose bytes do not start with an image it recognizes. |
 | `width` | `INTEGER` | Pixel width, where the provider stated one. NULL is "not known", never 0. |
 | `height` | `INTEGER` | Pixel height, likewise. |
 | `source_url` | `TEXT` | Where it came from, for provenance. Never carries a credential (§39) because vcw-metadata puts those in headers and not in URLs. |

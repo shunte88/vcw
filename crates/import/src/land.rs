@@ -64,7 +64,7 @@
 //! at export. An all-unity envelope is absent by definition ([`crate::model`]);
 //! a real one would silently change the audio if we applied it and silently
 //! change the user's intent if we dropped it, so a project carrying one is
-//! reported rather than half-honoured.
+//! reported rather than half-honored.
 //!
 //! # Why import commits in batches
 //!
@@ -226,7 +226,7 @@ impl Landed {
 pub struct Source<'a> {
     /// A connection to the Audacity project, which is only ever read.
     pub conn: &'a Connection,
-    /// The document, already modelled.
+    /// The document, already modeled.
     pub document: &'a Project,
     /// The file the connection is to, recorded as provenance.
     pub path: &'a Path,
@@ -265,7 +265,7 @@ pub fn land(source: &Path, destination: &Path, options: &Options) -> Result<Land
     )
 }
 
-/// Writes a `.vcw` from a project that is already open and modelled.
+/// Writes a `.vcw` from a project that is already open and modeled.
 ///
 /// # Errors
 ///
@@ -475,9 +475,9 @@ fn adopt_tags(project: &mut Destination, tags: &BTreeMap<String, String>) -> Res
         record.year = Some(year);
     }
     if let Some(genre) = get("GENRE") {
-        // Normalised on the way in, because the column says normalised (§32) and
-        // an unnormalised value there would be a trap for the tagger.
-        record.genres = vcw_metadata::Genres::builtin().normalise(genre);
+        // Normalized on the way in, because the column says normalized (§32) and
+        // an unnormalized value there would be a trap for the tagger.
+        record.genres = vcw_metadata::Genres::builtin().normalize(genre);
     }
     if let Some(comments) = get("COMMENTS") {
         record.comments = comments.to_owned();
@@ -490,7 +490,7 @@ fn adopt_tags(project: &mut Destination, tags: &BTreeMap<String, String>) -> Res
 ///
 /// Rounded rather than truncated for the same reason [`crate::model`] rounds
 /// trims: at 192 kHz a truncation loses a sample, and a label that shares a
-/// frame with its neighbour is the difference between two adjacent tracks and
+/// frame with its neighbor is the difference between two adjacent tracks and
 /// two overlapping ones.
 fn frames_at(rate: SampleRate, seconds: f64) -> u64 {
     if !seconds.is_finite() || seconds <= 0.0 {

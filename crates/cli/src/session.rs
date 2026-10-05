@@ -89,7 +89,7 @@ pub(crate) struct Args {
     pub(crate) mode: Mode,
     /// Ring capacity in milliseconds.
     pub(crate) ring_millis: Option<u32>,
-    /// What equalisation the hardware upstream already applied (§51).
+    /// What equalization the hardware upstream already applied (§51).
     pub(crate) capture_eq: Eq,
     /// A whole session on one line, verbs separated by commas.
     pub(crate) script: Option<String>,
@@ -170,7 +170,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
         }
     };
 
-    // End of input is the end of the session. Shutdown finalises whatever is
+    // End of input is the end of the session. Shutdown finalizes whatever is
     // still recording rather than abandoning it, so a script that forgets to
     // stop still keeps its audio.
     engine.shutdown()?;

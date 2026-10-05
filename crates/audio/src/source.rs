@@ -116,7 +116,7 @@ impl Source for Capture {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pace {
     /// Wall-clock, the way a device does. What a soak test needs, and the only
-    /// setting under which overrun behaviour means anything.
+    /// setting under which overrun behavior means anything.
     RealTime,
     /// Flat out, dropping whatever the consumer cannot take. Turns a 90-minute
     /// soak into seconds, at the cost of telling you nothing about timing.
@@ -281,7 +281,7 @@ impl Simulated {
                         continue;
                     }
                     // Metered: hold the chunk back until it will fit. Checked
-                    // before the fill so a stop is honoured while waiting -
+                    // before the fill so a stop is honored while waiting -
                     // a consumer that has stopped reading would otherwise keep
                     // this thread here until the ring drained, which it never
                     // would.

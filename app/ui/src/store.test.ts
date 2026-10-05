@@ -102,7 +102,7 @@ const FINISHED: Wire = {
 };
 
 group("the output meter", () => {
-  // The needle has to go out when the sound does. The bridge greys a side
+  // The needle has to go out when the sound does. The bridge grays a side
   // whose meter is null, so a snapshot left behind here is a lit output meter
   // resting at -3 dB over a device that stopped playing, which is the one
   // reading an instrument must never give.

@@ -51,7 +51,7 @@ vcw_kb.txt
 !**/tests/fixtures/**
 !/fixtures/**
 
-# The bulk labelled corpus (~294 MB, 595 excerpt/label pairs) is NOT tracked -
+# The bulk labeled corpus (~294 MB, 595 excerpt/label pairs) is NOT tracked -
 # fetched on demand by scripts/fetch-corpus.sh. Only the curated subset under
 # /fixtures/boundary/ lives in the repo.
 /fixtures/corpus-full/
@@ -63,7 +63,7 @@ vcw_kb.txt
 # Temporary analysis WAV (written to /tmp but just in case)
 /tmp/vcw_analysis_*.wav
 
-# Frontend build artefacts and dependencies. The generated TypeScript under
+# Frontend build artifacts and dependencies. The generated TypeScript under
 # `app/ui/src/bindings/` is NOT here: it is committed on purpose so the frontend
 # typechecks without a Rust toolchain, and a test regenerates and compares it.
 node_modules/
@@ -74,7 +74,7 @@ node_modules/
 **/src-tauri/gen/schemas/
 
 # The CLI staged for the bundler by tools/stage-cli.sh: a copy of a build
-# artefact, named for the target triple it was built for.
+# artifact, named for the target triple it was built for.
 /app/src-tauri/binaries/
 
 # Claude Code local config

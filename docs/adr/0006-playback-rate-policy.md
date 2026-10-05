@@ -23,10 +23,10 @@ not agree. There are two axes and they are not symmetric:
   conversion, and a converted path cannot be called bit-perfect.
 
 One more constraint comes from the archive's own purpose. A vinyl rip is captured once
-and kept; the reason §9 is as strict as it is, is that the capture is the artefact and
+and kept; the reason §9 is as strict as it is, is that the capture is the artifact and
 everything else is a view of it. Playback is how an operator decides whether the capture
 is good. A playback path that quietly changed the audio would be a poor instrument for
-that judgement, whatever it sounded like.
+that judgment, whatever it sounded like.
 
 ## Decision
 
@@ -62,7 +62,7 @@ the device.** "Nothing rules it out" is never reported as a pass.
 - **A resampler behind a quality setting.** Rejected: it makes the answer to "does this
   capture sound right" depend on a preference the operator has probably forgotten
   setting. If VCW ever needs sample-rate conversion it belongs in export (§33), where
-  the output is a new artefact that says what it is, and not in the monitoring path.
+  the output is a new artifact that says what it is, and not in the monitoring path.
 - **Playing a 192 kHz side through the system mixer at 48 kHz because it is available.**
   Rejected: that is precisely the silent conversion S1's finding 1 was about, arriving
   from the other direction. A refusal that names the device's real rates is more useful
@@ -86,7 +86,7 @@ the device.** "Nothing rules it out" is never reported as a pass.
 - **Export, not playback, is where rate conversion will be asked for.** §33 will
   eventually want 44.1 kHz FLAC from a 96 kHz side, and that is a different decision with
   a different answer: an export produces a new file that documents its own provenance,
-  where a monitor produces a judgement about an existing one.
+  where a monitor produces a judgment about an existing one.
 - The 44.1/88.2 family and the 48/96/192 family are therefore **not interchangeable** on
   output. A converter that does only one family can only audition captures from that
   family, which is a property of the hardware rather than of VCW, and is reported as

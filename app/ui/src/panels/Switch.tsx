@@ -12,12 +12,12 @@
 // A checkbox underneath, restyled, and not a `div` with an `onClick`. Everything
 // that makes a checkbox a checkbox - Space toggling it, the label clicking
 // through to it, a screen reader calling it a checkbox, the focus ring the rest
-// of the sheet already draws - is behaviour this file would otherwise have to
+// of the sheet already draws - is behavior this file would otherwise have to
 // reimplement and get subtly wrong. CSS moves the knob; the input does the work.
 //
 // Two words rather than one, because both states of the two switches VCW has
 // are *answers* rather than an on and an off. "Mono" unticked is "Stereo", not
-// "not mono", and a switch labelled only "Mono pressing" makes a person work
+// "not mono", and a switch labeled only "Mono pressing" makes a person work
 // that out from the absence of a tick.
 
 /** One switch, with the state it is in named at the end it points to. */

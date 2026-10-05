@@ -55,7 +55,7 @@
 //! frontend can send and nothing answers is worse than one that refuses out
 //! loud. There is nothing left for it to hold, so it is gone - which makes the
 //! test a requirement rather than a reminder: a command added to the contract
-//! now fails the suite until something here honours it.
+//! now fails the suite until something here honors it.
 
 // A release build should not open a console window behind the app on Windows. In
 // a debug build it should, because that is where a panic is printed.
@@ -76,7 +76,7 @@ use tauri::Manager;
 
 use state::Shell;
 
-/// The commands in [`vcw_contract::Request`] that this shell honours.
+/// The commands in [`vcw_contract::Request`] that this shell honors.
 ///
 /// These are the contract's *tags*, not the names in `generate_handler!`, and
 /// three of them differ from the command that serves them:

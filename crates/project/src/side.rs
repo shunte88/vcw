@@ -52,7 +52,7 @@
 //! [`ensure`] is explicit rather than implied by a capture. A capture that arrived
 //! with no side named is the common case during a session - the operator has not
 //! said yet, or is recording something that is not a record at all - and inventing
-//! side A for it would quietly relabel a mislabelled recording instead of leaving
+//! side A for it would quietly relabel a mislabeled recording instead of leaving
 //! the question open.
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -490,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn relabelling_moves_a_side_and_refuses_to_overwrite_one() {
+    fn relabeling_moves_a_side_and_refuses_to_overwrite_one() {
         let dir = tempfile::tempdir().expect("tempdir");
         let mut p = project(&dir);
         let capture = a_capture(&mut p);
@@ -508,7 +508,7 @@ mod tests {
     }
 
     #[test]
-    fn relabelling_a_side_to_itself_is_not_an_error() {
+    fn relabeling_a_side_to_itself_is_not_an_error() {
         let dir = tempfile::tempdir().expect("tempdir");
         let mut p = project(&dir);
         ensure(&mut p, Side::A).expect("ensure");

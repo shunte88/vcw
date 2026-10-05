@@ -34,7 +34,7 @@ const STEPS: readonly number[] = [
 ];
 
 /**
- * The narrowest a labelled mark may be spaced, in pixels.
+ * The narrowest a labeled mark may be spaced, in pixels.
  *
  * `0:00.00` is seven characters at 10px monospace, which is a little over 42
  * pixels, and two labels that touch are worse than half as many labels.
@@ -61,9 +61,9 @@ const MOST_TICKS = 4096;
 export type Tick = {
   /** Where it falls, in seconds from the start of the capture. */
   readonly seconds: number;
-  /** What it says, or the empty string for an unlabelled mark. */
+  /** What it says, or the empty string for an unlabeled mark. */
   readonly label: string;
-  /** Whether it is one of the labelled marks. */
+  /** Whether it is one of the labeled marks. */
   readonly major: boolean;
 };
 

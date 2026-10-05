@@ -93,7 +93,7 @@
 //! ignores the error code in ```` ```compile_fail,E0599``` ````** - a doctest
 //! annotated `E0599` passes when the code fails with `E0308` instead, which was
 //! measured rather than assumed. So a bare `compile_fail` proves only that the
-//! snippet did not compile, and a misspelt method name would pass it while
+//! snippet did not compile, and a misspelled method name would pass it while
 //! proving nothing. The twin closes that hole: a typo breaks the passing half,
 //! and only a genuinely absent method leaves the pair intact.
 //!
@@ -222,14 +222,14 @@ pub trait Deck {
     /// If the capture could not be resumed. The deck must still be paused.
     fn resume(&mut self) -> Result<(), Self::Error>;
 
-    /// Finalises the capture and gives up the device.
+    /// Finalizes the capture and gives up the device.
     ///
     /// Consumes the deck, because §11's `Stopped` is not a phase you can record
     /// from and a deck that outlived it would be a way to try.
     ///
     /// # Errors
     ///
-    /// If the capture could not be finalised. There is nothing to hand back:
+    /// If the capture could not be finalized. There is nothing to hand back:
     /// the deck is gone either way, which is why this is the one transition
     /// that cannot be refused into its original phase.
     fn finish(self, state: CaptureState) -> Result<Self::Report, Self::Error>;
@@ -238,7 +238,7 @@ pub trait Deck {
     ///
     /// An associated function rather than a method because by the time there
     /// is a report there is no deck: [`finish`](Deck::finish) consumed it. It
-    /// exists because finalising is not a no-op - a writer flushes the
+    /// exists because finalizing is not a no-op - a writer flushes the
     /// part-filled block on its way out - so the position taken *before* the
     /// stop is short by up to one block, and `Stopped::position` would
     /// otherwise disagree with the row in the project.
@@ -254,7 +254,7 @@ pub trait Deck {
 /// The five phases of §11, as data.
 ///
 /// The types are what enforce the machine; this is what it is called when it
-/// has to be printed, serialised or compared. Deriving `PartialEq` on the
+/// has to be printed, serialized or compared. Deriving `PartialEq` on the
 /// phases themselves would invite exactly the runtime branching the types exist
 /// to remove, so the comparison lives here instead.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -267,7 +267,7 @@ pub enum Phase {
     Recording,
     /// The device is still held, and nothing is being committed.
     Paused,
-    /// The capture is finalised. §11: the project is *not* closed.
+    /// The capture is finalized. §11: the project is *not* closed.
     Stopped,
 }
 
@@ -386,7 +386,7 @@ pub struct Paused<D: Deck> {
     clock: Clock,
 }
 
-/// The capture is finalised and the deck is gone.
+/// The capture is finalized and the deck is gone.
 #[derive(Debug)]
 pub struct Stopped<D: Deck> {
     report: D::Report,
@@ -400,7 +400,7 @@ impl Idle {
     /// Infallible on purpose: whatever could fail - opening the device, opening
     /// the project - has already failed or succeeded by the time a `Deck`
     /// exists. Building the deck is the risky part, and it happens outside the
-    /// state machine so that a failure to open never has to be modelled as a
+    /// state machine so that a failure to open never has to be modeled as a
     /// phase.
     #[must_use]
     pub fn arm<D: Deck>(self, deck: D) -> Armed<D> {
@@ -462,7 +462,7 @@ impl<D: Deck> Recording<D> {
     ///
     /// # Errors
     ///
-    /// If the deck could not finalise. The deck is consumed either way, so
+    /// If the deck could not finalize. The deck is consumed either way, so
     /// there is no phase to hand back - this is the one transition that cannot
     /// be refused into its origin.
     pub fn stop(self, state: CaptureState) -> Result<Stopped<D>, D::Error> {
@@ -510,7 +510,7 @@ impl<D: Deck> Paused<D> {
     ///
     /// # Errors
     ///
-    /// If the deck could not finalise. See [`Recording::stop`].
+    /// If the deck could not finalize. See [`Recording::stop`].
     pub fn stop(self, state: CaptureState) -> Result<Stopped<D>, D::Error> {
         let report = self.deck.finish(state)?;
         Ok(Stopped {
@@ -551,7 +551,7 @@ impl<D: Deck> Stopped<D> {
         &self.report
     }
 
-    /// Frames committed, as of the moment the deck was finalised.
+    /// Frames committed, as of the moment the deck was finalized.
     pub const fn position(&self) -> u64 {
         self.frames
     }
@@ -614,7 +614,7 @@ impl Rehearsal {
     }
 }
 
-/// What a [`Rehearsal`] leaves behind when it is finalised.
+/// What a [`Rehearsal`] leaves behind when it is finalized.
 ///
 /// A report is whatever the deck says a finished capture amounts to;
 /// [`Recorder`](crate::engine::Recorder)'s carries a row id and a diagnostics
@@ -678,7 +678,7 @@ pub enum Step<D: Deck> {
     Pause,
     /// `Paused -> Recording`.
     Resume,
-    /// `Recording | Paused -> Stopped`, finalising with this state.
+    /// `Recording | Paused -> Stopped`, finalizing with this state.
     Stop(CaptureState),
     /// `Stopped -> Idle`, yielding the report.
     Reset,
@@ -1107,7 +1107,7 @@ mod tests {
     fn a_stop_that_fails_reports_it_and_does_not_pretend_to_be_stopped() {
         // `finish` consumes the deck, so a failure here genuinely has no
         // capture to hand back. Falling to Idle is the honest answer; claiming
-        // Stopped would tell the operator a finalised capture exists.
+        // Stopped would tell the operator a finalized capture exists.
         let machine = Machine::default();
         let (machine, _) = machine.apply(Step::Arm(Rehearsal::refusing("finish")));
         let (machine, _) = machine.apply(Step::Record);

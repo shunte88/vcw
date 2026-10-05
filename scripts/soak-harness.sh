@@ -44,7 +44,7 @@ status=0
 # cannot be allowed to fail a build.
 #
 # The memory gate needs procfs, and `vcw soak` now refuses a gate it cannot
-# honour rather than reporting one it did not apply - so on Windows and macOS
+# honor rather than reporting one it did not apply - so on Windows and macOS
 # the limit is set to zero here, explicitly, where the intent is readable.
 gates=()
 [ "${VCW_SHARED:-0}" = 1 ] && gates+=(--ignore-commit-budget --waveform-budget-millis 0)
@@ -161,7 +161,7 @@ nightly)
     #
     # The timing numbers from this leg are worth reading and not worth gating
     # hard: a hosted runner shares its CPU and its disk, so a commit tail
-    # measured here says as much about the neighbours as about the writer.
+    # measured here says as much about the neighbors as about the writer.
     # `--minutes 60` against a 250 ms budget leaves an order of magnitude of
     # headroom, which is why the budget can stay on: it takes a genuinely
     # pathological runner to breach it, and that is worth seeing too.

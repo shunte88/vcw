@@ -68,7 +68,7 @@ export function onEvent(handler: (event: Wire) => void): Promise<UnlistenFn> {
 /**
  * Narrows a rejected `invoke` to the shell's own failure shape.
  *
- * Tauri rejects with whatever the command's error serialised to, which for
+ * Tauri rejects with whatever the command's error serialized to, which for
  * every command here is a `Failure`. A thrown string means something failed
  * before the command ran - a name that is not registered, usually.
  */

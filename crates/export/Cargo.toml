@@ -21,7 +21,7 @@ tracing = { workspace = true }
 [features]
 # Both lossy containers are on by default, because §33 requires MP3 and OGG as
 # initial export formats and a build that cannot write them does not meet the
-# requirement. The features exist for the licence rather than for the size: MP3
+# requirement. The features exist for the license rather than for the size: MP3
 # links libmp3lame under LGPL-3.0, and anyone redistributing VCW who cannot
 # carry that obligation can drop the feature without forking the tree. Ogg is
 # BSD-3-Clause and costs nothing, and is a feature only so that the pair can be

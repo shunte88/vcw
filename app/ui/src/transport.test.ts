@@ -9,7 +9,7 @@
  *  MIT License - see the header in any Rust source file for the full text.
  */
 
-// One sentence of behaviour, and it is the one the waveform's drag gesture
+// One sentence of behavior, and it is the one the waveform's drag gesture
 // exists for: a band drawn on the picture is a stretch to listen to, so the
 // transport has to mean that stretch and not the whole side. Tested here
 // rather than by pressing the key, for the reason `wiring.test.ts` gives at

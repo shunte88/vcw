@@ -400,12 +400,12 @@ export function useEngine(): Store {
   onChange.current = bump;
 
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     let unlisten: (() => void) | undefined;
 
     void api
       .onEvent((event) => {
-        if (cancelled) {
+        if (canceled) {
           return;
         }
         setEngine((previous) => ({
@@ -427,7 +427,7 @@ export function useEngine(): Store {
         }
       })
       .then((off) => {
-        if (cancelled) {
+        if (canceled) {
           off();
         } else {
           unlisten = off;
@@ -435,7 +435,7 @@ export function useEngine(): Store {
       });
 
     return () => {
-      cancelled = true;
+      canceled = true;
       unlisten?.();
     };
   }, []);
@@ -455,11 +455,11 @@ export function useEngine(): Store {
   // a reason on it is a bad outcome; a full window describing the wrong record
   // is a worse one.
   useEffect(() => {
-    let cancelled = false;
+    let canceled = false;
     void (async () => {
       try {
         const path = await api.openPath();
-        if (cancelled) {
+        if (canceled) {
           return;
         }
         if (path === null) {
@@ -474,11 +474,11 @@ export function useEngine(): Store {
             api.boundaries(),
             api.release(),
           ]);
-        if (!cancelled) {
+        if (!canceled) {
           setProject({ path, captures, sides, tracks, boundaries, release });
         }
       } catch (error) {
-        if (cancelled) {
+        if (canceled) {
           return;
         }
         setProject(NO_PROJECT);
@@ -489,7 +489,7 @@ export function useEngine(): Store {
       }
     })();
     return () => {
-      cancelled = true;
+      canceled = true;
     };
   }, [generation]);
 

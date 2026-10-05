@@ -220,7 +220,7 @@ enum Command {
         /// Ring capacity in milliseconds. Raised to the 500 ms floor if lower.
         #[arg(long)]
         ring_millis: Option<u32>,
-        /// What equalisation your hardware already applied (§51). Recorded with
+        /// What equalization your hardware already applied (§51). Recorded with
         /// the capture and not recoverable later, so state it if you know it.
         #[arg(long, value_enum, default_value_t = capture::Eq::Unknown)]
         capture_eq: capture::Eq,
@@ -290,9 +290,9 @@ enum Command {
     /// detectors, one resolver. Writes nothing - a boundary becomes a track in
     /// the editor, and this is how to see what the editor would be handed.
     Detect {
-        /// Project to analyse.
+        /// Project to analyze.
         project: std::path::PathBuf,
-        /// Capture to analyse. Omit for the most recent.
+        /// Capture to analyze. Omit for the most recent.
         #[arg(long)]
         capture: Option<i64>,
         /// Level a window must reach to count as music, in dBFS.
@@ -634,7 +634,7 @@ enum MetadataCommand {
         /// The release title.
         #[arg(long)]
         album: Option<String>,
-        /// The label's catalogue number. Usually identifies one pressing, which
+        /// The label's catalog number. Usually identifies one pressing, which
         /// is the difference between finding a record and finding the record.
         #[arg(long)]
         catalog: Option<String>,
@@ -688,9 +688,9 @@ enum MetadataCommand {
         json: bool,
     },
 
-    /// Normalise genre names through the §32 mapping table. Needs no network.
+    /// Normalize genre names through the §32 mapping table. Needs no network.
     Genres {
-        /// Names to normalise, semicolon-delimited or one per argument.
+        /// Names to normalize, semicolon-delimited or one per argument.
         names: Vec<String>,
         /// A replacement mapping table, in the shipped file's format.
         #[arg(long)]
@@ -883,7 +883,7 @@ struct ReleaseFields {
     /// The label.
     #[arg(long)]
     label: Option<String>,
-    /// The catalogue number, which is what identifies a pressing.
+    /// The catalog number, which is what identifies a pressing.
     #[arg(long)]
     catalog: Option<String>,
     /// The country of pressing.
@@ -927,7 +927,7 @@ const RUN_STACK_BYTES: usize = 8 * 1024 * 1024;
 /// macOS, and it is fixed in the executable header rather than asked for at run
 /// time. `Cli::parse()` does not fit in 1 MiB in a debug build: clap's derive
 /// expands an `augment_subcommands` function per subcommand enum that builds
-/// every `Command` and every `Arg` as a local, and unoptimised they are all live
+/// every `Command` and every `Arg` as a local, and unoptimized they are all live
 /// at once. Measured on this tree, a debug `vcw --version` needs between 1.0 and
 /// 1.5 MiB and aborts with `thread 'main' has overflowed its stack`, while a
 /// release build of the same commit runs in 256 KiB.
@@ -1401,12 +1401,12 @@ fn doctor() -> anyhow::Result<()> {
     // their copy contains LGPL-3.0 object code. Derived from `vcw-export`'s
     // cargo features, exactly as the dialog's list is - see
     // `vcw_export::notices`.
-    println!("licence     {} (VCW's own code)", env!("CARGO_PKG_LICENSE"));
+    println!("license     {} (VCW's own code)", env!("CARGO_PKG_LICENSE"));
     let notices = vcw_export::notices::notices();
     for notice in &notices {
         println!(
             "            {} - {} - {} - {}",
-            notice.licence, notice.component, notice.provides, notice.source
+            notice.license, notice.component, notice.provides, notice.source
         );
     }
     if notices.iter().any(|notice| notice.copyleft) {

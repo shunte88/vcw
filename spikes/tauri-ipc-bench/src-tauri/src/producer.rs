@@ -101,7 +101,7 @@ impl Sink {
     {
         // Everything that is *preparation* happens before the timer starts,
         // because moving that work off the IPC path is what D6 proposes. The
-        // `serde` arm is the exception on purpose: its serialisation is inside
+        // `serde` arm is the exception on purpose: its serialization is inside
         // the timed region because tauri does it there, and that is the
         // difference being measured.
         //
@@ -111,7 +111,7 @@ impl Sink {
         // the channel-manual arm never pays, and the comparison would have
         // been measuring my own plumbing.
         enum Ready {
-            /// Let tauri serialise, inside the timed region.
+            /// Let tauri serialize, inside the timed region.
             Serde,
             Json(InvokeResponseBody),
             Raw(InvokeResponseBody),
@@ -151,7 +151,7 @@ impl Sink {
                 (b.len(), arr + 25)
             }
             Ready::EventJson(r) => (r.get().len(), r.get().len()),
-            // The serde arm's size is taken from the same serialiser tauri
+            // The serde arm's size is taken from the same serializer tauri
             // uses, outside the timed region, so the byte columns stay
             // comparable across arms.
             Ready::Serde => {
@@ -230,7 +230,7 @@ impl Source {
     /// Advance by `frames` and return (peak, rms) per channel.
     fn advance(&mut self, frames: u64) -> ([f32; 2], [f32; 2]) {
         self.phase += frames as f64 / self.rate;
-        // A slow programme-level sweep plus per-frame noise: the meter needs to
+        // A slow program-level sweep plus per-frame noise: the meter needs to
         // move convincingly so the canvas work is representative.
         let env = 0.5 + 0.45 * (std::f64::consts::TAU * 0.05 * self.phase).sin();
         let n = self.next_noise();

@@ -42,7 +42,7 @@
 //!
 //! Discogs allows 60 requests a minute with a token and MusicBrainz asks for one a
 //! second, sustained. Both will start refusing a client that ignores them, and
-//! §40 treats exceeding a published limit as a defect rather than an optimisation
+//! §40 treats exceeding a published limit as a defect rather than an optimization
 //! opportunity. [`Limiter`] therefore *reserves* a slot before a request is made,
 //! so two threads asking at once queue behind each other instead of both deciding
 //! that enough time has passed.
@@ -228,8 +228,8 @@ impl Limiter {
 
     /// Gives back a slot that was reserved and then not used.
     ///
-    /// A cache hit reserves nothing, but a cancelled request has already taken its
-    /// place in the queue; handing it back keeps a cancelled search from delaying
+    /// A cache hit reserves nothing, but a canceled request has already taken its
+    /// place in the queue; handing it back keeps a canceled search from delaying
     /// the next real one.
     pub fn release(&self, reserved_until: u64) {
         let mut next_free = self.next_free.lock().expect("the limiter is not poisoned");
@@ -263,7 +263,7 @@ pub struct Retry {
     pub attempts: u32,
     /// The wait before the second attempt; doubled for each one after.
     pub initial_backoff: Duration,
-    /// The longest VCW will wait between attempts, and the longest it will honour
+    /// The longest VCW will wait between attempts, and the longest it will honor
     /// a `Retry-After` for before giving up instead.
     pub max_backoff: Duration,
 }
@@ -402,7 +402,7 @@ mod tests {
         assert_eq!(
             limiter.reserve(0),
             Duration::ZERO,
-            "a cancelled request does not delay the next one"
+            "a canceled request does not delay the next one"
         );
     }
 

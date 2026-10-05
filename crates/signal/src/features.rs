@@ -48,7 +48,7 @@
 //!
 //! # Why the numbers match VRipr's exactly
 //!
-//! WP-11's exit criterion is parity with VRipr on a labelled corpus, and parity is
+//! WP-11's exit criterion is parity with VRipr on a labeled corpus, and parity is
 //! only a meaningful claim if a difference in the *detector* cannot be hidden by a
 //! difference in the *features*. So this module reproduces VRipr's arithmetic rather
 //! than improving on it: channels are averaged into mono as `f32`, the sum of squares
