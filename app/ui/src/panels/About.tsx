@@ -115,6 +115,10 @@ export function About({
                         </td>
                       </tr>
                       <tr>
+                        <td className="dim">Built</td>
+                        <td>{build.built}</td>
+                      </tr>
+                      <tr>
                         <td className="dim">Platform</td>
                         <td>
                           {build.os} {build.arch}

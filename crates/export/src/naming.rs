@@ -216,8 +216,11 @@ pub fn suggest(unknown: &str) -> Option<String> {
         ("iso_country", "country_iso"),
         ("catno", "catalog"),
         ("cat_no", "catalog"),
+        ("catalog_no", "catalog"),
         ("catalogue", "catalog"),
         ("catalognumber", "catalog"),
+        ("catalog_number", "catalog"),
+        ("catalogue_number", "catalog"),
         ("organization", "label"),
         ("publisher", "label"),
         ("date", "year"),
@@ -225,13 +228,16 @@ pub fn suggest(unknown: &str) -> Option<String> {
         ("style", "genre"),
         ("styles", "genre"),
         ("albumartist", "album_artist"),
+        ("album_artist_name", "album_artist"),
         ("band", "album_artist"),
         ("performer", "artist"),
         ("writer", "composer"),
         ("face", "side"),
         ("disk", "disc"),
         ("discogs", "discogs_id"),
+        ("discogs_release", "discogs_id"),
         ("discogs_release_id", "discogs_id"),
+        ("release_id", "discogs_id"),
     ];
     let lower = unknown.to_lowercase();
     if let Some((_, to)) = ALIASES.iter().find(|(from, _)| *from == lower) {
@@ -793,6 +799,20 @@ mod tests {
         assert_eq!(suggest("catno").as_deref(), Some("catalog"));
         assert_eq!(suggest("albumartist").as_deref(), Some("album_artist"));
         assert_eq!(suggest("disk").as_deref(), Some("disc"));
+        // The six VRipr's table had and this one did not. Every one of them is
+        // too far from its target for the edit distance to reach - `catalog`
+        // is seven edits from `catalog_number` - so without the alias they
+        // were unknown tokens with no suggestion at all, and a template
+        // written for VRipr is exactly where they come from.
+        assert_eq!(suggest("catalog_number").as_deref(), Some("catalog"));
+        assert_eq!(suggest("catalogue_number").as_deref(), Some("catalog"));
+        assert_eq!(suggest("catalog_no").as_deref(), Some("catalog"));
+        assert_eq!(suggest("release_id").as_deref(), Some("discogs_id"));
+        assert_eq!(suggest("discogs_release").as_deref(), Some("discogs_id"));
+        assert_eq!(
+            suggest("album_artist_name").as_deref(),
+            Some("album_artist")
+        );
     }
 
     #[test]

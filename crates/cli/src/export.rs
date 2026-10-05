@@ -46,7 +46,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use vcw_export::encoder::{Container, Quality};
+use vcw_export::encoder::{Compression, Container, Quality};
 use vcw_export::splitter::{self, Artwork, Plan, Progress, Report, Request};
 use vcw_project::Project;
 use vcw_types::vinyl::Side;
@@ -61,6 +61,8 @@ pub(crate) struct Args {
     pub(crate) format: String,
     /// How hard a lossy container compresses. Ignored by WAV and FLAC.
     pub(crate) quality: String,
+    /// How hard FLAC compresses, 0 to 8. Ignored by the other three.
+    pub(crate) compression: String,
     /// Naming template, or `None` for the default.
     pub(crate) template: Option<String>,
     /// Sides to export. Empty exports every side that has tracks.
@@ -80,7 +82,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     if !args.project.exists() {
         bail!("{} does not exist", args.project.display());
     }
-    let container = container(&args.format, &args.quality)?;
+    let container = container(&args.format, &args.quality, &args.compression)?;
     let request = Request {
         container,
         template: args
@@ -173,6 +175,15 @@ fn print_plan(plan: &Plan, request: &Request) {
         plan.items.len(),
         plan.frames()
     );
+    // The one line that says the exported files will not sound like the
+    // project does. A fold is invisible afterwards - the file is simply mono -
+    // so it has to be visible before, and a dry run is where someone looks.
+    if plan.fold_to_mono {
+        println!(
+            "  channels   summed to mono at -6 dB per channel (the release says mono; \
+             the capture is unchanged)"
+        );
+    }
     println!(
         "  artwork    {}",
         match (&plan.cover, request.artwork) {
@@ -235,7 +246,10 @@ fn plan_json(plan: &Plan, report: Option<&Report>) -> serde_json::Value {
         // answer "this container has no such setting" is `null`, which is not
         // the same as "high" and not the same as a typo.
         "quality": plan.container.quality().map(|quality| quality.name()),
+        // `null` on the three containers with no level, for the reason above.
+        "compression": plan.container.compression().map(|level| level.level()),
         "lossless": !plan.container.is_lossy(),
+        "fold_to_mono": plan.fold_to_mono,
         "frames": plan.frames(),
         "covers": plan.covers.iter().map(|path| path.display().to_string()).collect::<Vec<_>>(),
         "items": plan.items.iter().map(|item| serde_json::json!({
@@ -265,7 +279,7 @@ fn plan_json(plan: &Plan, report: Option<&Report>) -> serde_json::Value {
 /// on WAV and FLAC, so `--format flac --quality compact` is not an error: the
 /// defaults put a quality on every invocation, and a flag that only becomes
 /// legal once another flag changes is a flag people trip over.
-fn container(given: &str, quality: &str) -> Result<Container> {
+fn container(given: &str, quality: &str, compression: &str) -> Result<Container> {
     let container = Container::from_extension(given).ok_or_else(|| {
         anyhow::anyhow!(
             "{given:?} is not a container VCW writes - {}",
@@ -275,7 +289,15 @@ fn container(given: &str, quality: &str) -> Result<Container> {
     let quality = Quality::parse(quality).ok_or_else(|| {
         anyhow::anyhow!("{quality:?} is not a quality - transparent, high or compact")
     })?;
-    Ok(container.with_quality(quality))
+    let compression = Compression::parse(compression).ok_or_else(|| {
+        anyhow::anyhow!(
+            "{compression:?} is not a FLAC compression level - a number from 0 to 8, \
+             where 5 is the default"
+        )
+    })?;
+    Ok(container
+        .with_quality(quality)
+        .with_compression(compression))
 }
 
 /// An artwork policy from what was typed.

@@ -45,7 +45,7 @@
 
 use std::path::Path;
 
-use vcw_export::encoder::Container;
+use vcw_export::encoder::{Compression, Container};
 use vcw_export::error::Error;
 use vcw_export::splitter::{self, Artwork, Progress, Request};
 use vcw_project::persistence::{Config, Writer};
@@ -273,7 +273,11 @@ fn a_flac_export_decodes_back_to_the_blocks() {
     titled(&mut project, &[(2_048, 61_237, "Metropolis")]);
 
     let out = dir.path().join("out");
-    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Flac)).expect("plan");
+    let plan = splitter::plan(
+        project.conn(),
+        &Request::new(&out, Container::Flac(Compression::default())),
+    )
+    .expect("plan");
     splitter::run(project.conn(), &plan, &mut quiet).expect("run");
 
     let decoded = dir.path().join("decoded.wav");
@@ -313,7 +317,7 @@ fn the_template_names_the_files_and_the_release_fills_it_in() {
     );
 
     let out = dir.path().join("out");
-    let mut request = Request::new(&out, Container::Flac);
+    let mut request = Request::new(&out, Container::Flac(Compression::default()));
     request.template = "{album_artist}/{year} {album}/{position} - {title}".to_owned();
     let plan = splitter::plan(project.conn(), &request).expect("plan");
 
@@ -396,8 +400,11 @@ fn a_two_sided_record_numbers_its_tracks_across_the_disc() {
     );
 
     let out = dir.path().join("out");
-    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Flac))
-        .expect("four untitled tracks over two sides collided");
+    let plan = splitter::plan(
+        project.conn(),
+        &Request::new(&out, Container::Flac(Compression::default())),
+    )
+    .expect("four untitled tracks over two sides collided");
 
     // The default template is VRipr's, and VRipr's `{tracknum}` was the alpha
     // position: `A1 - Title`, the number printed on the label.
@@ -454,7 +461,7 @@ fn a_two_sided_record_numbers_its_tracks_across_the_disc() {
         .expect("a release");
     record.numbering = vcw_types::vinyl::Numbering::Numeric;
     release::store(&mut project, &record).expect("store");
-    let mut request = Request::new(&out, Container::Flac);
+    let mut request = Request::new(&out, Container::Flac(Compression::default()));
     request.template = "{tracknum} {position}".to_owned();
     let plan = splitter::plan(project.conn(), &request).expect("plan");
     let names: Vec<String> = plan
@@ -557,7 +564,11 @@ fn the_cover_goes_in_the_tags_and_beside_the_files() {
     );
 
     let out = dir.path().join("out");
-    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Flac)).expect("plan");
+    let plan = splitter::plan(
+        project.conn(),
+        &Request::new(&out, Container::Flac(Compression::default())),
+    )
+    .expect("plan");
     // One image per directory, not one per track.
     assert_eq!(plan.covers.len(), 1);
     let report = splitter::run(project.conn(), &plan, &mut quiet).expect("run");
@@ -576,7 +587,10 @@ fn the_cover_goes_in_the_tags_and_beside_the_files() {
     );
 
     // And with artwork off, neither.
-    let mut bare = Request::new(dir.path().join("bare"), Container::Flac);
+    let mut bare = Request::new(
+        dir.path().join("bare"),
+        Container::Flac(Compression::default()),
+    );
     bare.artwork = Artwork::None;
     let plan = splitter::plan(project.conn(), &bare).expect("plan");
     assert!(plan.covers.is_empty());
@@ -593,7 +607,10 @@ fn the_tags_come_from_the_release_and_the_track() {
 
     let plan = splitter::plan(
         project.conn(),
-        &Request::new(dir.path().join("out"), Container::Flac),
+        &Request::new(
+            dir.path().join("out"),
+            Container::Flac(Compression::default()),
+        ),
     )
     .expect("plan");
     let tags = &plan.items[0].tags;
@@ -661,7 +678,7 @@ fn a_title_with_a_dot_in_it_still_gets_its_extension() {
     titled(&mut project, &[(0, 30_000, "Symphony No. 5")]);
 
     let out = dir.path().join("out");
-    let mut request = Request::new(&out, Container::Flac);
+    let mut request = Request::new(&out, Container::Flac(Compression::default()));
     request.template = "{title}".to_owned();
     let plan = splitter::plan(project.conn(), &request).expect("plan");
     assert_eq!(
@@ -714,7 +731,11 @@ fn a_track_number_carries_the_total_for_its_own_disc() {
     );
 
     let out = dir.path().join("out");
-    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Flac)).expect("plan");
+    let plan = splitter::plan(
+        project.conn(),
+        &Request::new(&out, Container::Flac(Compression::default())),
+    )
+    .expect("plan");
     let numbered: Vec<(Option<u32>, Option<u32>, Option<u32>)> = plan
         .items
         .iter()
@@ -743,7 +764,7 @@ fn a_track_number_carries_the_total_for_its_own_disc() {
 
     // And the total does not depend on what else was in the export: a side
     // exported on its own is still `of 4`, or a file could not be re-made.
-    let mut one_side = Request::new(&out, Container::Flac);
+    let mut one_side = Request::new(&out, Container::Flac(Compression::default()));
     one_side.sides = vec![Side::from_letter('D').expect("D")];
     let plan = splitter::plan(project.conn(), &one_side).expect("plan");
     assert_eq!(plan.items.len(), 2, "side D only");
@@ -770,8 +791,11 @@ fn a_container_that_cannot_carry_the_capture_is_refused_by_the_plan() {
     titled(&mut project, &[(0, 30_000, "Franz Schubert")]);
 
     let out = dir.path().join("out");
-    let error = splitter::plan(project.conn(), &Request::new(&out, Container::Flac))
-        .expect_err("FLAC is an integer codec");
+    let error = splitter::plan(
+        project.conn(),
+        &Request::new(&out, Container::Flac(Compression::default())),
+    )
+    .expect_err("FLAC is an integer codec");
     assert!(
         matches!(error, Error::Unencodable { .. }),
         "the refusal should name the format and the container, got {error:?}"
@@ -921,6 +945,138 @@ fn a_rate_mp3_cannot_carry_is_refused_by_the_plan_and_offered_the_others() {
         ),
     )
     .expect("Ogg takes 96 kHz");
-    splitter::plan(project.conn(), &Request::new(&out, Container::Flac))
-        .expect("FLAC takes it too");
+    splitter::plan(
+        project.conn(),
+        &Request::new(&out, Container::Flac(Compression::default())),
+    )
+    .expect("FLAC takes it too");
+}
+
+/// The channel count a WAV file declares, read out of its `fmt ` chunk.
+fn wav_channels(path: &Path) -> u16 {
+    let bytes = std::fs::read(path).expect("read");
+    let mut at = 12;
+    while at + 8 <= bytes.len() {
+        let size = u32::from_le_bytes(bytes[at + 4..at + 8].try_into().unwrap()) as usize;
+        if &bytes[at..at + 4] == b"fmt " {
+            return u16::from_le_bytes(bytes[at + 10..at + 12].try_into().unwrap());
+        }
+        at += 8 + size + size % 2;
+    }
+    panic!("no fmt chunk in {}", path.display());
+}
+
+/// Says the pressing is mono, which §33 makes an export-time decision.
+fn mono(project: &mut Project) {
+    let mut record = release::load(project.conn())
+        .expect("load")
+        .expect("a release");
+    record.is_mono = true;
+    release::store(project, &record).expect("store");
+}
+
+#[test]
+fn a_mono_release_exports_one_channel_that_is_the_average_of_two() {
+    // WP-24's other half. `releases.is_mono` is the operator's statement at
+    // setup; the capture stays stereo and the fold happens here, once, on the
+    // way out. Two stored formats, because the integer paths and the float path
+    // are different arithmetic.
+    for format in [StorageFormat::Int16, StorageFormat::Int32] {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut project, sent, frame_bytes) = recorded(dir.path(), format, 2, 40_000);
+        described(&mut project);
+        mono(&mut project);
+        titled(&mut project, &[(1_000, 30_000, "Tomorrow Never Knows")]);
+
+        let out = dir.path().join("out");
+        let plan =
+            splitter::plan(project.conn(), &Request::new(&out, Container::Wav)).expect("plan");
+        assert!(
+            plan.fold_to_mono,
+            "{format:?}: the plan did not see is_mono"
+        );
+        splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+
+        let path = &plan.items[0].path;
+        assert_eq!(wav_channels(path), 1, "{format:?}");
+
+        // Half the bytes, the same frames: a fold narrows a frame and does not
+        // drop any.
+        let got = data_chunk(path);
+        let width = frame_bytes / 2;
+        assert_eq!(got.len(), 29_000 * width, "{format:?}");
+
+        // And every sample is the average of the pair that went in, which is
+        // the assertion that fails if a channel were dropped instead.
+        let source = &sent[1_000 * frame_bytes..30_000 * frame_bytes];
+        for (frame, out) in source
+            .chunks_exact(frame_bytes)
+            .zip(got.chunks_exact(width))
+        {
+            let want = match format {
+                StorageFormat::Int16 => {
+                    let l = i32::from(i16::from_le_bytes([frame[0], frame[1]]));
+                    let r = i32::from(i16::from_le_bytes([frame[2], frame[3]]));
+                    i64::from((l + r) / 2)
+                }
+                _ => {
+                    let l = i64::from(i32::from_le_bytes(frame[0..4].try_into().unwrap()));
+                    let r = i64::from(i32::from_le_bytes(frame[4..8].try_into().unwrap()));
+                    (l + r) / 2
+                }
+            };
+            let had = match format {
+                StorageFormat::Int16 => i64::from(i16::from_le_bytes([out[0], out[1]])),
+                _ => i64::from(i32::from_le_bytes(out[0..4].try_into().unwrap())),
+            };
+            assert_eq!(had, want, "{format:?}");
+        }
+    }
+}
+
+#[test]
+fn a_stereo_release_is_untouched_by_the_fold() {
+    // The control arm. Same project, same export, is_mono left alone: the
+    // bytes must still be the bytes, or the fold is running when nobody asked.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, sent, frame_bytes) = recorded(dir.path(), StorageFormat::Int16, 2, 40_000);
+    described(&mut project);
+    titled(&mut project, &[(1_000, 30_000, "Tomorrow Never Knows")]);
+
+    let out = dir.path().join("out");
+    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Wav)).expect("plan");
+    assert!(!plan.fold_to_mono);
+    splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+
+    assert_eq!(wav_channels(&plan.items[0].path), 2);
+    assert_eq!(
+        data_chunk(&plan.items[0].path),
+        &sent[1_000 * frame_bytes..30_000 * frame_bytes]
+    );
+}
+
+// Without the `mp3` feature there is no encoder to refuse for, so the whole
+// premise - that the refusal moves with the fold - has nothing to stand on.
+#[cfg(feature = "mp3")]
+#[test]
+fn a_mono_fold_makes_a_four_channel_capture_exportable_as_mp3() {
+    // The refusal moves with the fold or the plan lies: MP3 carries one or two
+    // channels, and a four-channel capture folded to one is a file MP3 takes.
+    // Checked at plan time, which is where `Writer::vet` runs.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, _, _) = recorded_at(dir.path(), 44_100, StorageFormat::Int16, 4, 40_000);
+    described(&mut project);
+    titled(&mut project, &[(1_000, 30_000, "Tomorrow Never Knows")]);
+
+    let out = dir.path().join("out");
+    let request = Request::new(&out, Container::Mp3(Default::default()));
+    let stereo = splitter::plan(project.conn(), &request);
+    assert!(
+        matches!(stereo, Err(Error::Unencodable { .. })),
+        "four channels into MP3 should be refused: {stereo:?}"
+    );
+
+    mono(&mut project);
+    let folded = splitter::plan(project.conn(), &request).expect("a mono plan");
+    assert!(folded.fold_to_mono);
 }

@@ -311,6 +311,7 @@ fn an_artwork_policy_defaults_to_both_rather_than_none() {
         artwork: None,
         overwrite: false,
         quality: None,
+        compression: None,
     };
     let request = export.request().expect("a valid export");
     assert_eq!(request.artwork, vcw_export::splitter::Artwork::Both);
@@ -329,6 +330,7 @@ fn a_container_vcw_cannot_write_is_refused_by_name() {
         artwork: None,
         overwrite: false,
         quality: None,
+        compression: None,
     };
     let error = export.request().expect_err("VCW does not write Opus");
     assert_eq!(error.field, "format");
@@ -355,8 +357,9 @@ fn a_quality_is_taken_by_the_lossy_containers_and_ignored_by_the_others() {
         artwork: None,
         overwrite: false,
         quality: quality.map(str::to_owned),
+        compression: None,
     };
-    use vcw_export::encoder::{Container, Quality};
+    use vcw_export::encoder::{Compression, Container, Quality};
 
     let request = export("mp3", Some("compact"))
         .request()
@@ -369,7 +372,7 @@ fn a_quality_is_taken_by_the_lossy_containers_and_ignored_by_the_others() {
     let request = export("flac", Some("transparent"))
         .request()
         .expect("flac does not mind");
-    assert_eq!(request.container, Container::Flac);
+    assert_eq!(request.container, Container::Flac(Compression::default()));
 
     // A word that is not a quality is still refused, and against the right
     // field: a typo in the quality is not a problem with the format.
@@ -391,6 +394,7 @@ fn a_side_has_to_be_one_letter() {
             artwork: None,
             overwrite: false,
             quality: None,
+            compression: None,
         };
         let error = export
             .request()

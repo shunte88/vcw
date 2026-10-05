@@ -135,6 +135,7 @@ pub fn summarise(path: &Path) -> view::Project {
         file_bytes: bytes,
         modified,
         has_artwork: false,
+        preview: Vec::new(),
         problem: None,
     };
 
@@ -181,6 +182,17 @@ fn contents(path: &Path) -> vcw_project::Result<impl FnOnce(&mut view::Project)>
     // whether to draw a cover, not to be handed one per row.
     let has_artwork = release::artwork_bytes(conn, release::Artwork::FRONT)?.is_some();
 
+    // The tile view's picture of a project that has no cover yet, which is most
+    // of them. Read at the end and allowed to fail quietly: a row that cannot
+    // draw a thumbnail is still a row, and a capture whose blocks are missing -
+    // a kill mid-write, an import still landing - must not take the whole
+    // listing down over a decoration. `problem` is for a file that will not
+    // open; this is not that.
+    let preview = recorded
+        .first()
+        .and_then(|record| preview_of(conn, record.id))
+        .unwrap_or_default();
+
     Ok(move |row: &mut view::Project| {
         if let Some(release) = release {
             row.album = release.album;
@@ -193,7 +205,26 @@ fn contents(path: &Path) -> vcw_project::Result<impl FnOnce(&mut view::Project)>
         row.captures = captures;
         row.seconds = seconds;
         row.has_artwork = has_artwork;
+        row.preview = preview;
     })
+}
+
+/// One capture's whole length as [`view::PREVIEW_COLUMNS`] peak magnitudes.
+///
+/// `None` rather than an error for every failure here, for the reason given at
+/// the call site. The channel is zero because a thumbnail of one channel and a
+/// thumbnail of both are the same picture at this size.
+fn preview_of(conn: &rusqlite::Connection, capture_id: i64) -> Option<Vec<f32>> {
+    let shape = vcw_project::waveform::Shape::of(conn, capture_id).ok()?;
+    let request = shape.whole(view::PREVIEW_COLUMNS);
+    let drawn = vcw_project::waveform::read(conn, capture_id, 0, &request).ok()?;
+    Some(
+        drawn
+            .columns
+            .iter()
+            .map(|column| column.min.abs().max(column.max.abs()).clamp(0.0, 1.0))
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -325,5 +356,68 @@ mod tests {
         assert_eq!(row.catalog, "1C 064-82 306");
         assert_eq!(row.captures, 0);
         assert_eq!(row.seconds, 0.0);
+        assert!(
+            row.preview.is_empty(),
+            "a project with no capture has nothing to draw"
+        );
+    }
+
+    /// The tile view's picture, which is the only thing most rips have.
+    ///
+    /// A square wave at half scale, so the answer is a number rather than
+    /// "something non-zero": every column covers the same signal, so every
+    /// column must read the same, and that catches a fold that took `min` or
+    /// `max` alone as readily as it catches one that read nothing.
+    #[test]
+    fn a_recorded_project_previews_its_waveform() {
+        use vcw_project::persistence::{Config, Writer};
+        use vcw_types::{CaptureInfo, CaptureMode, CaptureState, SampleRate, StorageFormat};
+
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let info = CaptureInfo {
+            rate: SampleRate(48_000),
+            channels: 1,
+            storage_format: StorageFormat::Int16,
+            capture_mode: CaptureMode::Shared,
+            host_api: None,
+            device_id: None,
+            device_name: None,
+            os_verified: false,
+            os_report: None,
+            eq: vcw_types::CaptureEq::Unknown,
+        };
+        let project = Project::create(dir.path().join("recorded.vcw")).expect("create");
+        let mut writer = Writer::begin(project, &info, Config::default()).expect("begin");
+        // Ten seconds of a square wave alternating every 480 frames, at half
+        // of full scale. i16::MAX / 2 is 16383.
+        let mut pcm = Vec::with_capacity(480_000 * 2);
+        for frame in 0..480_000u32 {
+            let value: i16 = if (frame / 480) % 2 == 0 {
+                16_383
+            } else {
+                -16_383
+            };
+            pcm.extend_from_slice(&value.to_le_bytes());
+        }
+        writer.push(&pcm).expect("push");
+        let (_, project, _) = writer
+            .finish_with_project(CaptureState::Finalised)
+            .expect("finish");
+        project.close().expect("close");
+
+        let listed = library(dir.path());
+        assert_eq!(listed.len(), 1);
+        let preview = &listed[0].preview;
+        assert_eq!(
+            preview.len(),
+            view::PREVIEW_COLUMNS as usize,
+            "a preview is a fixed width whatever the capture's length"
+        );
+        for (column, peak) in preview.iter().enumerate() {
+            assert!(
+                (peak - 0.5).abs() < 0.01,
+                "column {column} reads {peak}, and every column covers the same half-scale square wave"
+            );
+        }
     }
 }

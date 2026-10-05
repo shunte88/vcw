@@ -77,6 +77,7 @@ import { Export } from "./panels/Export";
 import { About } from "./panels/About";
 import { Help } from "./panels/Help";
 import { Meters } from "./panels/Meters";
+import { SelectionBar } from "./panels/SelectionBar";
 import { Metadata } from "./panels/Metadata";
 import { Settings } from "./panels/Settings";
 import { Tracks } from "./panels/Tracks";
@@ -467,7 +468,20 @@ export function App(): React.JSX.Element {
       </main>
 
       <aside className="always">
-        <Meters meter={engine.meter} />
+        {/* Only where there is a waveform to have selected something in. */}
+        {STAGE.includes(panel) && (
+          <SelectionBar selection={selection} meter={engine.meter} />
+        )}
+        {/* Live when the device is open, which is everything but `idle`:
+            §50 sets the level while armed, so the input is metering long
+            before anything is recorded. The output is live only while
+            something is auditioning. */}
+        <Meters
+          meter={engine.meter}
+          output={engine.output}
+          capturing={engine.phase !== "idle"}
+          playing={engine.playing}
+        />
         <Transport
           store={store}
           capture={capture}

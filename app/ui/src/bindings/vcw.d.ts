@@ -84,6 +84,10 @@ seconds: number, } | { "kind": "meter-update",
 /**
  * Peak, RMS, hold and the clip latch, per channel, in dBFS.
  */
+meter: Meter, } | { "kind": "output-meter-update",
+/**
+ * Peak, RMS, hold and the clip latch, per channel, in dBFS.
+ */
 meter: Meter, } | { "kind": "track-detected",
 /**
  * Where it is, in frames.
@@ -605,6 +609,12 @@ format: string,
  */
 quality: string | null,
 /**
+ * `0` to `8`, or `null` for `5`.
+ *
+ * Ignored by everything but FLAC, for `quality`'s reason exactly.
+ */
+compression: string | null,
+/**
  * A naming template, or `null` for the default.
  */
 template: string | null,
@@ -1069,6 +1079,24 @@ modified: number,
  */
 hasArtwork: boolean,
 /**
+ * A waveform small enough to be an icon: peak magnitude per column, in
+ * `0..=1`, over the whole of the first capture. Empty when there is none.
+ *
+ * The tile view needs a picture of every project, and until a release is
+ * assigned there is no cover to be one. The waveform is what the project
+ * already is - a side of a record has a shape, and two rips of different
+ * records never look alike - so it is the honest placeholder rather than a
+ * repeated sleeve glyph.
+ *
+ * This is the same reader the real waveform uses at a tiny width, not a
+ * second summary: `Shape::whole` over [`PREVIEW_COLUMNS`], served out of
+ * the `sampleblocks_levels` covering index, which is 14 ms for a
+ * 26-minute side and the reason this can ride on the listing at all.
+ * One array and not three, because at this size min and max are mirror
+ * images and rms is invisible.
+ */
+preview: Array<number>,
+/**
  * Why the file could not be read, where it could not.
  */
 problem: string | null, };
@@ -1268,7 +1296,15 @@ covers: Array<string>,
 /**
  * Frames across the whole export, which is what a progress bar divides by.
  */
-frames: number, };
+frames: number,
+/**
+ * Whether every file's channels are summed to one on the way out.
+ *
+ * The release's `is_mono`. A confirmation dialog has to say it: the fold
+ * is invisible once the files exist - they are simply mono - so the only
+ * place to notice it was not wanted is before the export runs.
+ */
+foldToMono: boolean, };
 
 export type ExportFile = {
 /**
@@ -1306,6 +1342,15 @@ version: string,
  * different conversation, and this is the field that ends it early.
  */
 profile: string,
+/**
+ * The day this was compiled, as `YYYY-MM-DD`.
+ *
+ * Stamped by `build.rs`, because a version answers "which release" and
+ * this answers the question people holding a build actually ask, which is
+ * "is this the one from Tuesday". `SOURCE_DATE_EPOCH` wins where it is
+ * set, so a reproducible build stays reproducible.
+ */
+built: string,
 /**
  * Where the source is.
  */
@@ -1541,6 +1586,16 @@ format: string,
  * should find their choice still there.
  */
 quality: string,
+/**
+ * What FLAC is written at: `0` to `8`.
+ *
+ * A separate field from `quality` and not a reuse of it, because the two
+ * answer different questions. `quality` decides what gets thrown away and
+ * FLAC throws nothing away; this decides how long the encoder spends
+ * finding a smaller way to say the same samples. Kept across a format
+ * change for `quality`'s reason.
+ */
+compression: string,
 /**
  * Where to write, or `null` to be asked each time.
  */

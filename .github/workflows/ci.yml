@@ -8,12 +8,23 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
-  # The nightly soak. §41's exit criterion asks for a scheduled job, because
-  # the defects it looks for - memory over thousands of commits, a WAL that
-  # never gets checkpointed, a device that goes quiet - only show up in a run
-  # too long to put in front of a push.
+  # Weekly, for the packaging jobs: four release builds with a frontend each
+  # is too much to put in front of every push, and an installer that stopped
+  # building is worth knowing about before a tag rather than during one.
+  #
+  # Weekly and not nightly since 2026-10-05. This repository is public, so
+  # standard runners cost nothing and consume none of the 2,000-minute
+  # allowance - every job in it reports `billable.total_ms: 0`. But thirty
+  # packaging runs a month across four platforms is still an hour of somebody's
+  # hardware a night to learn nothing, and the day the repository goes private
+  # that bill arrives at 10x for the macOS leg. Sunday is enough to catch a
+  # bundler that stopped working before a tag needs it.
+  #
+  # §41's endurance soak is not here at all: it runs nightly on media2026,
+  # which is idle and ours. `scripts/soak-nightly.cron`, installed in that
+  # machine's crontab at 03:17.
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 4 * * 0'
 
 env:
   CARGO_TERM_COLOR: always
@@ -63,7 +74,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --workspace --all-targets
+      # A hosted runner is shared, and two tests in the suite make a latency
+      # claim rather than a correctness one. VCW_SHARED=1 is the soak harness's
+      # word for "this machine is not ours": the loss assertions still gate, the
+      # commit tail is printed instead. The numbers of record come off the rigs.
       - run: cargo test --workspace
+        env:
+          VCW_SHARED: 1
 
   # fmt and clippy do not vary by platform, so they run once.
   lint:
@@ -116,7 +133,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      # flac and ffmpeg are not optional here. `cargo test -p vcw-export` runs
+      # tests/third_party.rs, every case of which skips itself when its reader
+      # is missing - and the guard at the end of that file fails the run rather
+      # than let fifteen skipped tests report as fifteen passes.
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev flac ffmpeg
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -268,76 +289,25 @@ jobs:
       - run: cargo check --workspace --all-targets
         working-directory: spikes
 
-  # WP-17, §41. The capture path run against itself: a simulated device feeding
-  # the real writer into a real project, then every byte recomputed and
-  # compared. `scripts/soak-harness.sh` holds the legs and the reasons; the
-  # gates are inside `vcw soak`, which exits non-zero on its own verdict.
-  soak:
-    name: soak harness (short)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Linux audio headers
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      # Release, not debug. A soak spends its time in the deinterleave, the
-      # summaries and the CRC, and a debug build of those is slow enough to
-      # change what the run is measuring.
-      - run: cargo build --release -p vcw-cli
-      - run: scripts/soak-harness.sh short "$RUNNER_TEMP/soak"
-        env:
-          VCW_SHARED: 1
-      - name: Keep the logs whatever happened
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: soak-short-logs
-          path: ${{ runner.temp }}/soak/*.log
-          if-no-files-found: warn
-
-  # The long leg. Real-time pace, an hour a run, one with the window open and
-  # one without, because the pair is what attributes a difference to the
-  # readers rather than to the runner.
+  # WP-17, §41. The soak harness does not run here any more, short leg or long.
   #
-  # Scheduled and manual only: two hours is not something to put in a push's
-  # way, and a machine shared with a nightly's neighbours is the honest place
-  # for an endurance run but a poor one for a latency claim. The real-time
-  # numbers of record come off the rigs.
-  soak-nightly:
-    name: soak harness (nightly, real-time)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Linux audio headers
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release -p vcw-cli
-      - run: scripts/soak-harness.sh nightly "$RUNNER_TEMP/soak"
-        env:
-          VCW_SHARED: 1
-      - name: Keep the logs whatever happened
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: soak-nightly-logs
-          path: ${{ runner.temp }}/soak/*.log
-          if-no-files-found: warn
+  # The long leg never did: a hosted runner shares its CPU and its disk, and
+  # the one time it ran it dropped 25,920 frames and failed the byte verifier
+  # on the neighbours' account rather than on ours. The short leg did, on every
+  # push, for up to thirty minutes of runner time - and it was measuring the
+  # same shared machine, so it could gate loss but never latency.
+  #
+  # Both now run on media2026, which is idle and ours, out of
+  # `scripts/soak-nightly.cron` at 03:17 with its logs under /data2/vcw-soak.
+  # The latency gates are on there, because on that machine they mean
+  # something. See docs/STATUS.md.
 
   # WP-19. Installable artifacts for every Tier 1 platform, their checksums, and
   # on a tag, a release with all of it attached.
   #
   # Not on every push: four release builds with a frontend each is twenty
   # minutes of runner time to prove something that only matters when a version
-  # is going out. Tags, the nightly, and a manual run.
+  # is going out. Tags, the weekly schedule, and a manual run.
   package:
     name: package (${{ matrix.name }})
     if: >-

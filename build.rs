@@ -43,7 +43,7 @@ fn main() {
     let dest_path    = Path::new(&out_dir).join("build_info.rs");
 
     let version    = env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.0.0".to_string());
-    let pkg_name   = env::var("CARGO_PKG_NAME").unwrap_or_else(|_| "vripr".to_string());
+    let pkg_name   = env::var("CARGO_PKG_NAME").unwrap_or_else(|_| "vcw".to_string());
 
     let now              = Utc::now();
     let build_date       = now.format("%Y-%m-%d %H:%M:%S UTC").to_string();
@@ -63,7 +63,7 @@ fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let svg_path = Path::new(&manifest_dir).join("version.svg");
 
-    let value      = format!("VRipr v{} | Built: {}", version, build_date_short);
+    let value      = format!("VCW v{} | Built: {}", version, build_date_short);
     let char_width = 6.4_f64;
     let padding    = 12.0_f64;
     let value_width = (value.len() as f64 * char_width + padding * 2.0).round();

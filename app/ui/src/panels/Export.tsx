@@ -33,6 +33,7 @@ import { useState } from "react";
 
 import * as api from "../api";
 import type { ExportPlan, Settings } from "../bindings/vcw";
+import { effortOf } from "../effort";
 import { useKeys } from "../keys";
 import type { Exported, Store } from "../store";
 
@@ -48,6 +49,7 @@ export function Export({
   const [into, setInto] = useState("");
   const [format, setFormat] = useState("flac");
   const [quality, setQuality] = useState("high");
+  const [compression, setCompression] = useState("5");
   const [artwork, setArtwork] = useState("embed");
   const [overwrite, setOverwrite] = useState(false);
   const [sides, setSides] = useState<readonly string[]>([]);
@@ -61,16 +63,22 @@ export function Export({
     setInto(settings.export.output ?? "");
     setFormat(settings.export.format);
     setQuality(settings.export.quality);
+    setCompression(settings.export.compression);
     setArtwork(settings.export.artwork);
   }
+
+  // Which encoder knob this format has, if either.
+  const effort = effortOf(format);
 
   const request = () => ({
     into,
     format,
-    // Sent whatever the format is. The backend's `with_quality` is a no-op on
-    // WAV and FLAC, so there is no branch here and no way for the two to
-    // disagree about when the field matters.
+    // Both sent whatever the format is. The backend's `with_quality` and
+    // `with_compression` are no-ops on the containers that have no such
+    // setting, so there is no branch here and no way for the two to disagree
+    // about when a field matters.
     quality,
+    compression,
     template: settings?.export.template ?? null,
     sides: [...sides],
     artwork,
@@ -186,22 +194,31 @@ export function Export({
             <option value="ogg">Ogg Vorbis</option>
           </select>
         </label>
-        {LOSSY.has(format) && (
+        {effort !== null && (
           <label>
-            Quality
-            {/* Only for the two containers it means anything to. The value is
-                kept in state either way, so switching to FLAC and back does not
-                lose it - the field disappears, the choice does not. */}
+            {effort.caption}
+            {/* Only for the containers it means anything to, and under the
+                name that container's setting actually has: FLAC's number
+                changes the size and the time and nothing else, so calling it
+                a quality would be calling FLAC lossy. Both values are kept in
+                state whichever is on screen, so switching format and back
+                does not lose one - the field disappears, the choice does not. */}
             <select
-              value={quality}
+              value={effort.field === "quality" ? quality : compression}
               onChange={(event) => {
-                setQuality(event.target.value);
+                if (effort.field === "quality") {
+                  setQuality(event.target.value);
+                } else {
+                  setCompression(event.target.value);
+                }
                 setPlan(null);
               }}
             >
-              <option value="transparent">Transparent</option>
-              <option value="high">High</option>
-              <option value="compact">Compact</option>
+              {effort.options.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </select>
           </label>
         )}
@@ -276,6 +293,18 @@ export function Export({
             Plan: {plan.files.length} file(s) in {plan.container},{" "}
             {plan.covers.length} cover(s), {plan.frames} frame(s)
           </h3>
+          {/*
+            The fold is invisible once the files exist - they are simply mono -
+            so the only place it can be noticed and refused is here, before the
+            export runs. The release said so at setup; this is the reminder.
+          */}
+          {plan.foldToMono && (
+            <p className="hint">
+              This release is marked mono, so every file is written with one
+              channel: the captured channels are summed at -6 dB each, which
+              cannot clip. The capture itself is unchanged.
+            </p>
+          )}
           <table className="rows">
             <thead>
               <tr>
@@ -311,9 +340,6 @@ export function Export({
  * same reason the plan does not - the rate belongs to the capture, and this
  * report spans every side in the export.
  */
-/** The two containers a quality applies to, spelled as the backend parses them. */
-const LOSSY = new Set(["mp3", "ogg", "oga", "vorbis"]);
-
 export function wrote(report: Exported): string {
   const files = `${report.files} file${report.files === 1 ? "" : "s"}`;
   const covers =

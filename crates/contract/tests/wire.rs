@@ -71,6 +71,9 @@ fn every_event() -> Vec<Event> {
         Event::Meter {
             levels: Snapshot::default(),
         },
+        Event::Output {
+            levels: Snapshot::default(),
+        },
         Event::Detected {
             frame: 88_200,
             seconds: 2.0,
@@ -158,7 +161,7 @@ fn the_list_above_is_every_variant() {
     let names: std::collections::BTreeSet<_> = every_event().iter().map(Event::name).collect();
     assert_eq!(
         names.len(),
-        15,
+        16,
         "a core event was added or removed: {names:?}. Map it in \
          `vcw_contract::event::Wire` and add it to `every_event` above."
     );

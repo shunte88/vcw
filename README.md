@@ -1,7 +1,67 @@
-# VCW - The Vinyl Capture Workstation
+<p align="center">
+  <img src="assets/vcw-readme.webp" alt="VCW logo" width="320"/>
+</p>
 
-Capture, identify, edit, catalogue and export vinyl recordings. Bit-perfect from the
-converter to the file, in one self-contained application.
+<h1 align="center">VCW - The Vinyl Capture Workstation</h1>
+
+<p align="center">
+  Drop the needle. Everything after that is ours.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/rust-1.90%2B-orange" alt="Rust 1.90+"/>
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"/>
+  <img src="https://img.shields.io/badge/binaries-MIT%20%2B%20LGPL--2.1%20%2B%20LGPL--3.0-blue" alt="Binary licensing"/>
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey" alt="Platform"/>
+  <a href="https://github.com/shunte88/vcw/actions/workflows/ci.yml">
+    <img src="https://github.com/shunte88/vcw/actions/workflows/ci.yml/badge.svg" alt="CI"/>
+  </a>
+  <img src="assets/version.svg" alt="Version"/>
+</p>
+
+<p align="center">
+  <a href="https://www.buymeacoffee.com/shunte88">
+    <img src="assets/bmc-red-button.svg" alt="Buy me a coffee" height="40"/>
+  </a>
+</p>
+
+---
+
+A record is an analogue object with one good side at a time and no undo. The software
+that digitises it should be as careful with the signal as the cartridge tracking the
+groove, and most of it is not: it resamples when you did not ask, it dithers to be
+helpful, it calls 24-bit "high resolution" and hands you a float. VCW does none of
+that. What the converter put on the wire is what lands in the project, and what is in
+the project is what comes out the other end - verified byte for byte, not asserted in
+a changelog.
+
+Arm the deck, watch the needle on a 50 Hz meter that is live before you record so you
+can actually set the level, drop the stylus, and let it run. VCW writes every frame
+to a transactional project file as it arrives, so a power cut costs you the last
+quarter second and nothing else. When the side ends it finds the track boundaries,
+fingerprints them, asks Discogs, MusicBrainz and AcoustID who the record is, lets you
+argue with the answer on a waveform you can drag, and exports tagged FLAC, WAV, MP3 or
+Ogg with the cover art attached and the file names you asked for.
+
+One application, one file per record, no scripting pipe, no second program in the
+loop. It records.
+
+## What it does
+
+- **Captures** at any rate from 44.1 to 192 kHz and any depth the device offers, with
+  no resampling, no dithering and no hidden gain. `vcw doctor` tells you what your
+  hardware will really do before you commit a side to it.
+- **Survives.** The project is a SQLite database written as the audio arrives. Kill
+  the process mid-side and `vcw recover` finishes it the way the writer would have.
+- **Finds the tracks** by silence, by fingerprint and by the release's own track list,
+  and shows you the boundaries on a waveform you can scrub, drag and audition.
+- **Identifies the record** through Discogs, MusicBrainz and AcoustID, catalogue
+  number first, resolving the disagreements rather than taking the first answer.
+- **Exports** FLAC, WAV, MP3 and Ogg with full tags, multi-value genres and artists,
+  embedded and sidecar cover art, and a naming template you control.
+- **Reads Audacity**, AUP3 and AUP4, so a decade of existing rips comes in whole.
+- **Runs headless.** The desktop window and the `vcw` CLI drive the same core, so a
+  side can be recorded, recovered and exported with no UI compiled at all.
 
 VCW is part of the VRipr family and the successor to
 [VRipr](https://github.com/shunte88/vripr), which analysed rips Audacity had already
@@ -17,7 +77,9 @@ VCW / VRipr.
 
 ## Status
 
-Pre-0.1. Phase 0 - proving the foundations before building on them.
+0.1.1-alpha. It records, it identifies, it exports, and it packages for all four
+targets. What follows is the long version: every work package, what it proved, and
+what it is still waiting on. The spikes that came first:
 
 | Spike | Question | State |
 |---|---|---|
@@ -483,7 +545,27 @@ cd spikes && cargo build --workspace
 
 ## Licence
 
-MIT - see [LICENSE](LICENSE). Third-party obligations, including the LGPL relink
-instructions that arrive with Phase 2 fingerprinting, are recorded in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); `cargo deny` enforces the licence
-allowlist in CI.
+MIT - see [LICENSE](LICENSE). VCW's own source is MIT without qualification. The
+shipped binaries additionally link Chromaprint (LGPL-2.1-or-later) for fingerprinting
+and, when the optional `mp3` feature is on, LAME (LGPL-3.0); the relink instructions
+both licences require, and every other third-party obligation, are recorded in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). `cargo deny` enforces the licence
+allowlist in CI, so a dependency with incompatible terms fails the build rather than
+reaching a release.
+
+## Attribution
+
+If VCW's functionality is leveraged within your own solution - its code, its project
+format, its capture or export paths, or a derivative of any of them - quote the
+attribution. The MIT licence requires the copyright notice and permission text to
+travel with the code; beyond that, a visible credit is simply the decent thing:
+
+> Built on [VCW - The Vinyl Capture Workstation](https://github.com/shunte88/vcw),
+> (c) 2026 Stue Hunter, MIT licensed.
+
+If you publish something built on VCW, say so in your README and link back. If you
+ship a change that is worth having, open a pull request so the next person gets it too.
+
+## Like The App - Git The Shirt
+
+Team Badger shirts and other goodies are available at [shunte88](https://www.zazzle.com/team_badger_t_shirt-235604841593837420)

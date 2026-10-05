@@ -14,17 +14,22 @@
 // track count and `problem` all arrive on the row, because the CLI's `vcw list`
 // prints the same columns from the same view model.
 //
-// The leading cell is the cover, and it is a table with an icon column rather
-// than a grid of tiles. A tile grid makes the artwork the index, which is
-// Audacity 4.0's choice and the wrong one here: a vinyl library is indexed by
-// catalogue number and artist, most rips have no cover until a release is
-// assigned, and a wall of identical placeholders is a worse list than a list.
-// So the image rides beside the text at the height of one row, and a project
-// without one gets a sleeve mark in the same space - which keeps every row the
-// same height whether the cover has arrived or not.
+// Two views of the same rows, and the choice is remembered. The list is the
+// one that was here first: a table indexed by catalogue number and artist,
+// with the cover riding beside the text at the height of one row, because a
+// vinyl library is looked up by what is printed on the label and a column of
+// pictures is not an index.
+//
+// The argument against a grid was that most rips have no cover until a release
+// is assigned, so a wall of tiles would be a wall of identical placeholders -
+// a worse list than a list. What answers it is `Project::preview`: every
+// recorded project already has a picture of itself, because a side of a record
+// has a shape and two rips never look alike. So a tile shows the cover once
+// there is one and the waveform until then, and neither is a placeholder.
 //
 // The covers are fetched one row at a time, lazily, and only for rows that say
-// they have one. See `api.artwork`.
+// they have one. See `api.artwork`. The waveform needs no fetch at all - it
+// arrives on the row, 96 peaks of it, out of the `sampleblocks_levels` index.
 //
 // The create form is the helper the requirement asked for and nothing more.
 // Artist, title and catalogue number, none of them required, because the point
@@ -45,9 +50,10 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
-import type { Project } from "../bindings/vcw";
+import type { About, Project } from "../bindings/vcw";
 import { useKeys } from "../keys";
 import { step } from "../select";
+import { Switch } from "./Switch";
 import { bytes, clock, when } from "../format";
 import type { Store } from "../store";
 
@@ -76,8 +82,11 @@ const COVERS = new Map<string, string | null>();
  */
 function Cover({
   project,
+  fallback,
 }: {
   project: Project;
+  /** Drawn in the cover's place when there is no cover. */
+  fallback?: React.JSX.Element;
 }): React.JSX.Element {
   const key = `${project.path}\u0000${project.modified}`;
   const [url, setUrl] = useState<string | null>(COVERS.get(key) ?? null);
@@ -111,12 +120,172 @@ function Cover({
 
   if (url === null) {
     return (
+      fallback ?? (
+        <span className="sleeve" aria-hidden="true">
+          &#9834;
+        </span>
+      )
+    );
+  }
+  return <img className="cover" src={url} alt="" />;
+}
+
+/**
+ * A project's own waveform, as a tile-sized picture of it.
+ *
+ * An inline SVG rather than a canvas: there is no interaction, no redraw and
+ * no device-pixel arithmetic to get right, and 96 points is a string short
+ * enough that React re-rendering the whole thing costs less than keeping a
+ * ref to a canvas would. `preserveAspectRatio="none"` because the tile decides
+ * the shape - the vertical axis is a magnitude, not a length, so stretching it
+ * is the correct thing to do rather than a distortion.
+ *
+ * Falls back to the sleeve mark when there are no peaks, which is a project
+ * that has nothing recorded in it yet.
+ */
+function Preview({ peaks }: { peaks: readonly number[] }): React.JSX.Element {
+  if (peaks.length < 2) {
+    return (
       <span className="sleeve" aria-hidden="true">
         &#9834;
       </span>
     );
   }
-  return <img className="cover" src={url} alt="" />;
+  // Normalised to its own loudest column, which is the one place in VCW that
+  // scales a waveform without saying so. It is right here because this is an
+  // icon and not a meter: nobody reads a level off a 140-pixel thumbnail, and
+  // a record cut with headroom - the demo side peaks around a third of full
+  // scale - drew a flat blue smear through the middle of its tile that told
+  // you nothing about which record it was. Scaled, the shape is the thing you
+  // recognise. The real waveform, where the number matters, is untouched.
+  const loudest = Math.max(...peaks);
+  const scale = loudest > 0 ? 1 / loudest : 0;
+  const height = (column: number) => peaks[column]! * scale;
+
+  // One filled shape, mirrored about the centre line: out along the top, back
+  // along the bottom, closed. Drawn as an area and not as a polyline because a
+  // 1-pixel stroke at this scale disappears into the background on the quiet
+  // passages, and the quiet passages are where the sides are.
+  const last = peaks.length - 1;
+  const top = peaks.map((_, column) => `L${column},${1 - height(column)}`).join("");
+  const bottom = peaks
+    .map((_, column) => `L${last - column},${1 + height(last - column)}`)
+    .join("");
+  return (
+    <svg
+      className="preview"
+      viewBox={`0 0 ${last} 2`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path d={`M0,${1 - height(0)}${top}${bottom}Z`} />
+    </svg>
+  );
+}
+
+/**
+ * Where the list-or-tiles choice lives between sittings.
+ *
+ * `localStorage` and not the project config: this is a property of the person
+ * at the window, not of the library on the disk, and putting it in the config
+ * file would mean a schema migration and a round trip through the shell to
+ * record which of two buttons is pressed.
+ */
+const VIEW = "vcw.library.view";
+
+/** The two icons on the toggle, drawn rather than named so they do not need a font. */
+function ViewIcon({ tiles }: { tiles: boolean }): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className="view-icon">
+      {tiles ? (
+        [0, 1].map((row) =>
+          [0, 1].map((column) => (
+            <rect
+              key={`${row}.${column}`}
+              x={1 + column * 8}
+              y={1 + row * 8}
+              width="6"
+              height="6"
+              rx="1"
+            />
+          )),
+        )
+      ) : (
+        <>
+          {[1, 6.5, 12].map((y) => (
+            <rect key={y} x="1" y={y} width="3" height="3" rx="1" />
+          ))}
+          {[1.5, 7, 12.5].map((y) => (
+            <rect key={y} x="6" y={y} width="9" height="2" rx="1" />
+          ))}
+        </>
+      )}
+    </svg>
+  );
+}
+
+/**
+ * The classes a project's row or tile carries, in whichever view is showing.
+ *
+ * Shared rather than written out twice, and not only to save the six lines:
+ * `wiring.test.ts` counts the `"selected"` literals in a panel and expects a
+ * `step(` for each, because a selectable list with no way to move it from the
+ * keyboard is §44 failing quietly. Two *views* of one list are still one
+ * list, and spelling the class twice would have claimed otherwise.
+ */
+function marks(
+  project: Project,
+  selected: string | null,
+  open: string | null,
+): string {
+  return [
+    project.path === selected ? "selected" : "",
+    project.path === open ? "open" : "",
+    project.problem !== null ? "problem" : "",
+  ]
+    .filter((name) => name !== "")
+    .join(" ");
+}
+
+/**
+ * Which build this is, under the logo on the splash.
+ *
+ * The same three facts the About dialog leads with, in the one place a person
+ * is already looking at a logo and has nothing else to read. It is derived,
+ * not typed: `product` is the shell's name for itself, `version` is Cargo's,
+ * and `built` is stamped by `crates/contract/build.rs` - so a screenshot of
+ * this screen is evidence of what was running, which is the entire reason to
+ * put a date on a build.
+ *
+ * Nothing is drawn until the answer arrives. A version that appears as "0.0.0"
+ * and then corrects itself is worse than one that appears a frame late, and on
+ * a splash there is no layout to hold open.
+ */
+function Stamp(): React.JSX.Element | null {
+  const [build, setBuild] = useState<About | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void api.about().then((answer) => {
+      if (live) {
+        setBuild(answer);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (build === null) {
+    return null;
+  }
+  return (
+    <p className="stamp">
+      {build.product} <span>v{build.version}</span>
+      <br />
+      <span>Built {build.built}</span>
+    </p>
+  );
 }
 
 /** The browser. */
@@ -143,6 +312,9 @@ export function Browser({
   onLibraryChanged: () => void;
 }): React.JSX.Element {
   const [creating, setCreating] = useState(false);
+  const [tiles, setTiles] = useState(
+    () => localStorage.getItem(VIEW) === "tiles",
+  );
   const [seed, setSeed] = useState({
     artist: "",
     album: "",
@@ -160,7 +332,7 @@ export function Browser({
   // Keeps the selected row on screen, so arrowing down a long library does not
   // walk the selection out of the viewport. `nearest` rather than `center`:
   // a list that re-centres on every press is a list that will not sit still.
-  const show = useCallback((row: HTMLTableRowElement | null) => {
+  const show = useCallback((row: HTMLElement | null) => {
     row?.scrollIntoView({ block: "nearest" });
   }, []);
 
@@ -220,8 +392,25 @@ export function Browser({
     <section className="panel browser">
       <header className="panel-head">
         <h2>Library</h2>
-        <button type="button" onClick={() => setCreating(!creating)}>
-          {creating ? "Cancel" : "New project (n)"}
+        <div className="view-toggle" role="group" aria-label="Library view">
+          {[false, true].map((wanted) => (
+            <button
+              key={String(wanted)}
+              type="button"
+              className={tiles === wanted ? "on" : ""}
+              aria-pressed={tiles === wanted}
+              title={wanted ? "Tiles" : "List"}
+              onClick={() => {
+                localStorage.setItem(VIEW, wanted ? "tiles" : "list");
+                setTiles(wanted);
+              }}
+            >
+              <ViewIcon tiles={wanted} />
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => setCreating(true)}>
+          New project (n)
         </button>
         <button type="button" disabled={selected === null} onClick={open}>
           Open (Enter)
@@ -229,13 +418,44 @@ export function Browser({
       </header>
 
       {creating && (
+        /*
+          A dialog rather than a band pushed in above the library, which is
+          what this was. The band moved every row down the moment it opened,
+          so the project a person had just selected jumped out from under the
+          pointer, and in the tile view it reflowed the whole grid. A create
+          form is also a modal act in fact - there is nothing useful to do to
+          the list while one is half filled in - so it may as well say so.
+
+          `onKeyDown` and not the `dismiss` binding: `creating` is this
+          panel's state, `useKeys` listens on the window, and routing Escape
+          through `App` would mean lifting the state up there to close it.
+          Stopping the event here keeps the global handler from also clearing
+          a refusal on the same press.
+        */
+        <div
+          className="overlay"
+          role="dialog"
+          aria-label="New project"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              setCreating(false);
+            }
+          }}
+        >
         <form
-          className="seed"
+          className="seed overlay-box narrow"
           onSubmit={(event) => {
             event.preventDefault();
             create();
           }}
         >
+          <header className="panel-head">
+            <h2>New project</h2>
+            <button type="button" onClick={() => setCreating(false)}>
+              Cancel (Esc)
+            </button>
+          </header>
           <p className="hint">
             A helper, not a requirement. Leave a field blank and identification
             will fill it in.
@@ -268,34 +488,62 @@ export function Browser({
               }
             />
           </label>
-          <label className="tick">
-            <input
-              type="checkbox"
-              checked={seed.isMono}
-              onChange={(event) =>
-                setSeed({ ...seed, isMono: event.target.checked })
-              }
-            />
-            Mono pressing
-          </label>
-          <label className="tick">
-            <input
-              type="checkbox"
-              checked={seed.riaaEq}
-              onChange={(event) =>
-                setSeed({ ...seed, riaaEq: event.target.checked })
-              }
-            />
-            Apply RIAA equalisation
-          </label>
-          <p className="hint">
-            These two are not. Mono folds the channels together in the exported
-            files and leaves the capture stereo; RIAA applies the curve on
-            playback and on export, so leave it off if your phono stage already
-            did. Both can be changed later and neither touches what is recorded.
-          </p>
+          {/*
+            A group of its own, because these two are not fields of the
+            project the way the artist and the catalogue number are: they are
+            what VCW will do to the audio afterwards, and the note that says
+            so belongs above them rather than after the fact. A person reading
+            downwards should know the switches are harmless before they touch
+            one, not after.
+          */}
+          <fieldset className="seed-group">
+            <legend>Post-Processing</legend>
+            <p className="hint">
+              Neither of these two touches what is recorded, and both can be
+              changed later. Mono folds the channels together in the exported
+              files; RIAA applies the curve on audition and on export.
+            </p>
+            <div className="seed-switch">
+              <span>Pressing</span>
+              <Switch
+                checked={!seed.isMono}
+                onChange={(stereo) => setSeed({ ...seed, isMono: !stereo })}
+                off="Mono"
+                on="Stereo"
+                title="Mono folds the channels together in the exported files and leaves the capture stereo"
+              />
+            </div>
+            <div className="seed-switch">
+              <span>Equalisation</span>
+              <Switch
+                checked={seed.riaaEq}
+                onChange={(riaa) => setSeed({ ...seed, riaaEq: riaa })}
+                off="None"
+                on="RIAA"
+                title="Applies the RIAA playback curve on audition and on export"
+              />
+            </div>
+            {seed.riaaEq && (
+              /*
+                Shown only when it is switched on, because it is advice about a
+                decision just taken and not a standing caveat. There is no safe
+                default here and VCW cannot work the answer out: a phono stage
+                and a head amp both normally apply the curve themselves, and a
+                record equalised twice sounds wrong in a way that is hard to
+                name and impossible to undo after the fact.
+              */
+              <p className="hint warn">
+                Most phono stages and head amps apply the RIAA curve themselves.
+                If yours did, applying it again here equalises the record twice.
+                Nothing in the signal reaching VCW says which happened, so this
+                one is your call: switch it on only if the capture arrives flat,
+                and leave it off if anything upstream has already curved it.
+              </p>
+            )}
+          </fieldset>
           <button type="submit">Create</button>
         </form>
+        </div>
       )}
 
       {projects.length === 0 ? (
@@ -306,7 +554,54 @@ export function Browser({
         // meaning on its own.
         <div className="empty start">
           <img className="logo" src="/vcw-logo.webp" alt="" width={260} />
+          <Stamp />
           <p>No projects. Set a library directory in Settings, or create one.</p>
+        </div>
+      ) : tiles ? (
+        <div className="tiles">
+          {/*
+            The first cell, and a cell rather than a second place to find the
+            "New project" button that is already in the header: in a grid the
+            empty slot at the start is where a person looks to add one, and
+            leaving it out would mean the grid began with whichever project
+            sorted first and the way to add one was off in a corner.
+          */}
+          <button
+            type="button"
+            className="tile new"
+            onClick={() => setCreating(true)}
+          >
+            <span className="tile-art" aria-hidden="true">
+              +
+            </span>
+            <span className="tile-name">New project</span>
+          </button>
+          {projects.map((project) => (
+            <button
+              key={project.path}
+              type="button"
+              ref={project.path === selected ? show : null}
+              className={`tile ${marks(project, selected, store.project.path)}`}
+              onClick={() => onSelect(project.path)}
+              onDoubleClick={() =>
+                void store.open(project.path).then(onLibraryChanged)
+              }
+              title={project.path}
+            >
+              <span className="tile-art">
+                <Cover
+                  project={project}
+                  fallback={<Preview peaks={project.preview} />}
+                />
+              </span>
+              <span className="tile-name">
+                {project.album === "" ? project.name : project.album}
+              </span>
+              <span className="tile-when">
+                {project.problem ?? when(project.modified)}
+              </span>
+            </button>
+          ))}
         </div>
       ) : (
         <table className="rows">
@@ -328,13 +623,7 @@ export function Browser({
               <Fragment key={project.path}>
                 <tr
                   ref={project.path === selected ? show : null}
-                  className={[
-                    project.path === selected ? "selected" : "",
-                    project.path === store.project.path ? "open" : "",
-                    project.problem !== null ? "problem" : "",
-                  ]
-                    .filter((name) => name !== "")
-                    .join(" ")}
+                  className={marks(project, selected, store.project.path)}
                   onClick={() => onSelect(project.path)}
                   onDoubleClick={() =>
                     void store.open(project.path).then(onLibraryChanged)

@@ -48,6 +48,9 @@ const planned = vi.fn(async (_request: Record<string, unknown>) => ({
   covers: [],
   frames: 176_400,
   container: "FLAC",
+  // The plan always carries it, so the fixture does too: a test that had to
+  // remember to add it would be a test that silently stopped checking.
+  foldToMono: false,
 }));
 
 vi.mock("../api", () => ({
@@ -328,5 +331,35 @@ describe("the format and its quality", () => {
     await resolve();
     await choose(selectFor(container, "folder") as HTMLSelectElement, "none");
     expect(container.textContent).not.toMatch(/Plan: /);
+  });
+
+  it("warns before a mono export, because afterwards the file just is mono", async () => {
+    // The fold leaves no trace in what it writes: a one-channel FLAC looks like
+    // a one-channel FLAC whether it was asked for or set at project setup eight
+    // hours ago. The plan is the last place it can be seen and refused.
+    const container = await render({});
+    await addressed(container);
+    const plan = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Plan",
+    );
+
+    await act(async () => {
+      plan?.click();
+    });
+    expect(container.textContent).not.toMatch(/marked mono/);
+
+    planned.mockResolvedValueOnce({
+      files: ["/data2/exports/A1 Europe Endless.flac"],
+      covers: [],
+      frames: 176_400,
+      container: "FLAC",
+      foldToMono: true,
+    });
+    await choose(selectFor(container, "flac") as HTMLSelectElement, "wav");
+    await act(async () => {
+      plan?.click();
+    });
+    expect(container.textContent).toMatch(/marked mono/);
+    expect(container.textContent).toMatch(/-6 dB/);
   });
 });

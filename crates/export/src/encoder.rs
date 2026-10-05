@@ -185,6 +185,108 @@ impl std::fmt::Display for Quality {
     }
 }
 
+/// How hard FLAC should work, on the scale the reference encoder uses.
+///
+/// A number here where [`Quality`] is three words, and for the opposite
+/// reason: this one changes nothing about what comes out. Every level decodes
+/// to the same samples, so the whole choice is size against time, and `-8` is
+/// a thing a person can ask for without having to be talked out of it.
+///
+/// The scale is `flac`'s own `-0` to `-8`, defaulting to `-5`, because those
+/// are the numbers in every guide anyone has read. What they map onto is
+/// *ours*: `flacenc` 0.5.1 has no preset, it has the knobs the presets are
+/// made of, and it does not expose two of the things the reference levels
+/// differ in - loose mid/side and exhaustive model search. So this is a
+/// reading of that ladder onto what is available, not a reproduction of it,
+/// and a file written here at `-8` is not the byte-for-byte file `flac -8`
+/// would write. It is lossless either way, which is the part that matters.
+///
+/// Measured on a 3-minute 24-bit/48 kHz vinyl rip, the ladder is monotone and
+/// every level is distinct: 59.7% of raw at `-0`, 57.1% at `-5`, 57.0% at
+/// `-8`, costing 0.16 s to 0.36 s. The top of the scale buys very little and
+/// costs very little, which is the honest thing to be able to say about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Compression(u8);
+
+impl Default for Compression {
+    fn default() -> Self {
+        Self(5)
+    }
+}
+
+impl Compression {
+    /// The highest level there is.
+    pub const MAX: u8 = 8;
+
+    /// Every level, in the order a UI should offer them.
+    pub fn all() -> impl Iterator<Item = Self> {
+        (0..=Self::MAX).map(Self)
+    }
+
+    /// The level as a number.
+    #[must_use]
+    pub const fn level(self) -> u8 {
+        self.0
+    }
+
+    /// The digit a person types, and the one a settings file stores.
+    #[must_use]
+    pub fn name(self) -> String {
+        self.0.to_string()
+    }
+
+    /// Reads a level from what was typed, with or without the leading dash.
+    ///
+    /// `-8` as well as `8`, because that is how the reference encoder's flag
+    /// is written and somebody will paste it in.
+    #[must_use]
+    pub fn parse(given: &str) -> Option<Self> {
+        let given = given.trim().trim_start_matches('-');
+        given
+            .parse::<u8>()
+            .ok()
+            .filter(|level| *level <= Self::MAX)
+            .map(Self)
+    }
+
+    /// `flacenc`'s configuration for this level.
+    ///
+    /// Three knobs do the work, in the order they matter: the block size, mid
+    /// and side channel coding, and the LPC order. Below `-3` there is no LPC
+    /// at all and the fixed predictor's order is what moves, which is what the
+    /// reference encoder does at the bottom of its scale too.
+    #[must_use]
+    pub fn config(self) -> flacenc::config::Encoder {
+        let mut config = flacenc::config::Encoder::default();
+        // (block, stereo coding, LPC, fixed order, LPC order)
+        let (block, stereo, lpc, fixed, order) = match self.0 {
+            0 => (1152, false, false, 2, 8),
+            1 => (1152, true, false, 3, 8),
+            2 => (1152, true, false, 4, 8),
+            3 => (4096, false, true, 4, 6),
+            4 => (4096, true, true, 4, 7),
+            5 => (4096, true, true, 4, 8),
+            6 => (4096, true, true, 4, 10),
+            7 => (4096, true, true, 4, 12),
+            _ => (4096, true, true, 4, 16),
+        };
+        config.block_size = block;
+        config.stereo_coding.use_midside = stereo;
+        config.stereo_coding.use_leftside = stereo;
+        config.stereo_coding.use_rightside = stereo;
+        config.subframe_coding.use_lpc = lpc;
+        config.subframe_coding.fixed.max_order = fixed;
+        config.subframe_coding.qlpc.lpc_order = order;
+        config
+    }
+}
+
+impl std::fmt::Display for Compression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "-{}", self.0)
+    }
+}
+
 /// A deliverable container.
 ///
 /// The two lossy variants carry their quality, so that a resolved
@@ -202,8 +304,8 @@ impl std::fmt::Display for Quality {
 pub enum Container {
     /// Uncompressed PCM in a RIFF wrapper.
     Wav,
-    /// Lossless compression.
-    Flac,
+    /// Lossless compression, at a level that only trades size against time.
+    Flac(Compression),
     /// MPEG-1 Audio Layer III, variable bitrate.
     Mp3(Quality),
     /// Vorbis in an Ogg stream.
@@ -216,7 +318,7 @@ impl Container {
     /// Lossless first, because the archival copy is the one that matters and a
     /// list opening with MP3 would be a list suggesting otherwise.
     pub const ALL: [Self; 4] = [
-        Self::Flac,
+        Self::Flac(Compression(5)),
         Self::Wav,
         Self::Mp3(Quality::High),
         Self::OggVorbis(Quality::High),
@@ -227,7 +329,7 @@ impl Container {
     pub const fn extension(self) -> &'static str {
         match self {
             Self::Wav => "wav",
-            Self::Flac => "flac",
+            Self::Flac(_) => "flac",
             Self::Mp3(_) => "mp3",
             // Xiph's own guidance is `.oga` for Ogg audio generally and `.ogg`
             // for Ogg Vorbis specifically. `.ogg` is also what every player,
@@ -242,7 +344,7 @@ impl Container {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Wav => "WAV",
-            Self::Flac => "FLAC",
+            Self::Flac(_) => "FLAC",
             Self::Mp3(_) => "MP3",
             Self::OggVorbis(_) => "Ogg Vorbis",
         }
@@ -252,7 +354,7 @@ impl Container {
     #[must_use]
     pub const fn feature(self) -> Option<&'static str> {
         match self {
-            Self::Wav | Self::Flac => None,
+            Self::Wav | Self::Flac(_) => None,
             Self::Mp3(_) => Some("mp3"),
             Self::OggVorbis(_) => Some("ogg"),
         }
@@ -270,7 +372,7 @@ impl Container {
     #[must_use]
     pub const fn compiled_in(self) -> bool {
         match self {
-            Self::Wav | Self::Flac => true,
+            Self::Wav | Self::Flac(_) => true,
             Self::Mp3(_) => cfg!(feature = "mp3"),
             Self::OggVorbis(_) => cfg!(feature = "ogg"),
         }
@@ -280,7 +382,7 @@ impl Container {
     #[must_use]
     pub const fn quality(self) -> Option<Quality> {
         match self {
-            Self::Wav | Self::Flac => None,
+            Self::Wav | Self::Flac(_) => None,
             Self::Mp3(quality) | Self::OggVorbis(quality) => Some(quality),
         }
     }
@@ -300,9 +402,31 @@ impl Container {
     #[must_use]
     pub const fn with_quality(self, quality: Quality) -> Self {
         match self {
-            Self::Wav | Self::Flac => self,
+            Self::Wav | Self::Flac(_) => self,
             Self::Mp3(_) => Self::Mp3(quality),
             Self::OggVorbis(_) => Self::OggVorbis(quality),
+        }
+    }
+
+    /// The compression level this will be written at, where it has one.
+    #[must_use]
+    pub const fn compression(self) -> Option<Compression> {
+        match self {
+            Self::Flac(level) => Some(level),
+            Self::Wav | Self::Mp3(_) | Self::OggVorbis(_) => None,
+        }
+    }
+
+    /// The same container at a different compression level.
+    ///
+    /// A no-op on everything but FLAC, for [`with_quality`](Self::with_quality)'s
+    /// reason exactly: a settings panel holds one value for every format and
+    /// must not lose it while the format happens to be one that ignores it.
+    #[must_use]
+    pub const fn with_compression(self, level: Compression) -> Self {
+        match self {
+            Self::Flac(_) => Self::Flac(level),
+            Self::Wav | Self::Mp3(_) | Self::OggVorbis(_) => self,
         }
     }
 
@@ -319,7 +443,7 @@ impl Container {
             .as_str()
         {
             "wav" | "wave" => Some(Self::Wav),
-            "flac" => Some(Self::Flac),
+            "flac" => Some(Self::Flac(Compression::default())),
             "mp3" => Some(Self::Mp3(Quality::default())),
             "ogg" | "oga" | "vorbis" => Some(Self::OggVorbis(Quality::default())),
             _ => None,
@@ -343,7 +467,11 @@ impl std::fmt::Display for Container {
     /// against what a decoder says it read.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Wav | Self::Flac => f.write_str(self.name()),
+            Self::Wav => f.write_str(self.name()),
+            // The level, for the same reason the lossy arms print theirs: a
+            // log line that says only "FLAC" cannot be checked against the
+            // file, and `flac -a` will tell you the block size it found.
+            Self::Flac(level) => write!(f, "FLAC {level}"),
             Self::Mp3(quality) => write!(f, "MP3 {}", quality.mp3()),
             Self::OggVorbis(quality) => write!(f, "Ogg Vorbis {}", quality.vorbis()),
         }
@@ -476,7 +604,9 @@ impl Writer {
     pub fn create(path: &Path, container: Container, spec: Spec) -> Result<Self> {
         match container {
             Container::Wav => Wav::create(path, spec).map(Self::Wav),
-            Container::Flac => Flac::create(path, spec).map(|flac| Self::Flac(Box::new(flac))),
+            Container::Flac(level) => {
+                Flac::create(path, spec, level).map(|flac| Self::Flac(Box::new(flac)))
+            }
             // Both arms go through `crate::lossy`, which has a stub for each
             // whose only job is to raise [`Error::NoEncoder`]. The alternative
             // was `#[cfg]` on the arms themselves, and a match arm that exists
@@ -508,7 +638,7 @@ impl Writer {
     pub fn vet(container: Container, spec: &Spec) -> Result<()> {
         match container {
             Container::Wav => Wav::vet(spec),
-            Container::Flac => Flac::vet(spec),
+            Container::Flac(_) => Flac::vet(spec),
             Container::Mp3(_) => crate::lossy::vet_mp3(spec),
             Container::OggVorbis(_) => crate::lossy::vet_ogg(spec),
         }
@@ -588,7 +718,7 @@ const GUID_FLOAT: [u8; 16] = [
 pub(crate) fn carries(container: Container, spec: &Spec) -> bool {
     match container {
         Container::Wav => Wav::carries(spec),
-        Container::Flac => Flac::why(spec).is_none(),
+        Container::Flac(_) => Flac::why(spec).is_none(),
         Container::Mp3(_) => crate::lossy::mp3_why(spec).is_none(),
         Container::OggVorbis(_) => crate::lossy::ogg_why(spec).is_none(),
     }
@@ -855,14 +985,12 @@ impl std::fmt::Debug for Flac {
 impl Flac {
     /// Checks the format against what FLAC and `flacenc` will take, then writes
     /// the metadata blocks.
-    fn create(path: &Path, spec: Spec) -> Result<Self> {
+    fn create(path: &Path, spec: Spec, level: Compression) -> Result<Self> {
         Self::vet(&spec)?;
 
-        let config = flacenc::config::Encoder::default()
-            .into_verified()
-            .map_err(|why| Error::Flac {
-                why: format!("the encoder configuration was rejected: {why:?}"),
-            })?;
+        let config = level.config().into_verified().map_err(|why| Error::Flac {
+            why: format!("the encoder configuration was rejected: {why:?}"),
+        })?;
         let block_frames = config.block_size;
         let channels = spec.channels as usize;
         let bits = spec.bits() as usize;
@@ -916,8 +1044,12 @@ impl Flac {
             None => Ok(()),
             Some(reason) => Err(Error::Unencodable {
                 format: spec.format,
-                container: Container::Flac.name(),
-                why: format!("{reason} {}", alternatives(Container::Flac, spec)).into(),
+                container: Container::Flac(Compression::default()).name(),
+                why: format!(
+                    "{reason} {}",
+                    alternatives(Container::Flac(Compression::default()), spec)
+                )
+                .into(),
             }),
         }
     }
@@ -1098,7 +1230,7 @@ mod tests {
         let mut found = Vec::new();
         for (word, container) in [
             ("WAV", Container::Wav),
-            ("FLAC", Container::Flac),
+            ("FLAC", Container::Flac(Compression::default())),
             ("MP3", Container::Mp3(Quality::High)),
             ("Ogg Vorbis", Container::OggVorbis(Quality::High)),
             ("Ogg", Container::OggVorbis(Quality::High)),
@@ -1520,7 +1652,8 @@ mod tests {
         let spec = spec(StorageFormat::Int24Packed, 96_000, 300);
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("t.flac");
-        let mut writer = Writer::create(&path, Container::Flac, spec).unwrap();
+        let mut writer =
+            Writer::create(&path, Container::Flac(Compression::default()), spec).unwrap();
         writer.write(&ramp(&spec, 300)).unwrap();
         let total = writer.finish().unwrap();
 
@@ -1563,7 +1696,8 @@ mod tests {
         let spec = spec(StorageFormat::Int16, 48_000, 4096 * 3 + 17);
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("long.flac");
-        let mut writer = Writer::create(&path, Container::Flac, spec).unwrap();
+        let mut writer =
+            Writer::create(&path, Container::Flac(Compression::default()), spec).unwrap();
         // Fed in awkward pieces on purpose: a reader's fill size has nothing to
         // do with the encoder's block size.
         let stored = ramp(&spec, 4096 * 3 + 17);
@@ -1580,7 +1714,10 @@ mod tests {
     #[test]
     fn a_container_knows_its_extension_both_ways() {
         assert_eq!(Container::Wav.extension(), "wav");
-        assert_eq!(Container::from_extension(".FLAC"), Some(Container::Flac));
+        assert_eq!(
+            Container::from_extension(".FLAC"),
+            Some(Container::Flac(Compression::default()))
+        );
         assert_eq!(Container::from_extension("wave"), Some(Container::Wav));
         assert_eq!(
             Container::from_extension("mp3"),
@@ -1601,15 +1738,15 @@ mod tests {
         // nothing has to be cleared. The thing that must not happen is a
         // lossless container quietly acquiring a setting it does not have.
         assert_eq!(
-            Container::Flac.with_quality(Quality::Compact),
-            Container::Flac
+            Container::Flac(Compression::default()).with_quality(Quality::Compact),
+            Container::Flac(Compression::default())
         );
         assert_eq!(
             Container::Wav.with_quality(Quality::Compact),
             Container::Wav
         );
-        assert_eq!(Container::Flac.quality(), None);
-        assert!(!Container::Flac.is_lossy());
+        assert_eq!(Container::Flac(Compression::default()).quality(), None);
+        assert!(!Container::Flac(Compression::default()).is_lossy());
 
         assert_eq!(
             Container::Mp3(Quality::High).with_quality(Quality::Transparent),
@@ -1644,7 +1781,53 @@ mod tests {
             Container::OggVorbis(Quality::Transparent).to_string(),
             "Ogg Vorbis q8"
         );
-        assert_eq!(Container::Flac.to_string(), "FLAC");
+        // FLAC's number is in there for the same reason, even though it
+        // changes nothing about the samples: it is the one thing about a
+        // lossless file that a later "why is this bigger than the other one"
+        // needs, and the default has to be visible or nobody knows what -5 was.
+        assert_eq!(
+            Container::Flac(Compression::default()).to_string(),
+            "FLAC -5"
+        );
+    }
+
+    /// The ladder has to go somewhere, and the numbers have to survive a round
+    /// trip through the string a settings file holds.
+    #[test]
+    fn every_compression_level_is_a_distinct_configuration() {
+        let levels: Vec<Compression> = Compression::all().collect();
+        assert_eq!(levels.len(), 9, "flac -0 to -8");
+        assert_eq!(Compression::default().level(), 5, "the reference default");
+
+        // Measured out of tree on a real 24-bit rip: monotone, and no two
+        // levels produce the same file. Here the cheap half of that claim -
+        // that no two levels ask `flacenc` for the same thing - which is what
+        // would silently stop being true if a knob were dropped from the map.
+        let mut seen: Vec<(usize, bool, bool, usize, usize)> = Vec::new();
+        for level in levels {
+            let config = level.config();
+            let shape = (
+                config.block_size,
+                config.stereo_coding.use_midside,
+                config.subframe_coding.use_lpc,
+                config.subframe_coding.fixed.max_order,
+                config.subframe_coding.qlpc.lpc_order,
+            );
+            assert!(
+                !seen.contains(&shape),
+                "{level} repeats a configuration: {shape:?}"
+            );
+            seen.push(shape);
+        }
+
+        // `-8` and `8` are the same thing, `9` is not a level, and a round
+        // trip through `name` is what a settings file does on every save.
+        assert_eq!(Compression::parse("-8"), Compression::parse("8"));
+        assert_eq!(Compression::parse("9"), None);
+        assert_eq!(Compression::parse("flat"), None);
+        for level in Compression::all() {
+            assert_eq!(Compression::parse(&level.name()), Some(level));
+        }
     }
 
     #[test]

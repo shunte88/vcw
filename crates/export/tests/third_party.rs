@@ -53,7 +53,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use vcw_export::encoder::{Container, Spec, Writer};
+use vcw_export::encoder::{Compression, Container, Spec, Writer};
 // Quality is only named where a lossy container is, and every one of those is
 // behind a feature.
 #[cfg(any(feature = "mp3", feature = "ogg"))]
@@ -275,7 +275,7 @@ fn flac_verifies_what_we_encoded() {
             frames,
         };
         let path = dir.path().join(format!("{format:?}.flac"));
-        write(&path, Container::Flac, spec);
+        write(&path, Container::Flac(Compression::default()), spec);
         let said = run(&flac, &["-t", path.to_str().unwrap()]);
         assert!(said.contains("ok"), "{format:?}: {said}");
         assert!(
@@ -306,7 +306,7 @@ fn the_reference_decoder_gives_back_the_bytes_we_put_in() {
             frames: 20_000,
         };
         let path = dir.path().join(format!("{format:?}.flac"));
-        let stored = write(&path, Container::Flac, spec);
+        let stored = write(&path, Container::Flac(Compression::default()), spec);
         let decoded = dir.path().join(format!("{format:?}-decoded.wav"));
         run(
             &flac,
@@ -345,7 +345,7 @@ fn our_digest_is_the_reference_encoders_digest() {
     let wav = dir.path().join("source.wav");
     write(&wav, Container::Wav, spec);
     let ours = dir.path().join("ours.flac");
-    write(&ours, Container::Flac, spec);
+    write(&ours, Container::Flac(Compression::default()), spec);
 
     let theirs = dir.path().join("theirs.flac");
     run(
@@ -373,7 +373,7 @@ fn metaflac_reads_the_header_we_wrote() {
         frames: 4096 * 2 + 5,
     };
     let path = dir.path().join("t.flac");
-    write(&path, Container::Flac, spec);
+    write(&path, Container::Flac(Compression::default()), spec);
 
     let said = run(
         &metaflac,
@@ -498,7 +498,10 @@ fn this_build_writes_the_containers_it_is_supposed_to() {
     // but it can quietly shrink if a feature stops being default. Both lossless
     // containers are unconditional, and a default build has all four.
     let cases = tag_cases();
-    assert!(cases.contains(&Container::Flac), "{cases:?}");
+    assert!(
+        cases.contains(&Container::Flac(Compression::default())),
+        "{cases:?}"
+    );
     assert!(cases.contains(&Container::Wav), "{cases:?}");
     if cfg!(all(feature = "mp3", feature = "ogg")) {
         assert_eq!(cases.len(), Container::ALL.len(), "{cases:?}");
@@ -512,7 +515,7 @@ fn metaflac_reads_the_tags_we_wrote() {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
-    let path = tagged(dir.path(), Container::Flac);
+    let path = tagged(dir.path(), Container::Flac(Compression::default()));
 
     let said = run(&metaflac, &["--export-tags-to=-", path.to_str().unwrap()]);
     for expected in [
@@ -570,10 +573,10 @@ fn a_tagged_flac_still_verifies_and_still_holds_the_same_audio() {
         frames: 12_000,
     };
     let path = dir.path().join("digest.flac");
-    write(&path, Container::Flac, spec);
+    write(&path, Container::Flac(Compression::default()), spec);
 
     let before = run(&metaflac, &["--show-md5sum", path.to_str().unwrap()]);
-    tagging::write(&path, Container::Flac, &tags()).expect("tag");
+    tagging::write(&path, Container::Flac(Compression::default()), &tags()).expect("tag");
     let after = run(&metaflac, &["--show-md5sum", path.to_str().unwrap()]);
     assert_eq!(before, after, "tagging changed the audio digest");
 
@@ -671,7 +674,7 @@ fn mutagen_reads_the_tags_we_wrote() {
         return;
     }
     let dir = tempfile::tempdir().unwrap();
-    let flac = tagged(dir.path(), Container::Flac);
+    let flac = tagged(dir.path(), Container::Flac(Compression::default()));
     let wav = tagged(dir.path(), Container::Wav);
 
     let script = "
@@ -703,7 +706,7 @@ fn the_cover_comes_back_out_byte_for_byte() {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
-    let path = tagged(dir.path(), Container::Flac);
+    let path = tagged(dir.path(), Container::Flac(Compression::default()));
     let out = dir.path().join("cover.png");
 
     run(
@@ -967,7 +970,7 @@ fn the_channels_survive_a_lossy_encoder_in_the_order_they_went_in() {
     // still pass, which is exactly why it is here: it says the tone generator
     // and the two measuring tools agree about which channel is which before any
     // claim is made about the encoders.
-    let cases = std::iter::once(Container::Flac).chain(
+    let cases = std::iter::once(Container::Flac(Compression::default())).chain(
         tag_cases()
             .into_iter()
             .filter(|container| container.is_lossy()),

@@ -52,6 +52,17 @@ use vcw_types::{CaptureEq, CaptureState};
 
 const VCW: &str = env!("CARGO_BIN_EXE_vcw");
 
+/// Every test here is a real-time capture in a child process, and the harness
+/// would otherwise start all eight at once. On a four-core hosted runner that
+/// is what the timings measure: a Windows runner took 2.4 s to arm and dropped
+/// 66,720 frames, so a session that asked for 0.6 s of audio ran for 17.3 s and
+/// finished Interrupted. One at a time, and the numbers are about VCW again.
+fn alone() -> std::sync::MutexGuard<'static, ()> {
+    static GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    GATE.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Runs a session from `--script` and returns whether it succeeded, and the
 /// transcript.
 fn script(project: &Path, verbs: &str) -> (bool, String) {
@@ -99,6 +110,7 @@ fn only_capture(path: &Path) -> session::Record {
 /// The exit criterion. A whole side, from the command line, with no UI.
 #[test]
 fn a_full_capture_session_runs_from_the_command_line() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("side-a.vcw");
 
@@ -164,6 +176,7 @@ fn a_full_capture_session_runs_from_the_command_line() {
 /// The same thing from stdin, which is how an operator drives it.
 #[test]
 fn a_session_can_be_typed_one_verb_at_a_time() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("typed.vcw");
 
@@ -195,6 +208,7 @@ fn a_session_can_be_typed_one_verb_at_a_time() {
 /// End of input finalises a capture nobody stopped.
 #[test]
 fn a_script_that_forgets_to_stop_still_keeps_its_audio() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("forgetful.vcw");
 
@@ -212,6 +226,7 @@ fn a_script_that_forgets_to_stop_still_keeps_its_audio() {
 /// A verb the driver does not know is a failure - after the audio is safe.
 #[test]
 fn an_unknown_verb_fails_the_run_without_costing_the_capture() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("typo.vcw");
 
@@ -229,6 +244,7 @@ fn an_unknown_verb_fails_the_run_without_costing_the_capture() {
 /// A command that does not apply is reported and changes nothing.
 #[test]
 fn a_command_out_of_turn_is_rejected_rather_than_obeyed() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("out-of-turn.vcw");
 
@@ -250,6 +266,7 @@ fn a_command_out_of_turn_is_rejected_rather_than_obeyed() {
 /// Arming and thinking better of it leaves the project as it was found.
 #[test]
 fn an_abandoned_arm_leaves_no_capture_in_the_project() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("second-thoughts.vcw");
 
@@ -271,6 +288,7 @@ fn an_abandoned_arm_leaves_no_capture_in_the_project() {
 /// The meters are opt-in, and when asked for they are JSON a UI could use.
 #[test]
 fn the_meters_are_quiet_unless_asked_for_and_measured_when_they_are() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("levels.vcw");
 
@@ -333,6 +351,7 @@ fn the_meters_are_quiet_unless_asked_for_and_measured_when_they_are() {
 /// would then claim 'unknown' about a capture somebody described.
 #[test]
 fn the_operator_can_state_the_equalisation_and_it_is_what_the_project_keeps() {
+    let _alone = alone();
     for (flag, expected) in [
         ("flat", CaptureEq::Flat),
         ("riaa", CaptureEq::Riaa),

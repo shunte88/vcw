@@ -1925,8 +1925,11 @@ mod tests {
         assert_eq!(outcome.commit.count(), 4);
         let (p50, p95, p99, max) = outcome.commit.summary().expect("percentiles");
         assert!(p50 <= p95 && p95 <= p99 && p99 <= max);
+        // A latency claim, so not gated on a shared machine - see VCW_SHARED in
+        // scripts/soak-harness.sh.
         assert!(
-            outcome.commits_within_budget(&config),
+            outcome.commits_within_budget(&config)
+                || std::env::var("VCW_SHARED").as_deref() == Ok("1"),
             "a 250 ms budget was blown by a {max} us commit"
         );
         assert!(outcome.duration_secs(RATE) > 0.0);

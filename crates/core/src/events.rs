@@ -130,6 +130,16 @@ pub enum Event {
         /// Peak, RMS, peak-hold and the clip latch, per channel.
         levels: Snapshot,
     },
+    /// Where the output levels are, while something is auditioning.
+    ///
+    /// The playback counterpart of [`Event::Meter`], on the same contract and
+    /// at the same rate, so a UI can draw one bridge for both. It is published
+    /// by the feeder rather than by the device callback, for §10's reason in
+    /// reverse: nothing that meters may cost the output a frame.
+    Output {
+        /// Peak, RMS, peak-hold and the clip latch, per channel.
+        levels: Snapshot,
+    },
     /// A track boundary was detected. §35's `track-detected`.
     ///
     /// One event per boundary, not one per track, because that is what §24
@@ -299,6 +309,7 @@ impl Event {
             Self::Armed { .. } => "armed",
             Self::Position { .. } => "recording-position",
             Self::Meter { .. } => "meter-update",
+            Self::Output { .. } => "output-meter-update",
             Self::Detected { .. } => "track-detected",
             Self::Warning { .. } => "capture-warning",
             Self::Finished { .. } => "capture-finished",
@@ -341,6 +352,7 @@ impl fmt::Display for Event {
             }
             Self::Position { frames, seconds } => write!(f, "{frames} frames, {seconds:.3} s"),
             Self::Meter { levels } => write!(f, "{levels}"),
+            Self::Output { levels } => write!(f, "out {levels}"),
             Self::Detected {
                 seconds,
                 edge,

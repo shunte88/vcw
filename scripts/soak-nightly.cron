@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#
+#  soak-nightly.cron
+#
+#  VCW - The Vinyl Capture Workstation
+#  (c) 2026 Stue Hunter
+#
+#  §41's endurance soak, nightly, on a machine that is ours.
+#
+# MIT License - see the header in any Rust source file for the full text.
+#
+# Two hours of real-time capture - one with the waveform window open and one
+# without - is the only leg that can see what a fast run cannot: memory over
+# thousands of commits, the WAL over hundreds of checkpoint attempts, and a
+# real album side's worth of file. It used to run on a GitHub runner, where a
+# shared CPU and a shared disk cost it 54 overruns and 25,920 dropped frames
+# and the byte verifier failed it on the neighbours' account. So it runs here,
+# where nothing else does, and the latency gates stay on because they can.
+#
+# Install on the soak host (not the dev box - see docs/STATUS.md):
+#
+#   crontab -e
+#   17 3 * * *  /data2/vcw/scripts/soak-nightly.cron >> /data2/vcw-soak/cron.log 2>&1
+#
+set -euo pipefail
+
+repo=${VCW_REPO:-/data2/vcw}
+out=${VCW_SOAK_OUT:-/data2/vcw-soak}
+keep=${VCW_SOAK_KEEP:-14}
+
+# The short leg's corpus case, which a hosted runner can never do: a real rip
+# fed through the writer and read back byte for byte. The harness skips it when
+# the file is not there, so an export here costs a soak host that has no corpus
+# nothing. Any one of the 62 will do - the property is that the bytes come back
+# out, not which record they are.
+: "${VCW_RIP:=$(ls -1 /data2/source_rips/*.wav 2>/dev/null | head -1)}"
+[ -r "${VCW_RIP:-}" ] && export VCW_RIP || unset VCW_RIP
+
+mkdir -p "$out"
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+run="$out/$stamp"
+mkdir -p "$run"
+
+# The tree of record is origin/main, not whatever was left checked out. A soak
+# that measured an uncommitted experiment is a number nobody can reproduce.
+cd "$repo"
+git fetch --quiet origin
+git -c advice.detachedHead=false checkout --quiet --force origin/main
+echo "soaking $(git rev-parse --short HEAD) at $stamp" | tee "$run/head.txt"
+
+# Release, not debug: a soak spends its time in the deinterleave, the summaries
+# and the CRC, and a debug build of those changes what the run is measuring.
+cargo build --release -p vcw-cli
+
+# No VCW_SHARED here. That variable is for a machine we do not own, and the
+# whole point of this host is that the latency gates mean something on it.
+
+# The short leg first, which used to run in CI on every push and does not any
+# more: five quarter-minute runs of fault injection and byte verification, and
+# a canary for the two hours behind it. Its leg names do not collide with the
+# nightly's, so both write into the same directory. If it fails there is
+# nothing to learn from spending two hours on the long one.
+status=0
+scripts/soak-harness.sh short "$run" || status=$?
+if [ "$status" -eq 0 ]; then
+    scripts/soak-harness.sh nightly "$run" || status=$?
+fi
+
+# /data2 is where the audio goes and it is not free: keep the logs, which are
+# the evidence, and drop the projects, which are regenerable.
+find "$run" -name '*.vcw*' -delete
+printf 'exit %d\n' "$status" > "$run/verdict.txt"
+
+# Oldest first, keeping the last $keep nights of logs.
+ls -1d "$out"/*Z 2>/dev/null | sort | head -n -"$keep" | xargs -r rm -rf
+
+exit "$status"

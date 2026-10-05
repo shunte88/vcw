@@ -54,6 +54,7 @@ function build(notices: Notice[]): Build {
     product: "VCW - The Vinyl Capture Workstation",
     version: "0.1.0",
     profile: "release",
+    built: "2026-10-05",
     repository: "https://github.com/shunte88/vcw",
     authors: ["Stue Hunter"],
     licence: "MIT",

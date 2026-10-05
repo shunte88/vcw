@@ -21,27 +21,33 @@
 // the same answer.
 
 /**
- * Seconds as `m:ss.cc`, or `h:mm:ss.cc` past the hour.
+ * Seconds as `hh:mm:ss.fff`, always, whatever the magnitude.
  *
- * Centiseconds because that is the resolution a person can act on with a
- * nudge key, and because a millisecond column that changes 60 times a second
- * is unreadable at a glance. The frame count is the exact number and the
- * panels show it where exactness matters.
+ * One format and only one, which is the whole point: the hour field is there
+ * at four seconds and the millisecond field is there at four hours, so the
+ * digits never move under the eye and a reading can be compared to the one
+ * above it in a column. It is also why the widget needs no format picker -
+ * there is nothing to pick between.
+ *
+ * Milliseconds rather than the centiseconds this used to show. A live readout
+ * does change faster than it can be read at that column, but the column a
+ * person *acts* on is the one they are about to type into or nudge to, and
+ * rounding it away in the display meant the display and the frame count
+ * disagreed about where the playhead was.
  */
 export function clock(seconds: number): string {
   if (!Number.isFinite(seconds)) {
-    return "-:--";
+    return "--:--:--.---";
   }
   const negative = seconds < 0;
-  const total = Math.abs(seconds);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const rest = total % 60;
-  const pad = rest < 10 ? "0" : "";
-  const body =
-    hours > 0
-      ? `${hours}:${String(minutes).padStart(2, "0")}:${pad}${rest.toFixed(2)}`
-      : `${minutes}:${pad}${rest.toFixed(2)}`;
+  // Rounded to the millisecond *before* the fields are split out, so that
+  // 59.9999 s reads 00:01:00.000 rather than 00:00:60.000.
+  const millis = Math.round(Math.abs(seconds) * 1000);
+  const hours = Math.floor(millis / 3_600_000);
+  const minutes = Math.floor(millis / 60_000) % 60;
+  const secs = Math.floor(millis / 1000) % 60;
+  const two = (value: number): string => String(value).padStart(2, "0");
+  const body = `${two(hours)}:${two(minutes)}:${two(secs)}.${String(millis % 1000).padStart(3, "0")}`;
   return negative ? `-${body}` : body;
 }
 

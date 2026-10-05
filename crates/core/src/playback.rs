@@ -91,10 +91,12 @@ use vcw_audio::playback::{
 };
 use vcw_project::pcm::{Layout, Reader};
 use vcw_project::{Connection, Project};
+use vcw_signal::meter::{Config, Meter};
 use vcw_types::span::frames_at;
 use vcw_types::{SampleFormat, SampleRate, Span};
 
 use crate::events::{Bus, Event};
+use crate::metering;
 
 /// How much either side of a boundary a boundary audition plays.
 ///
@@ -373,6 +375,9 @@ pub struct Pump<'a> {
     conversion: Conversion,
     /// Stored-format bytes, in flight. Allocated once.
     staging: Vec<u8>,
+    /// How much of `staging` the last [`Pump::fill`] read, so the feeder can
+    /// meter what it just sent without reading the blocks a second time.
+    staged: usize,
 }
 
 impl<'a> Pump<'a> {
@@ -398,6 +403,7 @@ impl<'a> Pump<'a> {
             reader,
             conversion,
             staging,
+            staged: 0,
         })
     }
 
@@ -418,6 +424,18 @@ impl<'a> Pump<'a> {
         self.reader.seek(frame);
     }
 
+    /// The stored-format bytes the last [`Pump::fill`] read.
+    ///
+    /// Stored format rather than the device's, because that is what
+    /// [`vcw_signal::meter::Meter`] is configured for and it is the same audio:
+    /// playback applies no gain, so the only thing the conversion changes is
+    /// the width of the samples and - on a mono capture through a stereo
+    /// device - how many copies of them there are. Neither moves a needle.
+    #[must_use]
+    pub fn staged(&self) -> &[u8] {
+        &self.staging[..self.staged]
+    }
+
     /// Fills `dst` with device-format bytes and returns how many it wrote.
     ///
     /// Zero means the span has been read to the end. Whole frames only, in both
@@ -434,6 +452,7 @@ impl<'a> Pump<'a> {
             return Ok(0);
         }
         let read = self.reader.fill(&mut self.staging[..want])?;
+        self.staged = read;
         if read == 0 {
             return Ok(0);
         }
@@ -499,6 +518,9 @@ struct Job {
     span: Span,
     /// What the samples need on the way out.
     conversion: Conversion,
+    /// How to meter what is played: the capture's own rate, channels and
+    /// format, which is what the feeder reads before the conversion.
+    metering: Config,
 }
 
 /// Keeps the queue full until the stop flag is set or the stream goes away.
@@ -542,6 +564,21 @@ fn feeding(
     pump.seek(cursor.frame());
     let mut fed = 0u64;
 
+    // The output meter. Metering here rather than in the device callback is
+    // §10's rule applied to playback: nothing that watches the audio may cost
+    // it a frame, and the callback is the one place where it could.
+    //
+    // ponytail: the feeder runs ahead of the device by whatever the queue
+    // holds, so these levels lead what is audible by up to a buffer or two -
+    // around 80 ms at the default queue depth. For a level display that is
+    // under a frame of video and nobody can see it. If a needle ever has to be
+    // sample-accurate against the sound, the meter moves to a tap on the
+    // chunk the callback has just handed back, which needs a ring the callback
+    // can write to without allocating.
+    let mut meter = Meter::new(job.metering);
+    let mut due = Instant::now() + metering::INTERVAL;
+    let mut reported = 0;
+
     while !stop.load(Ordering::Relaxed) && !feeder.is_abandoned() {
         let now = cursor.epoch();
         if now != epoch {
@@ -557,7 +594,10 @@ fn feeding(
             feeder.release_reserve();
         }
         match step(&mut pump, &mut feeder, epoch) {
-            Ok(Progress::Filled) => fed += 1,
+            Ok(Progress::Filled) => {
+                fed += 1;
+                meter.feed(pump.staged());
+            }
             Ok(Progress::Full) => idle(cursor, epoch, REFILL_IDLE),
             Ok(Progress::Drained) => {
                 cursor.mark_drained(epoch);
@@ -574,6 +614,18 @@ fn feeding(
                 cursor.mark_drained(epoch);
                 return Err(error);
             }
+        }
+
+        // Nothing new means nothing to say, for the same reason the capture
+        // meter stays quiet on an empty tick: reading a snapshot resets the
+        // instantaneous peak, so a tick that found no audio would report a
+        // silence the stream never contained.
+        if Instant::now() >= due && meter.frames() > reported {
+            reported = meter.frames();
+            bus.publish(&Event::Output {
+                levels: meter.snapshot(),
+            });
+            due = Instant::now() + metering::INTERVAL;
         }
     }
     Ok(fed)
@@ -791,6 +843,7 @@ impl Player {
                 capture_id: audition.capture_id,
                 span,
                 conversion,
+                metering: Config::new(layout.channels as usize, layout.rate.0, layout.format),
             };
             let cursor = Arc::clone(&cursor);
             let stop = Arc::clone(&stop);

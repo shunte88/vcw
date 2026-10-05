@@ -14,6 +14,11 @@ import ReactDOM from "react-dom/client";
 
 import { App } from "./App";
 import "./app.css";
+import { applyScale, scaleOf } from "./scale";
+
+// Before the first paint, so a window at 175% does not start at 13px and
+// jump. It is one inline style on <html> and the stylesheet does the rest.
+applyScale(scaleOf());
 
 const root = document.getElementById("root");
 if (!root) {

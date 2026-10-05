@@ -91,7 +91,7 @@ impl Container {
     pub const fn notice(self) -> Option<Notice> {
         match self {
             Self::Wav => None,
-            Self::Flac => Some(Notice {
+            Self::Flac(_) => Some(Notice {
                 component: "flacenc",
                 licence: "Apache-2.0",
                 provides: "FLAC export",
@@ -120,16 +120,37 @@ impl Container {
     }
 }
 
-/// Every notice this build owes, in the order [`Container::ALL`] is offered in.
+/// The notices no feature can switch off.
 ///
-/// Empty is not a reachable answer: FLAC is unconditional, so a build with no
-/// features at all still owes flacenc its attribution.
+/// Chromaprint is not a container and has no feature behind it: `vcw-core`
+/// depends on `vcw-fingerprint`, which depends on `chromaprint-next`, so every
+/// VCW binary - the shell included, which does not name either crate in its own
+/// manifest - links it. A dialog that derives its list from the encoders alone
+/// therefore said nothing about the one component here whose licence asks to be
+/// spoken about: LGPL-2.1 section 6 wants the relink offer *made*, not inferred.
+const ALWAYS: [Notice; 1] = [Notice {
+    component: "libchromaprint, via chromaprint-next",
+    licence: "LGPL-2.1-or-later",
+    provides: "acoustic fingerprinting",
+    source: "https://crates.io/crates/chromaprint-next",
+    copyleft: true,
+}];
+
+/// Every notice this build owes: `ALWAYS`, then the containers it was
+/// compiled with in the order [`Container::ALL`] offers them.
+///
+/// Empty is not a reachable answer, and not only because FLAC is unconditional:
+/// `ALWAYS` is owed by a build with no features at all.
 #[must_use]
 pub fn notices() -> Vec<Notice> {
-    Container::ALL
+    ALWAYS
         .into_iter()
-        .filter(|container| container.compiled_in())
-        .filter_map(Container::notice)
+        .chain(
+            Container::ALL
+                .into_iter()
+                .filter(|container| container.compiled_in())
+                .filter_map(Container::notice),
+        )
         .collect()
 }
 
@@ -146,7 +167,7 @@ mod tests {
     #[test]
     fn the_notices_agree_with_the_features_this_build_was_compiled_with() {
         let owed = notices();
-        let mut expected = 0;
+        let mut expected = ALWAYS.len();
         for container in Container::ALL {
             let Some(notice) = container.notice() else {
                 continue;
@@ -168,23 +189,38 @@ mod tests {
     }
 
     /// The obligation the dialog exists for, stated as the one sentence that
-    /// has to stay true: the copyleft notice appears exactly when the feature
-    /// that brings the copyleft code is on.
+    /// has to stay true: a copyleft notice appears exactly when the code it
+    /// speaks for is linked.
+    ///
+    /// This test used to say `copyleft.is_empty()` for a build without `mp3`,
+    /// and it passed for as long as it was wrong. Chromaprint came in through
+    /// `vcw-core` with no feature in front of it, so *every* build has owed an
+    /// LGPL-2.1 relink offer since WP-21 and the dialog made none.
     #[test]
-    fn only_a_build_with_mp3_declares_a_copyleft_component() {
+    fn a_copyleft_notice_appears_exactly_when_its_code_is_linked() {
         let copyleft: Vec<&'static str> = notices()
             .iter()
             .filter(|notice| notice.copyleft)
             .map(|notice| notice.licence)
             .collect();
-        if cfg!(feature = "mp3") {
-            assert_eq!(copyleft, ["LGPL-3.0"], "{:#?}", notices());
+        let expected: &[&str] = if cfg!(feature = "mp3") {
+            &["LGPL-2.1-or-later", "LGPL-3.0"]
         } else {
-            assert!(
-                copyleft.is_empty(),
-                "a build without `mp3` links no copyleft code and must not claim to: {copyleft:?}"
-            );
-        }
+            &["LGPL-2.1-or-later"]
+        };
+        assert_eq!(copyleft, expected, "{:#?}", notices());
+    }
+
+    /// Fingerprinting has no feature gate, so no build may be silent about it.
+    #[test]
+    fn every_build_declares_chromaprint() {
+        assert!(
+            notices()
+                .iter()
+                .any(|notice| notice.component.contains("chromaprint") && notice.copyleft),
+            "{:#?}",
+            notices()
+        );
     }
 
     /// Flat attribution is still attribution, and FLAC is not optional.

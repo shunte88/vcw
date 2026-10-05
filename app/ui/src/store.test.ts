@@ -25,7 +25,7 @@ import { describe as group, expect, it } from "vitest";
 
 import type { Wire } from "./bindings/vcw";
 import { describe } from "./describe";
-import { NOTHING, fold } from "./store";
+import { NOTHING, fold, logged } from "./store";
 
 /** An audition that opened, so there is a playing state to be put back. */
 const OPENED: Wire = {
@@ -75,5 +75,51 @@ group("a playback refusal", () => {
 
   it("reads as one line in the log", () => {
     expect(describe(REFUSED)).toContain("the device will not play 96000 Hz");
+  });
+});
+
+/** An output snapshot, shaped as the feeder publishes it. */
+const OUT: Wire = {
+  kind: "output-meter-update",
+  meter: {
+    channels: [
+      { peakDb: -3.2, rmsDb: -14.1, holdDb: -3.2, clipped: false, clippedSamples: 0 },
+      { peakDb: -3.4, rmsDb: -14.3, holdDb: -3.4, clipped: false, clippedSamples: 0 },
+    ],
+    frames: 4800,
+    clipped: false,
+  },
+};
+
+/** The end of an audition that ran to the end of its span. */
+const FINISHED: Wire = {
+  kind: "playback-finished",
+  captureId: 4,
+  frames: 1_000_000,
+  underruns: 0,
+  fidelity: "bit-perfect",
+  bitPerfect: true,
+};
+
+group("the output meter", () => {
+  // The needle has to go out when the sound does. The bridge greys a side
+  // whose meter is null, so a snapshot left behind here is a lit output meter
+  // resting at -3 dB over a device that stopped playing, which is the one
+  // reading an instrument must never give.
+  it("goes out when playback ends", () => {
+    const playing = fold(fold(NOTHING, OPENED), OUT);
+    expect(playing.output?.channels).toHaveLength(2);
+
+    const state = fold(playing, FINISHED);
+    expect(state.output).toBeNull();
+    // The input meter is not touched: its last reading is the level the record
+    // was captured at, and that is worth leaving on screen.
+    expect(state.meter).toBe(playing.meter);
+  });
+
+  // A stream, not an event. 50 Hz of these would fill the log's 500 lines in
+  // ten seconds of audition, which is what UNLOGGED exists to stop.
+  it("is not kept in the log", () => {
+    expect(logged(OUT)).toBe(false);
   });
 });

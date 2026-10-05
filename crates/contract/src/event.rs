@@ -295,6 +295,14 @@ pub enum Wire {
         meter: Meter,
     },
 
+    /// Where the output levels are, at §17's refresh rate, while something is
+    /// auditioning.
+    #[serde(rename = "output-meter-update")]
+    OutputMeterUpdate {
+        /// Peak, RMS, hold and the clip latch, per channel, in dBFS.
+        meter: Meter,
+    },
+
     /// A boundary was detected, and it will not move.
     #[serde(rename = "track-detected")]
     TrackDetected {
@@ -539,6 +547,7 @@ impl Wire {
             Self::Armed { .. } => "armed",
             Self::RecordingPosition { .. } => "recording-position",
             Self::MeterUpdate { .. } => "meter-update",
+            Self::OutputMeterUpdate { .. } => "output-meter-update",
             Self::TrackDetected { .. } => "track-detected",
             Self::CaptureWarning { .. } => "capture-warning",
             Self::CaptureFinished { .. } => "capture-finished",
@@ -588,6 +597,9 @@ impl From<&Event> for Wire {
                 seconds: *seconds,
             },
             Event::Meter { levels } => Self::MeterUpdate {
+                meter: Meter::from(levels),
+            },
+            Event::Output { levels } => Self::OutputMeterUpdate {
                 meter: Meter::from(levels),
             },
             Event::Detected {

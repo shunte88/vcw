@@ -43,6 +43,10 @@ export function describe(event: Wire): string {
       return event.meter.channels
         .map((channel) => `${channel.peakDb.toFixed(1)} dBFS`)
         .join(" / ");
+    case "output-meter-update":
+      return event.meter.channels
+        .map((channel) => `${channel.peakDb.toFixed(1)} dBFS out`)
+        .join(" / ");
     case "track-detected":
       return `${event.edge} at ${event.seconds.toFixed(2)} s, ${(
         event.confidence * 100

@@ -271,7 +271,7 @@ pub fn write(path: &Path, container: Container, tags: &Tags) -> Result<()> {
         // Ogg both carry natively. lofty puts each in the right place for the
         // file it is handed.
         Container::Wav | Container::Mp3(_) => write_id3(path, tags),
-        Container::Flac | Container::OggVorbis(_) => write_vorbis(path, tags),
+        Container::Flac(_) | Container::OggVorbis(_) => write_vorbis(path, tags),
     }
 }
 
@@ -335,7 +335,7 @@ fn picture(cover: &Cover) -> lofty::picture::Picture {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encoder::{Spec, Writer};
+    use crate::encoder::{Compression, Spec, Writer};
     use std::path::PathBuf;
 
     use lofty::file::TaggedFileExt;
@@ -459,8 +459,8 @@ mod tests {
     #[test]
     fn a_tagged_flac_reads_back_everything_we_put_in() {
         let dir = tempfile::tempdir().unwrap();
-        let path = audio(dir.path(), Container::Flac);
-        write(&path, Container::Flac, &fixture()).expect("tag");
+        let path = audio(dir.path(), Container::Flac(Compression::default()));
+        write(&path, Container::Flac(Compression::default()), &fixture()).expect("tag");
 
         let file = lofty::read_from_path(&path).expect("read back");
         let tag = file.primary_tag().expect("a tag");

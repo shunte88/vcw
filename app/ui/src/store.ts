@@ -73,6 +73,7 @@ export const LOG_LIMIT = 500;
  */
 export const UNLOGGED: ReadonlySet<string> = new Set([
   "meter-update",
+  "output-meter-update",
   "playback-position",
   "recording-position",
 ]);
@@ -112,6 +113,15 @@ export type Engine = {
   readonly seconds: number;
   /** The last meter snapshot, or null before the first one. */
   readonly meter: Meter | null;
+  /**
+   * The last output meter snapshot, or null when nothing is auditioning.
+   *
+   * Cleared the moment playback ends rather than held like `meter` is: the
+   * input meter's last reading is the level the record was captured at and is
+   * worth leaving on screen, and an output needle resting at -3 dB over a
+   * silent device is just wrong.
+   */
+  readonly output: Meter | null;
   /** The negotiated format, as the `armed` event reported it. */
   readonly negotiated: string | null;
   /** Whether the OS confirmed the negotiated format. */
@@ -157,6 +167,7 @@ export const NOTHING: Engine = {
   frames: 0,
   seconds: 0,
   meter: null,
+  output: null,
   negotiated: null,
   verified: false,
   divergences: [],
@@ -199,6 +210,8 @@ export function fold(state: Engine, event: Wire): Engine {
       return { ...state, frames: event.frames, seconds: event.seconds };
     case "meter-update":
       return { ...state, meter: event.meter };
+    case "output-meter-update":
+      return { ...state, output: event.meter };
     case "status":
       // No diagnostics here: `status` answers `poll` with the phase and the
       // frame count and nothing else. The overrun and dropped-frame counts
@@ -218,11 +231,12 @@ export function fold(state: Engine, event: Wire): Engine {
         playing: true,
         auditioning: event.captureId,
         playhead: 0,
+        output: null,
       };
     case "playback-position":
       return { ...state, playhead: event.seconds };
     case "playback-finished":
-      return { ...state, playing: false, auditioning: null };
+      return { ...state, playing: false, auditioning: null, output: null };
     case "playback-refused":
       // Both halves matter. The transport goes back to not playing, because
       // this event is the only thing that will ever say so - there is no
@@ -233,6 +247,7 @@ export function fold(state: Engine, event: Wire): Engine {
         playing: false,
         auditioning: null,
         playhead: 0,
+        output: null,
         refusal: {
           code: "playback-refused",
           message: `${event.scope} of capture ${event.captureId}: ${event.reason}`,

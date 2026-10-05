@@ -502,6 +502,9 @@ enum Command {
         /// compact. Ignored by flac and wav.
         #[arg(long, default_value = "high")]
         quality: String,
+        /// How hard flac compresses: 0 to 8. Ignored by the other three.
+        #[arg(long, default_value = "5")]
+        compression: String,
         /// Naming template. Omit for the default.
         #[arg(long)]
         template: Option<String>,
@@ -1157,6 +1160,7 @@ fn run() -> anyhow::Result<()> {
             into,
             format,
             quality,
+            compression,
             template,
             sides,
             artwork,
@@ -1168,6 +1172,7 @@ fn run() -> anyhow::Result<()> {
             into,
             format,
             quality,
+            compression,
             template,
             sides,
             artwork,

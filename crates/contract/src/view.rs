@@ -371,6 +371,12 @@ pub struct ExportPlan {
     pub covers: Vec<String>,
     /// Frames across the whole export, which is what a progress bar divides by.
     pub frames: u64,
+    /// Whether every file's channels are summed to one on the way out.
+    ///
+    /// The release's `is_mono`. A confirmation dialog has to say it: the fold
+    /// is invisible once the files exist - they are simply mono - so the only
+    /// place to notice it was not wanted is before the export runs.
+    pub fold_to_mono: bool,
 }
 
 /// One file an export will write.
@@ -615,6 +621,7 @@ impl ExportPlan {
                 .map(|path| path.display().to_string())
                 .collect(),
             frames: plan.frames(),
+            fold_to_mono: plan.fold_to_mono,
         }
     }
 }
@@ -766,9 +773,33 @@ pub struct Project {
     /// here because the walk already has the file open: `length(bytes)` reads
     /// the row, not the blob.
     pub has_artwork: bool,
+    /// A waveform small enough to be an icon: peak magnitude per column, in
+    /// `0..=1`, over the whole of the first capture. Empty when there is none.
+    ///
+    /// The tile view needs a picture of every project, and until a release is
+    /// assigned there is no cover to be one. The waveform is what the project
+    /// already is - a side of a record has a shape, and two rips of different
+    /// records never look alike - so it is the honest placeholder rather than a
+    /// repeated sleeve glyph.
+    ///
+    /// This is the same reader the real waveform uses at a tiny width, not a
+    /// second summary: `Shape::whole` over [`PREVIEW_COLUMNS`], served out of
+    /// the `sampleblocks_levels` covering index, which is 14 ms for a
+    /// 26-minute side and the reason this can ride on the listing at all.
+    /// One array and not three, because at this size min and max are mirror
+    /// images and rms is invisible.
+    pub preview: Vec<f32>,
     /// Why the file could not be read, where it could not.
     pub problem: Option<String>,
 }
+
+/// How many columns a [`Project::preview`] carries.
+///
+/// A tile is a couple of hundred CSS pixels wide, so this is already more
+/// detail than it can draw. It is a constant rather than a parameter because
+/// the listing cannot know how wide the tile will be, and a preview that
+/// changed length with the window would defeat the cache the browser keeps.
+pub const PREVIEW_COLUMNS: u32 = 96;
 
 impl Boundary {
     /// Builds the view from a row, its side letter and its capture's rate.
@@ -924,6 +955,13 @@ pub struct About {
     /// `debug` or `release`. A timing complaint against a debug build is a
     /// different conversation, and this is the field that ends it early.
     pub profile: String,
+    /// The day this was compiled, as `YYYY-MM-DD`.
+    ///
+    /// Stamped by `build.rs`, because a version answers "which release" and
+    /// this answers the question people holding a build actually ask, which is
+    /// "is this the one from Tuesday". `SOURCE_DATE_EPOCH` wins where it is
+    /// set, so a reproducible build stays reproducible.
+    pub built: String,
     /// Where the source is.
     pub repository: String,
     /// Whoever holds the copyright on VCW's own code.
@@ -966,6 +1004,7 @@ impl About {
             } else {
                 "release".to_owned()
             },
+            built: env!("VCW_BUILT").to_owned(),
             repository: env!("CARGO_PKG_REPOSITORY").to_owned(),
             authors: env!("CARGO_PKG_AUTHORS")
                 .split(':')

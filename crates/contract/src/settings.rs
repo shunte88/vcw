@@ -237,6 +237,14 @@ pub struct Export {
     /// a quality, switches to FLAC for an archival copy and switches back
     /// should find their choice still there.
     pub quality: String,
+    /// What FLAC is written at: `0` to `8`.
+    ///
+    /// A separate field from `quality` and not a reuse of it, because the two
+    /// answer different questions. `quality` decides what gets thrown away and
+    /// FLAC throws nothing away; this decides how long the encoder spends
+    /// finding a smaller way to say the same samples. Kept across a format
+    /// change for `quality`'s reason.
+    pub compression: String,
     /// Where to write, or `null` to be asked each time.
     pub output: Option<String>,
     /// The naming template (§33).
@@ -391,6 +399,7 @@ impl Default for Export {
             // 190 kbit/s either way, which is the level above which most
             // listeners on most equipment stop being able to tell.
             quality: vcw_export::encoder::Quality::default().name().to_owned(),
+            compression: vcw_export::encoder::Compression::default().name(),
             output: None,
             template: vcw_export::naming::DEFAULT_TEMPLATE.to_owned(),
             artwork: "both".to_owned(),

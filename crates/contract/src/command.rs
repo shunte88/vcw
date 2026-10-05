@@ -496,6 +496,11 @@ pub struct Export {
     /// panel can keep one value while the format changes under it.
     #[serde(default)]
     pub quality: Option<String>,
+    /// `0` to `8`, or `null` for `5`.
+    ///
+    /// Ignored by everything but FLAC, for `quality`'s reason exactly.
+    #[serde(default)]
+    pub compression: Option<String>,
     /// A naming template, or `null` for the default.
     pub template: Option<String>,
     /// Side letters to export, or empty for every side that has tracks.
@@ -544,6 +549,22 @@ impl Export {
                     why: format!(
                         "{given:?} is not a quality - transparent, high or compact. \
                          The lossless containers ignore it."
+                    ),
+                })?,
+            ),
+        };
+
+        // Same shape as the quality above, and applied unconditionally for the
+        // same reason: `with_compression` is a no-op on the three containers
+        // that have no level, so a panel can send one with every request.
+        let container = match self.compression.as_deref() {
+            None => container,
+            Some(given) => container.with_compression(
+                vcw_export::encoder::Compression::parse(given).ok_or_else(|| Invalid {
+                    field: "compression",
+                    why: format!(
+                        "{given:?} is not a FLAC compression level - a number from 0 to 8, \
+                         where 5 is the default. Only FLAC has one."
                     ),
                 })?,
             ),

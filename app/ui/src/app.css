@@ -191,25 +191,60 @@ h3 {
    on the screen for it to line up with. The logo is held well under its
    natural size and dimmed a little: it is the backdrop to the sentence, not
    the thing being read. */
+/* The padding and the art are both smaller than they look like they want to
+   be, because at a 200% interface scale on a 1050-line screen the generous
+   version pushed the sentence under the meter bridge. A splash that hides the
+   one instruction on it is a decoration. */
 .empty.start {
   align-items: center;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
   justify-content: center;
-  padding: 3rem 1rem;
+  padding: 1.5rem 1rem;
 }
 
 .empty.start .logo {
   height: auto;
-  max-width: 50%;
+  max-width: 40%;
   opacity: 0.85;
-  width: 260px;
+  width: 16rem;
+}
+
+/* Which build this is, under the logo. Bold and at the foreground colour,
+   because the point of putting it on the splash is that it reads from across
+   a desk in a screenshot; the dim treatment the rest of this panel's small
+   print gets would defeat it. The gap above is tighter than the column's own
+   1 rem so the name reads as the logo's caption rather than a third thing. */
+.empty.start .stamp {
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  margin: -0.5rem 0 0;
+  text-align: center;
+}
+
+/* The version and the date are the same weight and a shade back: the product
+   name is what the eye lands on, and these are what it reads next. */
+.empty.start .stamp span {
+  color: var(--dim);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .hint {
   font-size: 0.9em;
   max-width: 62ch;
+}
+
+/* A note that is a warning rather than an explanation: the RIAA switch's
+   second-curve note, and a naming template with a token that does not exist.
+   Both were written as `hint warn` before there was a rule for it, so both
+   were grey. */
+.hint.warn {
+  color: var(--warn);
 }
 
 .dim {
@@ -294,15 +329,199 @@ input.wide {
   align-items: flex-end;
 }
 
+/* The create form lives in an overlay now, so `.overlay-box` draws the box and
+   this only has to lay the fields out down it.
+
+   `nowrap` is doing more work than it looks. `.fields` above sets `flex-wrap:
+   wrap`, which in a column whose height is bounded - and `.overlay-box` bounds
+   it at `max-height: 100%` - wraps into a second *column* rather than
+   scrolling. At a large interface scale on a short window that is what folded
+   this dialog in half: the fields in one column, the group box and the Create
+   button in another, the box wider than the window and the header's buttons
+   running off the right edge behind a horizontal scrollbar.
+
+   The children keep their height for the same reason: a column that may not
+   wrap shrinks its items by default, so without this the box would squash the
+   text to fit instead of scrolling. */
 .seed {
   flex-direction: column;
+  flex-wrap: nowrap;
   align-items: stretch;
-  max-width: 48ch;
-  padding: 0.75rem;
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: 4px;
 }
+
+.seed > * {
+  flex-shrink: 0;
+}
+
+/* Right, with the rest of the dialog's buttons, rather than a bar across the
+   full width. `stretch` is right for a field and wrong for an action. */
+.seed > [type="submit"] {
+  align-self: flex-end;
+}
+
+.overlay-box.narrow {
+  width: 34rem;
+}
+
+/* The dialog's one group, and a column rather than the wrapping row every
+   other fieldset is: two switches side by side would read as one control with
+   four states. `order: 0` is what keeps the note at the top - `fieldset .hint`
+   sends a note to the end of its group, which is right for a note about a
+   group of fields and wrong for one that has to be read before a switch is
+   touched. */
+.seed-group {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.seed-group .hint {
+  order: 0;
+}
+
+.seed-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--dim);
+  font-size: 0.9em;
+}
+
+/* --- The switch ---------------------------------------------------------- */
+
+/*
+ * A checkbox with the box hidden. `appearance: none` rather than `display:
+ * none` or a negative text indent: the input has to stay in the layout and
+ * stay focusable, because it is the thing that answers Space and the thing a
+ * screen reader reads. Only its painting is ours.
+ */
+.switch {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch input {
+  appearance: none;
+  position: absolute;
+  width: 2.4rem;
+  height: 1.3rem;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch .track {
+  display: inline-block;
+  position: relative;
+  width: 2.4rem;
+  height: 1.3rem;
+  border-radius: 0.65rem;
+  background: #2a2f38;
+  border: 1px solid var(--line);
+  transition: background 120ms ease;
+}
+
+.switch .knob {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--dim);
+  transition:
+    transform 120ms ease,
+    background 120ms ease;
+}
+
+.switch input:checked ~ .track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch input:checked ~ .track .knob {
+  background: var(--ground);
+  transform: translateX(1.1rem);
+}
+
+/* The focus ring has to be drawn here: the input it belongs to is invisible. */
+.switch input:focus-visible ~ .track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The end a person is currently at, so the switch reads without being worked
+   out from which side the knob is on. */
+.switch .end {
+  font-size: 0.9em;
+  color: var(--dim);
+}
+
+.switch .end.chosen {
+  color: var(--text);
+}
+
+/* --- The selection and levels strip -------------------------------------- */
+
+.selbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85em;
+}
+
+.selbar-label {
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+/* `levels` pushes itself and everything after it to the right edge. */
+.selbar-label.levels {
+  margin-left: auto;
+}
+
+.time-box {
+  background: #0f1115;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.15rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.peaks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 10rem;
+}
+
+.peak-track {
+  position: relative;
+  height: 5px;
+  background: #0f1115;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.peak-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent);
+}
+
+.peak-track.clipped {
+  border-color: var(--bad);
+}
+
+
 
 label {
   display: flex;
@@ -323,7 +542,10 @@ label input,
 label select,
 label textarea {
   color: var(--text);
-  font-size: 13px;
+  /* `rem` and not the 13px this used to be, so the interface scale in
+     Appearance moves the form fields with everything else. A form control does
+     not inherit the page's font, so it has to be said somewhere. */
+  font-size: 1rem;
   min-width: 18ch;
 }
 
@@ -389,6 +611,90 @@ fieldset .hint {
 
 fieldset table {
   flex-basis: 100%;
+}
+
+/* --- Settings, as a property tree ---------------------------------------- */
+
+/*
+ * A list of groups down the side and one group at a time beside it. The nav
+ * column is `auto` so it is as wide as the longest group name and no wider,
+ * and the pane is `minmax(0, 1fr)` for the usual reason: a `1fr` track's
+ * implicit minimum is its content, so the credentials table - which has a path
+ * in it - would push the nav off the left of the window instead of scrolling.
+ */
+.prefs {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.prefs-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-right: 1px solid var(--line);
+  padding-right: 0.75rem;
+}
+
+.prefs-nav button {
+  background: none;
+  border: 1px solid transparent;
+  text-align: left;
+  width: 100%;
+}
+
+.prefs-nav button:hover {
+  background: var(--sunken);
+}
+
+.prefs-nav button.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0c0e12;
+}
+
+.prefs-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* The one field whose value is a sentence. It takes a whole row and grows with
+   the pane; 36ch is the floor, which is twice what every other field gets. */
+input.template {
+  /* A width and not a `flex-basis`: a `label` is a flex *column*, so a basis
+     set here is a height, and `flex: 1 1 60ch` drew a text field sixty
+     characters tall. */
+  width: 60ch;
+  min-width: 36ch;
+  max-width: 100%;
+}
+
+/* `fieldset .hint` sends a note to the end of the group, which is right for a
+   note about the group and wrong for one about the field above it. */
+.hint.near,
+.tokens {
+  flex: 0 0 100%;
+  order: 0;
+}
+
+.tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tokens code {
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--dim);
+  padding: 0 0.3rem;
 }
 
 .row {
@@ -491,6 +797,173 @@ code {
   font-size: 0.85rem;
   line-height: 1.75rem;
   text-align: center;
+}
+
+/* --- The library as tiles ------------------------------------------------ */
+
+/*
+ * `auto-fill` and not `auto-fit`: with `auto-fit` a library of one project
+ * gets one tile stretched the width of the window, which looks like a bug.
+ * The minimum is the width at which 96 peaks still read as a waveform.
+ */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  /* Overriding the button defaults the rest of the sheet sets. A tile is a
+     button because it has to answer a click, a double click and the focus
+     ring; it should not look like one. */
+  background: #14171d;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.4rem;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  /* The name is allowed two lines and the date one, so the text block is a
+     fixed height whatever the name is and the art lines up across the row. */
+  overflow: hidden;
+}
+
+.tile:hover {
+  border-color: var(--dim);
+}
+
+.tile.selected {
+  border-color: var(--accent);
+}
+
+.tile.open {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.tile.problem {
+  border-color: #6b5a1f;
+}
+
+/*
+ * 16:10 and not square. The picture is a waveform far more often than it is a
+ * sleeve, and a square box either letterboxes the waveform or crops the
+ * sleeve; this is the compromise that keeps both recognisable, and `object-fit:
+ * cover` on the image means a square sleeve loses a little top and bottom
+ * rather than sitting in a black frame.
+ */
+.tile-art {
+  display: block;
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #0f1115;
+  border-radius: 2px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.tile-art > * {
+  width: 100%;
+  height: 100%;
+}
+
+.tile .cover {
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.tile .sleeve {
+  display: grid;
+  place-items: center;
+  border: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.tile .preview {
+  display: block;
+  fill: var(--accent);
+}
+
+.tile-name {
+  font-size: 0.8rem;
+  line-height: 1.2;
+  /* Two lines and then an ellipsis, so one long album title cannot make its
+     tile taller than its neighbours. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 1.92em;
+}
+
+.tile-when {
+  font-size: 0.7rem;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile.problem .tile-when {
+  color: var(--warn);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/*
+ * The one tile that is not a project. Dashed rather than the white of the
+ * mock-up, because a solid white rectangle in a dark window reads as a
+ * loading image rather than as an invitation.
+ */
+.tile.new {
+  border-style: dashed;
+  color: var(--dim);
+}
+
+.tile.new:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tile.new .tile-art {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  font-size: 2rem;
+  line-height: 1;
+  color: inherit;
+}
+
+/* --- The list-or-tiles toggle -------------------------------------------- */
+
+.view-toggle {
+  display: flex;
+  gap: 1px;
+}
+
+.view-toggle button {
+  padding: 0.2rem 0.35rem;
+  line-height: 0;
+}
+
+.view-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  /* The icon is the whole label, so it has to carry the pressed state as well
+     as the shape. `currentColor` lets the button's own rules do that. */
+  fill: currentColor;
+}
+
+.view-toggle button.on {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* Right-aligned and tabular, so a column of numbers stays a column. */
@@ -761,25 +1234,176 @@ code {
 }
 
 .waveform.empty,
-.meters.empty {
-  padding: 0.5rem 0.75rem;
-  color: var(--dim);
-}
-
 /* The idle meter bridge was 55 px tall to hold one sentence, which is the
    browser's own 1em margins on a bare `p` and not anything anyone chose. The
    bridge sits above the transport on every panel, so those margins were the
    most expensive two declarations nobody wrote. */
-.waveform.empty p,
-.meters.empty p {
+.waveform.empty p {
   margin: 0;
 }
 
+/* Input on the left, output on the right, each keeping its width whether or
+   not it is running. The bridge is an instrument on the front of the machine:
+   it is in the same place and the same size all the time, and the only thing
+   that changes is whether the needles are lit. */
+/* `flex-shrink: 0` because `.always` is a column and a flex column shrinks
+   its items before it lets anything scroll. Without it the bridge is quietly
+   squashed by however much the panel above wants, which cropped the bottom
+   off the dials - the same default that folded the new-project dialog. */
 .meters {
   padding: 0.4rem 0.75rem;
   display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.5rem;
+}
+
+.meters .bridge {
+  flex: 1 1 22rem;
+}
+
+/* Dials are their own size, so the two bridges sit side by side rather than
+   each claiming half the window and leaving a yard of ground between them.
+   The frame count goes with them: it is a number, and the argument for a dial
+   is that it is not one. */
+.meters.dials .bridge {
+  flex: 0 0 auto;
+}
+
+.meters.dials .meter-foot {
+  display: none;
+}
+
+.bridge {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.2rem 0.5rem;
+  min-width: 0;
+}
+
+.bridge-name {
+  color: var(--dim);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bridge-bars {
+  display: flex;
   flex-direction: column;
   gap: 0.2rem;
+  min-width: 0;
+}
+
+/* A disabled control, drawn and not hidden: the same rows at the same height,
+   dimmed, and announced as disabled rather than merely looking it. */
+.bridge.off {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+
+.bridge .meter-foot {
+  grid-column: 2;
+}
+
+/* --- The VU dials -------------------------------------------------------- */
+
+/* Side by side and sharing the width, so a stereo pair is a pair: an eye
+   reading two needles against each other wants them at the same size and the
+   same height, which is the whole reason a meter bridge is a bridge. */
+.bridge-dials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* Shrink-wrapped round the dial rather than sharing the bridge's width. A
+   dial stretched to fill a column is a dial with a hand's breadth of empty
+   face on either side of a tiny movement; at its own size it reads like an
+   instrument. */
+.vu {
+  background: #11131a;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.2rem;
+}
+
+/* The channel name, drawn in the SVG's bottom-left corner rather than in a
+   caption. See the comment in `Vu.tsx`: a caption is a line box, and the whole
+   point of this shape is that it does not have one to spare. */
+.vu-name {
+  fill: var(--dim);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* A fixed height and let the width look after itself. The bridge sits on
+   every panel, so its height is a tax on every panel: an SVG left to scale
+   with its width took a fifth of a 4K window at 200%.
+
+   2.6 rem is the number the remit set. Two bar rows are two 10 px tracks, a
+   0.2 rem gap and their labels - about 2.7 rem - and the dial has to land
+   inside that once this figure's own padding and border are added. The view
+   box is cropped to match, so the dial gets shorter rather than smaller: the
+   arc is the same size on the glass, there is just less glass below it. */
+.vu-face {
+  display: block;
+  height: 2.6rem;
+  width: auto;
+}
+
+.vu-arc {
+  fill: none;
+  stroke: #3d4a63;
+  stroke-width: 1;
+}
+
+.vu-arc.hot,
+.vu-mark.hot line {
+  stroke: var(--warn);
+}
+
+.vu-mark line {
+  stroke: #6b7a95;
+  stroke-width: 1;
+}
+
+.vu-label {
+  fill: var(--dim);
+  font-size: 7px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+/* The needle is the one thing on the dial that is not furniture, so it is the
+   one thing with the accent colour. `stroke-linecap: round` because a real
+   one has a tip and a square end reads as a bar. */
+.vu-needle {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-width: 1.4;
+}
+
+/* The hold mark. It falls on the Rust side at §14's rate, so what is drawn
+   here is the same number the bars draw as a hold line. */
+.vu-hold {
+  stroke: var(--warn);
+  stroke-width: 2;
+}
+
+.vu-hold.hot {
+  stroke: var(--bad);
+}
+
+.vu-clip {
+  fill: var(--bad);
 }
 
 .meter-row {
@@ -923,19 +1547,34 @@ code {
   padding: 2rem;
 }
 
+/* The right padding is wider than the rest on purpose. WebKitGTK draws an
+   overlay scrollbar - it takes no layout width and paints on top of whatever
+   is under it - so the keyboard map's right-aligned "\00a743" column rendered
+   with the 3 sliced in half. `scrollbar-gutter: stable` is the rule for this
+   and does nothing here, because the spec exempts overlay scrollbars from it.
+   Room is the only fix, and it belongs on the scrolling box rather than on
+   each overlay that happens to put something near its edge. */
 .overlay-box {
   background: var(--ground);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1rem;
+  padding-right: 2rem;
   max-height: 100%;
   overflow: auto;
-  width: 56rem;
+  /* A share of the window rather than a fixed 56rem, with a floor and a
+     ceiling. The fixed width was the thing that most obviously did not move
+     when the window did: a maximised 4K window had the keyboard map and the
+     About text sitting in the same small box they occupied at 1280, with
+     three feet of empty ground around them. `clamp` keeps the floor that
+     makes the two-column help readable and the ceiling that stops a line of
+     prose running the width of the monitor. */
+  width: clamp(34rem, 70vw, 72rem);
   max-width: 100%;
 }
 
 .overlay-box.wide {
-  width: 76rem;
+  width: clamp(44rem, 88vw, 104rem);
 }
 
 .help-group {
