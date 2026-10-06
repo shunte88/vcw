@@ -81,7 +81,11 @@ const UNIFORM_RMS_DB: f32 = -4.771_213;
 
 /// Collects events until `done` says so, or panics with what it saw.
 fn collect(events: &Events, done: impl Fn(&Event) -> bool) -> Vec<Event> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // Thirty seconds, which is not a claim about anything: this is the guard
+    // that stops a broken engine hanging a CI job, and a guard that fires on a
+    // slow machine is a false alarm. A Windows runner waited out ten seconds
+    // for a capture-finished that the same tree had delivered twice that hour.
+    let deadline = Instant::now() + Duration::from_secs(30);
     let mut seen = Vec::new();
     while Instant::now() < deadline {
         match events.try_next() {

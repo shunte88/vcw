@@ -100,7 +100,11 @@ fn ended(state: CaptureState, why: &str) {
 /// publishes a phase change the moment it happens, so this is as fast as the
 /// transport is and cannot pass by accident on a slow machine.
 fn wait_for(events: &Events, phase: Phase, seen: &mut Vec<Event>) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // Thirty seconds, which is not a claim about anything: this is the guard
+    // that stops a broken engine hanging a CI job, and a guard that fires on a
+    // slow machine is a false alarm. A Windows runner waited out ten seconds
+    // for a capture-finished that the same tree had delivered twice that hour.
+    let deadline = Instant::now() + Duration::from_secs(30);
     while Instant::now() < deadline {
         match events.try_next() {
             Some(Event::Phase { to, .. }) if to == phase => {
@@ -501,7 +505,11 @@ fn names(event: &Event) -> String {
 
 /// The next event matching a predicate, or a panic naming what turned up.
 fn next_matching(events: &Events, want: impl Fn(&Event) -> bool) -> Event {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // Thirty seconds, which is not a claim about anything: this is the guard
+    // that stops a broken engine hanging a CI job, and a guard that fires on a
+    // slow machine is a false alarm. A Windows runner waited out ten seconds
+    // for a capture-finished that the same tree had delivered twice that hour.
+    let deadline = Instant::now() + Duration::from_secs(30);
     let mut seen = Vec::new();
     while Instant::now() < deadline {
         match events.try_next() {
