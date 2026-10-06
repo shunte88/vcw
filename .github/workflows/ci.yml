@@ -40,6 +40,12 @@ jobs:
   test:
     name: test (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
+    # A hung test is a six-hour job without this, and the default is no
+    # signal at all until it ends: a Windows runner sat in `cargo test` for
+    # forty minutes against a five-minute norm with no log to read, because
+    # the log blob only appears when the job finishes. Twenty-five minutes is
+    # about four times the slowest honest run.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
