@@ -1,0 +1,13 @@
+# Two generated artifacts are compared byte for byte against what their
+# generator emits: `app/ui/src/bindings/vcw.d.ts` by
+# `crates/contract/tests/bindings.rs` and `docs/SCHEMA.md` by
+# `crates/project/tests/schema_doc.rs`. Both generators emit LF, and the
+# index holds LF, so a checkout that converts to CRLF makes the comparison
+# fail on a tree nobody has touched. That is what `test (windows-x86_64)`
+# did on run 37413694623 while every other platform passed.
+#
+# Repository-wide rather than two patterns, because the next byte-compared
+# file would have the same problem and would be found the same slow way.
+# `text=auto` leaves anything git detects as binary alone, which is every
+# .webp, .png and .aup3 in here.
+* text=auto eol=lf

@@ -105,7 +105,24 @@ fn first_difference(left: &str, right: &str) -> (usize, String, String) {
     loop {
         line += 1;
         match (lefts.next(), rights.next()) {
-            (None, None) => return (line, "<end of file>".into(), "<end of file>".into()),
+            // Both ran out, so the files differ somewhere `lines()` cannot
+            // see: a line ending, or a trailing newline. Saying "out of date
+            // at line 1630: committed <end of file>, generated <end of file>"
+            // describes nothing, and that is the message a Windows runner
+            // printed when its checkout arrived as CRLF.
+            (None, None) => {
+                return (
+                    line,
+                    format!(
+                        "<{} bytes, every line equal - check line endings>",
+                        left.len()
+                    ),
+                    format!(
+                        "<{} bytes, every line equal - check line endings>",
+                        right.len()
+                    ),
+                );
+            }
             (a, b) if a == b => {}
             (a, b) => {
                 return (
