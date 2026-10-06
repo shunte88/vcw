@@ -523,4 +523,10 @@ jobs:
           files: dist/*
           body_path: notes.md
           draft: true
+          # 0.1.1-alpha is an alpha, and GitHub's pre-release flag is what
+          # says so to anything reading the API rather than the version
+          # string. Swap this for
+          # `${{ contains(github.ref_name, '-') }}` when a tag without a
+          # suffix is the first one that should not carry it.
+          prerelease: true
           fail_on_unmatched_files: true
