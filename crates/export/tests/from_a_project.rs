@@ -332,13 +332,16 @@ fn the_template_names_the_files_and_the_release_fills_it_in() {
                 .into_owned()
         })
         .collect();
-    assert_eq!(
-        relative,
-        [
-            "Kraftwerk/1977 Trans-Europe Express/A1 - Europe Endless.flac",
-            "Kraftwerk/1977 Trans-Europe Express/A2 - Hall of Mirrors.flac",
-        ]
-    );
+    // The template's separator is `/` wherever it is typed; the path it
+    // becomes wears the platform's, so the expectation is converted rather
+    // than the result - a backslash is a legal character in a Unix file name
+    // and normalising the other way would hide a real one.
+    let want = [
+        "Kraftwerk/1977 Trans-Europe Express/A1 - Europe Endless.flac",
+        "Kraftwerk/1977 Trans-Europe Express/A2 - Hall of Mirrors.flac",
+    ]
+    .map(|path| path.replace('/', std::path::MAIN_SEPARATOR_STR));
+    assert_eq!(relative, want);
 }
 
 #[test]

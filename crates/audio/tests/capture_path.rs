@@ -107,8 +107,14 @@ fn expected_bytes(frames: u64, channels: u16) -> Vec<u8> {
 fn every_byte_arrives_unaltered_and_in_order() {
     // The whole of §9 in one assertion: what the producer made is what the
     // consumer got, byte for byte, with no gap and no reordering.
+    //
+    // Metered rather than Fast. The producer still runs flat out; it waits for
+    // room instead of discarding a callback, which is the one thing that could
+    // break this comparison without a bug in the ring. At Pace::Fast whether
+    // the reader keeps up is the runner's business, and on a hosted one it
+    // does not always.
     let (source, mut reader) =
-        Simulated::deterministic(SampleRate(48_000), 2, Pace::Fast).expect("start");
+        Simulated::deterministic(SampleRate(48_000), 2, Pace::Metered).expect("start");
     let want = expected_bytes(20_000, 2);
     let got = drain_until(&mut reader, Duration::from_secs(5), |g| {
         g.len() >= want.len()
@@ -127,8 +133,14 @@ fn every_byte_arrives_unaltered_and_in_order() {
 fn a_simulated_capture_can_never_be_called_bit_perfect() {
     // Defense in depth against the worst possible bug in this crate: a CI run
     // with no hardware reporting a confirmed bit-perfect capture.
+    //
+    // The run has to be clean for the refusal below to mean anything - a
+    // refusal that rested on the loss would say nothing about simulation - and
+    // only Pace::Metered can promise that, because it waits for room. A macOS
+    // runner failed `is_clean()` here at Pace::Fast, where the producer
+    // outrunning a descheduled reader is the design rather than a defect.
     let (source, mut reader) =
-        Simulated::deterministic(SampleRate(96_000), 2, Pace::Fast).expect("start");
+        Simulated::deterministic(SampleRate(96_000), 2, Pace::Metered).expect("start");
     drain_until(&mut reader, Duration::from_millis(200), |g| {
         g.len() > 100_000
     });
