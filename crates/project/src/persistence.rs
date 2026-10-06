@@ -1307,6 +1307,43 @@ mod tests {
         });
     }
 
+    /// Switches a [`Tap`] off however the test ends.
+    ///
+    /// A `Tap` never runs dry, and stopping a writer - whether through
+    /// `Handle::stop` or its `Drop` - drains its source to the last byte by
+    /// design. So an assertion that fails anywhere between the spawn and the
+    /// switch-off does not fail the test: it unwinds into a join that waits
+    /// for a loop that will never end. That is what nineteen minutes of
+    /// silence on a Windows runner was.
+    ///
+    /// Declared after the handle so it drops before it.
+    struct Off(Arc<AtomicBool>);
+
+    impl Drop for Off {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Waits for `holds` to become true, up to `limit`. Returns whether it did.
+    ///
+    /// A fixed sleep is a claim about the machine. 150 ms is ten of a `Tap`'s
+    /// reads here and two on a Windows runner, where a 1 ms sleep is 15.6 ms
+    /// and the first commit of a capture is also the one that has to create
+    /// the row - and these tests are about a writer committing, pausing and
+    /// resuming rather than about how quickly. A window that has to stay empty
+    /// is still a fixed sleep below: there is no waiting for nothing to happen.
+    fn settled(limit: Duration, mut holds: impl FnMut() -> bool) -> bool {
+        let deadline = Instant::now() + limit;
+        while Instant::now() < deadline {
+            if holds() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        holds()
+    }
+
     fn info() -> CaptureInfo {
         CaptureInfo {
             rate: SampleRate(RATE),
@@ -1865,6 +1902,7 @@ mod tests {
             done: Arc::clone(&done),
         };
         let handle = spawn(project(&dir), &info, Config::default(), source).expect("spawn");
+        let _off = Off(Arc::clone(&done));
         std::thread::sleep(Duration::from_millis(50));
 
         // The device is gone: nothing more will be read and `is_finished` is true.
@@ -2083,16 +2121,19 @@ mod tests {
             source,
         )
         .expect("spawn");
+        let _off = Off(Arc::clone(&done));
         STAGE.store(1, Ordering::Relaxed);
 
-        std::thread::sleep(Duration::from_millis(150));
-        let before = handle.progress().frames();
-        assert!(before > 0, "the writer committed nothing while running");
+        assert!(
+            settled(Duration::from_secs(5), || handle.progress().frames() > 0),
+            "the writer committed nothing while running"
+        );
 
         handle.pause();
-        // The flag is read at the top of the writer's loop, so give it one.
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(handle.is_paused());
+        assert!(
+            settled(Duration::from_secs(5), || handle.is_paused()),
+            "the writer never acted on the pause"
+        );
         STAGE.store(2, Ordering::Relaxed);
         let at_pause = handle.progress().frames();
 
@@ -2105,10 +2146,9 @@ mod tests {
         STAGE.store(3, Ordering::Relaxed);
 
         handle.resume();
-        std::thread::sleep(Duration::from_millis(150));
-        assert!(!handle.is_paused());
         assert!(
-            handle.progress().frames() > at_pause,
+            settled(Duration::from_secs(5), || !handle.is_paused()
+                && handle.progress().frames() > at_pause),
             "the writer did not start again"
         );
         STAGE.store(4, Ordering::Relaxed);
@@ -2154,7 +2194,9 @@ mod tests {
             },
         )
         .expect("spawn");
+        let _off = Off(Arc::clone(&done));
 
+        // A window that has to stay empty, so it is a real one.
         std::thread::sleep(Duration::from_millis(200));
         assert!(handle.is_paused());
         assert_eq!(
@@ -2164,8 +2206,10 @@ mod tests {
         );
 
         handle.resume();
-        std::thread::sleep(Duration::from_millis(150));
-        assert!(handle.progress().frames() > 0);
+        assert!(
+            settled(Duration::from_secs(5), || handle.progress().frames() > 0),
+            "the writer did not start when it was told to"
+        );
 
         done.store(true, Ordering::Relaxed);
         let outcome = handle.stop().expect("stop");
