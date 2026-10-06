@@ -1261,9 +1261,51 @@ mod tests {
     use super::*;
     use crate::validate::{Options, validate};
     use rusqlite::Connection;
+    use std::sync::atomic::AtomicUsize;
     use vcw_types::{CaptureEq, CaptureMode, SampleRate};
 
     const RATE: u32 = 96_000;
+
+    /// Reports where a test got to and ends the process if it stops getting
+    /// anywhere.
+    ///
+    /// A hung test in CI tells you nothing: libtest captures the test thread's
+    /// output, and a job's log blob does not exist until the job ends, so
+    /// `a_paused_writer_drains_the_ring_and_commits_none_of_it` sat on a
+    /// Windows runner for nineteen minutes and all that came back was its
+    /// name. This thread is not the test thread, so what it prints is not
+    /// captured, and `abort` turns a hang into a failure the log can describe.
+    ///
+    /// ponytail: diagnostic scaffolding, kept because this path has no other
+    /// way of being watched from here - a Windows-only hang cannot be
+    /// reproduced on the machine that has to fix it. `stage` is bumped as the
+    /// test advances; `names` is what each number means.
+    fn watch(stage: &'static AtomicUsize, names: &'static [&'static str], limit: Duration) {
+        std::thread::spawn(move || {
+            let start = Instant::now();
+            while stage.load(Ordering::Relaxed) < names.len() {
+                if start.elapsed() >= limit {
+                    let at = stage.load(Ordering::Relaxed);
+                    // Written to the handle rather than with `eprintln!`: the
+                    // macros go through libtest's capture, which a spawned
+                    // thread inherits, and an aborting process never hands the
+                    // captured buffer back. `Stderr` itself is the real one.
+                    let say = format!(
+                        "WATCHDOG: stuck after {:?} at stage {at} - finished {:?}, next is {}\n",
+                        start.elapsed(),
+                        &names[..at],
+                        names.get(at).copied().unwrap_or("nothing")
+                    );
+                    use std::io::Write;
+                    let mut err = std::io::stderr();
+                    let _ = err.write_all(say.as_bytes());
+                    let _ = err.flush();
+                    std::process::abort();
+                }
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        });
+    }
 
     fn info() -> CaptureInfo {
         CaptureInfo {
@@ -2011,6 +2053,18 @@ mod tests {
 
     #[test]
     fn a_paused_writer_drains_the_ring_and_commits_none_of_it() {
+        static STAGE: AtomicUsize = AtomicUsize::new(0);
+        const STAGES: &[&str] = &[
+            "spawn",
+            "first commits",
+            "pause took effect",
+            "nothing committed while paused",
+            "resumed and committing",
+            "stopped",
+            "reopened and validated",
+        ];
+        watch(&STAGE, STAGES, Duration::from_secs(90));
+
         let dir = tempfile::tempdir().expect("tempdir");
         let info = info();
         let done = Arc::new(AtomicBool::new(false));
@@ -2029,6 +2083,7 @@ mod tests {
             source,
         )
         .expect("spawn");
+        STAGE.store(1, Ordering::Relaxed);
 
         std::thread::sleep(Duration::from_millis(150));
         let before = handle.progress().frames();
@@ -2038,6 +2093,7 @@ mod tests {
         // The flag is read at the top of the writer's loop, so give it one.
         std::thread::sleep(Duration::from_millis(50));
         assert!(handle.is_paused());
+        STAGE.store(2, Ordering::Relaxed);
         let at_pause = handle.progress().frames();
 
         std::thread::sleep(Duration::from_millis(200));
@@ -2046,6 +2102,7 @@ mod tests {
             at_pause,
             "the writer committed audio while paused"
         );
+        STAGE.store(3, Ordering::Relaxed);
 
         handle.resume();
         std::thread::sleep(Duration::from_millis(150));
@@ -2054,10 +2111,12 @@ mod tests {
             handle.progress().frames() > at_pause,
             "the writer did not start again"
         );
+        STAGE.store(4, Ordering::Relaxed);
 
         done.store(true, Ordering::Relaxed);
         let outcome = handle.stop().expect("stop");
         assert!(outcome.frames > 0);
+        STAGE.store(5, Ordering::Relaxed);
 
         // The point of the whole exercise: the timeline has no hole in it. The
         // audio either side of the pause is adjacent, and the wall-clock time
@@ -2071,6 +2130,7 @@ mod tests {
         )
         .expect("validate");
         assert!(report.is_clean(), "{:?}", report.findings);
+        STAGE.store(STAGES.len(), Ordering::Relaxed);
     }
 
     #[test]
