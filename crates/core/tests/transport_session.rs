@@ -52,6 +52,21 @@ use vcw_core::{Engine, engine};
 use vcw_project::{Options, Project, recovery, session, validate};
 use vcw_types::CaptureState;
 
+/// Every test in this file drives a live `Engine`, and an engine's source is
+/// a `Pace::RealTime` capture running at the speed of a record. The harness
+/// would otherwise start all of them at once: a Windows runner then saw 8 of
+/// the 30 meter snapshots a 600 ms capture owes, which is the machine failing
+/// to provide real time rather than VCW failing to keep up. One at a time, and
+/// the rate and loss assertions mean what they say again. Copied from
+/// `vcw-cli`'s `session_from_cli.rs`, which learned it first; a mutex per
+/// test binary is as far as this goes, and cargo already runs the binaries
+/// one after another.
+fn alone() -> std::sync::MutexGuard<'static, ()> {
+    static GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    GATE.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Waits for the transport to reach a phase, or gives up and says what it saw.
 ///
 /// Polling the event stream rather than sleeping a guessed interval: the engine
@@ -79,6 +94,8 @@ fn wait_for(events: &Events, phase: Phase, seen: &mut Vec<Event>) {
 /// Drives one side: arm, record, pause, resume, record, stop.
 #[test]
 fn a_whole_session_runs_from_commands_and_reports_through_events() {
+    let _alone = alone();
+
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("side-a.vcw");
 
@@ -212,6 +229,8 @@ fn a_whole_session_runs_from_commands_and_reports_through_events() {
 /// The runtime half of §11: a command with no meaning here changes nothing.
 #[test]
 fn a_command_that_does_not_apply_is_reported_and_changes_nothing() {
+    let _alone = alone();
+
     let engine = Engine::start().expect("start");
     let events = engine.events();
 
@@ -250,6 +269,8 @@ fn a_command_that_does_not_apply_is_reported_and_changes_nothing() {
 /// Arming something that cannot be opened is a refusal, not a crash.
 #[test]
 fn a_device_that_cannot_be_opened_leaves_the_transport_idle() {
+    let _alone = alone();
+
     let dir = tempfile::tempdir().expect("tempdir");
     let engine = Engine::start().expect("start");
     let events = engine.events();
@@ -286,6 +307,8 @@ fn a_device_that_cannot_be_opened_leaves_the_transport_idle() {
 /// §11: stopping finalizes the capture and does *not* close the project.
 #[test]
 fn a_second_side_records_into_the_same_project() {
+    let _alone = alone();
+
     // §50's workflow is `Record -> Flip -> Record`, which is the requirement
     // §11's arrow diagram does not draw and this test does.
     let dir = tempfile::tempdir().expect("tempdir");
@@ -332,6 +355,8 @@ fn a_second_side_records_into_the_same_project() {
 /// An arm that is thought better of leaves nothing behind.
 #[test]
 fn arming_and_changing_your_mind_does_not_litter_the_project() {
+    let _alone = alone();
+
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("second-thoughts.vcw");
     let engine = Engine::start().expect("start");
@@ -360,6 +385,8 @@ fn arming_and_changing_your_mind_does_not_litter_the_project() {
 /// Dropping the engine mid-capture must finish the side, not lose it.
 #[test]
 fn a_shutdown_while_recording_finalizes_rather_than_abandons() {
+    let _alone = alone();
+
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("interrupted.vcw");
     let events;
@@ -398,6 +425,8 @@ fn a_shutdown_while_recording_finalizes_rather_than_abandons() {
 /// Every subscriber sees the same session.
 #[test]
 fn two_subscribers_see_the_same_thing() {
+    let _alone = alone();
+
     let dir = tempfile::tempdir().expect("tempdir");
     let engine = Engine::start().expect("start");
     let first = engine.events();

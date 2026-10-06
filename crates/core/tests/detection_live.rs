@@ -57,6 +57,22 @@ use vcw_core::{Engine, detection};
 use vcw_project::Project;
 use vcw_project::persistence::{Config as Commits, Writer};
 use vcw_signal::regions::Config;
+
+/// Every test in this file drives a live `Engine`, and an engine's source is
+/// a `Pace::RealTime` capture running at the speed of a record. The harness
+/// would otherwise start all of them at once: a Windows runner then saw 8 of
+/// the 30 meter snapshots a 600 ms capture owes, which is the machine failing
+/// to provide real time rather than VCW failing to keep up. One at a time, and
+/// the rate and loss assertions mean what they say again. Copied from
+/// `vcw-cli`'s `session_from_cli.rs`, which learned it first; a mutex per
+/// test binary is as far as this goes, and cargo already runs the binaries
+/// one after another.
+fn alone() -> std::sync::MutexGuard<'static, ()> {
+    static GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    GATE.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 use vcw_types::{
     CaptureInfo, CaptureMode, CaptureState, Edge, Provenance, SampleRate, StorageFormat,
 };
@@ -104,6 +120,8 @@ fn markers(seen: &[Event]) -> Vec<(u64, Edge, f32, Provenance)> {
 /// §22's live half: a marker arrives while the record is still turning.
 #[test]
 fn a_marker_is_published_before_the_capture_is_finished() {
+    let _alone = alone();
+
     let dir = tempfile::tempdir().expect("tempdir");
     let engine = Engine::start().expect("start");
     let events = engine.events();
@@ -181,6 +199,8 @@ fn a_marker_is_published_before_the_capture_is_finished() {
 /// A capture with the detectors attached is still the capture it would have been.
 #[test]
 fn detection_costs_the_capture_nothing() {
+    let _alone = alone();
+
     let dir = tempfile::tempdir().expect("tempdir");
     let engine = Engine::start().expect("start");
     let events = engine.events();
