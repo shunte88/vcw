@@ -16,7 +16,7 @@ loud if it cannot.
 
 ## 0.1.1-alpha
 
-*2026-10-05. The first public release.*
+*2026-10-06. The first public release.*
 
 An alpha: the capture, recovery, editing, export and cataloging paths all work
 end to end and are covered by the test suite, but the product has not been used

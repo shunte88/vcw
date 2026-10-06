@@ -5735,10 +5735,58 @@ additive migration when the curves ship.
 
 ## 0.1.1-alpha, the first release
 
-Tagged `v0.1.1-alpha` at `bbe709c` on 2026-10-05. Nothing has been pushed yet: the
-commit and the tag are local, and the tag is the thing to be careful with, because
-`tags: ['v*']` is the only trigger that turns the packaging job into a public GitHub
-release with four platform builds and a `SHA256SUMS` behind it.
+Released 2026-10-06. The tag is the thing to be careful with, because `tags: ['v*']`
+is the only trigger that turns the packaging job into a public GitHub release with
+four platform builds and a `SHA256SUMS` behind it, and `package` has no `needs:` -
+it publishes whatever the tag points at whether or not the test matrix is green. So
+the tag waited nine commits for a green `main`, and the ones it waited for are the
+interesting part of this release.
+
+**Eight CI rounds, and only one of them was a bug in the product.** The rest were
+tests making claims about the machine, on a hosted runner that could not meet them,
+and each round hid the next because cargo stops at the first test target that fails.
+In order:
+
+- *A meter rate and a capture state, on macOS and Windows.* `VCW_SHARED=1` already
+  meant "this machine is not ours" in the soak harness; it now gates the claims that
+  are about a scheduler rather than about VCW. How many meter snapshots arrive in a
+  window, how much audio a wall-clock window produced, and `Finalised` against
+  `Interrupted` - which is exactly `!diagnostics.is_clean()`, so a starved runner
+  reporting it is §38 working. What a snapshot *contains* still gates everywhere.
+- *A CRLF checkout.* `app/ui/src/bindings/vcw.d.ts` and `docs/SCHEMA.md` are compared
+  byte for byte against what their generators emit, and the generators emit LF.
+  `.gitattributes` pins the working tree, repository-wide rather than two patterns.
+  The diff message said "out of date at line 1630: committed `<end of file>`,
+  generated `<end of file>`" because `str::lines()` cannot see a line ending; it now
+  says which.
+- *Real-time captures racing each other.* Seven test files start captures at the
+  speed of a record, and libtest started them all at once: a Windows runner lost 2400
+  frames to five ring overruns. `alone()`, a mutex per test binary, because cargo
+  already runs the binaries one at a time. `Setup::simulated` reaches
+  `Pace::RealTime`, so every live `Engine` test is one of these.
+- *A path wearing the wrong separator.* A template's `/` is a separator wherever it
+  is typed and the path it becomes wears the platform's. The expectation converts
+  with `MAIN_SEPARATOR_STR`, not the result: a backslash is a legal character in a
+  Unix file name.
+- *A race the test created on purpose.* `a_simulated_capture_can_never_be_called_bit_perfect`
+  needs a clean run before its refusal means anything, and at `Pace::Fast` the
+  producer outrunning a descheduled reader is the design. `Pace::Metered` waits for
+  room, so the precondition is a promise.
+- *A test that hung instead of failing.* This one was worth the chase. A fixed 150 ms
+  window was false on Windows, where a 1 ms sleep is 15.6 ms; the assertion panicked,
+  and the unwind went into `Drop for Handle`, which joins the writer thread. Stopping
+  a writer drains its source to the last byte by design, the test's source never runs
+  dry, and the join waited for a loop that would never end. Nineteen minutes of
+  silence, twice, because a job's log blob does not exist until the job ends.
+
+**A hung job tells you nothing, so make it talk.** The writer test now publishes a
+stage as it advances and a watchdog thread reports the last one reached and aborts.
+It has to write to the `Stderr` handle rather than through `eprintln!`, because
+libtest's output capture is inherited by spawned threads and an aborting process
+never hands the captured buffer back. That one line - `stuck at stage 1 - finished
+["spawn"], next is pause took effect` - is what turned a week of guessing into a
+reproduction on this machine. `timeout-minutes: 25` on the test job so the next one
+is twenty-five minutes rather than six hours.
 
 **The version lives in four places and a test says so.** The root workspace's
 `workspace.package.version` plus the eleven path-dependency pins beside it,
