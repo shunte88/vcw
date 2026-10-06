@@ -5862,17 +5862,93 @@ README. Both should be deleted; the deletion is outstanding.
 **Gate before the tag:** sixteen legs green, 1173 Rust tests passed, 0 failed, 23
 ignored, 155 frontend tests passed, exit 0.
 
+## 0.1.2-alpha, the float capture gets a FLAC path
+
+**Published 2026-10-06 at `64cf18c`:**
+<https://github.com/shunte88/vcw/releases/tag/v0.1.2-alpha>. Eight assets again, marked
+as a pre-release. Two things in it, one of them the reason for cutting it.
+
+**`flac-codec` replaced `flacenc`.** The old encoder stopped at 24 bits and 96 kHz, both
+its limits and neither the format's, and because a device negotiation takes the widest
+integer format on offer that meant the *ordinary* rip - S32 - had no FLAC path at all,
+with 192 kHz ruled out beside it. §8 requires 192 kHz and §33 requires FLAC, so that was
+a real gap in the requirement rather than a theoretical one. Both ceilings are gone, the
+rate refusal with them. `the_flac_library_really_does_stop_where_we_say_it_does` - the
+test written to fail the day either cap lifted - was turned around rather than deleted:
+it now asserts that 32-bit at 192 kHz opens, and that 33 bits and a rate past 2^20 still
+do not, so the day the *format's* own limits are the binding ones `Flac::why` owes a
+sentence and this is what notices. The replacement streams natively, so WP-14's
+hand-patched `STREAMINFO` is gone too; it was checked against the same third-party
+readers that found the three WP-14 findings.
+
+**A float capture can now be narrowed, by somebody who decides to.** This is the half
+that needed a decision rather than a library. FLAC is an integer codec and an imported
+Audacity project is float, so the export was refused by name. Narrowing it *silently* was
+rejected at WP-14 on measurement - a real 32-bit rip from `/data2/source_rips` uses the
+whole low byte - and that still stands. What shipped is the operator-chosen version:
+**three switches answering three separate questions**, not one switch that guesses.
+
+| CLI | `Settings > Export` | Values |
+| --- | --- | --- |
+| `--narrow` | Narrow to | `refuse` (default), `24`, `32` |
+| `--dither` | Dither | `tpdf` (default), `none` |
+| `--headroom` | Headroom (dB) | `0` (default) to `60` |
+
+`refuse` is the default, so **an install nobody has configured behaves exactly as it did**
+and the refusal is unchanged except that it now names the setting that changes the answer.
+Four things about the shape of it are worth keeping:
+
+- **24 is the width worth having, and the code does not say so.** A float significand is
+  24 bits, so that is where a full-scale sample survives the trip intact; it is also the
+  widest FLAC stream that can still use one channel to predict the other, because the
+  difference channel needs one bit more than the samples and the format stops at 32. A
+  32-bit stereo FLAC has no mid/side at all - `-0` and `-1` come out byte-identical. The
+  reasoning is in `docs/USER-GUIDE.md` under *Narrowing a float capture*, because it is a
+  thing a person chooses and not a thing the code decides.
+- **`narrowed()` is keyed on `carries()`, not on FLAC.** It narrows only where
+  `spec.is_float() && !carries(container, &spec)`, so WAV never narrows, Ogg never
+  narrows, and the day a container learns floats it stops narrowing with no edit. Same
+  discipline as `alternatives()`, and `narrowing_applies_only_where_the_container_needs_it`
+  asserts it rather than trusting it.
+- **Dither is reproducible on purpose.** §33 says an export is reproducible from blocks
+  plus edit instructions, which a random generator would quietly break, so it is a
+  xorshift64 seeded per file from a constant. `dither_is_noise_and_is_the_same_noise_every_time`
+  is the check. Triangular, a little under one LSB: ~4.8 dB of noise floor traded for
+  rounding error that no longer tracks the music.
+- **Over full scale is clamped, not wrapped.** A float capture can sit above full scale
+  without clipping and an integer file cannot, which is what `--headroom` is for; what
+  survives the attenuation still gets clamped, because a wrap turns a peak into a crack.
+
+**The Windows CI flake was in the test, not the engine.** `transport_session` settled its
+post-pause frame count with a 200 ms sleep against a **250 ms** commit interval, so it
+sampled mid-flush: a runner read 24,000 frames and 34,080 half a second later and reported
+*"the transport recorded while paused"*. Replaced with a convergence poll that returns as
+soon as the count stops moving and panics if it never does. The general form is that a
+fixed sleep waiting on a flush has to outlast the interval it is waiting for, and if it
+does not name that interval nobody can tell by reading it.
+
+**Documentation that had gone stale with the encoder swap was corrected with it**: the
+`README.md` format table, `docs/USER-GUIDE.md`'s format table and its float paragraph, and
+the *What a container will not take, said out loud* section above, which still named
+`flacenc` 0.5.1's two caps as live limits.
+
+**Gate before the tag:** sixteen legs green, 1185 Rust tests passed, 0 failed, 23 ignored,
+156 frontend tests passed, exit 0. **One round of CI, not eight:** 12 jobs green on `main`
+at `64cf18c` first, then the tag, then 17 jobs including four `package` legs, then publish.
+The draft carried `tag_name: v0.1.2-alpha` already, unlike 0.1.1-alpha's - the difference
+was not measured, but 0.1.1's tag had been deleted and re-pushed eight times under an
+existing draft and this one was pushed once onto a green head, so read the draft's
+`tag_name` before publishing rather than assuming either way.
+
 ## Next up
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**, and so
 are the two Phase 2 packages taken out of order: WP-25's lossy encoders and schema v3's
 `capture_eq` at `85acd44`. WP-28's About dialog and WP-21's fingerprinting followed at
 `2297178`, WP-22's lookup at `75424f2`, and WP-23's resolver with schema v4 at `b96b440`.
-**The tree is clean and everything described above is committed.** `v0.1.1-alpha` is
-tagged at `8b51808`, pushed, packaged and published - see the section above it. `main`
-carries four commits past the tag: two gates on claims a hosted runner cannot make, a
-hang guard raised from ten seconds to thirty, and `prerelease: true` on the release
-step for next time. None of them touch the product.
+**The tree is clean and everything described above is committed.** `v0.1.2-alpha` is
+tagged at `64cf18c`, pushed, packaged and published - see the section above it - and
+`main` is at the tag with nothing past it.
 
 **The next release has nothing waiting on it.** One thing is: the UI change list, which
 is the user's to write. The README was read and passed on 2026-10-06, and the question
