@@ -63,11 +63,11 @@ Choose your intended export format **before recording**:
 | Export | Preserves samples? | Current limits |
 | --- | --- | --- |
 | WAV | Yes, without processing | Supports VCW's stored sample formats, including Float32; approximately 4 GiB per file under RIFF. |
-| FLAC | Yes, without processing | Integer audio up to 24-bit/96 kHz. No Float32 or 32-bit integer export through the current encoder. |
+| FLAC | Yes, without processing | Integer audio up to 32-bit at any rate VCW records. No Float32 export: FLAC is an integer codec. |
 | MP3 | No: lossy | Supported rates up to 48 kHz; mono or stereo. |
 | Ogg Vorbis | No: lossy | Accepts VCW's supported capture rates, including 192 kHz, and Float32 audio. |
 
-The FLAC limits belong to VCW's current encoder, not the FLAC format itself. VCW refuses unsupported combinations instead of silently reducing bit depth or resampling. For example, a 32-bit/192 kHz capture can leave as lossless WAV, but cannot currently leave as FLAC.
+VCW refuses unsupported combinations instead of silently reducing bit depth or resampling. The one capture FLAC cannot take is a Float32 one: deciding how to bring float down to integers is a judgment about headroom, so VCW asks rather than guesses, and that capture leaves as lossless WAV instead.
 
 ## Get started
 

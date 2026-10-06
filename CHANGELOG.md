@@ -14,6 +14,39 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## 0.1.2-alpha
+
+*2026-10-06.*
+
+### Export
+
+* **FLAC now takes the format VCW records by default.** A device negotiation
+  asks for the widest integer format the hardware offers, so an ordinary rip is
+  32-bit, and 32-bit had no FLAC path at all: `vcw export --format flac` refused
+  it and sent you to WAV. The same went for anything above 96 kHz, which ruled
+  out a 192 kHz capture outright. Both ceilings are gone. FLAC carries up to
+  32-bit integer at any rate VCW records, and the refusal that used to name a
+  rate limit no longer exists.
+* The one capture FLAC still refuses is a **32-bit float** one, and for a reason
+  that has not changed: FLAC is an integer codec, and choosing how to bring float
+  down to integers is a decision about headroom that belongs to a person. Export
+  those as WAV.
+* Worth knowing when you pick a width: **FLAC has no mid/side at 32 bits.** The
+  difference channel needs one bit more than the samples and the format stops at
+  32, so a 32-bit stereo file cannot use one channel to predict the other, and
+  compression levels `-0` and `-1` come out byte-identical. A 24-bit capture is
+  three quarters of the samples *and* the width where the encoder can still do
+  its best work.
+
+### Under the hood
+
+* The FLAC encoder is now [`flac-codec`](https://crates.io/crates/flac-codec)
+  rather than `flacenc`, which is where both ceilings came from. Still pure Rust,
+  still MIT OR Apache-2.0, no C library to relink. Output was checked against
+  reference libFLAC: a 32-bit 192 kHz file passes `flac -t`, which verifies the
+  decoded audio against the MD5 in the stream, and lands within 0.08% of
+  `flac -8` on real material.
+
 ## 0.1.1-alpha
 
 *2026-10-06. The first public release.*

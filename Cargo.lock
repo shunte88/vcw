@@ -1576,7 +1576,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "vcw-audio"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "cpal",
  "rtrb",
@@ -1590,7 +1590,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1612,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-contract"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "rusqlite",
  "serde",
@@ -1631,7 +1631,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "rusqlite",
  "tempfile",
@@ -1648,7 +1648,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-export"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "flac-codec",
  "lofty",
@@ -1663,7 +1663,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-fingerprint"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "chromaprint-next",
  "thiserror 2.0.20",
@@ -1672,7 +1672,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-identify"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "vcw-fingerprint",
  "vcw-metadata",
@@ -1681,7 +1681,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-import"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crc32fast",
  "rusqlite",
@@ -1696,7 +1696,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-metadata"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crc32fast",
  "serde",
@@ -1710,7 +1710,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-project"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crc32fast",
  "rusqlite",
@@ -1724,7 +1724,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-signal"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "rustfft",
  "serde_json",
@@ -1733,7 +1733,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-types"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",

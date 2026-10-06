@@ -77,7 +77,7 @@ VCW / VRipr.
 
 ## Status
 
-0.1.1-alpha. It records, it identifies, it exports, and it packages for all four
+0.1.2-alpha. It records, it identifies, it exports, and it packages for all four
 targets. What follows is the long version: every work package, what it proved, and
 what it is still waiting on. The spikes that came first:
 
