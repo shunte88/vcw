@@ -5735,7 +5735,22 @@ additive migration when the curves ship.
 
 ## 0.1.1-alpha, the first release
 
-Released 2026-10-06. The tag is the thing to be careful with, because `tags: ['v*']`
+**Published 2026-10-06 at `8b51808`:**
+<https://github.com/shunte88/vcw/releases/tag/v0.1.1-alpha>. Eight assets, marked as
+a pre-release: `.deb` and `.AppImage` for x86_64 and aarch64, an `.msi`, a macOS
+`.app.tar.gz` and `.dmg`, and a `SHA256SUMS` recomputed in the release job rather
+than concatenated from four platforms' own.
+
+**A draft keeps a placeholder tag until it is published.** The release job ends with
+`draft: true`, which is right: a tag builds the packages and stages a release but puts
+nothing in front of anybody. What is easy to miss is that the draft it leaves carries
+`tag_name: untagged-<hex>` rather than the tag that triggered it, so flipping
+`draft=false` publishes a release on the placeholder. It did, for a few seconds, until
+the `tag_name` was patched. Publish by setting the tag and the flag together. And
+`prerelease: true` in the workflow applies to the *next* tag; an existing draft needs
+the same PATCH.
+
+The tag is the thing to be careful with, because `tags: ['v*']`
 is the only trigger that turns the packaging job into a public GitHub release with
 four platform builds and a `SHA256SUMS` behind it, and `package` has no `needs:` -
 it publishes whatever the tag points at whether or not the test matrix is green. So
@@ -5841,10 +5856,17 @@ ignored, 155 frontend tests passed, exit 0.
 are the two Phase 2 packages taken out of order: WP-25's lossy encoders and schema v3's
 `capture_eq` at `85acd44`. WP-28's About dialog and WP-21's fingerprinting followed at
 `2297178`, WP-22's lookup at `75424f2`, and WP-23's resolver with schema v4 at `b96b440`.
-**The tree is clean and everything described above is committed**, and `bbe709c` is
-tagged `v0.1.1-alpha` - see the section above it. The first thing to decide in the
-morning is whether to push the branch alone or the tag with it, because the tag is what
-publishes.
+**The tree is clean and everything described above is committed.** `v0.1.1-alpha` is
+tagged at `8b51808`, pushed, packaged and published - see the section above it. `main`
+carries four commits past the tag: two gates on claims a hosted runner cannot make, a
+hang guard raised from ten seconds to thirty, and `prerelease: true` on the release
+step for next time. None of them touch the product.
+
+**The next release has nothing waiting on it.** The three things that are: the README
+copy pass, the UI change list that is the user's to write, and the question of whether
+`"finalised"` earns a schema v5 migration to `"finalized"` - it is a `captures.state`
+value with a CHECK constraint behind it and a `CaptureStateName` on the wire, which is
+why the spelling sweep left it alone.
 
 **WP-22 is built** (above): the lookup, the recording fetch, `--identify`, and the
 measurement that says alignment rather than audio quality is what decides whether a
