@@ -58,7 +58,9 @@
 //! - **WAV is capped at 4 GiB** by RIFF's 32-bit sizes. Reachable by a long
 //!   unsplit side at 192 kHz, not by a track.
 //! - **FLAC is an integer codec**, so a `Float32` capture has no FLAC path
-//!   until a person decides how it should be dithered.
+//!   until a person decides how it should be dithered. [`Narrowing`] is that
+//!   decision written down, and the refusal stands only while nobody has taken
+//!   it: the default is [`Width::Refuse`].
 //! - **FLAC itself stops at 32 bits and 1048575 Hz**, neither of which any
 //!   capture VCW makes can reach. This used to be a much shorter list of things
 //!   FLAC could carry: `flacenc` 0.5.1 stopped at 24 bits and 96 kHz, which are
@@ -593,6 +595,243 @@ impl Spec {
     }
 }
 
+/// The integer width a `Float32` capture is rounded to on the way out.
+///
+/// `Refuse` is the default and is what VCW did before this existed: FLAC is an
+/// integer codec, and an exporter that quietly picked a width and a dither for
+/// somebody's master would be making the one decision §33 says it must not
+/// make. The other two variants are that decision, taken by a person and
+/// written down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Width {
+    /// Do not narrow. A float capture is refused by a container that cannot
+    /// carry one, and the refusal says what else will.
+    #[default]
+    Refuse,
+    /// Round to 24-bit integers.
+    ///
+    /// The archival choice, and the one to reach for first: an `f32` has a
+    /// 24-bit significand, so 24 bits of fixed point is the width at which the
+    /// mantissa of a sample at full scale survives intact. It is also the width
+    /// at which FLAC can still code mid/side - see [`Compression`].
+    Bits24,
+    /// Round to 32-bit integers.
+    ///
+    /// Wider than the significand it came from, so it adds no resolution to any
+    /// single sample. What it does keep is the float's *scale*: quiet passages
+    /// in floating point carry their 24 bits down wherever the signal goes, and
+    /// 32 bits of fixed point has 48 dB more room underneath full scale to put
+    /// them in than 24 does.
+    Bits32,
+}
+
+impl Width {
+    /// Every width, in the order a UI should offer them.
+    pub const ALL: [Self; 3] = [Self::Refuse, Self::Bits24, Self::Bits32];
+
+    /// The word a person types, and the one a settings file stores.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Refuse => "refuse",
+            Self::Bits24 => "24",
+            Self::Bits32 => "32",
+        }
+    }
+
+    /// Reads a width from what was typed, in any case.
+    ///
+    /// `24-bit` and `32 bit` as well as the bare number, because the setting is
+    /// about bit depth and somebody will write the unit.
+    #[must_use]
+    pub fn parse(given: &str) -> Option<Self> {
+        let given = given.trim().to_ascii_lowercase();
+        let given = given
+            .trim_end_matches("bit")
+            .trim_end_matches(['-', ' ', '_'])
+            .trim();
+        Self::ALL.into_iter().find(|width| width.name() == given)
+    }
+
+    /// The stored format samples land in, or `None` to refuse instead.
+    #[must_use]
+    pub const fn format(self) -> Option<StorageFormat> {
+        match self {
+            Self::Refuse => None,
+            // Packed and not padded: the pad byte exists so a capture thread can
+            // write fixed-width words, and nothing downstream of here wants it.
+            Self::Bits24 => Some(StorageFormat::Int24Packed),
+            Self::Bits32 => Some(StorageFormat::Int32),
+        }
+    }
+
+    /// Full scale at this width, as a positive number of integer steps.
+    ///
+    /// `None` for [`Width::Refuse`], which has no scale because it has no
+    /// samples.
+    #[must_use]
+    pub const fn full_scale(self) -> Option<i64> {
+        match self {
+            Self::Refuse => None,
+            Self::Bits24 => Some(1 << 23),
+            Self::Bits32 => Some(1 << 31),
+        }
+    }
+}
+
+impl std::fmt::Display for Width {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// The noise added before rounding a float sample to an integer one.
+///
+/// Rounding on its own correlates its own error with the signal, which is what
+/// makes undithered truncation audible as distortion on a fade rather than as
+/// hiss: the error repeats with the waveform instead of being noise. A
+/// triangular dither decorrelates it, at the cost of about 4.8 dB of noise
+/// floor - which at 24 bits is roughly 120 dB down and under the surface noise
+/// of any record ever pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Dither {
+    /// Round, and add nothing.
+    ///
+    /// The right answer when the float capture is itself a conversion of
+    /// integer samples, because then the rounding is exact and dither would be
+    /// adding noise to a signal that had none to hide.
+    None,
+    /// Triangular, one LSB peak to peak either side.
+    #[default]
+    Tpdf,
+}
+
+impl Dither {
+    /// Every option, in the order a UI should offer them.
+    pub const ALL: [Self; 2] = [Self::Tpdf, Self::None];
+
+    /// The word a person types, and the one a settings file stores.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Tpdf => "tpdf",
+        }
+    }
+
+    /// Reads a dither from what was typed, in any case.
+    #[must_use]
+    pub fn parse(given: &str) -> Option<Self> {
+        let given = given.trim().to_ascii_lowercase();
+        Self::ALL.into_iter().find(|dither| dither.name() == given)
+    }
+}
+
+impl std::fmt::Display for Dither {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// The three answers an export needs before it can turn a float capture into
+/// an integer one.
+///
+/// Three and not one, because they are three separate questions and a person
+/// answering the first has not thereby answered the others: how many bits,
+/// what noise, and how much room to leave above the loudest sample. The
+/// default refuses, so a build that never touches this behaves exactly as VCW
+/// did before it existed.
+///
+/// **A dithered export is not bit-reproducible unless the noise is.** §33 says
+/// an export is reproducible from the blocks plus the edit instructions, which
+/// a random dither would quietly break, so the generator is seeded per file
+/// from a constant and re-exporting the same track with the same settings
+/// gives the same bytes. The noise is still noise; it is just the same noise
+/// every time.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Narrowing {
+    /// The width to round to, or [`Width::Refuse`].
+    pub to: Width,
+    /// What to add before rounding.
+    pub dither: Dither,
+    /// Gain applied before rounding, in decibels, never above zero.
+    ///
+    /// A float capture may hold samples past +/-1.0 and routinely does: nothing
+    /// clips in floating point, so a software RIAA curve or a gain stage can
+    /// leave peaks above full scale and no harm is done until somebody asks for
+    /// fixed point. Rounding clamps, which is a decision about this person's
+    /// record, so this is the knob that avoids having to make it: -3 dB here
+    /// brings a capture peaking at +2 dBFS back under the ceiling intact.
+    ///
+    /// Zero is the default and applies no gain at all - not a multiply by
+    /// 1.0, which is exact anyway, but the honest statement that an export
+    /// nobody configured does nothing to the samples beyond the rounding it was
+    /// asked for.
+    pub headroom_db: f32,
+}
+
+impl Default for Narrowing {
+    fn default() -> Self {
+        Self {
+            to: Width::Refuse,
+            dither: Dither::default(),
+            headroom_db: 0.0,
+        }
+    }
+}
+
+impl Narrowing {
+    /// The widest headroom anyone has a use for, in decibels below full scale.
+    ///
+    /// A limit rather than no limit, because the field is a number somebody
+    /// types and `-200` is a typo for `-20` that would otherwise silently
+    /// export silence.
+    pub const MAX_HEADROOM_DB: f32 = 60.0;
+
+    /// The linear gain [`headroom_db`](Self::headroom_db) asks for.
+    #[must_use]
+    pub fn gain(self) -> f64 {
+        if self.headroom_db == 0.0 {
+            1.0
+        } else {
+            10f64.powf(f64::from(-self.headroom_db.abs()) / 20.0)
+        }
+    }
+
+    /// Reads a headroom from what was typed, as a positive number of decibels
+    /// or a negative one.
+    ///
+    /// `3`, `-3` and `-3 dB` all mean the same thing - three decibels of room -
+    /// because the field is labelled "headroom" and somebody will write the
+    /// sign that a gain control would have.
+    ///
+    /// # Errors
+    ///
+    /// The string back, for anything that is not a number or is further down
+    /// than [`MAX_HEADROOM_DB`](Self::MAX_HEADROOM_DB).
+    pub fn parse_headroom(given: &str) -> Option<f32> {
+        let given = given.trim().to_ascii_lowercase();
+        let given = given.trim_end_matches("db").trim();
+        let db: f32 = given.parse().ok()?;
+        (db.is_finite() && db.abs() <= Self::MAX_HEADROOM_DB).then_some(db.abs())
+    }
+}
+
+/// The spec a container is actually handed, once any narrowing has been applied.
+///
+/// Worked out rather than keyed on FLAC, for `alternatives`'s reason exactly:
+/// narrowing applies when the container refuses this capture as it stands *and*
+/// would take it narrowed, so the day a container learns to carry floats this
+/// stops narrowing for it without anybody editing a match arm. It also means
+/// WAV never narrows, because WAV carries the float already.
+#[must_use]
+pub fn narrowed(container: Container, narrowing: Narrowing, spec: Spec) -> Spec {
+    match narrowing.to.format() {
+        Some(format) if spec.is_float() && !carries(container, &spec) => Spec { format, ..spec },
+        _ => spec,
+    }
+}
+
 /// Rewrites stored interleaved bytes into the shape the container wants.
 ///
 /// A verbatim copy for four of the five formats, which is what makes the
@@ -1090,7 +1329,8 @@ impl Flac {
             return Some(
                 "FLAC is an integer codec, and choosing how to dither 32-bit float \
                  down to integers is a decision about headroom that belongs to a \
-                 person.",
+                 person. Make it - Settings > Export, or `--narrow` - and this \
+                 capture exports as FLAC like any other.",
             );
         }
         if spec.channels == 0 || spec.channels > 8 {
@@ -1653,6 +1893,94 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn the_three_narrowing_switches_read_back_what_a_person_would_type() {
+        // Each spelling here is one somebody will actually write: the bare
+        // number, the number with its unit, the gain control's sign.
+        assert_eq!(Width::parse("24"), Some(Width::Bits24));
+        assert_eq!(Width::parse(" 24-bit "), Some(Width::Bits24));
+        assert_eq!(Width::parse("32 bit"), Some(Width::Bits32));
+        assert_eq!(Width::parse("REFUSE"), Some(Width::Refuse));
+        assert_eq!(Width::parse("16"), None, "VCW offers no 16-bit narrowing");
+        assert_eq!(Width::default(), Width::Refuse, "the default must refuse");
+
+        assert_eq!(Dither::parse("TPDF"), Some(Dither::Tpdf));
+        assert_eq!(Dither::parse(" none"), Some(Dither::None));
+        assert_eq!(Dither::parse("triangular"), None);
+
+        assert_eq!(Narrowing::parse_headroom("3"), Some(3.0));
+        assert_eq!(Narrowing::parse_headroom("-3"), Some(3.0));
+        assert_eq!(Narrowing::parse_headroom("-3 dB"), Some(3.0));
+        assert_eq!(Narrowing::parse_headroom("0"), Some(0.0));
+        assert_eq!(Narrowing::parse_headroom(""), None);
+        assert_eq!(Narrowing::parse_headroom("a lot"), None);
+        // The typo this limit exists for: -200 for -20 would export silence.
+        assert_eq!(Narrowing::parse_headroom("-200"), None);
+    }
+
+    #[test]
+    fn headroom_is_the_attenuation_it_says_it_is() {
+        let at = |db: f32| {
+            Narrowing {
+                headroom_db: db,
+                ..Narrowing::default()
+            }
+            .gain()
+        };
+        assert!(
+            (at(0.0) - 1.0).abs() < f64::EPSILON,
+            "no headroom is no gain"
+        );
+        // Both signs mean room, because the field is labelled headroom and not
+        // gain: somebody will write the minus a fader would have.
+        assert!((at(6.0) - at(-6.0)).abs() < 1e-12);
+        // -6 dB is half the amplitude, near enough: exactly half is 6.0206 dB,
+        // and the field takes the number people say rather than that one.
+        assert!((at(6.0) - 0.5).abs() < 0.002, "{}", at(6.0));
+        assert!((at(20.0) - 0.1).abs() < 1e-9, "{}", at(20.0));
+    }
+
+    #[test]
+    fn narrowing_applies_only_where_the_container_needs_it() {
+        let float = Spec {
+            rate: 192_000,
+            channels: 2,
+            format: StorageFormat::Float32,
+            frames: 1_000,
+        };
+        let integer = Spec {
+            format: StorageFormat::Int32,
+            ..float
+        };
+        let to24 = Narrowing {
+            to: Width::Bits24,
+            ..Narrowing::default()
+        };
+        let flac = Container::Flac(Compression::default());
+
+        // The whole point, and the only case that changes anything.
+        assert_eq!(
+            narrowed(flac, to24, float).format,
+            StorageFormat::Int24Packed
+        );
+        // WAV carries the float already, so a narrowing it never needed must
+        // not quietly halve the width of a WAV export. This is the assertion
+        // that makes `narrowed` worth deriving from `carries` rather than
+        // writing as `if container == Flac`.
+        assert_eq!(
+            narrowed(Container::Wav, to24, float).format,
+            StorageFormat::Float32
+        );
+        // An ordinary rip is already integers and has nothing to narrow, which
+        // matters because the setting is sent on every export.
+        assert_eq!(narrowed(flac, to24, integer).format, StorageFormat::Int32);
+        // And the default does nothing at all, to anything.
+        assert_eq!(
+            narrowed(flac, Narrowing::default(), float).format,
+            StorageFormat::Float32
+        );
     }
 
     #[test]

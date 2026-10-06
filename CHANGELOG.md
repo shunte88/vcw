@@ -27,10 +27,18 @@ loud if it cannot.
   out a 192 kHz capture outright. Both ceilings are gone. FLAC carries up to
   32-bit integer at any rate VCW records, and the refusal that used to name a
   rate limit no longer exists.
-* The one capture FLAC still refuses is a **32-bit float** one, and for a reason
-  that has not changed: FLAC is an integer codec, and choosing how to bring float
-  down to integers is a decision about headroom that belongs to a person. Export
-  those as WAV.
+* **A 32-bit float capture can now leave as FLAC too, once you have said how.**
+  FLAC is an integer codec, and choosing how to bring float down to integers is a
+  decision about headroom that belongs to a person - so VCW asks instead of
+  guessing. **Settings > Export** has three switches, and `vcw export` has the
+  same three as `--narrow`, `--dither` and `--headroom`. *Narrow to* is `refuse`
+  until you change it, which is exactly the old behavior; set it to `24` or `32`
+  and a float capture exports as FLAC like any other. *Dither* adds a little
+  under a bit of triangular noise before rounding, on by default, and is the same
+  noise every time so an export stays reproducible. *Headroom* attenuates first,
+  in dB, for a rip recorded hot; anything still over full scale is clamped rather
+  than wrapped. Nothing is narrowed where the container does not need it, so an
+  integer capture, and a float one going out as WAV or Ogg, are untouched.
 * Worth knowing when you pick a width: **FLAC has no mid/side at 32 bits.** The
   difference channel needs one bit more than the samples and the format stops at
   32, so a 32-bit stereo file cannot use one channel to predict the other, and

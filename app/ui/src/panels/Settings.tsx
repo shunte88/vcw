@@ -591,6 +591,74 @@ export function Settings({
               <option value="both">Both</option>
             </select>
           </label>
+          {/*
+            Three controls and not one, because narrowing a float master is
+            three decisions: how many bits, what noise, and how much room to
+            leave. The first of them defaults to "refuse", so an installation
+            nobody configures behaves as VCW always has - a float capture asked
+            for as FLAC is refused with a reason, rather than quietly rounded by
+            an exporter guessing at somebody's headroom.
+
+            Always visible rather than shown only while the default format is
+            FLAC: the default format is a default, and the Export panel can be
+            pointed at FLAC on the day without coming back through here. The
+            other two are disabled while the first says refuse, which is the
+            honest way to say they are read but not yet.
+          */}
+          <h3>32-bit float captures</h3>
+          <p className="hint near">
+            FLAC is an integer codec, so a <code>f32</code> capture has no FLAC
+            path until somebody decides how to bring it down to whole numbers.
+            VCW will not decide that for you, because the answer changes the
+            recording and cannot be undone from the file afterwards. Nothing
+            here touches the capture: it is read as it was recorded every time.
+          </p>
+          <label>
+            Narrow to
+            <select
+              value={draft.export.narrowing}
+              onChange={(event) => exporting({ narrowing: event.target.value })}
+            >
+              <option value="refuse">Refuse (export as WAV instead)</option>
+              <option value="24">24-bit integer</option>
+              <option value="32">32-bit integer</option>
+            </select>
+          </label>
+          <label>
+            Dither
+            <select
+              value={draft.export.dither}
+              disabled={draft.export.narrowing === "refuse"}
+              onChange={(event) => exporting({ dither: event.target.value })}
+            >
+              <option value="tpdf">Triangular</option>
+              <option value="none">None (round only)</option>
+            </select>
+          </label>
+          <label>
+            Headroom (dB)
+            <input
+              value={draft.export.headroom}
+              disabled={draft.export.narrowing === "refuse"}
+              onChange={(event) => exporting({ headroom: event.target.value })}
+            />
+          </label>
+          <p className="hint near">
+            24-bit is the archival answer: an <code>f32</code> sample carries a
+            24-bit significand, so that is the width at which a sample at full
+            scale arrives intact, and it is also the width at which FLAC can
+            still code one channel against the other. 32-bit adds no resolution
+            to any single sample and does keep the float's scale, which matters
+            on a capture with very quiet passages.
+          </p>
+          <p className="hint near">
+            Triangular dither trades about 5 dB of noise floor - at 24 bits,
+            some 120 dB below full scale and well under the surface noise of any
+            record - for a rounding error that is noise rather than distortion.
+            Headroom is attenuation applied before rounding: nothing clips in
+            floating point, so a capture peaking above 0 dBFS is rounded to the
+            ceiling unless you leave it room.
+          </p>
         </fieldset>
         )}
 

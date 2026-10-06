@@ -613,6 +613,15 @@ fieldset table {
   flex-basis: 100%;
 }
 
+/* A sub-heading *inside* a group, for a set of fields that belong together but
+   do not deserve a group of their own. Full width so the fields below it start
+   a new row - without this it is a flex item the width of its text and the
+   first control wraps up beside it, which reads as a label. The default
+   `order: 0` is what keeps it where it was written, unlike `fieldset .hint`. */
+fieldset h3 {
+  flex: 0 0 100%;
+}
+
 /* --- Settings, as a property tree ---------------------------------------- */
 
 /*

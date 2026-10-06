@@ -629,7 +629,24 @@ artwork: string | null,
 /**
  * Whether to replace files that are already there.
  */
-overwrite: boolean, };
+overwrite: boolean,
+/**
+ * `refuse`, `24` or `32`, or `null` for `refuse`.
+ *
+ * What a `Float32` capture is rounded to for a container that carries only
+ * integers. Ignored by a capture that is already integers, and by WAV,
+ * which takes the float as it stands.
+ */
+narrowing: string | null,
+/**
+ * `tpdf` or `none`, or `null` for `tpdf`. Only read when narrowing.
+ */
+dither: string | null,
+/**
+ * Decibels of room above full scale, or `null` for none. Only read when
+ * narrowing.
+ */
+headroom: string | null, };
 
 export type NewProject = {
 /**
@@ -1607,7 +1624,33 @@ template: string,
 /**
  * `none`, `embed`, `folder` or `both`.
  */
-artwork: string, };
+artwork: string,
+/**
+ * What a `Float32` capture is rounded to for a container that carries only
+ * integers: `refuse`, `24` or `32`.
+ *
+ * Three settings and not one, because narrowing a float master is three
+ * decisions and the default is to take none of them: `refuse` is what VCW
+ * did before these fields existed, and a FLAC export of a float capture is
+ * refused with a reason until somebody changes this.
+ */
+narrowing: string,
+/**
+ * The noise added before rounding: `tpdf` or `none`.
+ *
+ * Has no effect at all while `narrowing` is `refuse`, and is kept across a
+ * change of it for `quality`'s reason.
+ */
+dither: string,
+/**
+ * Decibels of room left above full scale before rounding, as a number.
+ *
+ * A string like the three settings above it rather than a number, so that
+ * a half-typed `-` in a settings panel is a value this struct can hold and
+ * a refusal names the field instead of the panel silently keeping the old
+ * one. Parsed by [`vcw_export::encoder::Narrowing::parse_headroom`].
+ */
+headroom: string, };
 
 export type Credential = {
 /**

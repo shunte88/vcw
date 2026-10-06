@@ -2544,6 +2544,10 @@ bit-exactness above untestable.
 
 ### The FLAC encoder had to be written streaming, and the header patched at the end
 
+*This records WP-14's `flacenc` writer. `flac-codec` replaced it on 2026-10-06 and
+streams natively, so the hand-patched `STREAMINFO` is gone; the three findings below are
+why the replacement was checked against the same readers.*
+
 `flacenc::encode_with_fixed_block_size` builds the whole stream in RAM, which is fine for
 a track and not fine for a 2.33 GiB side. `Flac` uses the per-frame
 `encode_fixed_size_frame` instead and patches `STREAMINFO` in `finish`, which is what the
@@ -2575,23 +2579,29 @@ module docs, because the corpus is still true: readers tolerate the other shape.
   stereo is 1.4 GiB, so this is reachable by a long unsplit side rather than by a track.
   Refused before the file is created, with FLAC named as the answer.
 - **FLAC is an integer codec.** A float capture is legitimate - §8 allows it and Audacity
-  produces it - and choosing how to dither it is a decision about headroom that belongs to
-  a person. Refused, with WAV named.
-- **`flacenc` 0.5.1 stops at 24 bits and 96 kHz.** Both are the library's limits and
-  neither is the format's: FLAC allows 32 bits and 655350 Hz. §8 requires 192 kHz and §33
-  requires FLAC, so **this is a real gap in the requirement and not a theoretical one**,
-  and `the_flac_library_really_does_stop_where_we_say_it_does` fails the day either cap is
-  lifted so the refusal can be deleted.
+  produces it - and choosing how to bring it down to integers is a decision about headroom
+  that belongs to a person. Refused by default, with WAV named *and* the setting that
+  changes the answer named beside it.
 
-The 24-bit cap has teeth, because `vcw session` takes the widest integer format a device
-offers and that is S32 on this machine: **a default capture cannot be exported as FLAC.**
-Narrowing it silently was considered and rejected on measurement - a real 32-bit rip from
-`/data2/source_rips` uses the whole low byte (`OR` of every low byte is `0xff`, max
-absolute value 2,092,715,264), so dropping eight bits is not lossless and is not the
-exporter's decision. `vcw session --format s24` produces a project FLAC will take, WAV
-takes any of them, and the remedies for the general case are a 32-bit-capable encoder
-(libFLAC 1.4+ through bindings, at the cost of D5's pure-Rust choice) or an explicit,
-operator-chosen dither. Both are bigger than WP-14.
+**The two library caps are gone, and the float refusal is now a question rather than a
+wall.** `flacenc` 0.5.1 stopped at 24 bits and 96 kHz, which were the library's limits and
+neither the format's, and because a device negotiation takes the widest integer format on
+offer that meant the ordinary S32 rip had no FLAC path at all. `flac-codec` replaced it on
+2026-10-06: FLAC now carries up to 32-bit integer at any rate VCW records, and the rate
+refusal no longer exists. Narrowing a float capture *silently* was considered and rejected
+on measurement - a real 32-bit rip from `/data2/source_rips` uses the whole low byte (`OR`
+of every low byte is `0xff`, max absolute value 2,092,715,264), so dropping eight bits is
+not lossless and is not the exporter's decision - but the operator-chosen version of it
+shipped with 0.1.2-alpha: three switches in `Settings > Export` and on `vcw export`,
+`--narrow` (`refuse`, `24`, `32`), `--dither` (`tpdf`, `none`) and `--headroom` (dB).
+`refuse` is the default, so an install nobody has configured behaves exactly as before.
+24 bits is the width worth having: a float significand is 24 bits, so a full-scale sample
+survives intact, and a 32-bit FLAC stream has no mid/side at all because the difference
+channel needs one bit more than the samples. The dither generator is a xorshift64 seeded
+per file from a constant, so §33's reproducibility claim survives it; anything still over
+full scale after the headroom is clamped, not wrapped. `narrowed()` is keyed on
+`carries()` rather than on FLAC, so the day a container learns floats it stops narrowing
+with no edit.
 
 ### lofty 0.25 removed the freeform key, so the tags go in twice
 

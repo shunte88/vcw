@@ -83,6 +83,14 @@ export function Export({
     sides: [...sides],
     artwork,
     overwrite,
+    // Straight from the settings, with no control on this panel. Narrowing a
+    // float master is a decision about the whole archive and not about one
+    // export, and it only applies to a capture most people will never make -
+    // so it lives in Settings > Export beside its two explanations, and this
+    // panel passes on whatever was decided there.
+    narrowing: settings?.export.narrowing ?? null,
+    dither: settings?.export.dither ?? null,
+    headroom: settings?.export.headroom ?? null,
   });
 
   // Canceling returns null and a canceled picker must not clear the field: a

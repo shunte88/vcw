@@ -94,6 +94,35 @@ fn ended(state: CaptureState, why: &str) {
     );
 }
 
+/// The committed frame count once a pause has finished flushing.
+///
+/// Pausing flushes the part-filled block, so frames keep landing *after* the
+/// phase event. That audio belongs to the recording - it was captured before
+/// the pause - so the baseline has to be taken once the flush has settled, and
+/// "settled" is two polls in a row that agree rather than a sleep long enough
+/// to look safe. The sleep was 200 ms against a 250 ms commit interval, which
+/// is to say it was shorter than the thing it was waiting for and passed only
+/// because Linux flushes promptly. A Windows runner read 24000 frames here and
+/// 34080 half a second later, and reported the engine as having recorded while
+/// paused when all it had done was finish writing what it already had.
+fn settled(engine: &Engine, events: &Events, seen: &mut Vec<Event>) -> u64 {
+    // Four seconds of patience, in the same spirit as `wait_for`'s thirty: long
+    // enough that a loaded runner is never the reason, short enough that a
+    // transport which really does keep recording still fails rather than hangs.
+    let mut last = None;
+    for _ in 0..40 {
+        std::thread::sleep(Duration::from_millis(100));
+        engine.send(Command::Poll).expect("poll");
+        let (phase, frames) = next_status(events, seen);
+        assert_eq!(phase, Phase::Paused, "the pause did not hold: {seen:?}");
+        if last == Some(frames) {
+            return frames;
+        }
+        last = Some(frames);
+    }
+    panic!("the commit never settled after a pause: {seen:?}");
+}
+
 /// Waits for the transport to reach a phase, or gives up and says what it saw.
 ///
 /// Polling the event stream rather than sleeping a guessed interval: the engine
@@ -159,13 +188,7 @@ fn a_whole_session_runs_from_commands_and_reports_through_events() {
 
     engine.send(Command::Pause).expect("pause");
     wait_for(&events, Phase::Paused, &mut seen);
-    // Pausing flushes the part-filled block, so a few thousand frames land
-    // *after* the phase event. That audio belongs to the recording - it was
-    // captured before the pause - so the baseline is taken once the flush has
-    // settled rather than the instant the phase changed.
-    std::thread::sleep(Duration::from_millis(200));
-    engine.send(Command::Poll).expect("poll");
-    let (_, at_pause) = next_status(&events, &mut seen);
+    let at_pause = settled(&engine, &events, &mut seen);
     assert!(at_pause > 0, "nothing was recorded before the pause");
 
     // The pause is the interesting part: audio keeps arriving from the device

@@ -211,9 +211,10 @@ Two things to expect. The audio is **re-blocked** rather than adopted, so an
 import writes a new file of comparable size and takes a couple of minutes for a
 full side. And Audacity records at 32-bit float by default, which FLAC cannot
 carry - FLAC is an integer codec - so a float project leaves as **WAV** if you
-want it lossless, or as **Ogg Vorbis** if you want it small. `vcw export
---format flac` refuses before it writes anything rather than producing half a
-library.
+want it lossless, or as **Ogg Vorbis** if you want it small. For FLAC, tell VCW
+which integer width you want it narrowed to; see [Narrowing a float
+capture](#narrowing-a-float-capture). Until you do, `vcw export --format flac`
+refuses before it writes anything rather than producing half a library.
 
 ## Finding the tracks
 
@@ -377,12 +378,14 @@ side B's is `B1 - ...`. Five things worth knowing:
   touched. What can still leave files behind is a run that fails part way - a
   full disk, a disappearing drive - and there the files already written are
   real files and are left alone.
-* **A float capture cannot leave as FLAC.** FLAC is an integer codec, and
-  where 32 bits of float should land as integers is a decision about headroom,
-  so `--format flac` refuses it by name rather than quietly dithering. WAV takes
-  it losslessly and Ogg Vorbis takes it lossily; MP3 does not take it at all
-  above 48 kHz. Capture at `--format s32` - the default - if FLAC is where the
-  rip is going to live.
+* **A float capture leaves as FLAC only once you have chosen a width.** FLAC
+  is an integer codec, and where 32 bits of float should land as integers is a
+  decision about headroom, so `--format flac` refuses it by name rather than
+  quietly dithering. Choose the width and it stops refusing: see [Narrowing a
+  float capture](#narrowing-a-float-capture). WAV takes float losslessly as it
+  stands and Ogg Vorbis takes it lossily; MP3 does not take it at all above 48
+  kHz. Capture at `--format s32` - the default - if you would rather not decide
+  at all.
 * **A 32-bit capture at 192 kHz leaves as FLAC, and that is new.** Until
   2026-10-06 the encoder stopped at 24 bits and 96 kHz, which are a library's
   limits and not the format's, and since a device negotiation takes the widest
@@ -416,6 +419,55 @@ every rate VCW records, as Ogg Vorbis, or as WAV.
 
 The lossy formats are for the copy you carry around. Keep the lossless one.
 
+### Narrowing a float capture
+
+An imported Audacity project is usually 32-bit **float**, and the three lossless
+and lossy codecs do not agree about it: WAV stores float as it stands, Ogg
+Vorbis is float all the way down, and FLAC is an integer codec that has no
+representation for it at all. Bringing float down to integers is lossy in a way
+that depends on what you want, so VCW refuses by default and asks instead. Three
+switches, three separate questions:
+
+| Switch | Settings | Answers |
+| --- | --- | --- |
+| `--narrow` | **Narrow to** | `refuse` (the default), `24` or `32` |
+| `--dither` | **Dither** | `tpdf` (the default) or `none` |
+| `--headroom` | **Headroom (dB)** | `0` (the default) up to `60` |
+
+**Narrow to** is the one that matters. `refuse` is where you start: nothing is
+narrowed, and a float capture exported as FLAC is refused by name exactly as
+before. `24` is the width to pick. A float sample has a 24-bit significand, so
+24 bits is where a full-scale sample survives the trip intact, and it is also
+the widest FLAC stream that can still use one channel to predict the other - a
+32-bit stream has no mid/side at all, because the difference needs one bit more
+than the samples and the format stops at 32. Pick `32` only if something
+downstream insists on it.
+
+**Dither** adds a little under one bit of noise before rounding, which trades a
+~4.8 dB higher noise floor for rounding error that is no longer correlated with
+the music - the difference between a quiet passage that hisses and one that
+grinds. Leave it on. It is the same noise every time: the generator is seeded
+per file from a constant, so exporting the same capture twice gives the same
+bytes twice, which is what makes an export reproducible.
+
+**Headroom** attenuates before rounding, in dB. A float capture can sit above
+full scale without clipping, which an integer file cannot; if a rip was recorded
+hot, `3` or `6` gets it off the ceiling instead of flattening the peaks against
+it. Anything above full scale after the attenuation is clamped, not wrapped. `0`
+leaves the level alone.
+
+```text
+vcw export side-a.vcw --into ~/Music --format flac --narrow 24 --headroom 3
+```
+
+Narrowing applies only where the container needs it. An integer capture is never
+touched, and nor is a float one going out as WAV or Ogg - so you can set the
+width once and leave it set. `--dry-run` says whether it will be used:
+
+```text
+samples    32-bit float rounded to 24-bit integer, triangular dither, 3 dB of headroom (the capture is unchanged)
+```
+
 ### In the window
 
 `Ctrl+5` is the export panel, and it is the same two steps. **Browse...** opens
@@ -429,7 +481,9 @@ Wrote 3 files, 1 cover image, 273.6 MiB.
 ```
 
 The format and quality selects are beside the directory, and the quality one
-appears only when the format is MP3 or Ogg Vorbis. Changing any of them drops
+appears only when the format is MP3 or Ogg Vorbis. The three narrowing switches
+live in **Settings > Export** rather than here, because they are a property of
+your library and not of one export. Changing any of them drops
 the plan, because a plan resolved against the old settings describes files
 nobody asked for - down to the file extension.
 

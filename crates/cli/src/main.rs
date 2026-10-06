@@ -514,6 +514,17 @@ enum Command {
         /// What to do with the front cover: none, embed, folder or both.
         #[arg(long, default_value = "both")]
         artwork: String,
+        /// What a 32-bit float capture is rounded to for a container that
+        /// carries only integers: refuse, 24 or 32.
+        #[arg(long, default_value = "refuse")]
+        narrow: String,
+        /// Noise added before rounding a float capture: tpdf or none.
+        #[arg(long, default_value = "tpdf")]
+        dither: String,
+        /// Decibels of room left above full scale when rounding a float
+        /// capture.
+        #[arg(long, default_value = "0")]
+        headroom: String,
         /// Replace files that are already there.
         #[arg(long)]
         overwrite: bool,
@@ -1164,6 +1175,9 @@ fn run() -> anyhow::Result<()> {
             template,
             sides,
             artwork,
+            narrow,
+            dither,
+            headroom,
             overwrite,
             dry_run,
             json,
@@ -1176,6 +1190,9 @@ fn run() -> anyhow::Result<()> {
             template,
             sides,
             artwork,
+            narrow,
+            dither,
+            headroom,
             overwrite,
             dry_run,
             json,

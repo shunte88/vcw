@@ -466,6 +466,96 @@ fn what_flac_cannot_carry_is_refused_with_the_reason() {
     // names only one of them sends a person who wanted a small file to WAV.
     assert!(said.contains("as WAV"), "{said}");
     assert!(said.contains("Ogg Vorbis"), "{said}");
+    // And the way out that is not another container. The refusal is what a
+    // person meets before they ever find the setting, so it has to be the thing
+    // that tells them the setting exists.
+    assert!(said.contains("--narrow"), "{said}");
+}
+
+/// The same capture, once somebody has answered the question the refusal asks.
+#[test]
+fn a_float_capture_exports_as_flac_once_a_width_is_chosen() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "f32", 1.0);
+    let into = dir.path().join("out");
+    let printed = vcw(&[
+        "export",
+        &project.display().to_string(),
+        "--into",
+        &into.display().to_string(),
+        "--format",
+        "flac",
+        "--narrow",
+        "24",
+        "--headroom",
+        "3",
+        "--json",
+    ]);
+    let report: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(report["report"]["files"], 2, "{printed}");
+    // The plan reports what will happen rather than what was asked for, so a
+    // script can tell a narrowed export from one that ignored the flag.
+    assert_eq!(report["narrowed_to"], "24", "{printed}");
+    assert_eq!(report["dither"], "tpdf", "{printed}");
+    assert_eq!(report["headroom_db"], 3.0, "{printed}");
+
+    for item in report["items"].as_array().expect("items") {
+        let path = Path::new(item["path"].as_str().expect("a path"));
+        let bytes = std::fs::read(path).expect("a written file");
+        assert_eq!(
+            &bytes[0..4],
+            b"fLaC",
+            "{} is not a FLAC file",
+            path.display()
+        );
+        let packed = u64::from_be_bytes(bytes[8 + 10..8 + 18].try_into().expect("eight bytes"));
+        let bits = ((packed >> 36) & 0x1F) + 1;
+        assert_eq!(bits, 24, "{} came out at {bits} bits", path.display());
+    }
+}
+
+/// An integer capture is not narrowed, whatever the flag says.
+///
+/// The flag is sent on every invocation - it has a default - so "ignored unless
+/// it applies" is the property that keeps `--narrow 24` from quietly halving
+/// the width of every ordinary rip.
+#[test]
+fn narrowing_leaves_an_integer_capture_alone() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "s32", 1.0);
+    let into = dir.path().join("out");
+    let printed = vcw(&[
+        "export",
+        &project.display().to_string(),
+        "--into",
+        &into.display().to_string(),
+        "--format",
+        "flac",
+        "--narrow",
+        "24",
+        "--dry-run",
+        "--json",
+    ]);
+    let report: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert!(report["narrowed_to"].is_null(), "{printed}");
+}
+
+/// A width VCW does not have is refused by name, before anything is opened.
+#[test]
+fn a_narrowing_nobody_offers_is_refused_by_name() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "f32", 0.5);
+    let said = refused(&[
+        "export",
+        &project.display().to_string(),
+        "--into",
+        &dir.path().join("out").display().to_string(),
+        "--format",
+        "flac",
+        "--narrow",
+        "16",
+    ]);
+    assert!(said.contains("refuse, 24 or 32"), "{said}");
 }
 
 /// The capture every rig makes, exported to the format §33 asks for.

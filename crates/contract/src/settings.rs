@@ -251,6 +251,26 @@ pub struct Export {
     pub template: String,
     /// `none`, `embed`, `folder` or `both`.
     pub artwork: String,
+    /// What a `Float32` capture is rounded to for a container that carries only
+    /// integers: `refuse`, `24` or `32`.
+    ///
+    /// Three settings and not one, because narrowing a float master is three
+    /// decisions and the default is to take none of them: `refuse` is what VCW
+    /// did before these fields existed, and a FLAC export of a float capture is
+    /// refused with a reason until somebody changes this.
+    pub narrowing: String,
+    /// The noise added before rounding: `tpdf` or `none`.
+    ///
+    /// Has no effect at all while `narrowing` is `refuse`, and is kept across a
+    /// change of it for `quality`'s reason.
+    pub dither: String,
+    /// Decibels of room left above full scale before rounding, as a number.
+    ///
+    /// A string like the three settings above it rather than a number, so that
+    /// a half-typed `-` in a settings panel is a value this struct can hold and
+    /// a refusal names the field instead of the panel silently keeping the old
+    /// one. Parsed by [`vcw_export::encoder::Narrowing::parse_headroom`].
+    pub headroom: String,
 }
 
 /// Whether a credential is configured, and nothing about what it is.
@@ -405,6 +425,17 @@ impl Default for Export {
             output: None,
             template: vcw_export::naming::DEFAULT_TEMPLATE.to_owned(),
             artwork: "both".to_owned(),
+            // The three float-narrowing answers, and the first of them is "do
+            // not". A default that narrowed would be VCW choosing a bit depth
+            // and a dither for somebody's master on their behalf, which is the
+            // decision §33 says is theirs; a default that refuses is VCW saying
+            // so out loud and leaving the controls where they can find them.
+            narrowing: vcw_export::encoder::Width::default().name().to_owned(),
+            // What the other two are *when* somebody turns narrowing on: a
+            // triangular dither and no attenuation. Kept while narrowing is off
+            // so that turning it on does not also present two empty fields.
+            dither: vcw_export::encoder::Dither::default().name().to_owned(),
+            headroom: "0".to_owned(),
         }
     }
 }

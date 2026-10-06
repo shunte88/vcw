@@ -46,7 +46,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use vcw_export::encoder::{Compression, Container, Quality};
+use vcw_export::encoder::{Compression, Container, Dither, Narrowing, Quality, Width};
 use vcw_export::splitter::{self, Artwork, Plan, Progress, Report, Request};
 use vcw_project::Project;
 use vcw_types::vinyl::Side;
@@ -69,6 +69,12 @@ pub(crate) struct Args {
     pub(crate) sides: Vec<char>,
     /// What to do with the release's front cover.
     pub(crate) artwork: String,
+    /// What a float capture is rounded to: `refuse`, `24` or `32`.
+    pub(crate) narrow: String,
+    /// The noise added before rounding: `tpdf` or `none`.
+    pub(crate) dither: String,
+    /// Decibels of room left above full scale before rounding.
+    pub(crate) headroom: String,
     /// Whether files already there may be replaced.
     pub(crate) overwrite: bool,
     /// Resolve and print the plan, and write nothing.
@@ -97,6 +103,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
             .collect::<Result<_>>()?,
         artwork: artwork(&args.artwork)?,
         overwrite: args.overwrite,
+        narrowing: narrowing(&args.narrow, &args.dither, &args.headroom)?,
     };
 
     // Read-only, because §33 says an export reads immutable blocks and edit
@@ -184,6 +191,27 @@ fn print_plan(plan: &Plan, request: &Request) {
              the capture is unchanged)"
         );
     }
+    // The second line of the same kind, and for the same reason: a file rounded
+    // from float to fixed point is not the project's samples any more, and
+    // afterwards there is nothing in the file to say so. Printed only when a
+    // file really will be rounded - `Plan::narrowed_to` is the difference
+    // between what was asked for and what will happen.
+    if plan.narrowed_to.is_some() {
+        println!(
+            "  samples    32-bit float rounded to {}-bit integer{}{} (the capture is \
+             unchanged)",
+            request.narrowing.to,
+            match request.narrowing.dither {
+                Dither::None => ", no dither",
+                Dither::Tpdf => ", triangular dither",
+            },
+            if request.narrowing.headroom_db == 0.0 {
+                String::new()
+            } else {
+                format!(", {} dB of headroom", request.narrowing.headroom_db)
+            }
+        );
+    }
     println!(
         "  artwork    {}",
         match (&plan.cover, request.artwork) {
@@ -250,6 +278,14 @@ fn plan_json(plan: &Plan, report: Option<&Report>) -> serde_json::Value {
         "compression": plan.container.compression().map(|level| level.level()),
         "lossless": !plan.container.is_lossy(),
         "fold_to_mono": plan.fold_to_mono,
+        // What will happen, not what was asked for: `null` whenever no file is
+        // rounded, which is every export of an integer capture whatever
+        // `--narrow` said. The three knobs are reported beside it so a script
+        // can record how a float master was brought down, which is the one
+        // thing about an exported file that cannot be recovered from it.
+        "narrowed_to": plan.narrowed_to.map(|_| plan.narrowing.to.name()),
+        "dither": plan.narrowed_to.map(|_| plan.narrowing.dither.name()),
+        "headroom_db": plan.narrowed_to.map(|_| plan.narrowing.headroom_db),
         "frames": plan.frames(),
         "covers": plan.covers.iter().map(|path| path.display().to_string()).collect::<Vec<_>>(),
         "items": plan.items.iter().map(|item| serde_json::json!({
@@ -298,6 +334,27 @@ fn container(given: &str, quality: &str, compression: &str) -> Result<Container>
     Ok(container
         .with_quality(quality)
         .with_compression(compression))
+}
+
+/// The three float-narrowing answers from what was typed.
+///
+/// Parsed even when the format is WAV and even when the capture is already
+/// integers, for `container`'s reason: the defaults put all three on every
+/// invocation, and a flag that is only checked when it applies is a flag whose
+/// typos are discovered by the one person whose capture it applies to.
+fn narrowing(width: &str, dither: &str, headroom: &str) -> Result<Narrowing> {
+    Ok(Narrowing {
+        to: Width::parse(width)
+            .ok_or_else(|| anyhow::anyhow!("{width:?} is not a narrowing - refuse, 24 or 32"))?,
+        dither: Dither::parse(dither)
+            .ok_or_else(|| anyhow::anyhow!("{dither:?} is not a dither - tpdf or none"))?,
+        headroom_db: Narrowing::parse_headroom(headroom).ok_or_else(|| {
+            anyhow::anyhow!(
+                "{headroom:?} is not a headroom - a number of decibels from 0 to {}",
+                Narrowing::MAX_HEADROOM_DB
+            )
+        })?,
+    })
 }
 
 /// An artwork policy from what was typed.

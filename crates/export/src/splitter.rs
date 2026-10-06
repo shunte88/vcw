@@ -77,7 +77,7 @@ use vcw_project::{Connection, pcm, release, side, track};
 use vcw_types::vinyl::{Numbering, Side};
 use vcw_types::{Span, StorageFormat};
 
-use crate::encoder::{Container, Spec, Writer};
+use crate::encoder::{Container, Dither, Narrowing, Spec, Writer, narrowed};
 use crate::error::{Error, Result};
 use crate::naming::{self, Values};
 use crate::tagging::{self, Cover, Tags};
@@ -129,6 +129,12 @@ pub struct Request {
     pub artwork: Artwork,
     /// Whether a file already there may be replaced.
     pub overwrite: bool,
+    /// What a `Float32` capture becomes for a container that cannot take one.
+    ///
+    /// Defaults to [`crate::encoder::Width::Refuse`], which is the behavior VCW
+    /// had before this field existed: a float capture and a FLAC request is a
+    /// refusal naming the containers that would have taken it.
+    pub narrowing: Narrowing,
 }
 
 impl Request {
@@ -142,6 +148,7 @@ impl Request {
             sides: Vec::new(),
             artwork: Artwork::default(),
             overwrite: false,
+            narrowing: Narrowing::default(),
         }
     }
 
@@ -179,7 +186,10 @@ impl Item {
 }
 
 /// Everything an export will do, before it does any of it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `PartialEq` and not `Eq`, since [`Narrowing::headroom_db`] is a float. Two
+/// plans comparing equal is a test's question, and no map is keyed on one.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Plan {
     /// The files, in side and track order.
     pub items: Vec<Item>,
@@ -195,6 +205,18 @@ pub struct Plan {
     pub fold_to_mono: bool,
     /// The cover, where there is one and it is wanted.
     pub cover: Option<Cover>,
+    /// The narrowing the request asked for, carried so that [`run`] writes the
+    /// files [`plan`] vetted and not whatever the default was.
+    pub narrowing: Narrowing,
+    /// The format float samples will actually land in, where any will.
+    ///
+    /// Not the same question as [`narrowing`](Self::narrowing), which is what
+    /// was *asked* for: a request may ask for 24 bits and change nothing,
+    /// because the capture is already integers or because the container takes
+    /// the float as it is. A dry run has to be able to tell those apart - a
+    /// line predicting a narrowing that will not happen is worse than no line -
+    /// so this is set only when a file really will be rounded.
+    pub narrowed_to: Option<StorageFormat>,
 }
 
 impl Plan {
@@ -270,6 +292,7 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
     // Path to the first track that claimed it, so a collision can name both.
     let mut claimed: HashMap<PathBuf, String> = HashMap::new();
     let mut covers: Vec<PathBuf> = Vec::new();
+    let mut narrowed_to = None;
     let mut captures: HashMap<i64, Option<i64>> = HashMap::new();
 
     for (side, record) in listing {
@@ -326,15 +349,22 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         // that resolves is a plan that can be written: a dry run that printed
         // `3 file(s) in FLAC` for a float32 capture and then died on file one
         // was a plan nobody could trust.
-        Writer::vet(
-            request.container,
-            &Spec {
-                rate: layout.rate.hz(),
-                channels: if release.is_mono { 1 } else { layout.channels },
-                format: layout.format,
-                frames: span.frames(),
-            },
-        )?;
+        //
+        // Vetted *after* any narrowing, because narrowing is what decides
+        // whether a float capture has a FLAC path at all: `narrowed` is a no-op
+        // unless the container refuses the capture as it stands, so a request
+        // that asked for nothing is vetted exactly as it always was.
+        let stored = Spec {
+            rate: layout.rate.hz(),
+            channels: if release.is_mono { 1 } else { layout.channels },
+            format: layout.format,
+            frames: span.frames(),
+        };
+        let out = narrowed(request.container, request.narrowing, stored);
+        if out.format != stored.format {
+            narrowed_to = Some(out.format);
+        }
+        Writer::vet(request.container, &out)?;
 
         if let (Some(cover), Some(directory)) = (cover.as_ref(), path.parent())
             && request.artwork.beside()
@@ -368,6 +398,8 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         container: request.container,
         fold_to_mono: release.is_mono,
         cover,
+        narrowing: request.narrowing,
+        narrowed_to,
     })
 }
 
@@ -393,6 +425,7 @@ pub fn run(conn: &Connection, plan: &Plan, on: &mut dyn FnMut(Progress<'_>)) -> 
             item,
             plan.container,
             plan.fold_to_mono,
+            plan.narrowing,
             &mut |frames| {
                 on(Progress {
                     item,
@@ -467,6 +500,7 @@ fn cut(
     item: &Item,
     container: Container,
     fold_to_mono: bool,
+    narrowing: Narrowing,
     on: &mut dyn FnMut(u64),
 ) -> Result<u64> {
     let mut reader = pcm::Reader::open(conn, item.capture_id, item.span)?;
@@ -475,32 +509,104 @@ fn cut(
     // One channel out whatever went in, and the same frame count: a fold
     // changes the width of a frame and not how many there are.
     let folding = fold_to_mono && layout.channels > 1;
-    let spec = Spec {
+    let stored = Spec {
         rate: layout.rate.hz(),
         channels: if folding { 1 } else { layout.channels },
         format: layout.format,
         frames: reader.span().frames(),
     };
+    // The same question `plan` asked, asked again from the same layout: a file
+    // written here is the file that was vetted there.
+    let spec = narrowed(container, narrowing, stored);
+    let narrowing = (spec.format != stored.format).then_some(narrowing);
 
     let mut writer = Writer::create(&item.path, container, spec)?;
     let mut buffer = vec![0u8; (CHUNK_BYTES / frame_bytes).max(1) * frame_bytes];
     let mut folded = Vec::new();
+    let mut rounded = Vec::new();
+    // Per file and from a constant, which is what keeps a dithered export
+    // reproducible - see `Narrowing`. A counter would do; a xorshift state has
+    // to be odd and non-zero, and this one is the 64-bit constant the algorithm
+    // is usually published with.
+    let mut noise = 0x2545_F491_4F6C_DD1Du64;
     let mut frames = 0u64;
     loop {
         let read = reader.fill(&mut buffer)?;
         if read == 0 {
             break;
         }
+        let mut chunk: &[u8] = &buffer[..read];
         if folding {
-            let wrote = fold(layout.format, layout.channels, &buffer[..read], &mut folded);
-            writer.write(&folded[..wrote])?;
-        } else {
-            writer.write(&buffer[..read])?;
+            fold(layout.format, layout.channels, chunk, &mut folded);
+            chunk = &folded;
         }
+        if let Some(narrowing) = narrowing {
+            narrow(spec.format, narrowing, chunk, &mut rounded, &mut noise);
+            chunk = &rounded;
+        }
+        writer.write(chunk)?;
         frames += (read / frame_bytes) as u64;
         on(frames);
     }
     writer.finish()
+}
+
+/// Rounds `Float32` samples to integers at the width the request asked for.
+///
+/// The arithmetic is in `f64` throughout rather than in the `f32` it came from,
+/// because a 32-bit target multiplies by 2^31 and an `f32` cannot hold the
+/// result to the nearest integer - rounding in `f32` would quantize twice and
+/// lose the bottom bits of every sample on the way to a wider container than
+/// the one it started in.
+///
+/// Clamping is not optional and is not a setting. Nothing clips in floating
+/// point, so a float capture may hold samples past +/-1.0 and a cast that
+/// wrapped them would turn a loud passage into a full-scale inversion.
+/// [`Narrowing::headroom_db`] is the knob for avoiding the clamp; this is what
+/// happens when nobody turned it.
+fn narrow(
+    to: StorageFormat,
+    narrowing: Narrowing,
+    src: &[u8],
+    dst: &mut Vec<u8>,
+    noise: &mut u64,
+) -> usize {
+    let full = narrowing.to.full_scale().unwrap_or(1 << 31);
+    let scale = narrowing.gain() * full as f64;
+    let (ceiling, floor) = (full - 1, -full);
+    dst.clear();
+    let (samples, _) = src.as_chunks::<4>();
+    for bytes in samples {
+        let mut value = f64::from(f32::from_le_bytes(*bytes)) * scale;
+        if narrowing.dither == Dither::Tpdf {
+            value += tpdf(noise);
+        }
+        // `as i64` saturates on an out-of-range float and maps NaN to 0, so the
+        // clamp is about the signal and not about the cast.
+        store(to, (value.round() as i64).clamp(floor, ceiling), dst);
+    }
+    dst.len()
+}
+
+/// One triangular dither sample, in the +/-1 LSB the name promises.
+///
+/// Two independent uniforms over +/-1/2 LSB, summed. That is the whole of TPDF:
+/// the sum of two rectangular distributions is a triangular one, and a
+/// triangular dither of exactly this width is what makes the quantization error
+/// independent of the signal instead of a function of it.
+///
+/// xorshift64 and not a dependency: the requirement on this generator is that
+/// it be white enough to dither with and the same every run, and sixty years of
+/// audio were dithered with less.
+fn tpdf(state: &mut u64) -> f64 {
+    let mut next = || {
+        *state ^= *state << 13;
+        *state ^= *state >> 7;
+        *state ^= *state << 17;
+        // 53 bits, which is every bit an f64 mantissa holds, mapped to -1/2..1/2.
+        (*state >> 11) as f64 / (1u64 << 53) as f64 - 0.5
+    };
+    next() + next()
 }
 
 /// What a track is called, in the three forms an export needs.
@@ -765,6 +871,7 @@ fn store(format: StorageFormat, value: i64, dst: &mut Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encoder::Width;
 
     /// One frame, as stored, for a format and a list of channel values.
     fn frame(format: StorageFormat, values: &[i64]) -> Vec<u8> {
@@ -773,6 +880,122 @@ mod tests {
             store(format, v, &mut out);
         }
         out
+    }
+
+    /// `src` as interleaved little-endian `f32` bytes.
+    fn floats(values: &[f32]) -> Vec<u8> {
+        values.iter().flat_map(|v| v.to_le_bytes()).collect()
+    }
+
+    /// The integer samples `narrow` produced, at `to`'s width.
+    fn narrowed_samples(to: StorageFormat, narrowing: Narrowing, values: &[f32]) -> Vec<i64> {
+        let mut out = Vec::new();
+        let mut noise = 0x2545_F491_4F6C_DD1Du64;
+        narrow(to, narrowing, &floats(values), &mut out, &mut noise);
+        let width = to.bytes_per_sample();
+        out.chunks_exact(width)
+            .map(|bytes| sample(to, bytes))
+            .collect()
+    }
+
+    /// Narrowing with no dither and no headroom, which is pure rounding.
+    fn plain(to: Width) -> Narrowing {
+        Narrowing {
+            to,
+            dither: Dither::None,
+            headroom_db: 0.0,
+        }
+    }
+
+    #[test]
+    fn rounding_a_float_lands_on_the_scale_the_width_defines() {
+        // Full scale is the width's, and +1.0 is one step past the top of a
+        // two's-complement range - which is the clamp doing its job and not an
+        // off-by-one. -1.0 is exactly representable and must not clamp.
+        assert_eq!(
+            narrowed_samples(
+                StorageFormat::Int24Packed,
+                plain(Width::Bits24),
+                &[0.0, 0.5, -0.5, 1.0, -1.0]
+            ),
+            vec![0, 4_194_304, -4_194_304, 8_388_607, -8_388_608]
+        );
+        assert_eq!(
+            narrowed_samples(
+                StorageFormat::Int32,
+                plain(Width::Bits32),
+                &[0.0, 0.5, -1.0]
+            ),
+            vec![0, 1_073_741_824, -2_147_483_648]
+        );
+    }
+
+    #[test]
+    fn a_float_past_full_scale_is_clamped_and_not_wrapped() {
+        // The failure this exists for: a cast that wrapped would turn the
+        // loudest moment of a record into a full-scale inversion, which is the
+        // single worst thing an exporter can do quietly. Floats do not clip, so
+        // these samples are ordinary in a `f32` capture.
+        let got = narrowed_samples(
+            StorageFormat::Int24Packed,
+            plain(Width::Bits24),
+            &[1.4, -1.4, f32::INFINITY, f32::NEG_INFINITY, f32::NAN],
+        );
+        assert_eq!(
+            got,
+            vec![8_388_607, -8_388_608, 8_388_607, -8_388_608, 0],
+            "a float past the ceiling must clamp to it"
+        );
+    }
+
+    #[test]
+    fn headroom_is_what_keeps_a_hot_capture_off_the_ceiling() {
+        let with_room = Narrowing {
+            headroom_db: 6.0,
+            ..plain(Width::Bits24)
+        };
+        // The same sample, once clamped and once not: 0.9 at -6 dB is 0.451 of
+        // full scale, and nothing is lost.
+        assert_eq!(
+            narrowed_samples(StorageFormat::Int24Packed, plain(Width::Bits24), &[1.2]),
+            vec![8_388_607],
+            "without headroom this clamps"
+        );
+        let [quieter] = narrowed_samples(StorageFormat::Int24Packed, with_room, &[1.2])[..] else {
+            panic!("one sample in, one sample out")
+        };
+        assert!(
+            quieter < 8_388_607,
+            "headroom did not bring the sample under the ceiling: {quieter}"
+        );
+    }
+
+    #[test]
+    fn dither_is_noise_and_is_the_same_noise_every_time() {
+        // A ramp well inside full scale, so nothing here is about clamping.
+        let values: Vec<f32> = (0..64).map(|n| f64::from(n) as f32 / 1000.0).collect();
+        let dithered = Narrowing {
+            dither: Dither::Tpdf,
+            ..plain(Width::Bits24)
+        };
+        let clean = narrowed_samples(StorageFormat::Int24Packed, plain(Width::Bits24), &values);
+        let noisy = narrowed_samples(StorageFormat::Int24Packed, dithered, &values);
+
+        assert_ne!(clean, noisy, "the dither added nothing");
+        // Within a step and a bit of where rounding alone put them: TPDF is
+        // +/-1 LSB, so this is the whole claim about how loud the noise is.
+        for (a, b) in clean.iter().zip(&noisy) {
+            assert!((a - b).abs() <= 2, "dither moved a sample by {}", a - b);
+        }
+        // §33 says an export is reproducible from the blocks and the edit
+        // instructions. A random dither would quietly make that false, so the
+        // generator is seeded per file from a constant and this is the test
+        // that says so.
+        assert_eq!(
+            noisy,
+            narrowed_samples(StorageFormat::Int24Packed, dithered, &values),
+            "the same export gave two different files"
+        );
     }
 
     #[test]

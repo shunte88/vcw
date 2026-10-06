@@ -78,6 +78,9 @@ function settings(library: string | null = null): Settings {
       artwork: "embed",
       template: null,
       quality: "high",
+      narrowing: "24",
+      dither: "tpdf",
+      headroom: "3",
     },
   } as unknown as Settings;
 }
@@ -298,6 +301,25 @@ describe("the format and its quality", () => {
     });
     expect(planned).toHaveBeenCalledWith(
       expect.objectContaining({ format: "ogg", quality: "compact" }),
+    );
+  });
+
+  it("sends the narrowing settings, which only Settings can set", async () => {
+    // The wiring, not the behavior: the three float-narrowing switches live in
+    // Settings and have no control on this panel, so nothing here would notice
+    // if `request()` stopped reading them and every export quietly went back to
+    // refusing a float capture.
+    const container = await render({});
+    await addressed(container);
+
+    const plan = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Plan",
+    );
+    await act(async () => {
+      plan?.click();
+    });
+    expect(planned).toHaveBeenCalledWith(
+      expect.objectContaining({ narrowing: "24", dither: "tpdf", headroom: "3" }),
     );
   });
 

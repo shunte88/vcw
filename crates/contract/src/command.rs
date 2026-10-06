@@ -511,6 +511,20 @@ pub struct Export {
     /// Whether to replace files that are already there.
     #[serde(default)]
     pub overwrite: bool,
+    /// `refuse`, `24` or `32`, or `null` for `refuse`.
+    ///
+    /// What a `Float32` capture is rounded to for a container that carries only
+    /// integers. Ignored by a capture that is already integers, and by WAV,
+    /// which takes the float as it stands.
+    #[serde(default)]
+    pub narrowing: Option<String>,
+    /// `tpdf` or `none`, or `null` for `tpdf`. Only read when narrowing.
+    #[serde(default)]
+    pub dither: Option<String>,
+    /// Decibels of room above full scale, or `null` for none. Only read when
+    /// narrowing.
+    #[serde(default)]
+    pub headroom: Option<String>,
 }
 
 impl Export {
@@ -570,6 +584,43 @@ impl Export {
             ),
         };
 
+        // The three float-narrowing answers, parsed together because they are
+        // one setting with three parts and a message about any of them wants to
+        // be able to mention the others.
+        let mut narrowing = vcw_export::encoder::Narrowing::default();
+        if let Some(given) = self.narrowing.as_deref() {
+            narrowing.to = vcw_export::encoder::Width::parse(given).ok_or_else(|| Invalid {
+                field: "narrowing",
+                why: format!(
+                    "{given:?} is not a narrowing - refuse, 24 or 32. It decides what a \
+                     32-bit float capture is rounded to for a container that carries only \
+                     integers, and refuse is the default."
+                ),
+            })?;
+        }
+        if let Some(given) = self.dither.as_deref() {
+            narrowing.dither =
+                vcw_export::encoder::Dither::parse(given).ok_or_else(|| Invalid {
+                    field: "dither",
+                    why: format!(
+                        "{given:?} is not a dither - tpdf or none. It is read only when \
+                     narrowing a float capture."
+                    ),
+                })?;
+        }
+        if let Some(given) = self.headroom.as_deref() {
+            narrowing.headroom_db = vcw_export::encoder::Narrowing::parse_headroom(given)
+                .ok_or_else(|| Invalid {
+                    field: "headroom",
+                    why: format!(
+                        "{given:?} is not a headroom - a number of decibels from 0 to {}, \
+                         with or without a sign. It is read only when narrowing a float \
+                         capture.",
+                        vcw_export::encoder::Narrowing::MAX_HEADROOM_DB
+                    ),
+                })?;
+        }
+
         let artwork = match self
             .artwork
             .as_deref()
@@ -618,6 +669,7 @@ impl Export {
             sides,
             artwork,
             overwrite: self.overwrite,
+            narrowing,
         })
     }
 }

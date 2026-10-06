@@ -310,6 +310,9 @@ fn an_artwork_policy_defaults_to_both_rather_than_none() {
         sides: Vec::new(),
         artwork: None,
         overwrite: false,
+        narrowing: None,
+        dither: None,
+        headroom: None,
         quality: None,
         compression: None,
     };
@@ -329,6 +332,9 @@ fn a_container_vcw_cannot_write_is_refused_by_name() {
         sides: Vec::new(),
         artwork: None,
         overwrite: false,
+        narrowing: None,
+        dither: None,
+        headroom: None,
         quality: None,
         compression: None,
     };
@@ -356,6 +362,9 @@ fn a_quality_is_taken_by_the_lossy_containers_and_ignored_by_the_others() {
         sides: Vec::new(),
         artwork: None,
         overwrite: false,
+        narrowing: None,
+        dither: None,
+        headroom: None,
         quality: quality.map(str::to_owned),
         compression: None,
     };
@@ -393,6 +402,9 @@ fn a_side_has_to_be_one_letter() {
             sides: vec![given.to_owned()],
             artwork: None,
             overwrite: false,
+            narrowing: None,
+            dither: None,
+            headroom: None,
             quality: None,
             compression: None,
         };
