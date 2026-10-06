@@ -5829,9 +5829,11 @@ the splash and in the About dialog; the compact VU dials; and the README swap, w
 development README moved to `docs/README.md`.
 
 **Two spelling carve-outs, both deliberate.** `finalised` stays, 108 occurrences of it:
-it is a value in `captures.state` with a CHECK constraint on it, parsed in `vcw-types`,
-and crossing the wire as `CaptureStateName`, so changing it is a schema v5 migration
-rather than a spelling fix. And the `ALIASES` table in `crates/export/src/naming.rs`
+it is a value in `captures.state`, parsed in `vcw-types`, and crossing the wire as
+`CaptureStateName`, so changing it is a schema v5 migration rather than a spelling fix.
+The column carries no CHECK constraint - `validate()` is what rejects an unknown state -
+so the migration would be a row rewrite rather than a table rebuild, which is cheaper
+than it sounds and still not worth doing. And the `ALIASES` table in `crates/export/src/naming.rs`
 keeps `catalogue`, `catalogue_number` and `organisation` alongside the US rows, because
 that table is not VCW's prose - it is what other tools and other people's templates call
 these fields, and a VRipr template reading `{catalogue}` has to get a suggestion rather
@@ -5862,11 +5864,13 @@ carries four commits past the tag: two gates on claims a hosted runner cannot ma
 hang guard raised from ten seconds to thirty, and `prerelease: true` on the release
 step for next time. None of them touch the product.
 
-**The next release has nothing waiting on it.** The three things that are: the README
-copy pass, the UI change list that is the user's to write, and the question of whether
-`"finalised"` earns a schema v5 migration to `"finalized"` - it is a `captures.state`
-value with a CHECK constraint behind it and a `CaptureStateName` on the wire, which is
-why the spelling sweep left it alone.
+**The next release has nothing waiting on it.** One thing is: the UI change list, which
+is the user's to write. The README was read and passed on 2026-10-06, and the question
+of whether `"finalised"` earns a schema v5 migration to `"finalized"` was closed the
+same day - it stays as it is. The reasoning is in the carve-out above: the spelling rule
+exempts identifiers, this is one as well as a stored value, nothing renders it to a
+user, and the migration would rewrite a column in every existing `.vcw` for a change
+nobody can see.
 
 **WP-22 is built** (above): the lookup, the recording fetch, `--identify`, and the
 measurement that says alignment rather than audio quality is what decides whether a
