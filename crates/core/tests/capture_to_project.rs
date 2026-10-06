@@ -49,6 +49,21 @@ use vcw_project::validate::{Options, validate};
 use vcw_project::{Project, Session, session};
 use vcw_types::{CaptureState, SampleFormat, SampleRate};
 
+/// Every real-time test in this file is a capture running at the speed of a
+/// record, and the harness would otherwise start all of them at once. On a
+/// four-core hosted runner that is what they measure: a Windows runner lost
+/// 2400 frames to five ring overruns here, which is the machine failing to
+/// provide real time rather than VCW failing to keep up. One at a time, and
+/// the loss assertions mean what they say again. Copied from
+/// `vcw-cli`'s `session_from_cli.rs`, which learned it first; a mutex per
+/// test binary is as far as this goes, and cargo already runs the binaries
+/// one after another.
+fn alone() -> std::sync::MutexGuard<'static, ()> {
+    static GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    GATE.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn project(dir: &tempfile::TempDir, name: &str) -> Project {
     Project::create(dir.path().join(name)).expect("create")
 }
@@ -72,6 +87,7 @@ fn run_for(
 
 #[test]
 fn a_clean_capture_lands_in_the_project_with_its_counters() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let mut p = project(&dir, "clean.vcw");
 
@@ -108,6 +124,7 @@ fn a_clean_capture_lands_in_the_project_with_its_counters() {
 
 #[test]
 fn r9_the_counters_from_an_unplugged_device_reach_the_file() {
+    let _alone = alone();
     // The fault that WP-03 deferred to here. The capture is interrupted, the
     // stream error is on disk, and the project is still sound.
     let dir = tempfile::tempdir().expect("tempdir");
@@ -146,6 +163,7 @@ fn r9_the_counters_from_an_unplugged_device_reach_the_file() {
 
 #[test]
 fn a_capture_killed_before_it_finished_is_recoverable_from_committed_rows_alone() {
+    let _alone = alone();
     // §15. Nothing calls finish(), exactly as nothing would if the power went.
     // What is left has to be enough for recovery to know what happened.
     let dir = tempfile::tempdir().expect("tempdir");
@@ -184,6 +202,7 @@ fn a_capture_killed_before_it_finished_is_recoverable_from_committed_rows_alone(
 
 #[test]
 fn two_captures_in_one_project_keep_their_own_counters() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let mut p = project(&dir, "two.vcw");
 

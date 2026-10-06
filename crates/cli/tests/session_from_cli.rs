@@ -194,17 +194,16 @@ fn a_full_capture_session_runs_from_the_command_line() {
     ended(record.state, "a paused run must finalize", &transcript);
     assert!(record.finished_at.is_some());
     let seconds = record.duration_secs();
-    // The ceiling is the claim being made and it holds anywhere: a pause that
-    // leaked into the recording would read about 2.0 s. The floor is a
-    // throughput claim, and a starved runner cannot be held to it.
+    // Both bounds, and both gated. The discriminator is only 0.4 s wide - a
+    // recorded pause reads about 2.0 s against about 1.6 s for a skipped one -
+    // and scheduling jitter is wider than that on a machine somebody else is
+    // using: a macOS runner overshot two 0.8 s sleeps to 1.940 s with no pause
+    // recorded at all. An earlier version of this kept the ceiling ungated on
+    // the theory that only the floor was about throughput. It is not.
     assert!(
-        seconds < 1.9,
-        "the pause was recorded: {seconds:.3} s of audio for two 0.8 s \
-         runs:\n{transcript}"
-    );
-    assert!(
-        seconds > 1.2 || shared(),
-        "expected about 1.6 s of audio, got {seconds:.3} s:\n{transcript}"
+        (1.2..1.9).contains(&seconds) || shared(),
+        "expected about 1.6 s of audio, got {seconds:.3} s - a pause that was \
+         recorded would read about 2.0 s:\n{transcript}"
     );
     assert!(
         transcript.contains(&format!("capture {}", record.id)),

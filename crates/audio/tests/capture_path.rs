@@ -50,6 +50,21 @@ use vcw_audio::source::{Faults, Pace, Pattern, Simulated, Source};
 use vcw_audio::verify::Verification;
 use vcw_types::{CaptureMode, SampleFormat, SampleRate};
 
+/// Every real-time test in this file is a capture running at the speed of a
+/// record, and the harness would otherwise start all of them at once. On a
+/// four-core hosted runner that is what they measure: a Windows runner lost
+/// 2400 frames to five ring overruns here, which is the machine failing to
+/// provide real time rather than VCW failing to keep up. One at a time, and
+/// the loss assertions mean what they say again. Copied from
+/// `vcw-cli`'s `session_from_cli.rs`, which learned it first; a mutex per
+/// test binary is as far as this goes, and cargo already runs the binaries
+/// one after another.
+fn alone() -> std::sync::MutexGuard<'static, ()> {
+    static GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    GATE.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Reads until the predicate holds or the deadline passes, accumulating
 /// everything that arrives. Returns what was read.
 ///
@@ -150,6 +165,7 @@ fn a_simulated_capture_can_never_be_called_bit_perfect() {
 
 #[test]
 fn r9_a_device_unplugged_mid_capture_goes_quiet_and_is_counted() {
+    let _alone = alone();
     // "Device removal mid-capture corrupts project". It must not: the capture
     // stops receiving, the error is counted, and everything already delivered
     // stays intact and readable.
@@ -187,6 +203,7 @@ fn r9_a_device_unplugged_mid_capture_goes_quiet_and_is_counted() {
 
 #[test]
 fn an_unplugged_device_refutes_bit_perfection_rather_than_going_unnoticed() {
+    let _alone = alone();
     let (source, mut reader) = Simulated::start(
         Negotiated::simulated(SampleRate(48_000), 2, SampleFormat::S32),
         &Pattern::Silence,

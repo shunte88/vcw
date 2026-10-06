@@ -58,6 +58,21 @@ use vcw_project::validate::{Options, validate};
 use vcw_project::{Project, Writer, session};
 use vcw_types::{CaptureInfo, CaptureState, SampleFormat, SampleRate, StorageFormat};
 
+/// Every real-time test in this file is a capture running at the speed of a
+/// record, and the harness would otherwise start all of them at once. On a
+/// four-core hosted runner that is what they measure: a Windows runner lost
+/// 2400 frames to five ring overruns here, which is the machine failing to
+/// provide real time rather than VCW failing to keep up. One at a time, and
+/// the loss assertions mean what they say again. Copied from
+/// `vcw-cli`'s `session_from_cli.rs`, which learned it first; a mutex per
+/// test binary is as far as this goes, and cargo already runs the binaries
+/// one after another.
+fn alone() -> std::sync::MutexGuard<'static, ()> {
+    static GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    GATE.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// 32-bit is what `Simulated::deterministic` produces, and the widest thing §8
 /// asks for. Four bytes a sample, so every generated word is stored whole.
 const WIDTH: usize = 4;
@@ -121,6 +136,7 @@ fn audit(conn: &Connection, capture_id: i64, channels: u16, width: usize) -> u64
 
 #[test]
 fn every_sample_the_source_produced_is_in_the_project_and_in_order() {
+    let _alone = alone();
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("audio.vcw");
 
@@ -162,6 +178,7 @@ fn every_sample_the_source_produced_is_in_the_project_and_in_order() {
 
 #[test]
 fn the_frames_the_device_delivered_are_the_frames_that_were_written() {
+    let _alone = alone();
     // The two counts come from opposite ends of the pipeline and nothing
     // reconciles them at runtime. If they can drift apart, every duration VCW
     // ever displays is a guess.
@@ -209,6 +226,7 @@ fn the_frames_the_device_delivered_are_the_frames_that_were_written() {
 
 #[test]
 fn a_device_that_vanishes_leaves_everything_it_did_deliver() {
+    let _alone = alone();
     // R9. The half of a side that reached the disc before the cable came out is
     // the half worth keeping, and it has to be intact rather than merely present.
     let dir = tempfile::tempdir().expect("tempdir");
@@ -339,6 +357,7 @@ fn a_writer_that_never_finished_leaves_a_recoverable_project() {
 
 #[test]
 fn the_summaries_describe_the_audio_that_is_really_in_the_block() {
+    let _alone = alone();
     // The waveform view is built from these and nothing else. A summary that
     // does not match its block is a picture of a recording that does not exist.
     let dir = tempfile::tempdir().expect("tempdir");
@@ -410,6 +429,7 @@ fn the_summaries_describe_the_audio_that_is_really_in_the_block() {
 
 #[test]
 fn the_writer_keeps_up_with_a_192k_device_in_real_time() {
+    let _alone = alone();
     // The soak in miniature, short enough for CI. It cannot prove the tail over
     // 90 minutes, but it does prove that the steady state is a steady state and
     // that nothing in the per-block work has become quadratic.
