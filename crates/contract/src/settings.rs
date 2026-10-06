@@ -389,10 +389,12 @@ impl Default for Export {
     fn default() -> Self {
         Self {
             // FLAC, because §33's point is archival and a 2.33 GiB side is
-            // worth halving. A default capture is S32 and `flacenc` stops at
-            // 24 bits, so this default and that limitation meet on the first
-            // export a person tries - which is the argument for the refusal
-            // naming WAV rather than narrowing the samples quietly.
+            // worth halving. This default used to meet a limitation on the
+            // first export anyone tried - a default capture is S32 and
+            // `flacenc` stopped at 24 bits - and since 2026-10-06 it does not:
+            // `flac-codec` takes 32 bits at 192 kHz. The only capture left
+            // without a FLAC path is a `Float32` one, where the dither is still
+            // a person's decision and the refusal still says so.
             format: "flac".to_owned(),
             // Ignored while the format is FLAC, and the value a person finds
             // already filled in the moment they switch to MP3 or Ogg. Around

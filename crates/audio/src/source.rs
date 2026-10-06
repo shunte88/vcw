@@ -345,9 +345,12 @@ impl Simulated {
     /// S32 is the default because it is the widest integer format and what a
     /// device negotiation asks for first, but it is not the only one a project
     /// can hold, and a caller pinning a format has a reason: a 32-bit project
-    /// cannot be exported as FLAC while `flacenc` stops at 24 bits, so a
-    /// simulated capture that could only be S32 made half of §33 untestable
-    /// without hardware. [`Pattern::Deterministic`] already writes the low
+    /// could not be exported as FLAC at all while `flacenc` stopped at 24 bits,
+    /// so a simulated capture that could only be S32 made half of §33
+    /// untestable without hardware. `flac-codec` lifted that on 2026-10-06 and
+    /// the reason to keep this is now the smaller one - §8 allows four storage
+    /// formats and a test that can only make one of them is a test of one of
+    /// them. [`Pattern::Deterministic`] already writes the low
     /// bytes of [`Simulated::expected_sample`] at the stored width, so the
     /// capture stays recomputable frame by frame whichever format it is in.
     ///

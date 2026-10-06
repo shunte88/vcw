@@ -11,7 +11,7 @@ authors.workspace = true
 [dependencies]
 vcw-types = { workspace = true }
 vcw-project = { workspace = true }
-flacenc = { workspace = true }
+flac-codec = { workspace = true }
 mp3lame-encoder = { workspace = true, optional = true }
 vorbis_rs = { workspace = true, optional = true }
 lofty = { workspace = true }

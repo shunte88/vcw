@@ -33,20 +33,22 @@
 //! Container selection and the two lossless writers (D5).
 //!
 //! Our own WAV writer - trivial to write, and it avoids `hound`'s format limits
-//! at 24/192. FLAC through `flacenc`, pure Rust and Apache-2.0. The two lossy
-//! containers live in [`crate::lossy`], behind the `mp3` and `ogg` cargo
-//! features: they are the only code in this crate that links a C library, the
-//! only code that converts samples rather than copying them, and the only code
-//! whose output cannot be compared byte for byte with its input, so they are
-//! kept where those three facts can be stated once.
+//! at 24/192. FLAC through `flac-codec`, pure Rust and MIT OR Apache-2.0. The
+//! two lossy containers live in [`crate::lossy`], behind the `mp3` and `ogg`
+//! cargo features: they are the only code in this crate that links a C library,
+//! the only code that converts samples rather than copying them, and the only
+//! code whose output cannot be compared byte for byte with its input, so they
+//! are kept where those three facts can be stated once.
 //!
 //! Both writers are **streaming**: [`Writer::write`] takes whatever
 //! `vcw_project::pcm::Reader::fill` produced and hands nothing back, so a
 //! twenty-minute side costs one block of memory and not a gigabyte of it. That
-//! rules out `flacenc`'s one-call `encode_with_fixed_block_size`, which builds
-//! the entire encoded stream in RAM before anything reaches the disk; the
-//! per-frame `encode_fixed_size_frame` is used instead and the `STREAMINFO`
-//! block is patched at the end, which is what the reference encoder does too.
+//! rules out every FLAC crate whose encoder is one call over a `Vec` of every
+//! sample in the file - which is most of them, and was why `flac-io` was looked
+//! at and put down. `flac_codec::encode::FlacByteWriter` is `std::io::Write`
+//! over the same little-endian interleaved bytes a WAV data chunk carries, and
+//! it buffers a partial block internally, so a short chunk is its problem
+//! rather than ours.
 //!
 //! ## What a container will not take
 //!
@@ -57,14 +59,18 @@
 //!   unsplit side at 192 kHz, not by a track.
 //! - **FLAC is an integer codec**, so a `Float32` capture has no FLAC path
 //!   until a person decides how it should be dithered.
-//! - **`flacenc` 0.5.1 stops at 24 bits and 96 kHz.** Both are the library's
-//!   limits and not the format's: FLAC itself allows 32 bits and rates to
-//!   655350 Hz. §8 requires capture at 192 kHz, so this is a real gap in the
-//!   requirement rather than a theoretical one, and it is asserted against the
-//!   library in `tests::the_flac_library_really_does_stop_where_we_say_it_does`,
+//! - **FLAC itself stops at 32 bits and 1048575 Hz**, neither of which any
+//!   capture VCW makes can reach. This used to be a much shorter list of things
+//!   FLAC could carry: `flacenc` 0.5.1 stopped at 24 bits and 96 kHz, which are
+//!   the library's limits and not the format's, and §8 requires capture at
+//!   192 kHz. The 24-bit half was the one that mattered, because a device
+//!   negotiation takes the widest integer format on offer and so an ordinary
+//!   capture is `Int32` - which meant the default rip had no FLAC path at all.
+//!   `flac-codec` lifted both on 2026-10-06. Its limits are asserted against
+//!   the library in `tests::the_flac_library_really_does_stop_where_we_say_it_does`,
 //!   spelled out rather than linked because a `cfg(test)` item is not there to
-//!   link to in a doc build, so the day either cap is lifted that test fails
-//!   and tells us.
+//!   link to in a doc build, so the day either moves that test fails and tells
+//!   us.
 //! - **MP3 carries nine sample rates and at most two channels.** MPEG-1 stops
 //!   at 48 kHz, so a 96 or 192 kHz capture has no MP3 path without resampling,
 //!   and choosing a resampling filter is the same kind of decision as choosing
@@ -98,11 +104,10 @@
 
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use flacenc::component::BitRepr;
-use flacenc::error::Verify;
-use flacenc::source::Fill;
+use flac_codec::byteorder::LittleEndian;
+use flac_codec::encode::{FlacByteWriter, Options};
 use vcw_types::StorageFormat;
 
 use crate::error::{Error, Result};
@@ -194,17 +199,26 @@ impl std::fmt::Display for Quality {
 ///
 /// The scale is `flac`'s own `-0` to `-8`, defaulting to `-5`, because those
 /// are the numbers in every guide anyone has read. What they map onto is
-/// *ours*: `flacenc` 0.5.1 has no preset, it has the knobs the presets are
-/// made of, and it does not expose two of the things the reference levels
-/// differ in - loose mid/side and exhaustive model search. So this is a
-/// reading of that ladder onto what is available, not a reproduction of it,
-/// and a file written here at `-8` is not the byte-for-byte file `flac -8`
-/// would write. It is lossless either way, which is the part that matters.
+/// *ours*: `flac-codec` has no preset ladder either, it has the knobs the
+/// presets are made of, and it has one apodization window where the reference
+/// encoder's top three levels differ by `subdivide_tukey`. So this is a reading
+/// of that ladder onto what is available, not a reproduction of it, and a file
+/// written here at `-8` is not the byte-for-byte file `flac -8` would write. It
+/// is lossless either way, which is the part that matters.
 ///
-/// Measured on a 3-minute 24-bit/48 kHz vinyl rip, the ladder is monotone and
-/// every level is distinct: 59.7% of raw at `-0`, 57.1% at `-5`, 57.0% at
-/// `-8`, costing 0.16 s to 0.36 s. The top of the scale buys very little and
-/// costs very little, which is the honest thing to be able to say about it.
+/// Measured out of tree on a minute of a real 48 kHz vinyl rip, narrowed to
+/// 24-bit: 57.61% of raw at `-0`, 55.84% at `-5`, 55.76% at `-8`, costing
+/// 0.38 s to 1.14 s. Strictly smaller at every step, and the top of the scale
+/// buys very little and costs very little, which is the honest thing to be able
+/// to say about it.
+///
+/// **The same minute at 32 bits runs 67.97% to 66.85%, and `-0` and `-1` come
+/// out byte-identical.** A mid/side frame carries the difference channel one
+/// bit wider than the stream, and FLAC's ceiling is 32, so a 32-bit stream has
+/// no side channel at all and the three levels below `-3` have nothing left to
+/// vary between them. Worth knowing before choosing a capture format: 24-bit
+/// is not only three quarters of the samples, it is also the width at which
+/// FLAC can still use the other channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Compression(u8);
 
@@ -249,35 +263,66 @@ impl Compression {
             .map(Self)
     }
 
-    /// `flacenc`'s configuration for this level.
+    /// `flac-codec`'s options for this level.
     ///
-    /// Three knobs do the work, in the order they matter: the block size, mid
-    /// and side channel coding, and the LPC order. Below `-3` there is no LPC
-    /// at all and the fixed predictor's order is what moves, which is what the
-    /// reference encoder does at the bottom of its scale too.
+    /// Four knobs do the work, in the order they matter: the LPC order, the
+    /// block size, mid and side channel coding, and the residual partition
+    /// order. Below `-3` there is no LPC at all and only the fixed predictors
+    /// run, which is what the reference encoder does at the bottom of its scale
+    /// too. `fast_channel_correlation` is the nearest thing available to the
+    /// reference encoder's loose mid/side: it picks the channel assignment from
+    /// a cheap estimate rather than by encoding every candidate.
+    ///
+    /// The padding block is ours and not the library's 4096, because a FLAC
+    /// file leaves here and goes straight to `lofty` to be tagged, and tags
+    /// that fit in the padding are written without moving the audio.
+    ///
+    /// **The partition order stops at 6, and not at the 15 the setter accepts.**
+    /// `flac_codec::encode` collects `1 << partition_order` partitions into an
+    /// `ArrayVec<_, MAX_PARTITIONS>` with `MAX_PARTITIONS = 64`, so an order of
+    /// 7 needs 128 and panics with "ArrayVec: capacity exceeded" rather than
+    /// returning an error. Found by the ladder at `-8`, which asked for 8.
+    /// `max_lpc_order` has no such problem and was checked to 32, so the top of
+    /// the scale moves on that instead and loses very little.
+    /// There is no test pinning that, and it was written and then deleted:
+    /// `Encoder`'s `Drop` calls `finalize_inner`, which panics again while the
+    /// first panic is still unwinding, and a panic during unwinding aborts the
+    /// process. So `catch_unwind` cannot hold it and a tripwire for this would
+    /// take the whole test binary down rather than fail a test. What is left is
+    /// this paragraph and `tests::the_compression_ladder_only_ever_gets_smaller`,
+    /// which encodes at every level and would abort the moment the ladder asked
+    /// for 7 again.
+    ///
+    /// # Panics
+    ///
+    /// Never: every value below is inside the range its setter documents, and
+    /// the four `expect`s are there because the setters are fallible for
+    /// arguments a caller could get wrong and these are constants.
     #[must_use]
-    pub fn config(self) -> flacenc::config::Encoder {
-        let mut config = flacenc::config::Encoder::default();
-        // (block, stereo coding, LPC, fixed order, LPC order)
-        let (block, stereo, lpc, fixed, order) = match self.0 {
-            0 => (1152, false, false, 2, 8),
-            1 => (1152, true, false, 3, 8),
-            2 => (1152, true, false, 4, 8),
-            3 => (4096, false, true, 4, 6),
-            4 => (4096, true, true, 4, 7),
-            5 => (4096, true, true, 4, 8),
-            6 => (4096, true, true, 4, 10),
-            7 => (4096, true, true, 4, 12),
-            _ => (4096, true, true, 4, 16),
+    pub fn config(self) -> Options {
+        // (block, mid/side, LPC order, partition order, cheap channel choice)
+        let (block, mid_side, lpc, partition, fast) = match self.0 {
+            0 => (1152, false, None, 3, true),
+            1 => (1152, true, None, 3, true),
+            2 => (1152, true, None, 4, false),
+            3 => (4096, false, Some(6), 4, true),
+            4 => (4096, true, Some(8), 4, true),
+            5 => (4096, true, Some(8), 5, false),
+            6 => (4096, true, Some(10), 6, false),
+            7 => (4096, true, Some(12), 6, false),
+            _ => (4096, true, Some(16), 6, false),
         };
-        config.block_size = block;
-        config.stereo_coding.use_midside = stereo;
-        config.stereo_coding.use_leftside = stereo;
-        config.stereo_coding.use_rightside = stereo;
-        config.subframe_coding.use_lpc = lpc;
-        config.subframe_coding.fixed.max_order = fixed;
-        config.subframe_coding.qlpc.lpc_order = order;
-        config
+        Options::default()
+            .block_size(block)
+            .expect("every block size in the ladder is at least 16")
+            .max_lpc_order(lpc)
+            .expect("every LPC order in the ladder is between 1 and 32")
+            .max_partition_order(partition)
+            .expect("every partition order in the ladder is at most 15")
+            .mid_side(mid_side)
+            .fast_channel_correlation(fast)
+            .padding(FLAC_PADDING)
+            .expect("8192 bytes of padding is well under the 2^24 ceiling")
     }
 }
 
@@ -764,9 +809,12 @@ pub(crate) fn alternatives(refused: Container, spec: &Spec) -> String {
             join(&lossy)
         ),
         (false, true) => format!("Export this one as {}.", join(&lossless)),
-        // Reachable, and the reason this arm says so out loud: a 192 kHz side
-        // long enough to overflow RIFF has no lossless container left, because
-        // `flacenc` stops at 96 kHz and WAV stops at four gibibytes.
+        // Was reachable, and is kept. A 192 kHz side long enough to overflow
+        // RIFF had no lossless container left while `flacenc` stopped at
+        // 96 kHz and WAV stopped at four gibibytes; `flac-codec` takes that
+        // capture, so the only way here now is a `Float32` side over 4 GiB.
+        // That is a real capture - §8 allows float and Audacity produces it -
+        // and the arm costs three lines.
         (true, false) => format!(
             "Export this one as {} - nothing VCW writes will take this capture \
              losslessly.",
@@ -941,97 +989,69 @@ impl Wav {
 /// that does not means rewriting every byte of audio to make room.
 const FLAC_PADDING: u32 = 8192;
 
-/// Where the `STREAMINFO` metadata block starts: straight after `fLaC`.
-///
-/// Its four-byte block header lives here and the 34 bytes of fields at
-/// `STREAMINFO_AT + 4`, which is where a decoder reads the sample rate from.
-/// `finish` seeks back to *this* offset, not to the fields, because
-/// [`Flac::write_stream_info`] writes the header and the fields together.
-const STREAMINFO_AT: u64 = 4;
-
-/// `STREAMINFO` is 34 bytes, always.
-const STREAMINFO_BYTES: usize = 34;
-
 /// A FLAC writer.
 pub struct Flac {
-    file: File,
+    writer: FlacByteWriter<File, LittleEndian>,
+    /// Asked for its size in [`finish`](Flac::finish), because
+    /// `FlacByteWriter::finalize` consumes the writer without handing the file
+    /// back and a counting wrapper is more code than one `stat`.
+    path: PathBuf,
     spec: Spec,
-    config: flacenc::error::Verified<flacenc::config::Encoder>,
-    info: flacenc::component::StreamInfo,
-    buffer: flacenc::source::FrameBuf,
-    context: flacenc::source::Context,
-    sink: flacenc::bitsink::ByteSink,
-    /// Wire bytes read but not yet a whole block.
-    pending: Vec<u8>,
     scratch: Vec<u8>,
-    block_frames: usize,
-    frame_number: usize,
-    bytes: u64,
 }
 
 impl std::fmt::Debug for Flac {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // `Verified<Encoder>` and `ByteSink` are not `Debug`, and a dump of an
-        // encoder's internals would not help anyone anyway.
+        // `FlacByteWriter` is not `Debug`, and a dump of an encoder's internals
+        // would not help anyone anyway.
         f.debug_struct("Flac")
+            .field("path", &self.path)
             .field("spec", &self.spec)
-            .field("block_frames", &self.block_frames)
-            .field("frame_number", &self.frame_number)
-            .field("bytes", &self.bytes)
             .finish_non_exhaustive()
     }
 }
 
 impl Flac {
-    /// Checks the format against what FLAC and `flacenc` will take, then writes
-    /// the metadata blocks.
+    /// Checks the format against what FLAC will take, then opens the stream.
+    ///
+    /// The metadata blocks, the `STREAMINFO` backfill, the MD5 digest, the seek
+    /// table and the frame numbering are all the library's. This used to be
+    /// about a hundred lines of our own, including a `set_block_sizes` call
+    /// whose comment explained why a stream with min != max makes `flac -t`
+    /// complain once per frame. None of it is missed.
     fn create(path: &Path, spec: Spec, level: Compression) -> Result<Self> {
         Self::vet(&spec)?;
 
-        let config = level.config().into_verified().map_err(|why| Error::Flac {
-            why: format!("the encoder configuration was rejected: {why:?}"),
+        let file = File::create(path)?;
+        // `None` rather than `spec.frames`, deliberately. A declared total is a
+        // promise `finalize` enforces, and the reader can come up short on a
+        // capture with a hole in it - which would turn a short export into a
+        // hard failure at the very end rather than a short file. The seek table
+        // is written either way, and `finalize` seeks back and fills in the
+        // real sample count, so nothing is lost but the duration a decoder
+        // could show while the file is still being written.
+        let writer = FlacByteWriter::new(
+            file,
+            level.config(),
+            spec.rate,
+            u32::from(spec.bits()),
+            u8::try_from(spec.channels).unwrap_or(u8::MAX),
+            None,
+        )
+        .map_err(|why| Error::Flac {
+            why: format!(
+                "{} Hz, {} channels, {}-bit: {why}",
+                spec.rate,
+                spec.channels,
+                spec.bits()
+            ),
         })?;
-        let block_frames = config.block_size;
-        let channels = spec.channels as usize;
-        let bits = spec.bits() as usize;
-
-        let mut info = flacenc::component::StreamInfo::new(spec.rate as usize, channels, bits)
-            .map_err(|why| Error::Flac {
-                why: format!("{} Hz, {channels} channels, {bits}-bit: {why:?}", spec.rate),
-            })?;
-        // Declared now and corrected in `finish`: a decoder that reads the
-        // header before the stream ends can still show a duration.
-        info.set_total_samples(usize::try_from(spec.frames).unwrap_or(usize::MAX));
-
-        let buffer =
-            flacenc::source::FrameBuf::with_size(channels, block_frames).map_err(|why| {
-                Error::Flac {
-                    why: format!("a {block_frames}-frame buffer was rejected: {why:?}"),
-                }
-            })?;
-
-        let mut sink = flacenc::bitsink::ByteSink::new();
-        let mut file = File::create(path)?;
-        file.write_all(b"fLaC")?;
-        Self::write_stream_info(&mut file, &info, &mut sink)?;
-        // Padding block: type 1, last block, `FLAC_PADDING` bytes of zero.
-        let length = FLAC_PADDING.to_be_bytes();
-        file.write_all(&[0x81, length[1], length[2], length[3]])?;
-        file.write_all(&vec![0u8; FLAC_PADDING as usize])?;
 
         Ok(Self {
-            file,
+            writer,
+            path: path.to_path_buf(),
             spec,
-            config,
-            info,
-            buffer,
-            context: flacenc::source::Context::new(bits, channels),
-            sink,
-            pending: Vec::with_capacity(block_frames * spec.wire_frame_bytes()),
             scratch: Vec::new(),
-            block_frames,
-            frame_number: 0,
-            bytes: 8 + STREAMINFO_BYTES as u64 + 4 + u64::from(FLAC_PADDING),
         })
     }
 
@@ -1059,6 +1079,12 @@ impl Flac {
     /// The reason only. Where to go instead is [`alternatives`]'s job, and
     /// keeping the two apart is what stops a message naming a container that
     /// will refuse the same capture a moment later.
+    ///
+    /// One reason, where there used to be three. The bit-depth and sample-rate
+    /// refusals were `flacenc`'s limits rather than FLAC's, and `flac-codec`
+    /// does not have them: 32-bit and 192 kHz both encode, and reference
+    /// libFLAC verifies the result. What is left is the format itself, which
+    /// will never carry floating point.
     fn why(spec: &Spec) -> Option<&'static str> {
         if spec.is_float() {
             return Some(
@@ -1067,51 +1093,18 @@ impl Flac {
                  person.",
             );
         }
-        if spec.bits() > 24 {
-            return Some(
-                "the FLAC format allows 32-bit samples but flacenc 0.5.1 stops at 24, \
-                 and narrowing 32 bits to 24 loses signal.",
-            );
-        }
-        if spec.rate > 96_000 {
-            return Some(
-                "flacenc 0.5.1 refuses rates above 96 kHz, though the FLAC format \
-                 allows up to 655350 Hz.",
-            );
-        }
         if spec.channels == 0 || spec.channels > 8 {
             return Some("FLAC carries between one and eight channels.");
         }
         None
     }
 
-    /// Writes the `STREAMINFO` metadata block, header and all, at the cursor.
-    fn write_stream_info(
-        file: &mut File,
-        info: &flacenc::component::StreamInfo,
-        sink: &mut flacenc::bitsink::ByteSink,
-    ) -> Result<()> {
-        sink.clear();
-        info.write(sink).map_err(|why| Error::Flac {
-            why: format!("the stream header would not serialize: {why:?}"),
-        })?;
-        let bytes = sink.as_slice();
-        if bytes.len() != STREAMINFO_BYTES {
-            return Err(Error::Flac {
-                why: format!(
-                    "the stream header came out {} bytes and STREAMINFO is {STREAMINFO_BYTES}",
-                    bytes.len()
-                ),
-            });
-        }
-        // Block header: not the last block, type 0, length 34.
-        file.write_all(&[0x00, 0x00, 0x00, STREAMINFO_BYTES as u8])?;
-        file.write_all(bytes)?;
-        sink.clear();
-        Ok(())
-    }
-
-    /// Appends interleaved frames, encoding whole blocks as they complete.
+    /// Appends interleaved frames, in the project's stored format.
+    ///
+    /// The library buffers a partial block for us, so this is a repack and a
+    /// write. The frame check stays: a caller handing over half a frame has a
+    /// bug that would otherwise surface as a channel swap halfway through a
+    /// side, and this crate is the last place that can still tell.
     fn write(&mut self, stored: &[u8]) -> Result<()> {
         let frame = self.spec.stored_frame_bytes();
         if frame == 0 || !stored.len().is_multiple_of(frame) {
@@ -1121,89 +1114,20 @@ impl Flac {
             });
         }
         to_wire(&self.spec, stored, &mut self.scratch);
-        self.pending.extend_from_slice(&self.scratch);
-
-        let block_bytes = self.block_frames * self.spec.wire_frame_bytes();
-        let mut consumed = 0;
-        while consumed + block_bytes <= self.pending.len() {
-            self.encode_block(consumed..consumed + block_bytes)?;
-            consumed += block_bytes;
-        }
-        if consumed > 0 {
-            self.pending.drain(..consumed);
-        }
-        Ok(())
+        self.writer
+            .write_all(&self.scratch)
+            .map_err(|why| Error::Flac {
+                why: format!("{} bytes would not encode: {why}", self.scratch.len()),
+            })
     }
 
-    /// Encodes one block out of `pending` and appends it to the file.
-    fn encode_block(&mut self, range: std::ops::Range<usize>) -> Result<()> {
-        let width = self.spec.wire_sample_bytes();
-        (&mut self.buffer, &mut self.context)
-            .fill_le_bytes(&self.pending[range], width)
-            .map_err(|why| Error::Flac {
-                why: format!("block {} would not load: {why:?}", self.frame_number),
-            })?;
-
-        let frame = flacenc::encode_fixed_size_frame(
-            &self.config,
-            &self.buffer,
-            self.frame_number,
-            &self.info,
-        )
-        .map_err(|why| Error::Flac {
-            why: format!("block {} would not encode: {why:?}", self.frame_number),
+    /// Flushes the last short block, corrects `STREAMINFO` and closes the file.
+    fn finish(self) -> Result<u64> {
+        let path = self.path;
+        self.writer.finalize().map_err(|why| Error::Flac {
+            why: format!("the stream would not close: {why}"),
         })?;
-        self.info.update_frame_info(&frame);
-
-        self.sink.clear();
-        frame.write(&mut self.sink).map_err(|why| Error::Flac {
-            why: format!("block {} would not serialize: {why:?}", self.frame_number),
-        })?;
-        let bytes = self.sink.as_slice();
-        self.file.write_all(bytes)?;
-        self.bytes += bytes.len() as u64;
-        self.frame_number += 1;
-        Ok(())
-    }
-
-    /// Encodes the last short block, corrects `STREAMINFO` and closes the file.
-    fn finish(mut self) -> Result<u64> {
-        if !self.pending.is_empty() {
-            let end = self.pending.len();
-            self.encode_block(0..end)?;
-            self.pending.clear();
-        }
-
-        // The digest and the sample count are whatever actually went through,
-        // not whatever `spec` promised. `flac -t` checks the digest, which is
-        // the only reason it is worth carrying.
-        self.info.set_md5_digest(&self.context.md5_digest());
-        self.info.set_total_samples(self.context.total_samples());
-
-        // The *nominal* block size, both ends, which is not what
-        // `update_frame_info` accumulated: it had honestly recorded the short
-        // final frame as the minimum. A `STREAMINFO` with min != max tells
-        // libFLAC the stream is variably blocked, and a variably blocked stream
-        // carries sample numbers in its frame headers where ours carry frame
-        // numbers - so `flac -t` warned once per frame that the numbering did
-        // not increase and that the file might not be seekable, on a file whose
-        // audio frames are byte-identical to the reference encoder's.
-        //
-        // Measured 2026-09-26: `flac 1.5.0` encoding the same 48000 frames
-        // declares min = max = 4096 and so does a 300-frame file, where the
-        // only frame there is runs short. The nominal size is the answer in
-        // both cases.
-        self.info
-            .set_block_sizes(self.block_frames, self.block_frames)
-            .map_err(|why| Error::Flac {
-                why: format!("a {}-frame block was rejected: {why:?}", self.block_frames),
-            })?;
-
-        let mut sink = std::mem::take(&mut self.sink);
-        self.file.seek(SeekFrom::Start(STREAMINFO_AT))?;
-        Self::write_stream_info(&mut self.file, &self.info, &mut sink)?;
-        self.file.flush()?;
-        Ok(self.bytes)
+        Ok(std::fs::metadata(&path)?.len())
     }
 }
 
@@ -1295,8 +1219,8 @@ mod tests {
     /// the direction the failure wants to point.
     #[test]
     fn a_refusal_only_sends_a_person_to_a_container_that_takes_the_capture() {
-        // Int32 and Float32 are what the FLAC refusals are about; the rates
-        // span MPEG's ceiling, flacenc's and §8's. Not a matrix for its own
+        // Float32 is what the FLAC refusal is about now that `Int32` exports;
+        // the rates span MPEG's ceiling and §8's. Not a matrix for its own
         // sake - every row here is a capture VCW can really produce.
         let mut checked = 0usize;
         for format in [
@@ -1584,16 +1508,22 @@ mod tests {
         let err = Writer::create(&path, Container::Wav, spec).unwrap_err();
         assert!(matches!(err, Error::TooLargeForWav { .. }), "got {err:?}");
         assert!(!path.exists(), "nothing was created");
-        // Ogg Vorbis, and only Ogg Vorbis. This assertion used to require the
-        // word "FLAC", which for this very spec - 192 kHz, 32-bit - is a
-        // container that refuses it on both counts, so the test was holding the
-        // wrong advice in place. The right answer here is that nothing lossless
-        // will take it: WAV is out on length and FLAC on rate and depth.
+        // FLAC *and* Ogg Vorbis, and this assertion has now been both ways
+        // round. It first required the word "FLAC", which for this very spec -
+        // 192 kHz, 32-bit - was a container `flacenc` refused on both counts,
+        // so the test was holding wrong advice in place and was inverted to
+        // forbid the word instead. `flac-codec` takes the spec, so the first
+        // version was right all along and the second was right about the
+        // library it was written against. Neither was ever written as a string
+        // literal in the message, which is the only reason a swap of encoder
+        // did not ship advice that had quietly become wrong: `alternatives`
+        // asks every container, so this test only has to say what the answer
+        // should be.
         let said = err.to_string();
         assert!(said.contains("Ogg Vorbis"), "{said}");
         assert!(
-            !said.contains("FLAC"),
-            "FLAC refuses this spec too, so naming it costs a second attempt: {said}"
+            said.contains("FLAC"),
+            "FLAC takes 32-bit at 192 kHz now, and is the only lossless answer here: {said}"
         );
     }
 
@@ -1612,17 +1542,17 @@ mod tests {
         let float = Flac::vet(&spec(StorageFormat::Float32, 48_000, 10)).unwrap_err();
         assert!(float.to_string().contains("integer codec"), "{float}");
 
-        let wide = Flac::vet(&spec(StorageFormat::Int32, 48_000, 10)).unwrap_err();
-        assert!(wide.to_string().contains("flacenc 0.5.1"), "{wide}");
-
-        let fast = Flac::vet(&spec(StorageFormat::Int24Packed, 192_000, 10)).unwrap_err();
-        assert!(fast.to_string().contains("96 kHz"), "{fast}");
-
         let mut many = spec(StorageFormat::Int16, 48_000, 10);
         many.channels = 9;
         assert!(Flac::vet(&many).is_err());
 
-        // And the case that has to work: the archival default.
+        // And the cases that have to work. The first two are the ones
+        // `flacenc` refused until 2026-10-06: a 32-bit capture, which is what
+        // a default device negotiation produces, and 192 kHz, which §8
+        // requires. Between them they are the ordinary rip.
+        Flac::vet(&spec(StorageFormat::Int32, 48_000, 10)).unwrap();
+        Flac::vet(&spec(StorageFormat::Int24Packed, 192_000, 10)).unwrap();
+        Flac::vet(&spec(StorageFormat::Int32, 192_000, 10)).unwrap();
         Flac::vet(&spec(StorageFormat::Int24Packed, 96_000, 10)).unwrap();
         Flac::vet(&spec(StorageFormat::Int24Padded, 96_000, 10)).unwrap();
         Flac::vet(&spec(StorageFormat::Int16, 44_100, 10)).unwrap();
@@ -1630,21 +1560,99 @@ mod tests {
 
     #[test]
     fn the_flac_library_really_does_stop_where_we_say_it_does() {
-        // `vet` refuses 32 bits and 192 kHz on the library's behalf. This is the
-        // evidence that the refusal is the library's limit and not ours, and the
-        // test that will fail - loudly, and in the right place - on the day
-        // flacenc lifts either one.
-        use flacenc::component::StreamInfo;
+        // `Flac::why` has one reason left in it, and this is the evidence for
+        // the two that were deleted: the encoder now takes both of the things
+        // VCW records. The other direction matters too - the day a capture
+        // mode exceeds what FLAC itself carries, `why` owes a sentence about
+        // it, and this is the test that would notice.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let open = |rate: u32, bits: u32, channels: u8| {
+            let path = dir.path().join(format!("{rate}-{bits}-{channels}.flac"));
+            FlacByteWriter::<_, LittleEndian>::new(
+                File::create(&path).expect("a file"),
+                Options::default(),
+                rate,
+                bits,
+                channels,
+                None,
+            )
+            .map(drop)
+        };
+        open(192_000, 32, 2).expect("32-bit at 192 kHz is the whole point of the swap");
+        open(96_000, 24, 2).expect("24/96 is the archival default");
+        open(44_100, 16, 2).expect("16/44.1 is the CD case");
         assert!(
-            StreamInfo::new(192_000, 2, 24).is_err(),
-            "flacenc now takes 192 kHz: drop the rate check in Flac::vet"
+            open(48_000, 33, 2).is_err(),
+            "the encoder now takes more than 32 bits: say so in Flac::why"
         );
         assert!(
-            StreamInfo::new(96_000, 2, 32).is_err(),
-            "flacenc now takes 32-bit: drop the width check in Flac::vet"
+            open(1 << 21, 24, 2).is_err(),
+            "the encoder now takes rates past 2^20: say so in Flac::why"
         );
-        StreamInfo::new(96_000, 2, 24).expect("24/96 is the archival default");
-        StreamInfo::new(44_100, 2, 16).expect("16/44.1 is the CD case");
+        assert!(
+            open(48_000, 24, 9).is_err(),
+            "the encoder now takes more than 8 channels: drop the check in Flac::why"
+        );
+    }
+
+    /// The claim the word "lossless" makes, checked rather than asserted.
+    ///
+    /// 32-bit at 192 kHz, which is both of the caps that were lifted at once,
+    /// and the samples have to come back out byte for byte. Out of tree this
+    /// was `flac -t` against reference libFLAC on a real rip; in tree it is the
+    /// library's own reader, which is weaker evidence but runs on every push.
+    #[test]
+    fn a_32_bit_192_khz_file_decodes_back_to_the_bytes_that_went_in() {
+        use std::io::Read;
+
+        let spec = spec(StorageFormat::Int32, 192_000, 5000);
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let path = dir.path().join("wide.flac");
+        let stored = noisy_pcm(5000, 4);
+
+        let mut writer =
+            Writer::create(&path, Container::Flac(Compression::default()), spec).unwrap();
+        writer.write(&stored).unwrap();
+        let bytes = writer.finish().unwrap();
+        assert!(bytes > 0);
+
+        let mut reader = flac_codec::decode::FlacByteReader::endian(
+            std::io::BufReader::new(File::open(&path).unwrap()),
+            LittleEndian,
+        )
+        .expect("the file we just wrote");
+        let mut back = Vec::new();
+        reader.read_to_end(&mut back).expect("a whole stream");
+        assert_eq!(back.len(), stored.len(), "frame count");
+        assert!(back == stored, "32/192 did not round trip");
+    }
+
+    /// Interleaved stereo bytes that compress like music rather than like a
+    /// ramp, `bytes` wide per sample.
+    ///
+    /// A ramp is the wrong shape for anything about compression: a fixed
+    /// predictor of order 2 encodes one exactly, so every level ties at the
+    /// floor and a ladder test on one proves nothing. This is a tone the
+    /// predictors can follow with noise on top they cannot, and the two
+    /// channels carry the same tone with the noise inverted, so mid/side has
+    /// something to find the way it does on a real record. The LCG is there to
+    /// make the test reproducible; `rand` is not a dependency of this crate and
+    /// should not become one for a waveform.
+    fn noisy_pcm(frames: usize, bytes: usize) -> Vec<u8> {
+        let full = 1i64 << (bytes * 8 - 1);
+        let mut out = Vec::with_capacity(frames * 2 * bytes);
+        let mut state = 0x2545_F491_4F6C_DD1Du64;
+        for n in 0..frames {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            let noise = ((state >> 48) as i64) - (1 << 15);
+            let tone = ((n as f64 * 0.013).sin() * (full as f64) * 0.4) as i64;
+            for sample in [tone + noise, tone - noise] {
+                out.extend_from_slice(&sample.to_le_bytes()[..bytes]);
+            }
+        }
+        out
     }
 
     #[test]
@@ -1660,21 +1668,43 @@ mod tests {
         let file = std::fs::read(&path).unwrap();
         assert_eq!(file.len() as u64, total);
         assert_eq!(&file[0..4], b"fLaC");
-        assert_eq!(file[4], 0x00, "STREAMINFO, and not the last block");
-        assert_eq!(
-            u32::from_be_bytes([0, file[5], file[6], file[7]]),
-            STREAMINFO_BYTES as u32
+
+        // Walked rather than indexed. The block list is the library's now, and
+        // the thing worth asserting is what a tagger and a player need - a
+        // STREAMINFO first, and padding big enough that `lofty` writes a
+        // comment block without moving the audio - not the order a particular
+        // version happens to emit them in.
+        let mut at = 4;
+        let mut blocks = Vec::new();
+        loop {
+            let last = file[at] & 0x80 != 0;
+            let kind = file[at] & 0x7F;
+            let length = u32::from_be_bytes([0, file[at + 1], file[at + 2], file[at + 3]]);
+            blocks.push((kind, length));
+            at += 4 + length as usize;
+            assert!(at < file.len(), "the metadata ran past the end of the file");
+            if last {
+                break;
+            }
+        }
+        assert_eq!(blocks[0], (0, 34), "STREAMINFO is first and is 34 bytes");
+        // Not `== FLAC_PADDING`: the library takes the seek table out of the
+        // padding budget, so asking for 8192 gives 8170 of padding and 18 of
+        // seek points. What the tagger needs is room, and half the ask is
+        // ample for a `VORBIS_COMMENT` - a vinyl rip's tags run to a few
+        // hundred bytes.
+        let padding = blocks
+            .iter()
+            .find(|(kind, _)| *kind == 1)
+            .unwrap_or_else(|| panic!("no PADDING block for the tagger: {blocks:?}"));
+        assert!(
+            padding.1 >= FLAC_PADDING / 2,
+            "only {} bytes of padding, out of the {FLAC_PADDING} asked for",
+            padding.1
         );
-        let padding_at = 8 + STREAMINFO_BYTES;
-        assert_eq!(file[padding_at], 0x81, "PADDING, and the last block");
-        assert_eq!(
-            u32::from_be_bytes([
-                0,
-                file[padding_at + 1],
-                file[padding_at + 2],
-                file[padding_at + 3]
-            ]),
-            FLAC_PADDING
+        assert!(
+            blocks.iter().any(|(kind, _)| *kind == 3),
+            "no SEEKTABLE: {blocks:?}"
         );
 
         // total_samples, the low 36 bits of the packed field at offset 8+18.
@@ -1794,31 +1824,52 @@ mod tests {
     /// The ladder has to go somewhere, and the numbers have to survive a round
     /// trip through the string a settings file holds.
     #[test]
-    fn every_compression_level_is_a_distinct_configuration() {
+    fn the_compression_ladder_only_ever_gets_smaller() {
         let levels: Vec<Compression> = Compression::all().collect();
         assert_eq!(levels.len(), 9, "flac -0 to -8");
         assert_eq!(Compression::default().level(), 5, "the reference default");
 
-        // Measured out of tree on a real 24-bit rip: monotone, and no two
-        // levels produce the same file. Here the cheap half of that claim -
-        // that no two levels ask `flacenc` for the same thing - which is what
-        // would silently stop being true if a knob were dropped from the map.
-        let mut seen: Vec<(usize, bool, bool, usize, usize)> = Vec::new();
+        // `flac_codec::encode::Options` keeps its fields private, so the old
+        // version of this - compare the knobs each level asks for - is not
+        // available any more. Encoding is, and it was always the better test:
+        // two levels that set different knobs to the same effect would have
+        // passed the old one.
+        //
+        // What is asserted here is that every level encodes, and that the top
+        // of the ladder is not worse than the bottom. Strict monotonicity is
+        // *not* asserted, and was tried: it is a property of real material and
+        // not of the encoder, and on a synthetic waveform the levels reorder
+        // freely - here `-2` beats `-3` outright, because `-3` turns mid/side
+        // off and this signal is two channels of one tone with the noise
+        // inverted, which is the one thing mid/side is best at. The real
+        // ladder is in `Compression`'s own documentation, measured where
+        // measuring means something.
+        //
+        // "Every level encodes" is not a formality. The first version of this
+        // ladder asked for a partition order of 8 at `-8`, which panics inside
+        // the encoder rather than returning an error, and this is the test that
+        // found it.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let pcm = noisy_pcm(24_000, 3);
+        let mut sizes = Vec::new();
         for level in levels {
-            let config = level.config();
-            let shape = (
-                config.block_size,
-                config.stereo_coding.use_midside,
-                config.subframe_coding.use_lpc,
-                config.subframe_coding.fixed.max_order,
-                config.subframe_coding.qlpc.lpc_order,
-            );
-            assert!(
-                !seen.contains(&shape),
-                "{level} repeats a configuration: {shape:?}"
-            );
-            seen.push(shape);
+            let path = dir.path().join(format!("{}.flac", level.level()));
+            let spec = Spec {
+                rate: 48_000,
+                channels: 2,
+                format: StorageFormat::Int24Packed,
+                frames: 24_000,
+            };
+            let mut writer = Flac::create(&path, spec, level).expect("24/48 is ordinary");
+            writer.write(&pcm).expect("the whole buffer");
+            sizes.push((level, writer.finish().expect("a closed stream")));
         }
+        let worst = sizes.first().expect("nine levels").1;
+        let best = sizes.last().expect("nine levels").1;
+        assert!(
+            best <= worst,
+            "-8 came out bigger than -0: {best} against {worst} - the ladder is {sizes:?}"
+        );
 
         // `-8` and `8` are the same thing, `9` is not a level, and a round
         // trip through `name` is what a settings file does on every save.

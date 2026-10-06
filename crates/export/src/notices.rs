@@ -92,10 +92,10 @@ impl Container {
         match self {
             Self::Wav => None,
             Self::Flac(_) => Some(Notice {
-                component: "flacenc",
-                license: "Apache-2.0",
+                component: "flac-codec",
+                license: "MIT OR Apache-2.0",
                 provides: "FLAC export",
-                source: "https://crates.io/crates/flacenc",
+                source: "https://crates.io/crates/flac-codec",
                 copyleft: false,
             }),
             // The one that made WP-28 a license obligation rather than a
@@ -225,10 +225,10 @@ mod tests {
 
     /// Flat attribution is still attribution, and FLAC is not optional.
     #[test]
-    fn every_build_owes_flacenc_and_names_a_source_for_everything() {
+    fn every_build_owes_the_flac_encoder_and_names_a_source_for_everything() {
         let owed = notices();
         assert!(
-            owed.iter().any(|notice| notice.component == "flacenc"),
+            owed.iter().any(|notice| notice.component == "flac-codec"),
             "{owed:#?}"
         );
         for notice in &owed {

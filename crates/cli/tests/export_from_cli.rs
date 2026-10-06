@@ -77,9 +77,10 @@ fn refused(args: &[&str]) -> String {
 /// A project with one side of simulated audio, two titled tracks, a release and
 /// a cover, built entirely through the binary.
 ///
-/// `format` is pinned because it decides what can be exported: FLAC cannot carry
-/// 32-bit samples while `flacenc` stops at 24 bits, which is a real limit and
-/// not a test convenience.
+/// `format` is pinned because it decides what can be exported: FLAC is an
+/// integer codec, so a `f32` capture has no FLAC path at all. It used to decide
+/// much more than that - `flacenc` stopped at 24 bits, so `s32` was refused as
+/// well - and `flac-codec` lifted that on 2026-10-06.
 fn side(dir: &Path, format: &str, seconds: f64) -> PathBuf {
     let project = dir.join("side.vcw");
     let path = project.display().to_string();
@@ -444,14 +445,14 @@ fn one_side_can_be_exported_on_its_own() {
 
 #[test]
 fn what_flac_cannot_carry_is_refused_with_the_reason() {
-    // The one requirement gap WP-14 leaves open, asserted so it cannot be
-    // forgotten: §8 allows a 32-bit capture and §33 requires FLAC, and
-    // `flacenc` 0.5.1 stops at 24 bits. Refused loudly, with the remedy in the
-    // message, rather than narrowed behind the operator's back - the corpus at
-    // /data2/source_rips shows real 32-bit rips using the whole low byte, so
-    // narrowing is not lossless and is not ours to decide.
+    // What is left of WP-14's requirement gap, and it is now one format rather
+    // than three. §8 allows a float capture - it is what Audacity produces -
+    // and FLAC is an integer codec, so there is no encoder anywhere that would
+    // take it. Refused loudly, with the remedy in the message, rather than
+    // dithered behind the operator's back: where the samples land when 32 bits
+    // of float become integers is a decision about headroom and is not ours.
     let dir = tempfile::tempdir().expect("tempdir");
-    let project = side(dir.path(), "s32", 1.0);
+    let project = side(dir.path(), "f32", 1.0);
     let said = refused(&[
         "export",
         &project.display().to_string(),
@@ -461,10 +462,53 @@ fn what_flac_cannot_carry_is_refused_with_the_reason() {
         "flac",
     ]);
     assert!(said.contains("cannot be written as FLAC"), "{said}");
-    // Both containers that will take a 32-bit capture, because a refusal that
+    // Both containers that will take a float capture, because a refusal that
     // names only one of them sends a person who wanted a small file to WAV.
     assert!(said.contains("as WAV"), "{said}");
     assert!(said.contains("Ogg Vorbis"), "{said}");
+}
+
+/// The capture every rig makes, exported to the format §33 asks for.
+///
+/// This is the test that could not be written until 2026-10-06. A device
+/// negotiation takes the widest integer format on offer, so an ordinary capture
+/// is `s32`, and `flacenc` 0.5.1 stopped at 24 bits - which meant the default
+/// rip had no FLAC path and the first export anyone tried was a refusal. The
+/// assertion is small and the thing it covers is the whole point of the swap.
+#[test]
+fn the_default_capture_format_exports_as_flac() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "s32", 1.0);
+    let into = dir.path().join("out");
+    let printed = vcw(&[
+        "export",
+        &project.display().to_string(),
+        "--into",
+        &into.display().to_string(),
+        "--format",
+        "flac",
+        "--json",
+    ]);
+    let report: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(report["report"]["files"], 2, "{printed}");
+
+    for item in report["items"].as_array().expect("items") {
+        let path = Path::new(item["path"].as_str().expect("a path"));
+        let bytes = std::fs::read(path).expect("a written file");
+        assert_eq!(
+            &bytes[0..4],
+            b"fLaC",
+            "{} is not a FLAC file",
+            path.display()
+        );
+        // STREAMINFO packs the rate (20 bits), the channel count (3) and the
+        // width (5) into the same 64-bit field as the sample total (36), at
+        // offset 8+10. The width is stored one less than it is, so 32 reads
+        // as 31.
+        let packed = u64::from_be_bytes(bytes[8 + 10..8 + 18].try_into().expect("eight bytes"));
+        let bits = ((packed >> 36) & 0x1F) + 1;
+        assert_eq!(bits, 32, "{} was narrowed to {bits} bits", path.display());
+    }
 }
 
 #[test]

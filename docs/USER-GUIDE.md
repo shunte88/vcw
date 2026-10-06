@@ -377,20 +377,23 @@ side B's is `B1 - ...`. Five things worth knowing:
   touched. What can still leave files behind is a run that fails part way - a
   full disk, a disappearing drive - and there the files already written are
   real files and are left alone.
-* **A 32-bit capture cannot leave as FLAC.** The FLAC encoder stops at 24 bits
-  and narrowing 32 to 24 throws signal away, so `--format flac` refuses it by
-  name rather than quietly dithering. WAV takes it losslessly and Ogg Vorbis
-  takes it lossily; MP3 does not take it at all above 48 kHz. Capture at
-  `--format s24` if FLAC is where the rip is going to live.
-* **Above 96 kHz, FLAC refuses too.** `flacenc` stops there, though the format
-  itself allows far more. A 176.4 or 192 kHz rip leaves as WAV or as Ogg
-  Vorbis - which is the one container that will take any rate VCW records.
+* **A float capture cannot leave as FLAC.** FLAC is an integer codec, and
+  where 32 bits of float should land as integers is a decision about headroom,
+  so `--format flac` refuses it by name rather than quietly dithering. WAV takes
+  it losslessly and Ogg Vorbis takes it lossily; MP3 does not take it at all
+  above 48 kHz. Capture at `--format s32` - the default - if FLAC is where the
+  rip is going to live.
+* **A 32-bit capture at 192 kHz leaves as FLAC, and that is new.** Until
+  2026-10-06 the encoder stopped at 24 bits and 96 kHz, which are a library's
+  limits and not the format's, and since a device negotiation takes the widest
+  integer format on offer that meant the ordinary rip had no FLAC path at all.
+  It does now.
 
 ### The four formats
 
 | `--format` | What it is | Takes |
 | --- | --- | --- |
-| `flac` | Lossless, compressed. The archival choice. | Up to 24-bit, up to 96 kHz |
+| `flac` | Lossless, compressed. The archival choice. | Up to 32-bit integer, any rate VCW records |
 | `wav` | Lossless, uncompressed. Takes everything, including float. | Anything, up to 4 GiB a file |
 | `mp3` | Lossy, variable bitrate. The one every car stereo reads. | 1 or 2 channels at up to 48 kHz |
 | `ogg` | Lossy Vorbis. Smaller than MP3 at the same quality. | Anything VCW records |
@@ -408,8 +411,8 @@ ones, so you can leave it set while you change your mind about the format:
 kHz, so a 96 or 192 kHz rip cannot become an MP3 without resampling it - and
 resampling means choosing an anti-alias filter, which is a decision about how
 the record sounds and not one an exporter should make on your behalf. The
-refusal names the rate it is looking at. Export that rip as Ogg Vorbis, which
-has no such limit, or as WAV. FLAC is only an option at 96 kHz or below.
+refusal names the rate it is looking at. Export that rip as FLAC, which takes
+every rate VCW records, as Ogg Vorbis, or as WAV.
 
 The lossy formats are for the copy you carry around. Keep the lossless one.
 

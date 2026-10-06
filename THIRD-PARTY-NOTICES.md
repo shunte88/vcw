@@ -129,7 +129,7 @@ cargo build --release --no-default-features --features ogg   # in crates/export
 Such a build still understands `--format mp3` and refuses it with a sentence saying
 this binary was compiled without it, which is a better answer than not knowing the
 word. FLAC and WAV - the archival formats, and the ones VCW's bit-exactness claim is
-about - are unaffected either way: `flacenc` is pure Rust and Apache-2.0.
+about - are unaffected either way: `flac-codec` is pure Rust and MIT OR Apache-2.0.
 
 ### Notice to users of VCW binaries containing MP3 support
 

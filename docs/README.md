@@ -342,10 +342,13 @@ Tags are validated by software nobody here wrote - `ffprobe`, `flac`, `metaflac`
 python `mutagen` - and a tag write is required not to move a sample: the FLAC stream's MD5
 must be unchanged after tagging, and the WAV `data` chunk byte-identical. Two limits are
 refused out loud rather than worked around. A WAV cannot exceed 4 GiB, because RIFF sizes
-are 32-bit. And `flacenc` 0.5.1 stops at 24 bits and 96 kHz, which are the library's
-limits and not the format's - so a 32-bit capture has no FLAC path today, and narrowing it
-silently is not on offer, because a real 32-bit rip uses the whole low byte and dropping
-eight of them is a decision about dither that belongs to a person. **MP3 and Ogg are not
+are 32-bit. And FLAC is an integer codec, so a float capture has no FLAC path, and
+narrowing it silently is not on offer, because where 32 bits of float land as integers is a
+decision about headroom that belongs to a person. That list used to be longer: the FLAC
+encoder was `flacenc` 0.5.1, which stops at 24 bits and 96 kHz - the library's limits and
+not the format's - and so a 32-bit capture, which is what a default device negotiation
+produces, could not be exported as FLAC at all. `flac-codec` replaced it on 2026-10-06 and
+takes 32 bits at 192 kHz, verified against reference libFLAC. **MP3 and Ogg are not
 built yet.**
 
 The desktop shell (WP-15) puts a window in front of all of it. There is now an eleventh

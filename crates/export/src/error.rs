@@ -108,13 +108,17 @@ pub enum Error {
         /// Where to send this particular capture instead.
         ///
         /// Computed at the refusal rather than written into the message,
-        /// because the honest answer depends on the capture. This used to read
-        /// "Export this one as FLAC", which is true of a 24-bit 44.1 kHz side
-        /// and false of the 192 kHz `Int32` one in `/data2/vcw-firstlight`:
-        /// `flacenc` stops at 96 kHz and at 24 bits, so for that capture the
-        /// only container with no size ceiling is Ogg Vorbis. A refusal that
-        /// names a container which then refuses as well costs a person a
-        /// second attempt to find out.
+        /// because the honest answer depends on the capture *and* on what the
+        /// encoder in this build can do. This used to read "Export this one as
+        /// FLAC", which was true of a 24-bit 44.1 kHz side and false of the
+        /// 192 kHz `Int32` one in `/data2/vcw-firstlight`, because `flacenc`
+        /// stopped at 96 kHz and at 24 bits and left Ogg Vorbis as the only
+        /// container with no size ceiling. Swapping in `flac-codec` on
+        /// 2026-10-06 made FLAC the right answer again for exactly that
+        /// capture, and this field needed no edit for either change, which is
+        /// the argument for computing it. A refusal that names a container
+        /// which then refuses as well costs a person a second attempt to find
+        /// out.
         instead: String,
     },
 

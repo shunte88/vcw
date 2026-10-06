@@ -5867,10 +5867,18 @@ step for next time. None of them touch the product.
 **The next release has nothing waiting on it.** One thing is: the UI change list, which
 is the user's to write. The README was read and passed on 2026-10-06, and the question
 of whether `"finalised"` earns a schema v5 migration to `"finalized"` was closed the
-same day - it stays as it is. The reasoning is in the carve-out above: the spelling rule
-exempts identifiers, this is one as well as a stored value, nothing renders it to a
-user, and the migration would rewrite a column in every existing `.vcw` for a change
-nobody can see.
+same day - it stays as it is. The reason that survives is the carve-out above: the
+spelling rule exempts identifiers, this is one as well as a stored value, and the
+migration would rewrite a column in every existing `.vcw`.
+
+**One reason given for that decision was wrong, and is withdrawn.** I said nothing
+rendered the raw state name to a user. `Capture.tsx:253` prints `{row.state}` straight
+into the Captures table's State column, and `:262` puts it in a sentence, so `finalised`
+is on screen whenever a project is open - confirmed in a screenshot of the published
+AppImage on 2026-10-06. The grep that missed it searched the frontend for the literal,
+and the frontend never names the value; it just prints what the wire sends. The decision
+to leave the spelling alone stands on the user's instruction, but it should be read
+knowing the word is user-visible, which is the one real argument the other way.
 
 **WP-22 is built** (above): the lookup, the recording fetch, `--identify`, and the
 measurement that says alignment rather than audio quality is what decides whether a
