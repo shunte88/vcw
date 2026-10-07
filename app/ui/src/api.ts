@@ -222,8 +222,14 @@ export function about(): Promise<About> {
  *
  * A name and not a URL: the addresses are a table in the shell, so this side
  * can ask for a page and cannot ask for an address.
+ *
+ * A `string` rather than a union of the names, because the shell *generates*
+ * its table - the repository from the manifest, one entry per third-party
+ * notice from the cargo features - so the set is a property of the build and
+ * not something this file could spell. An unknown name is refused, with the
+ * refusal shown rather than swallowed.
  */
-export function support(page: "coffee" | "shirts"): Promise<void> {
+export function support(page: string): Promise<void> {
   return invoke("support", { page });
 }
 

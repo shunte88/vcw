@@ -43,6 +43,7 @@ import {
 } from "../scale";
 import type { Store } from "../store";
 import { TOKENS, unknownTokens } from "../template";
+import { Switch } from "./Switch";
 
 /**
  * The sample formats the contract accepts, which are `parse_format`'s.
@@ -141,6 +142,13 @@ export function Settings({
 
   // Which of the two encoder knobs the chosen default format has, if either.
   const effort = effortOf(draft.export.format);
+
+  // The Discogs token, reported where it is asked for rather than only in the
+  // Credentials group: "Discogs needs a token" and "your token did not arrive"
+  // are the same question, and they were two sections apart.
+  const discogsToken = credentials.find(
+    (credential) => credential.variable === "VCW_DISCOGS_TOKEN",
+  );
 
   const text = (value: string) => (value.trim() === "" ? null : value.trim());
   const number = (value: string) =>
@@ -430,34 +438,42 @@ export function Settings({
         )}
 
         {section === "Metadata" && (
-        <fieldset>
+        <fieldset className="stacked">
           <legend>Metadata</legend>
-          <label className="tick">
-            <input
-              type="checkbox"
+
+          {/* The master switch, and it stays a switch of its own. The two below
+              it choose which *catalogs a search consults*; this one chooses the
+              transport, and it is the only thing in the product that stops an
+              AcoustID lookup or a cover-art download - neither of which goes
+              through MusicBrainz or Discogs. Derived from "either provider is
+              on", a both-off configuration would still reach the network. */}
+          <div className="setting-switch">
+            <span>Allow network lookups</span>
+            <Switch
               checked={draft.metadata.online}
-              onChange={(event) => metadata({ online: event.target.checked })}
+              onChange={(online) => metadata({ online })}
+              off="Offline"
+              on="Online"
+              title="The master switch: offline, VCW opens no socket at all"
             />
-            Allow network lookups
-          </label>
-          <label className="tick">
-            <input
-              type="checkbox"
+          </div>
+          <p className="hint">
+            Offline, nothing here reaches the network: no catalog search, and
+            also no AcoustID fingerprint lookup and no cover art, neither of
+            which the two switches below cover. Online, those two choose which
+            catalogs a search asks.
+          </p>
+
+          <div className="setting-switch">
+            <span>MusicBrainz</span>
+            <Switch
               checked={draft.metadata.musicbrainz}
-              onChange={(event) =>
-                metadata({ musicbrainz: event.target.checked })
-              }
+              onChange={(musicbrainz) => metadata({ musicbrainz })}
+              off="Skip"
+              on="Search"
+              title="Consult MusicBrainz when searching for a release"
             />
-            MusicBrainz
-          </label>
-          <label className="tick">
-            <input
-              type="checkbox"
-              checked={draft.metadata.discogs}
-              onChange={(event) => metadata({ discogs: event.target.checked })}
-            />
-            Discogs
-          </label>
+          </div>
           <label>
             Contact address for the user agent
             <input
@@ -466,6 +482,57 @@ export function Settings({
               onChange={(event) => metadata({ contact: text(event.target.value) })}
             />
           </label>
+          <p className="hint">
+            MusicBrainz needs no account, but it does ask who is calling: an
+            address here is sent in the user agent on every request, and without
+            one the rate limit is harder and a lookup can be refused outright. An
+            email address or a URL, and public by design - it is not a secret, so
+            unlike the token below it can live in settings. <code>VCW_CONTACT</code>{" "}
+            in the environment is used when this is empty.
+          </p>
+
+          <div className="setting-switch">
+            <span>Discogs</span>
+            <Switch
+              checked={draft.metadata.discogs}
+              onChange={(discogs) => metadata({ discogs })}
+              off="Skip"
+              on="Search"
+              title="Consult Discogs when searching for a release"
+            />
+          </div>
+          <p className="hint">
+            <code>VCW_DISCOGS_TOKEN</code>{" "}
+            {discogsToken?.present === true ? (
+              <span className="ok">
+                set, {discogsToken.characters} characters
+              </span>
+            ) : (
+              <span className="dim">not set in this process</span>
+            )}
+          </p>
+          <p className="hint">
+            Discogs needs a personal access token, which is a secret: §39 keeps
+            it out of every project and settings file, so there is no field for
+            it here. Export it before starting VCW and the line above says
+            whether it arrived - a desktop launcher starts VCW with its own
+            environment rather than your shell&apos;s, which is the usual reason
+            a token you have exported reads as not set. Generating one takes a
+            Discogs account and no application review.
+          </p>
+          <p className="hint">
+            <button
+              type="button"
+              className="as-link globe-link"
+              onClick={() => {
+                void store.run(() => api.support("discogs-token"));
+              }}
+            >
+              <span className="icon globe-mark" aria-hidden="true" />
+              Get Discogs API Token
+            </button>
+          </p>
+
           <label>
             Genre map
             <input
@@ -477,13 +544,16 @@ export function Settings({
             />
           </label>
           <p className="hint">
-            MusicBrainz needs no account, but it does ask who is calling: an
-            address here is sent in the user agent on every request, and without
-            one the rate limit is harder and a lookup can be refused outright. An
-            email address or a URL, and public by design. Discogs needs a token,
-            which is a secret and so is never kept here - export
-            VCW_DISCOGS_TOKEN before starting VCW, and the Credentials table
-            below says whether it arrived.
+            What a provider calls a genre is not what your catalog calls one:
+            Discogs answers <code>Electronic</code> with a style of{" "}
+            <code>Dub Techno</code>, and a 1994 pressing carries whatever its
+            cataloger typed. The genre map folds those into your own names
+            before they are stored or written to a tag. Leave it empty for the
+            built-in table - 639 mappings ported from VRipr - or give the path
+            to a file of <code>key|Genre; Another</code> lines, one per row,{" "}
+            <code>#</code> for a comment. Matching is exact first and
+            case-insensitive second, and a genre the table does not mention
+            passes through unchanged.
           </p>
         </fieldset>
         )}
@@ -668,6 +738,17 @@ export function Settings({
           <p className="hint">
             Read from the environment and never written to a project file. This
             list is everything the application can tell you about one.
+          </p>
+          <p className="hint">
+            Read once, when VCW starts, from the environment of whatever started
+            it - which is why a credential you have exported can read as not set
+            here. A desktop launcher, a dock icon or a .desktop entry starts VCW
+            from the session&apos;s environment and not from your shell&apos;s,
+            so an <code>export</code> in <code>.bashrc</code> or typed into a
+            terminal is invisible to it. Either start VCW from that same
+            terminal, or put the variable somewhere the session reads -{" "}
+            <code>~/.profile</code> on Linux, <code>launchctl setenv</code> on
+            macOS, the user environment variables on Windows - and log in again.
           </p>
           <table className="rows">
             <thead>

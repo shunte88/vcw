@@ -16,7 +16,7 @@ members = ["crates/*"]
 exclude = ["app", "spikes"]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.90"
 description = "VCW - The Vinyl Capture Workstation"
@@ -28,20 +28,29 @@ license = "MIT"
 repository = "https://github.com/shunte88/vcw"
 authors = ["Stue Hunter"]
 
+# What the project *is*, in one sentence, as the repository's own description
+# says it. `description` above is the product's name, which is what crates.io
+# wants and what the About dialog titles itself with; this is the sentence under
+# it. Here rather than typed into the dialog for the reason every other fact in
+# that dialog is derived - see `About::current` - and read by
+# `the_description_is_what_the_project_says_it_is`.
+[workspace.metadata.vcw]
+description = "VCW the de facto tool for vinyl capture across platforms: a complete workstation for listeners preserving and cataloging their collections, with reusable services for people building their own workflows and interfaces"
+
 [workspace.dependencies]
 # Internal. Versioned as well as pathed so the crates stay publishable if that ever
 # becomes useful, and so a stale path cannot resolve to the wrong thing.
-vcw-audio = { path = "crates/audio", version = "0.1.2" }
-vcw-contract = { path = "crates/contract", version = "0.1.2" }
-vcw-core = { path = "crates/core", version = "0.1.2" }
-vcw-export = { path = "crates/export", version = "0.1.2" }
-vcw-fingerprint = { path = "crates/fingerprint", version = "0.1.2" }
-vcw-identify = { path = "crates/identify", version = "0.1.2" }
-vcw-import = { path = "crates/import", version = "0.1.2" }
-vcw-metadata = { path = "crates/metadata", version = "0.1.2" }
-vcw-project = { path = "crates/project", version = "0.1.2" }
-vcw-signal = { path = "crates/signal", version = "0.1.2" }
-vcw-types = { path = "crates/types", version = "0.1.2" }
+vcw-audio = { path = "crates/audio", version = "0.1.3" }
+vcw-contract = { path = "crates/contract", version = "0.1.3" }
+vcw-core = { path = "crates/core", version = "0.1.3" }
+vcw-export = { path = "crates/export", version = "0.1.3" }
+vcw-fingerprint = { path = "crates/fingerprint", version = "0.1.3" }
+vcw-identify = { path = "crates/identify", version = "0.1.3" }
+vcw-import = { path = "crates/import", version = "0.1.3" }
+vcw-metadata = { path = "crates/metadata", version = "0.1.3" }
+vcw-project = { path = "crates/project", version = "0.1.3" }
+vcw-signal = { path = "crates/signal", version = "0.1.3" }
+vcw-types = { path = "crates/types", version = "0.1.3" }
 
 # External. Single source of version truth for the whole tree; a bump happens here
 # and nowhere else.

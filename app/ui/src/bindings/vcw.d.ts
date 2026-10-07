@@ -1351,6 +1351,14 @@ export type About = {
  */
 product: string,
 /**
+ * What the project is, in the sentence the repository leads with.
+ *
+ * The name above answers "what is this called"; a person who has just
+ * installed a package and opened the only dialog that explains itself is
+ * asking the other question.
+ */
+description: string,
+/**
  * The release this is.
  */
 version: string,

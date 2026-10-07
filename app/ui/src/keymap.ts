@@ -428,6 +428,18 @@ export const BINDINGS = {
     scope: "global",
     label: "Show the event log",
   },
+  // The only overlay that had no chord at all, which made §44's "no workflow
+  // needs the mouse" false for the one panel a person opens to answer "what
+  // version is this" - the first question of every bug report. `Ctrl+I` for
+  // information: `Ctrl+A` is select-all inside every text field in the product
+  // and `chord()` cannot tell `Ctrl+Shift+A` from it, because Shift is carried
+  // by the character for a single-character key.
+  about: {
+    chord: "Ctrl+i",
+    workflow: "help",
+    scope: "global",
+    label: "Show the build, its license and its notices",
+  },
   dismiss: {
     chord: "Escape",
     workflow: "navigate",
@@ -485,7 +497,7 @@ export const COVERAGE: Record<Workflow, readonly Action[]> = {
     "log",
     "dismiss",
   ],
-  help: ["help"],
+  help: ["help", "about"],
 };
 
 /**

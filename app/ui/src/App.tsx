@@ -289,6 +289,21 @@ export function App(): React.JSX.Element {
   // it. `zoom.ts` holds every rule about what a range may be; this holds which
   // range it currently is.
   const frames = capture?.frames ?? 0;
+
+  // Whether the top half of the window is a picture. Three panels want one and
+  // three do not, which is what `STAGE` says - but a panel that wants one and
+  // has nothing to draw used to get it anyway: half the window, black, with
+  // "Nothing captured yet" in a strip under it, and the panel's own content
+  // squeezed into the remaining half. Tabbing between a staged panel and the
+  // Library then moved everything on screen by about 280px for no reason a
+  // person could see.
+  //
+  // So the stage appears when there is something in it. The Waveform's own
+  // empty line still exists, for the moment between a capture arriving and its
+  // peaks being read, and its argument for never unmounting its box mid-life
+  // is untouched: this unmounts the whole component, which is what a panel
+  // switch already did.
+  const staged = STAGE.includes(panel) && capture !== undefined;
   const visible: Span =
     view === null
       ? fit()
@@ -356,6 +371,7 @@ export function App(): React.JSX.Element {
     },
     help: () => setHelp((open) => !open),
     log: () => setLog((open) => !open),
+    about: () => setAbout((open) => !open),
     dismiss: () => {
       // One key, three things it could mean, in the order a person expects:
       // close what is on top, then clear the refusal, then nothing.
@@ -400,13 +416,17 @@ export function App(): React.JSX.Element {
         <button type="button" onClick={() => setHelp(true)} title="?">
           Keys
         </button>
-        <button type="button" onClick={() => setAbout(true)}>
+        <button
+          type="button"
+          onClick={() => setAbout(true)}
+          title="Ctrl+I"
+        >
           About
         </button>
       </header>
 
-      <main className={STAGE.includes(panel) ? "project" : "library"}>
-        {STAGE.includes(panel) && (
+      <main className={staged ? "project" : "library"}>
+        {staged && (
           <div className="stage-top">
             <Waveform
               capture={capture}
@@ -469,7 +489,7 @@ export function App(): React.JSX.Element {
 
       <aside className="always">
         {/* Only where there is a waveform to have selected something in. */}
-        {STAGE.includes(panel) && (
+        {staged && (
           <SelectionBar selection={selection} meter={engine.meter} />
         )}
         {/* Live when the device is open, which is everything but `idle`:
@@ -493,8 +513,14 @@ export function App(): React.JSX.Element {
       <footer className="status">
         {engine.refusal !== null ? (
           <span className="refusal">
-            <strong>{engine.refusal.code}</strong> {engine.refusal.message}
-            {engine.refusal.field !== null && ` (${engine.refusal.field})`}
+            <strong>{engine.refusal.code}</strong>
+            {/* Its own element so it can wrap where the bar does not. A
+                refusal ends in advice naming what to do instead, and that
+                clause is exactly what the bar's ellipsis was eating. */}
+            <span className="reason">
+              {engine.refusal.message}
+              {engine.refusal.field !== null && ` (${engine.refusal.field})`}
+            </span>
             <button type="button" onClick={store.dismiss}>
               Dismiss (Esc)
             </button>

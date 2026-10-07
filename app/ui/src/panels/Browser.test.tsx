@@ -159,6 +159,64 @@ describe("the project browser", () => {
     container.remove();
   });
 
+  // Two things an unreadable project used to get wrong at once, and they
+  // compound: a library of seven older-schema files was seven amber rows of
+  // zeros, each with a full-width copy of the same sentence under it. The
+  // zeros read as "an empty project", which is a different fact, and the
+  // repetition buried the album names a person came to the panel to read.
+  it("says it does not know, rather than saying zero, and explains once", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const { store } = fakeStore();
+    const old = (path: string) =>
+      row({
+        path,
+        sides: 0,
+        tracks: 0,
+        seconds: 0,
+        problem: "schema v1, which this build cannot read",
+      });
+
+    const draw = async (selected: string | null) => {
+      await act(async () => {
+        root.render(
+          <Browser
+            store={store}
+            projects={[old("/library/one.vcw"), old("/library/two.vcw")]}
+            selected={selected}
+            onSelect={() => {}}
+            onLibraryChanged={() => {}}
+          />,
+        );
+      });
+    };
+
+    await draw(null);
+    // The size and the date stay: those come from the filesystem and are true
+    // whatever the schema says.
+    expect(container.textContent).toContain("1.83 GiB");
+    expect(container.querySelectorAll("tr.problem-reason")).toHaveLength(0);
+    const counts = Array.from(container.querySelectorAll("tbody td.n")).map(
+      (cell) => cell.textContent,
+    );
+    expect(counts.filter((each) => each === "-")).toHaveLength(6);
+    expect(counts).not.toContain("0:00.00");
+
+    // Selected, the reason arrives - once, on the row it belongs to, and
+    // without a mouse, which is the whole reason it is not a tooltip. The
+    // selected row is also scrolled to, and jsdom has no `scrollIntoView`.
+    Element.prototype.scrollIntoView = () => {};
+    await draw("/library/two.vcw");
+    expect(container.querySelectorAll("tr.problem-reason")).toHaveLength(1);
+    expect(container.textContent).toContain("schema v1");
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   // The split the whole cover design rests on: the listing carries a flag and
   // the image is asked for separately. A row that says it has no cover must
   // never make the call, because a hundred-row library would otherwise read a

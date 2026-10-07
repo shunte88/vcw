@@ -329,6 +329,18 @@ export function Browser({
     }
   };
 
+  // A list with no cursor is a list where Enter does nothing and the header's
+  // own "Open (Enter)" is a lie. A library of one was the case that made it
+  // obvious: the single row is plainly the one meant, and a person still had
+  // to click it before the keyboard would act on it. First row rather than
+  // none, which is what every other list in the product does and what the
+  // arrow keys already assume when they start from nothing.
+  useEffect(() => {
+    if (selected === null && projects.length > 0) {
+      onSelect(projects[0]?.path ?? null);
+    }
+  }, [projects, selected, onSelect]);
+
   // Keeps the selected row on screen, so arrowing down a long library does not
   // walk the selection out of the viewport. `nearest` rather than `center`:
   // a list that re-centers on every press is a list that will not sit still.
@@ -636,9 +648,24 @@ export function Browser({
                   <td>{project.album === "" ? project.name : project.album}</td>
                   <td>{project.albumArtist}</td>
                   <td>{project.catalog}</td>
-                  <td className="n">{project.sides}</td>
-                  <td className="n">{project.tracks}</td>
-                  <td className="n">{clock(project.seconds)}</td>
+                  {/*
+                    A dash and not a zero for a project that could not be
+                    read. `summarize` returns zeros because it got no rows,
+                    and "Sides 0, Tracks 0, 0:00.00" is a *claim* - it reads
+                    exactly like an empty project, and the one thing known
+                    about this file is that nobody knows what is in it. The
+                    size and the date are different: they come from the
+                    filesystem and are true whatever the schema says.
+                  */}
+                  <td className="n">
+                    {project.problem === null ? project.sides : "-"}
+                  </td>
+                  <td className="n">
+                    {project.problem === null ? project.tracks : "-"}
+                  </td>
+                  <td className="n">
+                    {project.problem === null ? clock(project.seconds) : "-"}
+                  </td>
                   <td className="n">{bytes(project.fileBytes)}</td>
                   <td className="n">{when(project.modified)}</td>
                 </tr>
@@ -649,8 +676,16 @@ export function Browser({
                   so first light showed an amber row of zeros against a file
                   holding twenty seconds of audio and said nothing about why.
                   A hover is also no use to somebody driving this by keyboard.
+
+                  On the *selected* row only. A library holding seven projects
+                  of an older schema got seven copies of the same sentence,
+                  each one doubling a row's height, and the album names it
+                  pushed apart were what a person had come to the panel to
+                  read. Selection is how this list is driven - a click, or an
+                  arrow key - so the reason still arrives without a mouse and
+                  without being asked for twice.
                 */}
-                {project.problem !== null && (
+                {project.problem !== null && project.path === selected && (
                   <tr
                     className="problem-reason"
                     onClick={() => onSelect(project.path)}

@@ -14,6 +14,72 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## 0.1.3-alpha
+
+*2026-10-07.*
+
+A release about the window rather than the audio. Nothing here changes a byte
+that gets recorded or exported; all of it is about what the application tells
+you while you use it.
+
+### About
+
+* **Ctrl+I opens the About dialog**, which previously had a button and no key.
+* **The logo is the way to the source.** Clicking it opens the repository in
+  your browser.
+* **A sentence saying what this is**, read from the project's own description
+  rather than typed into the dialog, so it cannot drift from what the
+  repository says.
+* **Every third-party component has a globe beside it** that opens that
+  component's source. The addresses used to sit in a column that had been
+  invisible for some time; a mark you can click is both shorter and the thing
+  the license obligation actually asks for.
+
+### Settings
+
+* **Metadata reads as switches rather than tickboxes.** *Allow network
+  lookups*, *MusicBrainz* and *Discogs* are the same three settings, shown the
+  way the rest of the application shows a two-state choice.
+* **Each one is explained where it is, rather than in a paragraph underneath
+  all of them.** In particular: *Allow network lookups* is the only setting that
+  stops an AcoustID fingerprint lookup or a cover art download, neither of which
+  the other two cover - so turning both catalogs off is not the same as going
+  offline.
+* **Get Discogs API Token** opens the page where you generate one.
+* **The genre map field says what a genre map is**, and what a line in one looks
+  like.
+* **Credentials explains why a variable you exported can read as not set.** A
+  desktop launcher starts VCW from the session environment rather than from your
+  shell, which is the usual reason; the fix differs per platform and is now
+  written down.
+
+### Event log
+
+* **Double-click a line to read it in full.** Rows are one line each so the log
+  stays scannable, which clipped exactly the thing worth copying into a bug
+  report: a refusal carrying generated advice.
+* **A refused command now appears in the log.** Until now a refusal was shown in
+  the status bar and then forgotten, so the log - the panel a bug report is
+  copied out of - was missing the event the report is about. The line names the
+  command: `detect`, `split`, `merge`.
+* **The filter no longer takes focus when the log opens.** It did, which made
+  the status bar's standing offer of "? for the keyboard map" a lie for as long
+  as the log was up: a text field is right to take a literal `?`.
+* **A long refusal wraps in the status bar** instead of being clipped at the
+  window edge.
+
+### Library and Tracks
+
+* **The first project is selected when the library loads**, so Enter opens
+  something without an arrow key first.
+* **A project VCW cannot read shows dashes rather than zeros.** "0 sides, 0
+  tracks" is a statement about a record; a dash is a statement about VCW. The
+  reason is spelled out on the selected row.
+* **The Tracks panel says what is missing.** With no project open it points at
+  the library, with no capture it points at Capture, and only then does it talk
+  about detection. Detect is disabled until there is a capture to detect in, and
+  the waveform appears once there is audio to draw rather than as an empty frame.
+
 ## 0.1.2-alpha
 
 *2026-10-06.*

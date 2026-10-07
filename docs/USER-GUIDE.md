@@ -50,11 +50,17 @@ waveform is drawn from what has been committed and it appears when the capture
 stops, not as the side goes by. Nothing is missing while it is blank - the audio
 is on disk within a quarter of a second of the stylus reading it either way.
 `Ctrl+d` opens the event log, which is every event the core published in this
-session and the first place to look when something did not do what you expected.
+session and the first place to look when something did not do what you expected
+- double-click a line to read it in full, wrapped, which is the form to paste
+into a bug report. `Ctrl+i` opens About, which carries the version, the build
+date and the third-party components this build links; a bug report wants those
+too.
 
 The waveform sits above Capture, Tracks and Export, which are the three
 workspaces that point at positions in the recording, and not above Library,
-Metadata or Settings, which do not. Under it are the channel it is drawing - a
+Metadata or Settings, which do not. It appears once there is a capture to draw:
+a project with nothing recorded gives those three their whole workspace rather
+than half of it and an empty black box. Under it are the channel it is drawing - a
 stereo capture is two pictures and the picker chooses which - the range in view,
 and the zoom controls.
 
@@ -574,6 +580,7 @@ that claimed to cover them would be describing the wrong thing.
 | `Ctrl+5` | Export | `navigate` | - |
 | `Ctrl+6` | Settings | `navigate` | - |
 | `Ctrl+d` | Show the event log | `navigate` | - |
+| `Ctrl+i` | Show the build, its license and its notices | `help` | - |
 | `Escape` | Close the overlay, or clear the last refusal | `navigate` | - |
 
 ### Browser

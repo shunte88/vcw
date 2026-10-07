@@ -52,6 +52,7 @@ const lame: Notice = {
 function build(notices: Notice[]): Build {
   return {
     product: "VCW - The Vinyl Capture Workstation",
+    description: "the de facto tool for vinyl capture across platforms",
     version: "0.1.0",
     profile: "release",
     built: "2026-10-05",
@@ -121,8 +122,14 @@ describe("the about dialog", () => {
     expect(text).toContain("flacenc");
     expect(text).toContain("Apache-2.0");
     expect(text).toContain("libmp3lame, via mp3lame-encoder and mp3lame-sys");
-    expect(text).toContain("https://crates.io/crates/mp3lame-sys");
     expect(text).not.toContain("vorbis");
+  });
+
+  it("says what the project is, in the sentence the project uses", async () => {
+    const container = await shown([flacenc]);
+    expect(container.textContent ?? "").toContain(
+      "the de facto tool for vinyl capture across platforms",
+    );
   });
 
   it("makes the relink offer when a component is copyleft", async () => {
@@ -164,6 +171,27 @@ describe("the about dialog", () => {
       shirts?.click();
     });
     expect(opened).toEqual(["coffee", "shirts"]);
+  });
+
+  it("opens the repository from the logo and each component from its globe", async () => {
+    opened = [];
+    refusal = null;
+    const container = await shown([flacenc, lame]);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("button.about-logo-link")?.click();
+    });
+    for (const globe of container.querySelectorAll<HTMLButtonElement>(
+      "button.globe",
+    )) {
+      await act(async () => {
+        globe.click();
+      });
+    }
+
+    // The names, not the addresses: the shell holds the table, and a webview
+    // that knew the URL to pass would be the thing WP-28 is built to avoid.
+    expect(opened).toEqual(["repository", flacenc.component, lame.component]);
   });
 
   it("offers the shirts as well as the coffee", async () => {

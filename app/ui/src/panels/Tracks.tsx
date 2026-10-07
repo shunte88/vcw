@@ -137,7 +137,10 @@ export function Tracks({
     nextTrack: moveTrack(1),
     previousBoundary: moveBoundary(-1),
     nextBoundary: moveBoundary(1),
-    detect: () => void run(() => api.detectTracks({ side: null, promote: true })),
+    detect: () => void run(
+              () => api.detectTracks({ side: null, promote: true }),
+              "detect",
+            ),
     deleteMarker: () => {
       if (boundary !== undefined) {
         void run(() => api.deleteMarker({ boundaryId: boundary.id }));
@@ -180,9 +183,16 @@ export function Tracks({
         <h2>Tracks</h2>
         <button
           type="button"
-          disabled={project.path === null}
+          // A capture as well as a project. Detection reads audio, and with
+          // none the button was live, ran, and came back having found nothing
+          // - which looks like a detector that failed rather than a panel
+          // that had nothing to offer.
+          disabled={project.path === null || project.captures.length === 0}
           onClick={() =>
-            void run(() => api.detectTracks({ side: null, promote: true }))
+            void run(
+              () => api.detectTracks({ side: null, promote: true }),
+              "detect",
+            )
           }
         >
           Detect (t)
@@ -192,8 +202,9 @@ export function Tracks({
           disabled={track === undefined}
           onClick={() => {
             if (track !== undefined) {
-              void run(() =>
-                api.splitTrack({ trackId: track.id, at: engine.playhead }),
+              void run(
+                () => api.splitTrack({ trackId: track.id, at: engine.playhead }),
+                "split",
               ).then(store.reload);
             }
           }}
@@ -207,8 +218,9 @@ export function Tracks({
           onClick={() => {
             const after = track === undefined ? undefined : next(project.tracks, track);
             if (track !== undefined && after !== undefined) {
-              void run(() =>
-                api.mergeTracks({ leftId: track.id, rightId: after.id }),
+              void run(
+                () => api.mergeTracks({ leftId: track.id, rightId: after.id }),
+                "merge",
               ).then(store.reload);
             }
           }}
@@ -228,8 +240,26 @@ export function Tracks({
       )}
 
       {project.tracks.length === 0 ? (
+        /* The advice has to match the state, or it is worse than silence.
+           "Press t to run detection" against no project at all sends a person
+           to a key that is disabled, and tells them nothing about the step
+           they actually have to take first. */
         <p className="empty">
-          No tracks. Press <kbd>t</kbd> to run detection over the capture.
+          {project.path === null ? (
+            <>
+              No project open. Open or create one in the Library (
+              <kbd>Ctrl+1</kbd>).
+            </>
+          ) : project.captures.length === 0 ? (
+            <>
+              Nothing captured yet. Record a side in Capture (
+              <kbd>Ctrl+2</kbd>).
+            </>
+          ) : (
+            <>
+              No tracks. Press <kbd>t</kbd> to run detection over the capture.
+            </>
+          )}
         </p>
       ) : (
         <table className="rows">

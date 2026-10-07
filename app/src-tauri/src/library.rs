@@ -98,33 +98,69 @@ pub(crate) fn about() -> About {
 /// A table and not two commands, because the refusal below has to name what
 /// exists: a hand-written "try coffee or shirts" is a sentence that goes stale
 /// the day a third page is added.
-const PAGES: [(&str, &str); 2] = [
+const PAGES: [(&str, &str); 3] = [
     ("coffee", "https://www.buymeacoffee.com/shunte88"),
     (
         "shirts",
         "https://www.zazzle.com/team_badger_t_shirt-235604841593837420",
     ),
+    // Where a person goes to get the token Settings > Metadata asks them for.
+    // Here and not in the panel for the reason the other two are: this product
+    // hands the webview no addresses.
+    (
+        "discogs-token",
+        "https://www.discogs.com/settings/developers",
+    ),
 ];
 
-/// Opens one of [`PAGES`] in the operator's own browser (WP-28).
+/// Every address this build can send the operator to, by the name a frontend
+/// asks for: [`PAGES`], the repository, and one per third-party notice.
+///
+/// Generated rather than listed, because the last two sets are *derived* - the
+/// repository from the manifest and the notices from the cargo features - so a
+/// hand-written table would be wrong in exactly the builds [`About`] exists to
+/// describe. A build without `mp3` must not offer a link to libmp3lame's source
+/// and must not refuse one it is still linking.
+fn addresses() -> Vec<(String, String)> {
+    let about = About::current();
+    PAGES
+        .iter()
+        .map(|(name, url)| ((*name).to_owned(), (*url).to_owned()))
+        .chain([("repository".to_owned(), about.repository)])
+        .chain(
+            about
+                .notices
+                .into_iter()
+                .map(|notice| (notice.component, notice.source)),
+        )
+        .collect()
+}
+
+/// Opens one of [`addresses`] in the operator's own browser (WP-28).
 ///
 /// The frontend names a page and not an address, which is the whole security
 /// story: a command that takes a URL opens whatever the webview asks for, and
-/// the two links in this product that leave it are known at compile time.
+/// every address this product can reach is derived here from the manifest and
+/// the features it was built with.
+///
+/// A component's own name is its page name. That reads oddly next to `coffee`
+/// and reads exactly right at the call site, where the About dialog has the
+/// notice in its hand and nothing else to call it.
 ///
 /// # Errors
 ///
-/// [`Error::Invalid`] if the name is not one of [`PAGES`], or if the platform's
-/// opener could not be started - a headless box, or a desktop with nothing
-/// registered for `https`. Starting it is as far as this goes: the opener exits
-/// as soon as it has handed the URL on, so what the browser does next is not
-/// VCW's to report.
+/// [`Error::Invalid`] if the name is not one of [`addresses`], or if the
+/// platform's opener could not be started - a headless box, or a desktop with
+/// nothing registered for `https`. Starting it is as far as this goes: the
+/// opener exits as soon as it has handed the URL on, so what the browser does
+/// next is not VCW's to report.
 #[tauri::command]
 pub(crate) fn support(page: String) -> Result<(), Error> {
-    let url = PAGES
+    let known = addresses();
+    let url = known
         .iter()
         .find(|(name, _)| *name == page)
-        .map(|(_, url)| *url)
+        .map(|(_, url)| url.as_str())
         .ok_or_else(|| Error::Invalid {
             field: "page".to_owned(),
             why: format!("no page called {page:?} - this build offers {}", named()),
@@ -142,9 +178,9 @@ pub(crate) fn support(page: String) -> Result<(), Error> {
 
 /// The page names, for a refusal that cannot go stale.
 fn named() -> String {
-    PAGES
-        .iter()
-        .map(|(name, _)| *name)
+    addresses()
+        .into_iter()
+        .map(|(name, _)| name)
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -300,9 +336,13 @@ mod tests {
 
     /// The point of the table: whatever the webview sends, the URL that reaches
     /// the platform's opener is one of ours.
+    ///
+    /// Over [`addresses`] and not [`PAGES`], because the two sets that are
+    /// *derived* are the two that could carry something nobody checked.
     #[test]
     fn every_page_offered_is_a_page_of_the_authors() {
-        for (name, url) in PAGES {
+        for (name, url) in addresses() {
+            let url = url.as_str();
             let args: Vec<String> = opener(url)
                 .get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())
@@ -327,9 +367,38 @@ mod tests {
         let refused = support("merch".to_owned()).expect_err("no page is called merch");
         let said = refused.to_string();
 
-        for (name, _) in PAGES {
-            assert!(said.contains(name), "{said:?} does not mention {name}");
+        for (name, _) in addresses() {
+            assert!(said.contains(&name), "{said:?} does not mention {name}");
         }
+    }
+
+    /// The About dialog's links, which are the reason the table is generated:
+    /// it has a notice in its hand and asks for that component by name.
+    ///
+    /// A build without `mp3` links no libmp3lame and must offer no page for it,
+    /// which is the half of this that a default build cannot fail - the gate's
+    /// `features` leg builds the one where it can.
+    #[test]
+    fn the_about_dialog_can_reach_everything_it_lists() {
+        let about = About::current();
+        let offered: Vec<String> = addresses().into_iter().map(|(name, _)| name).collect();
+
+        assert!(
+            offered.iter().any(|name| name == "repository"),
+            "the logo has nowhere to go: {offered:?}"
+        );
+        for notice in &about.notices {
+            assert!(
+                offered.contains(&notice.component),
+                "{} is listed and cannot be opened: {offered:?}",
+                notice.component
+            );
+        }
+        assert_eq!(
+            offered.len(),
+            PAGES.len() + 1 + about.notices.len(),
+            "the table offers something the dialog does not list: {offered:?}"
+        );
     }
 
     /// How many arguments the platform's opener is given, the URL included.

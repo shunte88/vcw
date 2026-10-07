@@ -950,6 +950,12 @@ impl From<&vcw_export::notices::Notice> for Notice {
 pub struct About {
     /// The product's name.
     pub product: String,
+    /// What the project is, in the sentence the repository leads with.
+    ///
+    /// The name above answers "what is this called"; a person who has just
+    /// installed a package and opened the only dialog that explains itself is
+    /// asking the other question.
+    pub description: String,
     /// The release this is.
     pub version: String,
     /// `debug` or `release`. A timing complaint against a debug build is a
@@ -998,6 +1004,14 @@ impl About {
             // product's name, is inherited by no crate. `tests` below checks
             // this literal against the workspace manifest.
             product: "VCW - The Vinyl Capture Workstation".to_owned(),
+            // Named for the same reason as `product`, and checked the same way:
+            // it lives in `[workspace.metadata.vcw]` because no crate inherits
+            // it and a manifest is not shipped beside a binary.
+            description: "VCW the de facto tool for vinyl capture across platforms: a \
+                          complete workstation for listeners preserving and cataloging \
+                          their collections, with reusable services for people building \
+                          their own workflows and interfaces"
+                .to_owned(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
             profile: if cfg!(debug_assertions) {
                 "debug".to_owned()
@@ -1029,22 +1043,48 @@ impl About {
 mod tests {
     use super::About;
 
-    /// The one field of [`About`] that is a literal, so the one field that can
+    /// The two fields of [`About`] that are literals, so the two that can
     /// drift. Everything else is a constant of the crate it is read from.
     #[test]
     fn the_product_is_what_the_workspace_calls_it() {
+        assert_eq!(
+            About::current().product,
+            declared("workspace.package"),
+            "the dialog's product name is not the one the workspace declares"
+        );
+    }
+
+    /// The sentence under the name, which the repository's own description is.
+    ///
+    /// A separate key from `[workspace.package] description` rather than a
+    /// replacement for it: that one is the product's name, which is what
+    /// crates.io shows and what the dialog titles itself with.
+    #[test]
+    fn the_description_is_what_the_project_says_it_is() {
+        assert_eq!(
+            About::current().description,
+            declared("workspace.metadata.vcw"),
+            "the dialog's description is not the one the workspace declares"
+        );
+    }
+
+    /// The `description` under one `[section]` of the workspace manifest.
+    ///
+    /// Section-aware because there are now two of them, and a search for the
+    /// first `description = ` in the file would answer both questions with
+    /// whichever key happens to be written higher up.
+    fn declared(section: &str) -> String {
         let manifest = std::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml"),
         )
         .expect("the workspace manifest is two directories above this crate");
-        let declared = manifest
+        manifest
             .lines()
-            .find_map(|line| line.strip_prefix("description = "))
-            .expect("[workspace.package] declares a description");
-        assert_eq!(
-            format!("\"{}\"", About::current().product),
-            declared,
-            "the dialog's product name is not the one the workspace declares"
-        );
+            .skip_while(|line| line.trim() != format!("[{section}]"))
+            .skip(1)
+            .take_while(|line| !line.trim_start().starts_with('['))
+            .find_map(|line| line.trim().strip_prefix("description = "))
+            .map(|value| value.trim_matches('"').to_owned())
+            .unwrap_or_else(|| panic!("[{section}] declares a description"))
     }
 }

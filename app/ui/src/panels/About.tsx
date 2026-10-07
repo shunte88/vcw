@@ -54,7 +54,7 @@ export function About({
   const [refused, setRefused] = useState<string | null>(null);
 
   /** Asks the shell for a page, and says so if it will not open one. */
-  function visit(page: "coffee" | "shirts"): void {
+  function visit(page: string): void {
     setRefused(null);
     void api.support(page).catch((error: unknown) => {
       setRefused(api.asFailure(error).message);
@@ -98,12 +98,25 @@ export function About({
                   third of the panel on a column of air to the logo's left and
                   right. */}
               <div className="about-masthead">
-                <img
-                  className="about-logo"
-                  src="/vcw-logo.webp"
-                  alt=""
-                  width={280}
-                />
+                {/* The logo is the way to the source. A button and not an
+                    anchor for the same reason as the two below it: this
+                    webview is handed no addresses, it asks the shell for a
+                    page by name and the shell holds the table. */}
+                <button
+                  type="button"
+                  className="about-logo-link"
+                  title={build.repository}
+                  onClick={() => {
+                    visit("repository");
+                  }}
+                >
+                  <img
+                    className="about-logo"
+                    src="/vcw-logo.webp"
+                    alt={`VCW on GitHub: ${build.repository}`}
+                    width={280}
+                  />
+                </button>
                 <section className="about-group">
                   <h3>This build</h3>
                   <table className="rows">
@@ -145,7 +158,15 @@ export function About({
               </div>
 
               <section className="about-group">
-                <h3>License</h3>
+                <h3>What this is</h3>
+                <p>{build.description}</p>
+              </section>
+
+              <section className="about-group">
+                <h3>
+                  <span className="icon scales" aria-hidden="true" />
+                  License
+                </h3>
                 <p>
                   VCW&apos;s own code is {build.license}. Copyright (c) 2026{" "}
                   {build.authors.join(", ")}.
@@ -163,10 +184,22 @@ export function About({
                   <tbody>
                     {build.notices.map((notice) => (
                       <tr key={notice.component}>
-                        <td>{notice.component}</td>
+                        <td className="with-icon">
+                          <button
+                            type="button"
+                            className="globe"
+                            title={`Open ${notice.source}`}
+                            aria-label={`Source for ${notice.component}`}
+                            onClick={() => {
+                              visit(notice.component);
+                            }}
+                          >
+                            <span className="icon globe-mark" aria-hidden="true" />
+                          </button>
+                          {notice.component}
+                        </td>
                         <td>{notice.license}</td>
                         <td className="dim">{notice.provides}</td>
-                        <td>{notice.source}</td>
                       </tr>
                     ))}
                   </tbody>

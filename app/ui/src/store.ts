@@ -43,6 +43,7 @@ import type {
   Diagnostics,
   Failure,
   Meter,
+  PhaseName,
   Release,
   Side,
   Track,
@@ -336,8 +337,18 @@ export type Store = {
   readonly engine: Engine;
   /** The project rows, reloaded when something says they changed. */
   readonly project: ProjectState;
-  /** Runs a command, catching a refusal into `engine.refusal`. */
-  readonly run: (what: () => Promise<unknown>) => Promise<void>;
+  /**
+   * Runs a command, catching a refusal into `engine.refusal` and into the log.
+   *
+   * `command` names what is being run, for the log line. It defaults rather
+   * than being required because every call site would otherwise have to be
+   * touched to get the line at all, and a line that says "a command" is still
+   * a line - which is more than these refusals used to get.
+   */
+  readonly run: (
+    what: () => Promise<unknown>,
+    command?: string,
+  ) => Promise<void>;
   /** Clears the last refusal. */
   readonly dismiss: () => void;
   /** Re-reads the project rows. */
@@ -493,15 +504,41 @@ export function useEngine(): Store {
     };
   }, [generation]);
 
-  const run = useCallback(async (what: () => Promise<unknown>) => {
-    setEngine((previous) => ({ ...previous, refusal: null }));
-    try {
-      await what();
-    } catch (error) {
-      const refusal = api.asFailure(error);
-      setEngine((previous) => ({ ...previous, refusal }));
-    }
-  }, []);
+  const run = useCallback(
+    async (what: () => Promise<unknown>, command = "a command") => {
+      setEngine((previous) => ({ ...previous, refusal: null }));
+      try {
+        await what();
+      } catch (error) {
+        const refusal = api.asFailure(error);
+        // Into the log as well as into the status bar. A refusal that arrives
+        // over the bus is a `command-refused` event and gets a line; one
+        // *returned* from the command took this path instead and got none, so
+        // the panel a bug report is copied out of was missing exactly the
+        // failures a bug report is about. Same event kind, because it is the
+        // same thing - the engine said no, and this is only the other way the
+        // answer travels.
+        setEngine((previous) => {
+          const event: Wire = {
+            kind: "command-refused",
+            command,
+            // The engine's own phase, which is what the bus-borne version of
+            // this event carries. A cast because the store holds it as a
+            // string: it is whatever the engine last said, not a value this
+            // side chose.
+            phase: previous.phase as PhaseName,
+            reason: refusal.message,
+          };
+          return {
+            ...previous,
+            refusal,
+            log: [...previous.log, { at: Date.now(), event }].slice(-LOG_LIMIT),
+          };
+        });
+      }
+    },
+    [],
+  );
 
   const dismiss = useCallback(
     () => setEngine((previous) => ({ ...previous, refusal: null })),

@@ -378,7 +378,12 @@ input.wide {
   order: 0;
 }
 
-.seed-switch {
+/* A switch with its name to its left, filling the row. `.seed-switch` is the
+   setup sheet's; `.setting-switch` is Settings', and they want the same shape -
+   a label a reader's eye finds at the margin and the control at the other end,
+   lined up down the column. */
+.seed-switch,
+.setting-switch {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -587,6 +592,40 @@ fieldset {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+/*
+ * One question per row.
+ *
+ * The wrapping row above packs short fields, which is right for Audio and
+ * Export where a field is a word wide. Metadata is not that shape: it is a
+ * sequence of a switch, the thing that switch needs, and the sentence that
+ * explains it, and packed side by side the explanation under one switch sat
+ * level with the next switch's label. First light showed all three switches
+ * and two text fields on a single line.
+ */
+fieldset.stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* The fields keep a reading measure rather than the pane's full width, which
+   at 1600px is a contact address in a field four times its own length. The
+   switch rows take the same measure, so the whole group shares one right edge
+   instead of flinging each switch to the far side of a 4K pane. */
+fieldset.stacked > label,
+fieldset.stacked > .setting-switch {
+  max-width: 62ch;
+}
+
+/* In a stacked group a note belongs where it was written, not at the end.
+   `order: 1` below is what keeps a note out of the middle of a packed row of
+   fields; here there is no packed row, and it instead collected every
+   explanation at the foot of the panel - so the sentence about Discogs sat
+   three paragraphs below the Discogs switch, under a field about genres. */
+fieldset.stacked .hint {
+  order: 0;
+  max-width: 96ch;
 }
 
 legend {
@@ -1028,6 +1067,20 @@ code {
 
 .rows.log .kind {
   color: var(--accent);
+}
+
+/* The one row opened in full, under the row it belongs to and spanning the
+   table, for the same reason `.problem-reason` is: it is a sentence, not a
+   cell. Wrapped, because being wrapped is the whole point of opening it. */
+.rows.log tr.log-full td {
+  padding-top: 0;
+  padding-bottom: 0.5rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.rows.log tr.log-full:hover {
+  background: none;
 }
 
 .problems {
@@ -1529,7 +1582,7 @@ code {
 
 .refusal {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   color: var(--bad);
 }
@@ -1537,6 +1590,26 @@ code {
 .refusal strong {
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  flex: none;
+}
+
+/*
+ * The one thing in this bar that wraps. The idle line is a note about what just
+ * happened and clipping its tail costs nothing, but a refusal's last clause is
+ * the generated advice saying what to do instead - the part a person is reading
+ * the bar for, and the part an ellipsis at the right edge removed. The bar
+ * grows down to fit it, with a ceiling and a scroll so a pathological message
+ * cannot take the window.
+ */
+.refusal .reason {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-height: 4.5rem;
+  overflow-y: auto;
+}
+
+.refusal button {
+  flex: none;
 }
 
 /* --- Overlays ------------------------------------------------------------ */
@@ -1617,6 +1690,10 @@ code {
   overflow-y: auto;
   min-height: 0;
   padding-bottom: 1rem;
+  /* Room for the scrollbar. Without it the notices table and the description
+     run under the track, and the last word of a wrapped line is read through
+     it. */
+  padding-right: 0.75rem;
 }
 
 /* The product name is the masthead, across the full width and above the art:
@@ -1647,6 +1724,19 @@ code {
    one, or the table would sit a row lower than the art it is beside. */
 .about-masthead .about-group {
   margin-top: 0;
+}
+
+/* The logo is the way to the repository, so it is a button: no chrome of its
+   own, because the art is the affordance. */
+.about-logo-link {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.about-logo-link:hover img {
+  filter: brightness(1.08);
 }
 
 .about-logo {
@@ -1707,10 +1797,20 @@ code {
   cursor: pointer;
 }
 
-/* The notices table carries a component name, a license, a purpose and a URL in
-   56rem. The names and the URL have to wrap or the table pushes the overlay
-   wider than the window, but "Apache-2.0" broken after its hyphen reads as a
-   version number, so the two short columns are held on one line. */
+/* The same link with a globe ahead of it, for the one in Settings that leaves
+   the product. Inline-flex so it still sits inside a paragraph. */
+.globe-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* The notices table carries a component name, a license and a purpose in 56rem.
+   The names have to wrap or the table pushes the overlay wider than the window,
+   but "Apache-2.0" broken after its hyphen reads as a version number, so the two
+   short columns are held on one line. The source address is not a column at all:
+   it wrapped mid-path and was unclickable either way, so it is the globe beside
+   the name, which opens it. */
 .about-group .notices td {
   white-space: normal;
 }
@@ -1720,6 +1820,74 @@ code {
   white-space: nowrap;
 }
 
-.about-group .notices td:last-child {
-  overflow-wrap: anywhere;
+/* An icon ahead of a cell's text, on the text's own baseline band. */
+.with-icon {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/*
+ * The globe and the scales, painted rather than drawn.
+ *
+ * Both files were trimmed to `currentColor` so one copy could sit in a heading
+ * and in a table row and take the color of each. Inside an `<img>` that does
+ * nothing: the browser loads an SVG source as a document of its own, where
+ * there is no inherited color to take and `currentColor` resolves to black.
+ * First light showed both icons as black-on-black marks that were there and
+ * could not be seen. A mask paints the element's own color through the
+ * artwork's alpha, which is what `currentColor` was supposed to buy.
+ *
+ * `-webkit-` as well as the standard property because WebKitGTK is the renderer
+ * that ships with this product on Linux.
+ */
+.icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+.icon.scales {
+  mask-image: url(/scales.svg);
+  -webkit-mask-image: url(/scales.svg);
+}
+
+.icon.globe-mark {
+  mask-image: url(/globe-lines.svg);
+  -webkit-mask-image: url(/globe-lines.svg);
+}
+
+.globe {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.globe:hover {
+  filter: brightness(1.3);
+}
+
+/* The heading is a flex row so the scales sit beside the word rather than on
+   the line's baseline, where a 16px glyph hangs below the cap height. */
+.about-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The mark takes the accent rather than the heading's dim, which is the color
+   a heading is set in and which made a 16px line drawing read as a smudge. */
+.about-group h3 .icon {
+  color: var(--accent);
 }

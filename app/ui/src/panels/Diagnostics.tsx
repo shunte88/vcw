@@ -17,8 +17,18 @@
 // Newest first because the interesting event is the last one. The log is bounded
 // in the store at `LOG_LIMIT`, which is the one accumulation this side of the
 // boundary is allowed and is argued for where it happens rather than here.
+//
+// The rows are one line each and clipped, because a table whose rows are as tall
+// as their longest sentence is not scannable - and a refusal carrying generated
+// advice is several lines long. Double-click opens one row in full, wrapped,
+// which is the thing a person is copying into a bug report.
+//
+// The filter does not take focus when the overlay opens. It did, and that made
+// the status bar's standing offer of "? for the keyboard map" a lie for as long
+// as this panel was up: a field with focus is correct to take a literal `?`, so
+// the only fix is to not be in one before a person has asked to be.
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import type { Line } from "../store";
 import { describe } from "../describe";
@@ -35,6 +45,8 @@ export function Diagnostics({
   onClose: () => void;
 }): React.JSX.Element {
   const [filter, setFilter] = useState("");
+  /** The row opened in full, by its key, or null when none is. */
+  const [opened, setOpened] = useState<string | null>(null);
   const matching =
     filter.trim() === ""
       ? log
@@ -51,7 +63,6 @@ export function Diagnostics({
         <header className="panel-head">
           <h2>Event log</h2>
           <input
-            autoFocus
             value={filter}
             placeholder="filter by event kind"
             onChange={(event) => setFilter(event.target.value)}
@@ -69,19 +80,44 @@ export function Diagnostics({
             in the store.
           </p>
         ) : (
-          <table className="rows log">
-            <tbody>
-              {shown.map((line, index) => (
-                <tr key={`${line.at}-${index}`}>
-                  <td className="dim n">
-                    {new Date(line.at).toLocaleTimeString()}
-                  </td>
-                  <td className="kind">{line.event.kind}</td>
-                  <td>{describe(line.event)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <p className="hint">Double-click a line to read it in full.</p>
+            <table className="rows log">
+              <tbody>
+                {shown.map((line, index) => {
+                  const key = `${line.at}-${index}`;
+                  const said = describe(line.event);
+                  return (
+                    <Fragment key={key}>
+                      <tr
+                        className={opened === key ? "current" : ""}
+                        title="Double-click to read in full"
+                        onDoubleClick={() => {
+                          setOpened(opened === key ? null : key);
+                        }}
+                      >
+                        <td className="dim n">
+                          {new Date(line.at).toLocaleTimeString()}
+                        </td>
+                        <td className="kind">{line.event.kind}</td>
+                        <td>{said}</td>
+                      </tr>
+                      {opened === key && (
+                        <tr className="log-full">
+                          <td colSpan={3}>
+                            <span className="dim">
+                              {new Date(line.at).toLocaleString()}
+                            </span>{" "}
+                            {said}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
     </div>
