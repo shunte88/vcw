@@ -258,15 +258,22 @@ fn audio_after_the_end_boundary_is_not_in_the_region() {
 #[test]
 fn a_region_the_tap_lost_audio_from_is_thrown_away_rather_than_published() {
     let pcm = music(SECONDS);
-    // Half a second of tap for eight seconds of audio pumped in one go: the tap is
-    // lossy by construction and this is what that looks like. A fingerprint with a
-    // hole in it is shifted from the hole onwards and would match nothing, while
-    // looking exactly like one that works - so it must not be handed on.
+    // A tap smaller than one write. `pump` moves the audio in 64 KiB chunks, so a
+    // ring of 16 KiB cannot take even the first one whole and the rest of it is
+    // dropped inside a single call - before the worker thread has any chance to
+    // drain. That is the difference between a hole this test manufactures and one
+    // it races for: half a second of tap for eight seconds of audio is lossy on
+    // most machines and was not on an M-series runner, which drained the ring as
+    // fast as the loop could fill it and left `holed` at 0.
+    //
+    // A fingerprint with a hole in it is shifted from the hole onwards and would
+    // match nothing, while looking exactly like one that works - so it must not be
+    // handed on, and the test of that must not depend on how fast the machine is.
     let mut tee = Tee::new(Canned {
         pcm: pcm.clone(),
         at: 0,
     });
-    let tap = tee.tap(RATE.hz() as usize * FRAME / 2);
+    let tap = tee.tap(16 * 1024);
     let bus = Bus::new();
     let fingerprints = Fingerprints::spawn(tap, &info(), &bus).expect("spawn");
 
