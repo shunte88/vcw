@@ -111,15 +111,23 @@ fn the_drawing_is_as_wide_as_it_was_asked_for_at_every_zoom() {
     let path = dir.path().join("draw.vcw");
     record(&path, 3.0);
 
-    // 3 s of 48 kHz is 144,000 frames in 12 blocks of 250 ms, and the rungs are
-    // 1, 256 and 12,000 frames, so the width alone decides which one is read.
-    // Under 12 columns a column spans a whole block; over 562 it spans fewer
-    // than 256 frames and only the samples themselves will do.
+    // 3 s of 48 kHz is about 144,000 frames in 12 blocks of 250 ms, and the
+    // rungs are 1, 256 and 12,000 frames, so the width alone decides which one
+    // is read: a column spanning a whole block reads the block rung, and one
+    // spanning fewer than 256 frames leaves only the samples themselves.
+    //
+    // "About", because `record` runs a real capture in real time and nothing
+    // here pins its length to the frame - a 3 s side is 144,000 frames give or
+    // take a callback. So every width below sits with margin inside a rung
+    // rather than on its boundary. It did not: 12 columns is the exact column
+    // count at which the block rung stops fitting, and the one Windows run
+    // whose side came in a few hundred frames short read "summary256" and
+    // failed a test about zoom for a reason that had nothing to do with zoom.
     for (pixels, level) in [
         ("6", "block"),
-        ("12", "block"),
+        ("10", "block"),
         ("100", "summary256"),
-        ("500", "summary256"),
+        ("400", "summary256"),
         ("200000", "samples"),
     ] {
         let drawing = draw(&path, &["--pixels", pixels]);
