@@ -5940,18 +5940,147 @@ was not measured, but 0.1.1's tag had been deleted and re-pushed eight times und
 existing draft and this one was pushed once onto a green head, so read the draft's
 `tag_name` before publishing rather than assuming either way.
 
+## 0.1.3-alpha, the window says more, in fewer places
+
+**Published 2026-10-07 at `d0e6a5a`:**
+<https://github.com/shunte88/vcw/releases/tag/v0.1.3-alpha>. Eight assets, marked as a
+pre-release. Nothing in it changes a byte that gets recorded or exported. It is the UI
+change list the previous section said was the user's to write -
+`/data2/vcw_ui_modifications_10062026.txt`, thirteen items - plus eleven findings from a
+read of the window beside it, and one real defect that only CI could see.
+
+**About stopped printing addresses and started opening them.** The logo is now the way to
+the source, each third-party component has a globe beside it that opens that component's
+source, and the URL column those addresses used to sit in is gone - it had been invisible
+for some time behind a measure that outranked it, which is the specificity trap already
+written up in the WP-28 notes. All of it goes through the same `support(page)` table in
+the shell: the webview names a page and never holds a URL, so `PAGES` grew one entry and
+`addresses()` already generated the rest. `Ctrl+I` opens the dialog, which had a button
+and no key.
+
+**One new fact is derived rather than typed, which is the whole discipline of that
+dialog.** About now carries a sentence saying what VCW is, and it is a new
+`[workspace.metadata.vcw] description` in the root manifest read by `About::current`,
+with `the_description_is_what_the_project_says_it_is` checking the literal against the
+manifest. The alternative was a paragraph in a `.tsx` file that would drift from the
+repository's own description the first time either changed.
+
+**`Settings > Metadata` reads as switches, and each one is explained where it sits.** It
+was three tickboxes and one paragraph underneath all of them. The question that prompted
+the change was whether *Allow network lookups* is redundant beside the two catalog
+switches, and it is not: it selects the transport, so it is the only one of the three
+that stops an AcoustID lookup or a cover-art download. Deriving it from
+`musicbrainz || discogs` would let a both-off configuration still reach the network. The
+panel now says so in the sentence under the switch rather than leaving it to be
+rediscovered. Beside it, *Get Discogs API Token* opens the page that generates one, the
+genre map field describes what a genre map is, and `Credentials` explains why a variable
+you exported can read as not set - a desktop launcher starts VCW from the session
+environment rather than from your shell, which is the usual cause and has a different fix
+on each platform.
+
+**The event log was missing the events a bug report is about.** A refused command was
+shown in the status bar and then forgotten, so the panel a report is copied out of never
+saw it. `Store.run` now takes the command's name and writes a `command-refused` line on
+failure, and the Tracks verbs pass theirs, so the log reads `detect in idle: ...` rather
+than `a command in idle: ...`. Rows stay one line each, because a table whose rows are as
+tall as their longest sentence is not scannable - and double-click opens one in full,
+wrapped, which is the thing worth copying. The filter no longer takes focus when the
+overlay opens: it did, and that made the status bar's standing offer of *"? for the
+keyboard map"* a lie for as long as the log was up, because a field with focus is correct
+to take a literal `?`.
+
+**The library and Tracks say what they do not know.** A project VCW cannot read showed
+`0 sides, 0 tracks, 0:00`, which is a statement about a record; it now shows dashes, which
+is a statement about VCW, with the reason spelled out on the selected row only rather than
+on every amber row at once. The first project is selected when the list loads. Tracks
+points at the Library with no project open and at Capture with no capture, instead of
+always talking about detection, keeps Detect disabled until there is a capture to detect
+in, and draws the waveform stage only when there is audio for it.
+
+**One review finding was resolved as no change.** `Ctrl+1..6` select panels and `Ctrl+D`,
+`?` and `Ctrl+I` open overlays; the log being on the second list rather than the first is
+not an inconsistency, because the log is an overlay and not a panel.
+
+**Six of the fixes were found by looking at screenshots, and no test in the tree could
+have caught any of them.** `currentColor` inside an `<img>` resolves against the SVG's own
+document, which inherits no color, so both new marks painted black on a dark sheet and
+were simply absent - the fix is a `<span>` with `mask-image` and
+`background-color: currentColor`. `fieldset` in this sheet is
+`display: flex; flex-wrap: wrap`, so a group of three switches and two text fields laid
+itself out on one line across a 1600px pane. `fieldset .hint { order: 1 }`, which is right
+for a packed row, collected every explanation at the foot of the panel so the sentence
+about Discogs sat three paragraphs below the Discogs switch under a field about genres.
+The switches had no measure and flew to the right window edge. The scales mark took the
+heading's `--dim` and read as a smudge. And `.about-scroll` had no gutter, so every
+wrapped line was read through the scrollbar. `/data2/vcw-scratch/firstlight.sh` is now a
+reusable keyboard-driven Xvfb harness that shoots thirteen panels, which also exercises
+§44's claim that no workflow needs the mouse.
+
+**The gate was 16/16 green before every push, and `main` still went red three times.**
+That is the useful part of this release. Four CI rounds, none of them about the release:
+
+- **A real defect, found only because Windows is slow where Linux is fast.**
+  `vcw session --script 'arm,record,sleep 3,stop'` produced a **1.37 s** side on a Windows
+  runner. Arming is where the device is opened, and `arm` sent its command and moved
+  straight on - so `record` queued behind an arm still in progress and the sleep that was
+  meant to *be* the recording spent 1.6 s of itself waiting for WASAPI to open a stream.
+  ALSA opens in 21 ms, which is why this had been invisible here since WP-06. `arm` now
+  waits for `Event::Armed` on a condvar the printer thread sets, bounded at ten seconds
+  and released at once by `Rejected | Refused | Denied` so the three illegal verbs in
+  `record,pause,stop,arm,record` still cost the script nothing. The printer is the only
+  consumer of the event stream by design, so nothing subscribes twice. **Three Windows
+  failures across two crates were this one defect** - a pyramid rung, a span's end frame
+  and a dropped-frame count - and all three were consistent with "the side is shorter than
+  it was asked for", which was the whole bug. The first attempt waited in `record` for the
+  first `Position { frames > 0 }` instead; that works, but the first position arrives one
+  commit interval after audio starts, so every scripted side grew by 300 ms and broke a
+  pause test whose discriminator is only 0.4 s wide.
+- **A test that raced for its own precondition.**
+  `a_region_the_tap_lost_audio_from_is_thrown_away_rather_than_published` gave the tap half
+  a second of ring for eight seconds of audio and expected the overflow to hole the region.
+  On an M-series runner the worker drained the ring as fast as the pump loop filled it,
+  `holed` stayed 0, and a test about what happens to a holed region failed for want of a
+  hole. The tap is now 16 KiB, smaller than one 64 KiB write, so the loss happens inside a
+  single call before any consumer gets a turn. Both ends checked: with a tap big enough to
+  hold the stream the assertion fails as it should.
+- **A test asserting on a boundary.** The zoom test asked for 12 columns, which is exactly
+  the count at which the block rung stops fitting a 3 s side. Widths now sit with margin
+  inside a rung. A test that only passes when a real-time capture lands on an exact frame
+  count will go red for a reason it is not about.
+- **A loss claim a borrowed machine cannot make.** `detection_costs_the_capture_nothing`
+  records 800 ms at 96 kHz with two taps on the fan-out, the most demanding live capture in
+  the suite, and asserts nothing was lost. A Windows runner lost 259,200 frames inside it,
+  nearly four times the audio the capture contains - a writer thread that was never
+  scheduled rather than a tap that cost anything. The claim is comparative and a stalled
+  machine loses the same frames with one tap as with two, so it is behind `shared()` now
+  with an `eprintln`. The frame count stays ungated: however badly the runner behaved, the
+  detectors must not have stopped a side committing.
+
+**Gate before the tag:** sixteen legs green, 1187 Rust tests passed, 0 failed, 23 ignored,
+165 frontend tests passed, exit 0. Then 12 jobs green on `main` at `d0e6a5a`, then the tag,
+then 17 jobs including four `package` legs, then publish. The draft carried
+`tag_name: v0.1.3-alpha` already, as 0.1.2-alpha's had, so publishing was one
+`-F draft=false`.
+
+**One step was missing from the release recipe and is now in it.** Three tracked files are
+generated from the version - `assets/version.svg`, `Cargo.lock` and `app/Cargo.lock` - so
+a bump has to be built before it is committed, or the release commit claims a version its
+own lockfiles disagree with.
+
+
 ## Next up
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**, and so
 are the two Phase 2 packages taken out of order: WP-25's lossy encoders and schema v3's
 `capture_eq` at `85acd44`. WP-28's About dialog and WP-21's fingerprinting followed at
 `2297178`, WP-22's lookup at `75424f2`, and WP-23's resolver with schema v4 at `b96b440`.
-**The tree is clean and everything described above is committed.** `v0.1.2-alpha` is
-tagged at `64cf18c`, pushed, packaged and published - see the section above it - and
+**The tree is clean and everything described above is committed.** `v0.1.3-alpha` is
+tagged at `d0e6a5a`, pushed, packaged and published - see the section above it - and
 `main` is at the tag with nothing past it.
 
-**The next release has nothing waiting on it.** One thing is: the UI change list, which
-is the user's to write. The README was read and passed on 2026-10-06, and the question
+**The next release has nothing waiting on it.** The UI change list that was waiting
+here shipped whole in 0.1.3-alpha, along with eleven findings from a read of the window
+beside it. The README was read and passed on 2026-10-06, and the question
 of whether `"finalised"` earns a schema v5 migration to `"finalized"` was closed the
 same day - it stays as it is. The reason that survives is the carve-out above: the
 spelling rule exempts identifiers, this is one as well as a stored value, and the
