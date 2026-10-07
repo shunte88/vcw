@@ -68,6 +68,16 @@ you while you use it.
 * **A long refusal wraps in the status bar** instead of being clipped at the
   window edge.
 
+### Recording from a script
+
+* **`vcw session --script` now records for as long as the script says.** `arm`
+  sent the command and moved straight on, but arming is where the device is
+  opened, so a script that armed and immediately recorded was sleeping through
+  the device opening rather than through the recording. On ALSA that costs
+  21 ms and nobody noticed; on WASAPI it cost 1.6 s, and `arm,record,sleep
+  3,stop` produced a side of 1.37 s. `arm` now waits for the engine to say it is
+  armed, bounded at ten seconds, and released at once by a refusal.
+
 ### Library and Tracks
 
 * **The first project is selected when the library loads**, so Enter opens

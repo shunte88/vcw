@@ -117,12 +117,18 @@ fn the_drawing_is_as_wide_as_it_was_asked_for_at_every_zoom() {
     // spanning fewer than 256 frames leaves only the samples themselves.
     //
     // "About", because `record` runs a real capture in real time and nothing
-    // here pins its length to the frame - a 3 s side is 144,000 frames give or
-    // take a callback. So every width below sits with margin inside a rung
-    // rather than on its boundary. It did not: 12 columns is the exact column
-    // count at which the block rung stops fitting, and the one Windows run
-    // whose side came in a few hundred frames short read "summary256" and
+    // here pins its length to the frame. So every width below sits with margin
+    // inside a rung rather than on its boundary. It did not: 12 columns is the
+    // exact count at which the block rung stops fitting, and a Windows runner
+    // that produced 65,760 frames for this 3 s request read "summary256" and
     // failed a test about zoom for a reason that had nothing to do with zoom.
+    //
+    // That shortfall was a defect in `vcw session` rather than a slow machine -
+    // `record` returned before the device was running, so the script's `sleep`
+    // spent 1.6 s of itself waiting for WASAPI to open - and it is fixed. The
+    // margin stays anyway: a test that only passes when a real-time capture
+    // lands on an exact frame count is a test that will go red for a reason it
+    // is not about.
     for (pixels, level) in [
         ("6", "block"),
         ("10", "block"),

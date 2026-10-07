@@ -51,6 +51,17 @@
 //! - `sleep <seconds>` - wait, which is how a script records for a while.
 //! - `#` - a comment, so a script can explain itself.
 //!
+//! `arm` is the one verb this driver does not simply send and forget. It waits
+//! for the engine to say it is armed before the next line runs, because arming
+//! is where the device is opened and opening one is not instant: on WASAPI it
+//! took 1.6 s, during which `arm,record,sleep 3,stop` had already sent `record`
+//! and started sleeping. The side came back at 1.37 s instead of 3 s - the
+//! sleep that was meant to be the recording had spent half of itself waiting
+//! for a stream that had not started. The wait is bounded, so a device that
+//! never opens gives the script back after [`ARMED_TIMEOUT`] rather than
+//! hanging, and a refusal releases it at once; on ALSA, where arming takes
+//! 21 ms, it costs 21 ms.
+//!
 //! Everything else is a [`Command`], except `arm`, which needs a [`Setup`] and
 //! so is assembled here from the verb's own arguments.
 //!
@@ -64,6 +75,7 @@
 
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -118,6 +130,17 @@ impl Args {
     }
 }
 
+/// How long `arm` waits for the device before giving up on it.
+///
+/// Long enough for any device open seen so far and short enough that a script
+/// against a dead device still finishes. Exceeding it is not an error: the
+/// engine will have said why on the event stream already, and this driver's job
+/// is to keep feeding the script.
+const ARMED_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Set once the engine has answered an `arm`, so the verb knows when to return.
+type Armed = Arc<(Mutex<bool>, Condvar)>;
+
 /// Runs the verb.
 pub(crate) fn run(args: &Args) -> Result<()> {
     let setup = args.setup();
@@ -130,9 +153,30 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     // be joined rather than detached or killed.
     let json = args.json;
     let meters = args.meters;
+    // The printer already reads every event, so it is also the one thing that
+    // can tell `arm` the device is open. A flag and a condvar rather than a
+    // second subscription: the stream has one consumer by design.
+    let armed: Armed = Arc::new((Mutex::new(false), Condvar::new()));
+    let announce = Arc::clone(&armed);
     let printer = thread::spawn(move || {
         while let Some(event) = events.next() {
             let last = event.is_last();
+            // `armed` means the device is open. A refusal means it never will
+            // be, and releases the wait just as well: an arm that cannot happen
+            // should cost the script nothing.
+            if matches!(
+                event,
+                Event::Armed { .. }
+                    | Event::Rejected { .. }
+                    | Event::Refused { .. }
+                    | Event::Denied { .. }
+            ) {
+                let (flag, waiting) = &*announce;
+                *flag
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+                waiting.notify_all();
+            }
             if meters || !matches!(event, Event::Meter { .. }) {
                 print_event(&event, started, json);
             }
@@ -140,6 +184,13 @@ pub(crate) fn run(args: &Args) -> Result<()> {
                 break;
             }
         }
+        // Nothing more will arrive, so anything still waiting on the device is
+        // waiting for an answer that is not coming.
+        let (flag, waiting) = &*announce;
+        *flag
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+        waiting.notify_all();
     });
 
     // A verb this driver did not understand is a mistake worth failing over,
@@ -150,7 +201,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     let outcome = match &args.script {
         Some(script) => {
             for line in script.split(',') {
-                feed(&engine, &setup, line, started, json, &mut unknown)?;
+                feed(&engine, &setup, line, started, json, &mut unknown, &armed)?;
             }
             Ok(())
         }
@@ -159,7 +210,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
             let mut result = Ok(());
             for line in stdin.lock().lines() {
                 match line {
-                    Ok(line) => feed(&engine, &setup, &line, started, json, &mut unknown)?,
+                    Ok(line) => feed(&engine, &setup, &line, started, json, &mut unknown, &armed)?,
                     Err(error) => {
                         result = Err(error);
                         break;
@@ -191,6 +242,7 @@ fn feed(
     started: Instant,
     json: bool,
     unknown: &mut Vec<String>,
+    armed: &Armed,
 ) -> Result<()> {
     let line = line.trim();
     if line.is_empty() || line.starts_with('#') {
@@ -219,7 +271,20 @@ fn feed(
         }
         // `arm` is the one command that carries a description of a device, and
         // this verb's arguments are where that description comes from.
-        "arm" => engine.send(Command::Arm(Box::new(setup.clone())))?,
+        // The one verb this driver waits on - see the module docs. Cleared
+        // before the command, so a second `arm` in one script waits for its own
+        // answer rather than returning on the first one's.
+        "arm" => {
+            let (flag, waiting) = &**armed;
+            *flag
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = false;
+            engine.send(Command::Arm(Box::new(setup.clone())))?;
+            let guard = flag
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let _ = waiting.wait_timeout_while(guard, ARMED_TIMEOUT, |armed| !*armed);
+        }
         _ => match Command::parse(&verb) {
             Some(command) => engine.send(command)?,
             None => unknown.push(verb),
