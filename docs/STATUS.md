@@ -6068,19 +6068,121 @@ a bump has to be built before it is committed, or the release commit claims a ve
 own lockfiles disagree with.
 
 
+## 0.2.0-alpha, the window does what you tell it
+
+**Published 2026-10-08 at `4829f76`:**
+<https://github.com/shunte88/vcw/releases/tag/v0.2.0-alpha>. Eight assets, marked as a
+pre-release. Nothing in it changes a byte that gets recorded. It is the second UI change
+list - `/data2/vcw_ui_modifications_10082026.txt`, seven items - plus the findings from a
+read of the window beside it, and the first release where what the window looks like and
+how an export is named are the operator's to set rather than mine.
+
+**Buttons can be icons instead of words, and the word survives the switch.**
+*Settings > Appearance > Buttons* changes the panel tabs along the top and the transport
+along the bottom together, and gives both rows back about a third of their width. Every
+button keeps its name: the tooltip still reads `Record (r)`, and `.btn-label` is clipped
+off the page rather than taken out of it, so a screen reader still hears the word. Stored
+in `localStorage` beside the interface scale and the meter style, because none of the
+three is a fact about the record. Six glyphs were drawn for this release in the existing
+language - open line art, `#4f8cc9`, 2.7663 wide, on the same 73.768 box - and
+`Face.test.tsx` now reads the stylesheet as text and insists that every glyph a component
+asks for is one the stylesheet can draw, which is a class of bug no type can catch: `Face`
+takes a string, so a seventh tab added without its rule compiles, renders, and shows an
+empty 16 px gap.
+
+**The Save button is gone and Settings save themselves.** Change anything and it is
+written a moment after you stop; while the write is outstanding the panel says `Saving`
+beside its title. The acknowledgement is derived rather than remembered, and that is not
+a stylistic preference: `store.run` swallows a refusal into the status bar and resolves
+either way, so a flag set in `.then` would read "Saved" over a write the core had
+refused. The word goes when the stored settings catch up with the draft, and if the write
+never lands it stays, beside the reason.
+
+**That feature shipped silently doing nothing, and 174 passing tests all agreed it
+worked.** `useStore()` returns a new object literal on every render and the window
+re-renders at meter rate, so an effect listing `store` in its dependencies re-runs about
+sixty times a second - and its cleanup cancelled the 600 ms save timer every time. The
+panel said `Saving...` forever and `settings.json` was never touched. **No test could see
+it, because a test renders when something changes and the window renders always.** The
+first replacement test passed on the broken code for the same reason; it only
+discriminates now because it keeps re-rendering right through the debounce, with a store
+object rebuilt each pass and a settings object that holds still. The fix holds the write
+in a `useRef` refreshed by a dependency-free effect, so the timer depends on the two
+values that are actually a reason to save again. This is `first-light-finds-what-tests-cannot`
+a second time, and it is the reason every release now gets an hour in the running window.
+
+**Track numbers have three spellings, and none of them is written back to the project.**
+*Settings > Export > Track numbers* chooses the position on the label (`A1`, `B2`) or a
+plain number, and *Counted* then chooses whether the number restarts on each side or runs
+across the sides of one disc. `vcw export --numbering` takes the same choice. It applies
+to the export in hand only: exporting once as a sequence does not renumber the record,
+because the number on the label is a fact about the record and the number in a file name
+is a fact about this export.
+
+**FLAC narrows a float capture at 24 bits instead of refusing it.** 24 is where an `f32`
+significand survives intact, with a triangular dither and no attenuation, so the default
+is the honest one rather than the cautious one. Settings still changes the width, the
+dither and the headroom, and can be set back to refusing.
+
+**The webview stopped keeping a second copy of every glyph.** `app/ui/public/` held a
+duplicate of each icon that had already drifted from `assets/`. Vite inlines a small SVG
+referenced by a relative `url()` straight into the stylesheet as a data URI, in dev and in
+build alike, so the duplication bought nothing and is deleted. `tools/tidy-glyph.py`
+strips the Inkscape editor state - window size, zoom, two dozen inapplicable style
+properties - that was shipping inside those data URIs, and touches no geometry.
+
+**One licensing gap is now written down rather than unnoticed.** Twelve of the icons are
+borrowed art from SVG Repo whose license was never recorded, and they shipped that way in
+0.1.3-alpha. `THIRD-PARTY-NOTICES.md` now names all twelve, names the six VCW drew, and
+records the decision: they are placeholders and are being redrawn, so the obligation is
+being removed rather than traced. It is the one open item in that file.
+
+**`main` went red on macOS after the release commit, on a test nothing in 0.2 touches.**
+`a_region_the_tap_lost_audio_from_is_thrown_away_rather_than_published` again, and the
+second time it has been the subject of a release note. `d0e6a5a` had made the *loss*
+deterministic - a 16 KiB tap cannot accept a 64 KiB write on any machine - and left the
+*ordering* to a sleep: the test published a boundary and slept 300 ms before flooding the
+tap, against a worker that drains the bus every 250 ms. A 50 ms margin on a parked thread.
+Lose that race and the region opens after the audio it was meant to lose has already gone,
+which is not a hole in a region but loss outside one, correctly not counted. The same
+50 ms sat in front of every boundary in the file. **The fix is to ask the worker rather
+than to guess at it:** `Fingerprints` reports how many boundaries it has acted on -
+counted after the region exists, so a caller waiting on it is waiting for an open region -
+and how many frames it has taken off the tap, which is the cursor a region actually closes
+at. Both sleeps became waits and no assertion in the file depends on a duration any more.
+Both ends checked: with the worker's cadence slowed eight times, the sleeping version
+fails on two of the three boundaries and the waiting version passes.
+
+**The gate earned its keep twice in this release.** `doc` caught an intra-doc link from
+the new public documentation to a private const - `-D rustdoc::private_intra_doc_links`,
+a one-word fix, and a red CI job that never happened. And the split holds: 13 legs on
+media2026, the 3 that need GTK headers run here, 1154 Rust tests passed, 0 failed, 23
+ignored, 174 frontend. Then 12 jobs green on `main` at `4829f76`, then the tag, then 17
+jobs including four `package` legs, then publish.
+
+
 ## Next up
 
 **Where to pick up.** **Every work package in Phase 1 is built and committed**, and so
 are the two Phase 2 packages taken out of order: WP-25's lossy encoders and schema v3's
 `capture_eq` at `85acd44`. WP-28's About dialog and WP-21's fingerprinting followed at
 `2297178`, WP-22's lookup at `75424f2`, and WP-23's resolver with schema v4 at `b96b440`.
-**The tree is clean and everything described above is committed.** `v0.1.3-alpha` is
-tagged at `d0e6a5a`, pushed, packaged and published - see the section above it - and
+**The tree is clean and everything described above is committed.** `v0.2.0-alpha` is
+tagged at `4829f76`, pushed, packaged and published - see the section above it - and
 `main` is at the tag with nothing past it.
 
-**The next release has nothing waiting on it.** The UI change list that was waiting
-here shipped whole in 0.1.3-alpha, along with eleven findings from a read of the window
-beside it. The README was read and passed on 2026-10-06, and the question
+**0.3 has three things on it, and one of them is a licensing question before it is a
+coding one.** The second UI change list shipped whole in 0.2.0-alpha, so what is waiting
+is: **i18n** - a language select in *Settings > Appearance* defaulting to US English and
+translations submitted against a TOML template, which is an extraction job across 23
+`.tsx` files and about 272 `format!` sites rather than a file-format one; **AIFF and AAC
+export**, where AIFF is ordinary work - big-endian PCM, an 80-bit IEEE 754 extended float
+in the `COMM` chunk, and a check that lofty will tag it - and **AAC cannot be started
+until it is settled how it gets encoded at all**, because the usual encoder is Fraunhofer
+FDK, whose license is not OSI-approved and is not MIT-compatible, and VCW ships binaries
+on four platforms; and **the twelve borrowed glyphs**, which are being redrawn. The
+darker variant of the expanded log row is deferred with them. The README was read and
+passed on 2026-10-06, and the question
 of whether `"finalised"` earns a schema v5 migration to `"finalized"` was closed the
 same day - it stays as it is. The reason that survives is the carve-out above: the
 spelling rule exempts identifiers, this is one as well as a stored value, and the
