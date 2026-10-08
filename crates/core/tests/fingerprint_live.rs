@@ -46,9 +46,9 @@
 //!
 //! Timing is made irrelevant rather than tuned. The tap is sized to hold the whole
 //! stream, so no scheduling accident can drop audio and no assertion here depends on
-//! how often the worker woke up; and audio is pumped only *after* the boundary is
-//! published, so the cursor cannot have moved before the region opened. What is left
-//! is the worker's logic, which is what the tests are about.
+//! how often the worker woke up; and audio is pumped only *after* the worker has been
+//! seen to act on the boundary, so the cursor cannot have moved before the region
+//! opened. What is left is the worker's logic, which is what the tests are about.
 
 use std::time::Duration;
 
@@ -161,23 +161,40 @@ fn worker(pcm: Vec<u8>) -> (Tee<Canned>, Bus, Fingerprints) {
     (tee, bus, fingerprints)
 }
 
-/// Long enough for the worker to have woken and emptied the tap. One drain interval
-/// plus a generous margin; nothing below depends on the number, only on the ordering
-/// it buys.
-const SETTLE: Duration = Duration::from_millis(300);
-
-/// Publishes a boundary the way the live detector does, with the worker given time to
-/// be level with the stream on both sides of it.
+/// Waits for a condition on the worker rather than for a length of time.
 ///
-/// Both sleeps matter, and for opposite reasons. The one before: a region closes at
-/// the worker's *cursor* rather than at the frame the event names, which is the right
-/// behavior for audio arriving in real time - by the time a boundary is announced the
-/// cursor is already about 1.2 s past it - but a test that pumps eight seconds in a
-/// millisecond would otherwise say "end" while all eight are still in the tap. The one
-/// after: the event has to be on the bus before the audio it opens is pumped, or the
-/// cursor has moved and the region starts late.
-fn boundary(bus: &Bus, frame: u64, edge: Edge) {
-    std::thread::sleep(SETTLE);
+/// Every ordering these tests need is an ordering against a thread that wakes on its
+/// own quarter-second cadence, and the margin a sleep buys is whatever the scheduler
+/// leaves of it. This file used to sleep 300 ms against that 250 ms and call it
+/// settled, which is a 50 ms margin: enough on this machine, not enough on a loaded
+/// macOS runner, where a region opened *after* the audio it was supposed to lose had
+/// already been lost - outside any region, and so not a hole. Asking the worker what
+/// it has done cannot be too fast or too slow.
+fn until(what: &str, ready: impl Fn() -> bool) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !ready() {
+        assert!(std::time::Instant::now() < deadline, "{what}");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// Lets the worker catch up with every frame pumped so far.
+///
+/// A region closes at the worker's *cursor* rather than at the frame the event names,
+/// which is the right behavior for audio arriving in real time - by the time a
+/// boundary is announced the cursor is already about 1.2 s past it - but a test that
+/// pumps eight seconds in a millisecond would otherwise say "end" while all eight are
+/// still in the tap.
+fn level(fingerprints: &Fingerprints, frames: u64) {
+    until("the worker never caught up with the stream", || {
+        fingerprints.frames_read() >= frames
+    });
+}
+
+/// Publishes a boundary the way the live detector does, and does not return until the
+/// worker has acted on it - which for a start means the region exists.
+fn boundary(bus: &Bus, fingerprints: &Fingerprints, frame: u64, edge: Edge) {
+    let before = fingerprints.boundaries_handled();
     bus.publish(&Event::Detected {
         frame,
         seconds: frame as f64 / f64::from(RATE.hz()),
@@ -185,7 +202,9 @@ fn boundary(bus: &Bus, frame: u64, edge: Edge) {
         confidence: 0.9,
         provenance: Provenance::Silence,
     });
-    std::thread::sleep(SETTLE);
+    until("the worker never acted on the boundary", || {
+        fingerprints.boundaries_handled() > before
+    });
 }
 
 /// §25's live half, and S4's claim: off the tap is the same as off the file.
@@ -194,7 +213,7 @@ fn a_region_off_the_tap_is_what_the_same_audio_fingerprints_to_offline() {
     let pcm = music(SECONDS);
     let (mut tee, bus, fingerprints) = worker(pcm.clone());
 
-    boundary(&bus, 0, Edge::Start);
+    boundary(&bus, &fingerprints, 0, Edge::Start);
     pump(&mut tee, pcm.len());
     drop(tee);
     let out = fingerprints.stop();
@@ -229,9 +248,10 @@ fn audio_after_the_end_boundary_is_not_in_the_region() {
     let half = pcm.len() / 2;
     let (mut tee, bus, fingerprints) = worker(pcm.clone());
 
-    boundary(&bus, 0, Edge::Start);
+    boundary(&bus, &fingerprints, 0, Edge::Start);
     pump(&mut tee, half);
-    boundary(&bus, half as u64 / FRAME as u64, Edge::End);
+    level(&fingerprints, half as u64 / FRAME as u64);
+    boundary(&bus, &fingerprints, half as u64 / FRAME as u64, Edge::End);
     pump(&mut tee, pcm.len() - half);
     drop(tee);
     let out = fingerprints.stop();
@@ -277,7 +297,7 @@ fn a_region_the_tap_lost_audio_from_is_thrown_away_rather_than_published() {
     let bus = Bus::new();
     let fingerprints = Fingerprints::spawn(tap, &info(), &bus).expect("spawn");
 
-    boundary(&bus, 0, Edge::Start);
+    boundary(&bus, &fingerprints, 0, Edge::Start);
     pump(&mut tee, pcm.len());
     drop(tee);
     let out = fingerprints.stop();

@@ -75,7 +75,7 @@
 //! Requirements: §25 (fingerprinting), §10 (fan-out), §36 (a worker per job).
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -155,6 +155,8 @@ pub struct Fingerprinted {
 pub struct Fingerprints {
     thread: Option<JoinHandle<Fingerprinted>>,
     running: Arc<AtomicBool>,
+    handled: Arc<AtomicU64>,
+    taken: Arc<AtomicU64>,
 }
 
 impl std::fmt::Debug for Fingerprints {
@@ -183,12 +185,44 @@ impl Fingerprints {
         let info = info.clone();
         let running = Arc::new(AtomicBool::new(true));
         let flag = Arc::clone(&running);
+        let handled = Arc::new(AtomicU64::new(0));
+        let counted = Arc::clone(&handled);
+        let taken = Arc::new(AtomicU64::new(0));
+        let drained = Arc::clone(&taken);
         let scratch = bytes_for(&info, TAP_MILLIS / 4);
         let thread = std::thread::Builder::new()
             .name("vcw-fingerprint".into())
-            .spawn(move || run(tap, &info, &events, &flag, scratch))
+            .spawn(move || run(tap, &info, &events, &flag, &counted, &drained, scratch))
             .ok();
-        Ok(Self { thread, running })
+        Ok(Self {
+            thread,
+            running,
+            handled,
+            taken,
+        })
+    }
+
+    /// How many boundaries the worker has acted on.
+    ///
+    /// Not the same question as how many have been published: the worker drains the
+    /// bus on its own quarter-second cadence, so a boundary is up to that old before
+    /// the region it opens exists. Anything that has to know the region is open before
+    /// it does the next thing has to ask, because the answer is "when the worker next
+    /// wakes" and a sleep chosen to be long enough on one machine is not long enough on
+    /// a loaded one.
+    #[must_use]
+    pub fn boundaries_handled(&self) -> u64 {
+        self.handled.load(Ordering::Relaxed)
+    }
+
+    /// How many frames the worker has taken off the tap.
+    ///
+    /// The worker's cursor, and so how far behind the stream it is running. A region
+    /// is closed where this is rather than at the frame the boundary names, which is
+    /// why anything deciding *when* to announce a boundary wants to know it.
+    #[must_use]
+    pub fn frames_read(&self) -> u64 {
+        self.taken.load(Ordering::Relaxed)
     }
 
     /// Stops the worker, waits for it, and returns every region it fingerprinted.
@@ -259,6 +293,8 @@ fn run(
     info: &CaptureInfo,
     events: &Events,
     running: &AtomicBool,
+    handled: &AtomicU64,
+    taken: &AtomicU64,
     scratch: usize,
 ) -> Fingerprinted {
     let frame_bytes = (info.storage_format.bytes_per_sample() * info.channels as usize).max(1);
@@ -300,6 +336,9 @@ fn run(
                     Err(_) => out.refused += 1,
                 }
             }
+            // Counted after the region exists, not before: a caller waiting on this
+            // is waiting to know the region is open.
+            handled.fetch_add(1, Ordering::Relaxed);
         }
 
         // Drain everything waiting rather than one buffer of it, so a worker that was
@@ -332,6 +371,8 @@ fn run(
                 out.refused += 1;
             }
         }
+
+        taken.store(read_bytes / frame_bytes as u64, Ordering::Relaxed);
 
         if !carry_on || (tap.is_abandoned() && tap.available() == 0) {
             // The last track of a side has no end boundary - the record simply stops
