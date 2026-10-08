@@ -91,6 +91,10 @@ export function Export({
     narrowing: settings?.export.narrowing ?? null,
     dither: settings?.export.dither ?? null,
     headroom: settings?.export.headroom ?? null,
+    // Likewise from the settings: how a number is spelled is a decision about
+    // the archive, and a person who wanted this export numbered differently
+    // from the last one is a person who wanted a different archive.
+    numbering: settings?.export.numbering ?? null,
   });
 
   // Canceling returns null and a canceled picker must not clear the field: a

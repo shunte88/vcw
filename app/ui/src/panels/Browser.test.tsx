@@ -116,6 +116,7 @@ describe("the project browser", () => {
           selected={null}
           onSelect={() => {}}
           onLibraryChanged={onLibraryChanged}
+          onOpened={() => {}}
         />,
       );
     });
@@ -159,6 +160,114 @@ describe("the project browser", () => {
     container.remove();
   });
 
+  // Opening lands on Tracks, by all three routes.
+  //
+  // The three were wired separately before this - the Open button, the tile
+  // double-click and the row double-click each called `store.open` themselves -
+  // so "also switch panel" was three edits and a chance to make two of them.
+  // They now share one `openProject`, and this test is what says so: it drives
+  // each route in turn and expects the same two calls out of each.
+  it("opens a project onto Tracks, by button, tile and row alike", async () => {
+    Element.prototype.scrollIntoView = () => {};
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const { store } = fakeStore();
+    const opened = vi.fn();
+    const projects = [row({ path: "/library/a.vcw" }), row({ path: "/library/b.vcw" })];
+
+    const draw = async () => {
+      await act(async () => {
+        root.render(
+          <Browser
+            store={store}
+            projects={projects}
+            selected="/library/b.vcw"
+            onSelect={() => {}}
+            onLibraryChanged={() => {}}
+            onOpened={opened}
+          />,
+        );
+      });
+    };
+
+    // The button, which is what Enter reaches: `useKeys("browser",
+    // { openProject: open })` and this button are the same `open`.
+    await draw();
+    await act(async () => {
+      find(container, "Open (Enter)").click();
+    });
+    expect(opened).toHaveBeenCalledTimes(1);
+
+    // The row, in list mode.
+    const target = container.querySelector("tbody tr");
+    if (!target) {
+      throw new Error("no row to double-click");
+    }
+    await act(async () => {
+      target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    expect(opened).toHaveBeenCalledTimes(2);
+
+    // And the tile, which is a different element in a different branch. The
+    // view toggle is two icon buttons, so it answers to its title, not text.
+    const toTiles = container.querySelector<HTMLButtonElement>(
+      '.view-toggle button[title="Tiles"]',
+    );
+    if (!toTiles) {
+      throw new Error("no tiles toggle");
+    }
+    await act(async () => {
+      toTiles.click();
+    });
+    // `:not(.new)`, because the first tile in the grid is the "New project"
+    // cell and it has no project to open.
+    const tile = container.querySelector("button.tile:not(.new)");
+    if (!tile) {
+      throw new Error("no tile to double-click");
+    }
+    await act(async () => {
+      tile.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    expect(opened).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  // A library of one used to need a click before Enter would do anything: no
+  // row was selected, so "Open (Enter)" was greyed and the key it advertises
+  // did nothing. The panel now puts the cursor on the first row.
+  it("selects the first row when nothing is selected", async () => {
+    Element.prototype.scrollIntoView = () => {};
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const { store } = fakeStore();
+    const chose = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <Browser
+          store={store}
+          projects={[row({ path: "/library/only.vcw" })]}
+          selected={null}
+          onSelect={chose}
+          onLibraryChanged={() => {}}
+          onOpened={() => {}}
+        />,
+      );
+    });
+    expect(chose).toHaveBeenCalledWith("/library/only.vcw");
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   // Two things an unreadable project used to get wrong at once, and they
   // compound: a library of seven older-schema files was seven amber rows of
   // zeros, each with a full-width copy of the same sentence under it. The
@@ -187,6 +296,7 @@ describe("the project browser", () => {
             selected={selected}
             onSelect={() => {}}
             onLibraryChanged={() => {}}
+            onOpened={() => {}}
           />,
         );
       });
@@ -238,6 +348,7 @@ describe("the project browser", () => {
           selected={null}
           onSelect={() => {}}
           onLibraryChanged={() => {}}
+          onOpened={() => {}}
         />,
       );
     });
@@ -273,6 +384,7 @@ describe("the project browser", () => {
             selected={null}
             onSelect={() => {}}
             onLibraryChanged={() => {}}
+            onOpened={() => {}}
           />,
         );
       });
@@ -346,6 +458,7 @@ describe("the project browser", () => {
             selected={null}
             onSelect={() => {}}
             onLibraryChanged={() => {}}
+            onOpened={() => {}}
           />,
         );
       });
@@ -374,6 +487,7 @@ describe("the project browser", () => {
             selected={null}
             onSelect={() => {}}
             onLibraryChanged={() => {}}
+            onOpened={() => {}}
           />,
         );
       });

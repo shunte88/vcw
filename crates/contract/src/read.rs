@@ -187,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn numeric_numbering_runs_across_the_release() {
+    fn numeric_numbering_is_zero_padded() {
         let (_dir, mut project) = project();
         let mut record = release::ensure(&mut project).expect("release");
         record.numbering = Numbering::Numeric;
@@ -198,7 +198,7 @@ mod tests {
                 .iter()
                 .map(|t| t.position.as_str())
                 .collect::<Vec<_>>(),
-            ["1", "2"]
+            ["01", "02"]
         );
     }
 

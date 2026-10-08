@@ -245,13 +245,21 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 /// Prints the project's topology.
 fn list(project: &Project, only: Option<char>, boundaries: bool, json: bool) -> Result<()> {
     let numbering = release::load(project.conn())?.map_or(Numbering::Alpha, |r| r.numbering);
+    // Rendered over the whole project even when one side was asked for, because
+    // `sequence` counts across a disc's sides: side B's numbers depend on how
+    // many tracks side A holds, so `--side B` alone cannot render them.
+    let rendered: std::collections::HashMap<i64, String> =
+        track::positions(project.conn(), numbering)?
+            .into_iter()
+            .map(|(record, text)| (record.id, text))
+            .collect();
     let sides = match only {
         Some(letter) => vec![side::require(project.conn(), self::letter(letter)?)?],
         None => side::list(project.conn())?,
     };
 
     if json {
-        print_json(project, &sides, boundaries, numbering)?;
+        print_json(project, &sides, boundaries, &rendered)?;
         return Ok(());
     }
 
@@ -264,10 +272,7 @@ fn list(project: &Project, only: Option<char>, boundaries: bool, json: bool) -> 
     println!(
         "  release    {expected} disc(s) claimed, {} side(s) present, numbering {}",
         sides.len(),
-        match numbering {
-            Numbering::Alpha => "alpha",
-            Numbering::Numeric => "numeric",
-        }
+        numbering.name()
     );
     if !missing.is_empty() {
         let letters: String = missing.iter().map(|s| s.letter()).collect();
@@ -303,7 +308,7 @@ fn list(project: &Project, only: Option<char>, boundaries: bool, json: bool) -> 
         for one in &tracks {
             println!(
                 "    {:<5} {:>9.3} - {:>9.3} s  ({:>7.3} s)  {}",
-                numbering.render(one.position(record.side), one.number),
+                rendered.get(&one.id).map_or("", String::as_str),
                 one.start as f64 / rate,
                 one.end as f64 / rate,
                 one.frames() as f64 / rate,
@@ -453,7 +458,7 @@ fn print_json(
     project: &Project,
     sides: &[side::Record],
     boundaries: bool,
-    numbering: Numbering,
+    rendered: &std::collections::HashMap<i64, String>,
 ) -> Result<()> {
     let mut out = String::from("{\"sides\":[");
     for (index, record) in sides.iter().enumerate() {
@@ -478,7 +483,7 @@ fn print_json(
             out.push_str(&format!(
                 "{{\"id\":{},\"position\":\"{}\",\"start\":{},\"end\":{},\"title\":{}}}",
                 one.id,
-                numbering.render(one.position(record.side), one.number),
+                rendered.get(&one.id).map_or("", String::as_str),
                 one.start,
                 one.end,
                 quote(&one.title)

@@ -81,6 +81,7 @@ function settings(library: string | null = null): Settings {
       narrowing: "24",
       dither: "tpdf",
       headroom: "3",
+      numbering: "sequence",
     },
   } as unknown as Settings;
 }
@@ -304,11 +305,12 @@ describe("the format and its quality", () => {
     );
   });
 
-  it("sends the narrowing settings, which only Settings can set", async () => {
-    // The wiring, not the behavior: the three float-narrowing switches live in
-    // Settings and have no control on this panel, so nothing here would notice
-    // if `request()` stopped reading them and every export quietly went back to
-    // refusing a float capture.
+  it("sends the narrowing and numbering settings, which only Settings can set", async () => {
+    // The wiring, not the behavior: the float-narrowing switches and the two
+    // numbering ones live in Settings and have no control on this panel, so
+    // nothing here would notice if `request()` stopped reading them and every
+    // export quietly went back to refusing a float capture, or to the label's
+    // numbering whatever was chosen.
     const container = await render({});
     await addressed(container);
 
@@ -319,7 +321,12 @@ describe("the format and its quality", () => {
       plan?.click();
     });
     expect(planned).toHaveBeenCalledWith(
-      expect.objectContaining({ narrowing: "24", dither: "tpdf", headroom: "3" }),
+      expect.objectContaining({
+        narrowing: "24",
+        dither: "tpdf",
+        headroom: "3",
+        numbering: "sequence",
+      }),
     );
   });
 

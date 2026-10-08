@@ -22,6 +22,12 @@ export default defineConfig({
   // WP-16's exit criterion.
   test: {
     environment: "jsdom",
+    // Process the stylesheet rather than stubbing it to "". Not for the
+    // rendering - jsdom does not lay anything out either way - but so that a
+    // test can read `app.css` as text: `Face.test.tsx` holds the TSX and the
+    // stylesheet to the same list of glyph names, and with CSS stubbed it was
+    // comparing every name against an empty set and passing.
+    css: true,
     // `.tsx` as well since WP-19: the project browser earned a rendered test
     // when a project created in the window turned out to be missing from the
     // list until a restart, and that is not a question source text can answer.

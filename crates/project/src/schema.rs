@@ -350,8 +350,9 @@ CREATE TABLE releases (
     -- How many discs the release has. The sides follow from it (§29), and it is
     -- stored because a project may hold fewer sides than the release has.
     discs          INTEGER NOT NULL DEFAULT 1,
-    -- 'alpha' (A1, B2) or 'numeric' (6). Numbering's two spellings; alpha is
-    -- VRipr's and the one printed on the label.
+    -- 'alpha' (A1, B2), 'numeric' (01 within the side) or 'sequence' (01..0n
+    -- across the disc). Numbering's three spellings; alpha is VRipr's and the
+    -- one printed on the label. An unknown spelling reads back as alpha.
     numbering      TEXT    NOT NULL DEFAULT 'alpha',
     -- MusicBrainz release id, where identification found one (§32).
     musicbrainz_id TEXT,

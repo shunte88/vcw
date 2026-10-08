@@ -64,6 +64,7 @@ import type {
   Project,
   Settings as Values,
 } from "./bindings/vcw";
+import { Face } from "./Face";
 import { describe } from "./describe";
 import { useKeys } from "./keys";
 import type { Scope } from "./keymap";
@@ -93,13 +94,18 @@ import { STEP, type Span, fit, toRange, toSelection, zoom } from "./zoom";
  * records, and "project" is the file they happen to be kept in. The scope is
  * unchanged, so `keymap.ts`, the bindings and `wiring.test.ts` do not move.
  */
-const PANELS: readonly { scope: Scope; label: string; chord: string }[] = [
-  { scope: "browser", label: "Library", chord: "Ctrl+1" },
-  { scope: "capture", label: "Capture", chord: "Ctrl+2" },
-  { scope: "tracks", label: "Tracks", chord: "Ctrl+3" },
-  { scope: "metadata", label: "Metadata", chord: "Ctrl+4" },
-  { scope: "export", label: "Export", chord: "Ctrl+5" },
-  { scope: "settings", label: "Settings", chord: "Ctrl+6" },
+const PANELS: readonly {
+  scope: Scope;
+  label: string;
+  chord: string;
+  icon: string;
+}[] = [
+  { scope: "browser", label: "Library", chord: "Ctrl+1", icon: "library" },
+  { scope: "capture", label: "Capture", chord: "Ctrl+2", icon: "capture" },
+  { scope: "tracks", label: "Tracks", chord: "Ctrl+3", icon: "tracks" },
+  { scope: "metadata", label: "Metadata", chord: "Ctrl+4", icon: "metadata" },
+  { scope: "export", label: "Export", chord: "Ctrl+5", icon: "export" },
+  { scope: "settings", label: "Settings", chord: "Ctrl+6", icon: "settings" },
 ];
 
 /**
@@ -404,24 +410,24 @@ export function App(): React.JSX.Element {
               type="button"
               className={tab.scope === panel ? "current" : ""}
               onClick={() => setPanel(tab.scope)}
-              title={tab.chord}
+              title={`${tab.label} (${tab.chord})`}
             >
-              {tab.label}
+              <Face icon={tab.icon}>{tab.label}</Face>
             </button>
           ))}
         </nav>
-        <button type="button" onClick={() => setLog(true)} title="Ctrl+D">
-          Log
+        <button type="button" onClick={() => setLog(true)} title="Log (Ctrl+D)">
+          <Face icon="log">Log</Face>
         </button>
-        <button type="button" onClick={() => setHelp(true)} title="?">
-          Keys
+        <button type="button" onClick={() => setHelp(true)} title="Keys (?)">
+          <Face icon="keys">Keys</Face>
         </button>
         <button
           type="button"
           onClick={() => setAbout(true)}
-          title="Ctrl+I"
+          title="About (Ctrl+I)"
         >
-          About
+          <Face icon="scales">About</Face>
         </button>
       </header>
 
@@ -465,6 +471,7 @@ export function App(): React.JSX.Element {
               selected={selected}
               onSelect={setSelected}
               onLibraryChanged={reread}
+              onOpened={() => setPanel("tracks")}
             />
           )}
           {panel === "capture" && (

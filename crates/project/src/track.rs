@@ -907,17 +907,24 @@ pub fn move_to_side(project: &mut Project, track_id: i64, to: Side) -> Result<()
 ///
 /// The one place the [`Numbering`] scheme is applied, since it is a presentation
 /// choice rather than a fact about the record: the rows store side and number, and
-/// this turns them into `A1` or `1` or `01` on the way out.
+/// this turns them into `A1` or `01` or `06` on the way out.
+///
+/// The running number restarts on each disc, not on each release, because a
+/// disc is what a track number is numbered within - sides A and B are disc 1,
+/// C and D are disc 2, and side C's first track is `01` again.
 ///
 /// # Errors
 ///
 /// If the query fails.
 pub fn positions(conn: &Connection, numbering: Numbering) -> Result<Vec<(Record, String)>> {
     let mut rendered = Vec::new();
-    let mut sequence = 0;
+    let mut per_disc: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
     for (side, record) in listing(conn)? {
-        sequence += 1;
-        let text = numbering.render(record.position(side), sequence);
+        let within_disc = per_disc
+            .entry(side.disc())
+            .and_modify(|n| *n += 1)
+            .or_insert(1);
+        let text = numbering.render(record.position(side), *within_disc);
         rendered.push((record, text));
     }
     Ok(rendered)
@@ -1764,11 +1771,45 @@ mod tests {
             .into_iter()
             .map(|(_, text)| text)
             .collect();
-        assert_eq!(numeric, ["1", "2", "3"]);
+        assert_eq!(numeric, ["01", "02", "01"], "numeric restarts on each side");
+
+        // The two forms differ exactly where it matters: B1 is `01` as a side
+        // number and `03` as a disc number. A test that only ever looked at
+        // side A could not tell them apart.
+        let sequence: Vec<String> = positions(p.conn(), Numbering::Sequence)
+            .expect("positions")
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect();
+        assert_eq!(
+            sequence,
+            ["01", "02", "03"],
+            "sequence runs across the disc"
+        );
 
         let listed = listing(p.conn()).expect("listing");
         assert_eq!(listed.len(), 3);
         assert_eq!(listed[2].0, side_of('B'));
         assert_eq!(listed[2].1.number, 1, "numbers are per side");
+    }
+
+    #[test]
+    fn a_sequence_restarts_on_the_next_disc() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir, "discs.vcw");
+        for letter in ['A', 'B', 'C'] {
+            side::ensure(&mut p, side_of(letter)).expect("side");
+            add_track(&mut p, side_of(letter), 0, 100).expect("track");
+        }
+        add_track(&mut p, side_of('C'), 100, 200).expect("c2");
+
+        let rendered: Vec<String> = positions(p.conn(), Numbering::Sequence)
+            .expect("positions")
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect();
+        // A and B are disc 1, C is disc 2 - the CD parlance the numbering
+        // follows. A release-wide count would have said 03 and 04 here.
+        assert_eq!(rendered, ["01", "02", "01", "02"]);
     }
 }

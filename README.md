@@ -67,7 +67,7 @@ Choose your intended export format **before recording**:
 | MP3 | No: lossy | Supported rates up to 48 kHz; mono or stereo. |
 | Ogg Vorbis | No: lossy | Accepts VCW's supported capture rates, including 192 kHz, and Float32 audio. |
 
-VCW refuses unsupported combinations instead of silently reducing bit depth or resampling. FLAC is an integer codec, so deciding how to bring a Float32 capture down to integers is a judgment about headroom: VCW asks rather than guesses. Settings > Export chooses the width (24-bit or 32-bit), whether to dither, and how much headroom to leave; until one is chosen a Float32 capture is refused by name and leaves as lossless WAV instead.
+VCW refuses unsupported combinations instead of silently reducing bit depth or resampling. FLAC is an integer codec, so a Float32 capture has to be brought down to integers first: VCW does that at 24-bit with a triangular dither and no attenuation, which is where an `f32` significand survives intact. Settings > Export changes the width, the dither and the headroom, and can be set to refuse instead - in which case a Float32 capture asked for as FLAC is refused by name and leaves as lossless WAV.
 
 ## Get started
 

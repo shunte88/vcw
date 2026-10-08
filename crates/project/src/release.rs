@@ -190,7 +190,10 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
                     composer: r.get(8)?,
                     comments: r.get(9)?,
                     discs: r.get::<_, i64>(10)? as u32,
-                    numbering: read_numbering(&numbering),
+                    // An unknown spelling reads back as the default rather
+                    // than failing: the column is a presentation preference,
+                    // and a project is not worth refusing over one.
+                    numbering: Numbering::parse(&numbering).unwrap_or_default(),
                     musicbrainz_id: r.get(12)?,
                     discogs_id: r.get(13)?,
                     confirmed: r.get::<_, i64>(14)? != 0,
@@ -260,7 +263,7 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
             record.composer,
             record.comments,
             i64::from(discs),
-            numbering_name(record.numbering),
+            record.numbering.name(),
             record.musicbrainz_id,
             record.discogs_id,
             i64::from(record.confirmed),
@@ -495,22 +498,6 @@ fn split_genres(stored: &str) -> Vec<String> {
         .filter(|g| !g.is_empty())
         .map(str::to_owned)
         .collect()
-}
-
-const fn numbering_name(numbering: Numbering) -> &'static str {
-    match numbering {
-        Numbering::Alpha => "alpha",
-        Numbering::Numeric => "numeric",
-    }
-}
-
-/// Unknown spellings read back as the default rather than failing: the column is
-/// a presentation preference, and a project is not worth refusing over one.
-fn read_numbering(stored: &str) -> Numbering {
-    match stored {
-        "numeric" => Numbering::Numeric,
-        _ => Numbering::Alpha,
-    }
 }
 
 #[cfg(test)]

@@ -1073,10 +1073,18 @@ code {
    table, for the same reason `.problem-reason` is: it is a sentence, not a
    cell. Wrapped, because being wrapped is the whole point of opening it. */
 .rows.log tr.log-full td {
-  padding-top: 0;
-  padding-bottom: 0.5rem;
+  padding: 0.4rem 0.75rem 0.5rem;
   white-space: normal;
   overflow-wrap: anywhere;
+  background: var(--accent);
+  color: #fff;
+}
+
+/* The timestamp is `.dim` in the row above, where dim means "this is the part
+   you already read". On the accent it has to come back up, or it reads as a
+   rendering fault rather than a de-emphasis. */
+.rows.log tr.log-full td .dim {
+  color: #e8eef7;
 }
 
 .rows.log tr.log-full:hover {
@@ -1856,13 +1864,116 @@ code {
 }
 
 .icon.scales {
-  mask-image: url(/scales.svg);
-  -webkit-mask-image: url(/scales.svg);
+  mask-image: url(../../../assets/scales.svg);
+  -webkit-mask-image: url(../../../assets/scales.svg);
 }
 
 .icon.globe-mark {
-  mask-image: url(/globe-lines.svg);
-  -webkit-mask-image: url(/globe-lines.svg);
+  mask-image: url(../../../assets/globe-lines.svg);
+  -webkit-mask-image: url(../../../assets/globe-lines.svg);
+}
+
+/* The button glyphs, one rule each.
+ *
+ * Masked straight out of the repository's own `assets/`, not out of
+ * `public/`, which used to hold its own copies of two of them. The copies
+ * drifted - `scales.svg` was edited in `assets/` and the window went on
+ * wearing the old one - and the fix is to have one file rather than a rule
+ * about keeping two in step. Vite resolves the relative URL at build time and
+ * inlines each file, which is why `tools/tidy-glyph.py` strips Inkscape's
+ * editor state first: whatever is in the file ships inside the stylesheet.
+ *
+ * A name per rule rather than one rule and a custom property, because a
+ * `url()` in a custom property is resolved against the document and not the
+ * stylesheet, so the relative path would break. */
+.icon.library {
+  mask-image: url(../../../assets/library.svg);
+  -webkit-mask-image: url(../../../assets/library.svg);
+}
+
+.icon.capture {
+  mask-image: url(../../../assets/capture.svg);
+  -webkit-mask-image: url(../../../assets/capture.svg);
+}
+
+.icon.tracks {
+  mask-image: url(../../../assets/tracks.svg);
+  -webkit-mask-image: url(../../../assets/tracks.svg);
+}
+
+.icon.metadata {
+  mask-image: url(../../../assets/metadata.svg);
+  -webkit-mask-image: url(../../../assets/metadata.svg);
+}
+
+.icon.export {
+  mask-image: url(../../../assets/export.svg);
+  -webkit-mask-image: url(../../../assets/export.svg);
+}
+
+.icon.settings {
+  mask-image: url(../../../assets/settings.svg);
+  -webkit-mask-image: url(../../../assets/settings.svg);
+}
+
+.icon.log {
+  mask-image: url(../../../assets/log.svg);
+  -webkit-mask-image: url(../../../assets/log.svg);
+}
+
+.icon.keys {
+  mask-image: url(../../../assets/keys.svg);
+  -webkit-mask-image: url(../../../assets/keys.svg);
+}
+
+.icon.record {
+  mask-image: url(../../../assets/record.svg);
+  -webkit-mask-image: url(../../../assets/record.svg);
+}
+
+.icon.play {
+  mask-image: url(../../../assets/play.svg);
+  -webkit-mask-image: url(../../../assets/play.svg);
+}
+
+.icon.pause {
+  mask-image: url(../../../assets/pause.svg);
+  -webkit-mask-image: url(../../../assets/pause.svg);
+}
+
+.icon.stop {
+  mask-image: url(../../../assets/stop.svg);
+  -webkit-mask-image: url(../../../assets/stop.svg);
+}
+
+.icon.marker {
+  mask-image: url(../../../assets/marker.svg);
+  -webkit-mask-image: url(../../../assets/marker.svg);
+}
+
+/* An icon-only button keeps its word, off the page.
+ *
+ * Only ever emitted beside a glyph - in text mode `Face` renders the word
+ * itself and no wrapper - so this needs no second class to qualify it. The
+ * word stays in the accessibility tree and in the tooltip, which is what
+ * makes an icon row still navigable by name rather than by shape. */
+.btn-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Record is red and nothing else is, which is the one place this product
+ * spends a color on a single control. The artwork is a blue outline like the
+ * rest of the set; the mask paints it in the button's own color, so the red
+ * lives here rather than in a second copy of the file. */
+.transport-buttons button:not(:disabled) .icon.record {
+  background-color: var(--bad);
 }
 
 .globe {

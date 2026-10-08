@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<!--
+  ffwd.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  Skip forward. Worn as a mask-image, so only the shape is read.
+  Adapted from SVG Repo (www.svgrepo.com) - see THIRD-PARTY-NOTICES.md.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
 <!--
   ffwd.svg
 
@@ -23,28 +33,18 @@
    height="22.570187mm"
    viewBox="0 0 37.157028 22.570187"
    version="1.1"
-   id="svg1"
    xml:space="preserve"
-   xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg"><defs
-     id="defs1" /><g
-     id="layer1"
+   xmlns="http://www.w3.org/2000/svg"><g
      transform="translate(-89.393707,-57.706745)"><g
-       id="g21"
-       transform="translate(0,-113.77086)"><g
-         id="g17"><g
-           id="g15"
+       transform="translate(0,-113.77086)"><g><g
            transform="translate(0,113.77085)"><rect
              style="fill:#2d3340;fill-opacity:1;stroke-width:1;stroke-linecap:round"
-             id="rect14"
              width="37.157028"
              height="22.570187"
              x="89.393707"
              y="57.706745"
              rx="6.1999998" /><path
-             id="path14"
              style="fill:#13161b;fill-opacity:0.727083;stroke-width:1;stroke-linecap:round"
              d="m 91.766689,59.021393 c -1.446617,1.133062 -2.372982,2.897249 -2.372982,4.88549 v 10.169922 c 0,3.4348 2.765338,6.200139 6.200138,6.200139 h 24.757145 c 1.98824,0 3.75191,-0.926366 4.88497,-2.372982 -1.05249,0.824366 -2.38008,1.314648 -3.82664,1.314648 H 96.652179 c -3.4348,0 -6.200139,-2.765338 -6.200139,-6.200138 V 62.84855 c 0,-1.446558 0.490282,-2.774661 1.314649,-3.827157 z" /></g><path
-           id="path10"
            style="fill:#d8dee9;fill-opacity:1;stroke-width:1.23504;stroke-linecap:round"
            d="m 101.67148,177.5088 a 0.75465075,0.75465075 0 0 0 -0.72864,0.75396 l -0.003,5.80688 -0.002,3.19257 a 0.75465075,0.75465075 0 0 0 1.13171,0.65422 l 3.63182,-2.09444 -10e-4,1.44022 a 0.75465075,0.75465075 0 0 0 1.13171,0.65422 l 5.0307,-2.90111 2.76573,-1.59474 a 0.75465075,0.75465075 0 0 0 5.1e-4,-1.3069 l -5.0276,-2.90628 -2.76365,-1.59783 a 0.75465075,0.75465075 0 0 0 -1.13275,0.65319 l -5.2e-4,1.44487 -0.86558,-0.50023 -2.76417,-1.59783 a 0.75465075,0.75465075 0 0 0 -0.40359,-0.10077 z" /></g></g></g></svg>

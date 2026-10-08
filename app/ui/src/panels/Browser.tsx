@@ -295,6 +295,7 @@ export function Browser({
   selected,
   onSelect,
   onLibraryChanged,
+  onOpened,
 }: {
   store: Store;
   projects: readonly Project[];
@@ -310,6 +311,8 @@ export function Browser({
    * it needs fixing.
    */
   onLibraryChanged: () => void;
+  /** A project was opened, so the window should move on from the library. */
+  onOpened: () => void;
 }): React.JSX.Element {
   const [creating, setCreating] = useState(false);
   const [tiles, setTiles] = useState(
@@ -323,9 +326,22 @@ export function Browser({
     riaaEq: false,
   });
 
+  // Every way into a project goes through here, so the panel change that
+  // follows one cannot be wired to two of the three. Opening lands on Tracks
+  // because that is what somebody who just picked a record off the shelf came
+  // to look at: the library answers "which record", and the next question is
+  // always "what is on it". Creating a project deliberately does not go here -
+  // a new project has nothing to show on Tracks.
+  const openProject = (path: string) => {
+    void store.open(path).then(() => {
+      onLibraryChanged();
+      onOpened();
+    });
+  };
+
   const open = () => {
     if (selected !== null) {
-      void store.open(selected).then(onLibraryChanged);
+      openProject(selected);
     }
   };
 
@@ -595,9 +611,7 @@ export function Browser({
               ref={project.path === selected ? show : null}
               className={`tile ${marks(project, selected, store.project.path)}`}
               onClick={() => onSelect(project.path)}
-              onDoubleClick={() =>
-                void store.open(project.path).then(onLibraryChanged)
-              }
+              onDoubleClick={() => openProject(project.path)}
               title={project.path}
             >
               <span className="tile-art">
@@ -637,9 +651,7 @@ export function Browser({
                   ref={project.path === selected ? show : null}
                   className={marks(project, selected, store.project.path)}
                   onClick={() => onSelect(project.path)}
-                  onDoubleClick={() =>
-                    void store.open(project.path).then(onLibraryChanged)
-                  }
+                  onDoubleClick={() => openProject(project.path)}
                   title={project.path}
                 >
                   <td className="art">

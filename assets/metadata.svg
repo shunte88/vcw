@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  metadata.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  The release's own label. Worn as a mask-image, so only the shape is read.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="800px"
+     viewBox="0 0 73.768 73.768" version="1.1">
+  <path fill="none" stroke="#4f8cc9" stroke-width="2.7663"
+        stroke-linecap="round" stroke-linejoin="round"
+        d="M 24.5,15 H 62.3 A 4,4 0 0 1 66.3,19 V 54.8 A 4,4 0 0 1 62.3,58.8 H 24.5 L 7.5,36.9 Z M 19.1,36.9 A 4.4,4.4 0 0 1 27.9,36.9 A 4.4,4.4 0 0 1 19.1,36.9 Z" />
+</svg>

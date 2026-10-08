@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  marker.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  A marker dropped on the capture. Worn as a mask-image, so only the shape is read.
+  Adapted from SVG Repo (www.svgrepo.com) - see THIRD-PARTY-NOTICES.md.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
+<svg
+   width="800px"
+   height="800px"
+   viewBox="0 0 73.768 73.768"
+   version="1.1"
+   xml:space="preserve"
+   xmlns="http://www.w3.org/2000/svg"><path
+     style="opacity:1;fill:#4f8cc9;stroke-linecap:round;stroke-linejoin:round"
+     d="m 26.228747,5.468035 a 1.38315,1.38315 0 0 0 -1.384771,1.384771 v 60.064369 a 1.38315,1.38315 0 0 0 1.384771,1.38279 1.38315,1.38315 0 0 0 1.38279,-1.38279 V 6.852806 a 1.38315,1.38315 0 0 0 -1.38279,-1.384771 z m 3.655622,0.0049 a 1.3832883,1.3832883 0 0 0 -1.294182,1.377928 v 26.22456 a 1.3832883,1.3832883 0 0 0 2.025379,1.224664 l 24.945326,-13.11147 a 1.3832883,1.3832883 0 0 0 0,-2.449148 L 30.615566,5.628142 A 1.3832883,1.3832883 0 0 0 29.884369,5.472897 Z M 31.355767,9.141885 51.943631,19.964133 31.355767,30.7844 Z" /></svg>

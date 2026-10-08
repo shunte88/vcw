@@ -315,7 +315,9 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
 fn a_float32_import_cannot_be_flac_and_is_told_so_before_anything_is_written() {
     // 24 of the user's 25 rips are float32, so this is the ordinary case and not
     // an edge one. The refusal has to arrive before the first file, because a
-    // half-written album is worse than a rejected command.
+    // half-written album is worse than a rejected command - and that is the
+    // property this test is really about, which is why it still asks for the
+    // refusal now that `--narrow refuse` has to be said out loud.
     let dir = scratch();
     let destination = dir.path().join("rate-trap.vcw");
     let (_, project) = import(&fixture("rate-trap.aup3"), &destination);
@@ -332,6 +334,8 @@ fn a_float32_import_cannot_be_flac_and_is_told_so_before_anything_is_written() {
         &out.display().to_string(),
         "--format",
         "flac",
+        "--narrow",
+        "refuse",
     ]);
     assert!(
         said.contains("FLAC") && said.contains("WAV"),

@@ -185,7 +185,7 @@ fn show(project: &mut Project, json: bool) -> Result<()> {
             quote(&record.composer),
             record.discs,
             recorded,
-            numbering_name(record.numbering),
+            record.numbering.name(),
             sides.len(),
             record.confirmed,
             record.is_mono,
@@ -224,7 +224,7 @@ fn show(project: &mut Project, json: bool) -> Result<()> {
         record.discs,
         sides.len()
     );
-    field("numbering", numbering_name(record.numbering));
+    field("numbering", record.numbering.name());
     field("mono", if record.is_mono { "yes" } else { "no" });
     field("riaa eq", if record.riaa_eq { "yes" } else { "no" });
     field("confirmed", if record.confirmed { "yes" } else { "no" });
@@ -333,11 +333,13 @@ fn apply(record: &mut release::Record, change: &Change) -> Result<()> {
         record.riaa_eq = riaa;
     }
     if let Some(numbering) = &change.numbering {
-        record.numbering = match numbering.as_str() {
-            "alpha" => Numbering::Alpha,
-            "numeric" => Numbering::Numeric,
-            other => bail!("{other:?} is not a numbering scheme - alpha or numeric"),
-        };
+        record.numbering = Numbering::parse(numbering).ok_or_else(|| {
+            let names: Vec<&str> = Numbering::ALL.iter().map(|n| n.name()).collect();
+            anyhow::anyhow!(
+                "{numbering:?} is not a numbering scheme - {}",
+                names.join(", ")
+            )
+        })?;
     }
     if change.confirm {
         record.confirmed = true;
@@ -348,13 +350,6 @@ fn apply(record: &mut release::Record, change: &Change) -> Result<()> {
 fn field(name: &str, value: &str) {
     if !value.is_empty() {
         println!("  {name:<12} {value}");
-    }
-}
-
-const fn numbering_name(numbering: Numbering) -> &'static str {
-    match numbering {
-        Numbering::Alpha => "alpha",
-        Numbering::Numeric => "numeric",
     }
 }
 

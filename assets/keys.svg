@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  keys.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  The keyboard map. Worn as a mask-image, so only the shape is read.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="800px"
+     viewBox="0 0 73.768 73.768" version="1.1">
+  <path fill="none" stroke="#4f8cc9" stroke-width="2.7663"
+        stroke-linecap="round" stroke-linejoin="round"
+        d="M 10.5,16 H 63.268 A 5,5 0 0 1 68.268,21 V 52.768 A 5,5 0 0 1 63.268,57.768 H 10.5 A 5,5 0 0 1 5.5,52.768 V 21 A 5,5 0 0 1 10.5,16 Z M 15.7,25 H 22.3 A 2.2,2.2 0 0 1 24.5,27.2 V 32.8 A 2.2,2.2 0 0 1 22.3,35 H 15.7 A 2.2,2.2 0 0 1 13.5,32.8 V 27.2 A 2.2,2.2 0 0 1 15.7,25 Z M 31.7,25 H 38.3 A 2.2,2.2 0 0 1 40.5,27.2 V 32.8 A 2.2,2.2 0 0 1 38.3,35 H 31.7 A 2.2,2.2 0 0 1 29.5,32.8 V 27.2 A 2.2,2.2 0 0 1 31.7,25 Z M 47.7,25 H 54.3 A 2.2,2.2 0 0 1 56.5,27.2 V 32.8 A 2.2,2.2 0 0 1 54.3,35 H 47.7 A 2.2,2.2 0 0 1 45.5,32.8 V 27.2 A 2.2,2.2 0 0 1 47.7,25 Z M 20.8,42 H 52.968 A 2.8,2.8 0 0 1 55.768,44.8 V 46.2 A 2.8,2.8 0 0 1 52.968,49 H 20.8 A 2.8,2.8 0 0 1 18,46.2 V 44.8 A 2.8,2.8 0 0 1 20.8,42 Z" />
+</svg>

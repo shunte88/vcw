@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  settings.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  Preferences. Worn as a mask-image, so only the shape is read.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="800px"
+     viewBox="0 0 73.768 73.768" version="1.1">
+  <path fill="none" stroke="#4f8cc9" stroke-width="2.7663"
+        stroke-linecap="round" stroke-linejoin="round"
+        d="M 31.9584,7.2911 L 41.8096,7.2911 L 43.4189,15.877 L 47.1173,17.4089 L 54.3264,12.4757 L 61.2923,19.4416 L 56.3591,26.6507 L 57.891,30.3491 L 66.4769,31.9584 L 66.4769,41.8096 L 57.891,43.4189 L 56.3591,47.1173 L 61.2923,54.3264 L 54.3264,61.2923 L 47.1173,56.3591 L 43.4189,57.891 L 41.8096,66.4769 L 31.9584,66.4769 L 30.3491,57.891 L 26.6507,56.3591 L 19.4416,61.2923 L 12.4757,54.3264 L 17.4089,47.1173 L 15.877,43.4189 L 7.2911,41.8096 L 7.2911,31.9584 L 15.877,30.3491 L 17.4089,26.6507 L 12.4757,19.4416 L 19.4416,12.4757 L 26.6507,17.4089 L 30.3491,15.877 Z M 27.884,36.884 A 9,9 0 0 0 45.884,36.884 A 9,9 0 0 0 27.884,36.884 Z" />
+</svg>

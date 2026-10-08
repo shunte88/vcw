@@ -34,6 +34,11 @@ Two dependencies are worth naming because they are load-bearing rather than inci
   (public domain) into the binary. Bundling is deliberate: it removes platform SQLite
   variance from a file format we have to be able to recover.
 
+One obligation is not a dependency at all: twelve of the icons are third-party art,
+inlined into the stylesheet and therefore into the binary, and their license is not
+recorded. That section is the only open item in this file, and it is already on the
+way out: those twelve are placeholders and are being redrawn.
+
 The sections below describe each obligation beyond attribution. The MP3 one is live -
 `deny.toml` names it and CI enforces it. The `chromaprint-next` one is written ahead of
 the dependency, while the decision is fresh, and its `deny.toml` entry stays commented
@@ -159,6 +164,33 @@ D5 recorded Ogg Vorbis as LGPL, which was simply a mistake - corrected in
 `PROJECT_PLAN.md`. Ogg export carries no relink obligation at all. It sits behind a
 `ogg` cargo feature anyway, also on by default, so that the two lossy containers can be
 turned off together; there is no license reason to turn this one off.
+
+---
+
+## The icons - SVG Repo (unresolved)
+
+VCW's button and tab glyphs are inlined into the stylesheet as `mask-image` data URIs,
+so the art is in the shipped binary, not just the repository. Six of them - `library`,
+`tracks`, `metadata`, `settings`, `log` and `keys` - were drawn for VCW and are MIT with
+the rest of the source. The other twelve came from [SVG Repo](https://www.svgrepo.com)
+and were then recolored and resized to match: `play`, `pause`, `stop`, `record`,
+`capture`, `export`, `marker`, `ffwd`, `select`, `scales`, `globe-lines` and
+`globe-filled`.
+
+**This entry is open, and the twelve are placeholders.** SVG Repo is a host, not a
+licensor: it carries several collections under different terms - CC0, MIT, and CC
+Attribution among them - and the only provenance the downloaded files carried was the
+line `Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools`, which
+names no collection and no license. So the obligation cannot be stated here, only the
+fact that twelve glyphs have one and it is unrecorded.
+
+They are being replaced rather than traced. The icon set simply ran out of time before
+0.2 did; the six VCW-drawn glyphs took an afternoon and a 60-line generator
+(`tools/make-glyphs.py`), and they already define the house style the twelve were
+matched to, so the remaining twelve are scheduled work and not a research problem.
+
+Until they land, VCW should not be called unambiguously MIT end to end. That is the
+only reason this is written down rather than left to the release.
 
 ---
 

@@ -631,7 +631,7 @@ artwork: string | null,
  */
 overwrite: boolean,
 /**
- * `refuse`, `24` or `32`, or `null` for `refuse`.
+ * `refuse`, `24` or `32`, or `null` for the default, `24`.
  *
  * What a `Float32` capture is rounded to for a container that carries only
  * integers. Ignored by a capture that is already integers, and by WAV,
@@ -646,7 +646,11 @@ dither: string | null,
  * Decibels of room above full scale, or `null` for none. Only read when
  * narrowing.
  */
-headroom: string | null, };
+headroom: string | null,
+/**
+ * `alpha`, `numeric` or `sequence`, or `null` for the project's own.
+ */
+numbering: string | null, };
 
 export type NewProject = {
 /**
@@ -1638,9 +1642,10 @@ artwork: string,
  * integers: `refuse`, `24` or `32`.
  *
  * Three settings and not one, because narrowing a float master is three
- * decisions and the default is to take none of them: `refuse` is what VCW
- * did before these fields existed, and a FLAC export of a float capture is
- * refused with a reason until somebody changes this.
+ * decisions. The default takes all three - 24 bits, a triangular dither
+ * and no headroom - and `refuse` is the fourth answer, which is what VCW
+ * did before these fields existed: a FLAC export of a float capture
+ * refused with a reason rather than choosing a width.
  */
 narrowing: string,
 /**
@@ -1658,7 +1663,15 @@ dither: string,
  * a refusal names the field instead of the panel silently keeping the old
  * one. Parsed by [`vcw_export::encoder::Narrowing::parse_headroom`].
  */
-headroom: string, };
+headroom: string,
+/**
+ * How a track number is spelled: `alpha`, `numeric` or `sequence`.
+ *
+ * An override applied to the export and not written back to the project,
+ * so a release that was numbered on the label stays numbered on the label
+ * whatever this says. Empty for the project's own choice.
+ */
+numbering: string, };
 
 export type Credential = {
 /**

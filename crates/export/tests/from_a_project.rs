@@ -456,32 +456,44 @@ fn a_two_sided_record_numbers_its_tracks_across_the_disc() {
         "one disc, two faces"
     );
 
-    // Numeric numbering moves `{tracknum}` and leaves `{position}` alone,
+    // A numeric numbering moves `{tracknum}` and leaves `{position}` alone,
     // because the position is provenance rather than presentation: it is the
     // one fact a vinyl rip has that a CD rip does not.
+    //
+    // The two numeric forms are asserted together because they only differ on
+    // side B - `sequence` carries on from side A and `numeric` starts over -
+    // and asserting either one alone would pass on the other.
     let mut record = release::load(project.conn())
         .expect("load")
         .expect("a release");
-    record.numbering = vcw_types::vinyl::Numbering::Numeric;
-    release::store(&mut project, &record).expect("store");
-    let mut request = Request::new(&out, Container::Flac(Compression::default()));
-    request.template = "{tracknum} {position}".to_owned();
-    let plan = splitter::plan(project.conn(), &request).expect("plan");
-    let names: Vec<String> = plan
-        .items
-        .iter()
-        .map(|item| {
-            item.path
-                .file_name()
-                .expect("a file name")
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect();
-    assert_eq!(
-        names,
-        ["01 A1.flac", "02 A2.flac", "03 B1.flac", "04 B2.flac"]
-    );
+    for (numbering, expected) in [
+        (
+            vcw_types::vinyl::Numbering::Sequence,
+            ["01 A1.flac", "02 A2.flac", "03 B1.flac", "04 B2.flac"],
+        ),
+        (
+            vcw_types::vinyl::Numbering::Numeric,
+            ["01 A1.flac", "02 A2.flac", "01 B1.flac", "02 B2.flac"],
+        ),
+    ] {
+        record.numbering = numbering;
+        release::store(&mut project, &record).expect("store");
+        let mut request = Request::new(&out, Container::Flac(Compression::default()));
+        request.template = "{tracknum} {position}".to_owned();
+        let plan = splitter::plan(project.conn(), &request).expect("plan");
+        let names: Vec<String> = plan
+            .items
+            .iter()
+            .map(|item| {
+                item.path
+                    .file_name()
+                    .expect("a file name")
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(names, expected, "{numbering:?}");
+    }
 }
 
 #[test]

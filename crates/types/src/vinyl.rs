@@ -290,22 +290,87 @@ pub enum Numbering {
     /// person reads off the sleeve.
     #[default]
     Alpha,
-    /// A running number across the whole release, `6`.
+    /// Zero-padded, restarting on each side: `01`, `02`, and `01` again on B.
+    ///
+    /// Not unique on its own, which is the point - it is the label's own number
+    /// with the letter taken off, for a template that carries `{side}` or
+    /// `{disc}` separately. A template using this alone on a two-sided record
+    /// collides, and the export says so rather than overwriting a file.
     Numeric,
+    /// Zero-padded, running across the sides of one disc: `01`..`0n`, then
+    /// `01` again on the next disc.
+    ///
+    /// A record in CD parlance, which is the rule the user set: sides A and B
+    /// are disc 1, C and D are disc 2, and the numbering conforms. So side B's
+    /// first track on a single record is `06` when side A held five, and side
+    /// C's first track is `01` again. This is the same quantity a track number
+    /// tag carries, which is why it is not a count across the whole release:
+    /// a release-wide number would disagree with the tag on every disc past
+    /// the first.
+    Sequence,
 }
 
 impl Numbering {
     /// Renders a track number.
     ///
-    /// `sequence` is the one-based position across the whole release, which
-    /// [`Numbering::Alpha`] ignores and [`Numbering::Numeric`] is.
+    /// `within_disc` is the one-based position across the sides of this track's
+    /// own disc. [`Numbering::Alpha`] and [`Numbering::Numeric`] ignore it and
+    /// read the position instead; [`Numbering::Sequence`] is it.
+    ///
+    /// Two digits minimum for both numeric forms, because the number is read in
+    /// a file name beside its neighbors and `9` sorting after `10` is the
+    /// oldest complaint in a music library.
     #[must_use]
-    pub fn render(self, position: Position, sequence: u32) -> String {
+    pub fn render(self, position: Position, within_disc: u32) -> String {
         match self {
             Self::Alpha => position.alpha(),
-            Self::Numeric => sequence.to_string(),
+            Self::Numeric => format!("{:02}", position.number),
+            Self::Sequence => format!("{within_disc:02}"),
         }
     }
+
+    /// How a side is spelled under this scheme: `A`, or `01` under either
+    /// numeric form.
+    ///
+    /// The scheme is one choice, not two - a template reading `{side}-{tracknum}`
+    /// under a numeric scheme wants `01-01`, not `A-01`. `{position}` is left
+    /// alone, because it is provenance: the number printed on the label does
+    /// not change spelling because the file name did.
+    #[must_use]
+    pub fn side(self, side: Side) -> String {
+        match self {
+            Self::Alpha => side.letter().to_string(),
+            Self::Numeric | Self::Sequence => format!("{:02}", u32::from(side.index()) + 1),
+        }
+    }
+
+    /// The stored and spoken spelling, which is also the column's value.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Alpha => "alpha",
+            Self::Numeric => "numeric",
+            Self::Sequence => "sequence",
+        }
+    }
+
+    /// The inverse of [`Numbering::name`], `None` for anything else.
+    ///
+    /// Here rather than beside each reader because there were three copies of
+    /// the name table and two of the parse, and a fourth scheme would have had
+    /// to find all five.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "alpha" => Some(Self::Alpha),
+            "numeric" => Some(Self::Numeric),
+            "sequence" => Some(Self::Sequence),
+            _ => None,
+        }
+    }
+
+    /// Every scheme, for a caller that has to offer or name them all.
+    pub const ALL: [Self; 3] = [Self::Alpha, Self::Numeric, Self::Sequence];
 }
 
 #[cfg(test)]
@@ -389,11 +454,22 @@ mod tests {
     }
 
     #[test]
-    fn numbering_renders_both_forms_of_the_same_track() {
+    fn numbering_renders_all_three_forms_of_the_same_track() {
+        // Side B's second track, sixth on its disc: the one track where the
+        // three schemes all disagree, which is the only kind worth asserting.
         let position: Position = "B2".parse().expect("B2");
-        assert_eq!(Numbering::Alpha.render(position, 6), "B2");
-        assert_eq!(Numbering::Numeric.render(position, 6), "6");
+        let side = Side::from_letter('B').expect("B");
+        for (numbering, track, letter) in [
+            (Numbering::Alpha, "B2", "B"),
+            (Numbering::Numeric, "02", "02"),
+            (Numbering::Sequence, "06", "02"),
+        ] {
+            assert_eq!(numbering.render(position, 6), track, "{numbering:?}");
+            assert_eq!(numbering.side(side), letter, "{numbering:?}");
+            assert_eq!(Numbering::parse(numbering.name()), Some(numbering));
+        }
         assert_eq!(Numbering::default(), Numbering::Alpha);
+        assert_eq!(Numbering::parse("running"), None);
     }
 
     #[test]

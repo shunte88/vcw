@@ -88,6 +88,24 @@ When the application refuses something it says so in a banner and leaves the
 refusal there until you dismiss it with `Escape`. That is deliberate: a refusal
 that disappears on its own is a refusal nobody read.
 
+### Settings keep themselves
+
+There is no Save button. Change anything in Settings and it is written for you a
+moment after you stop; while that write is outstanding the panel says `Saving`
+beside its title, and if the core refuses the value the word stays and the
+reason appears in the status line. So the panel only ever shows you what is
+actually stored.
+
+Three of its choices are not stored in the settings file at all, because they
+are about this screen rather than about your records, and they live on this
+machine only:
+
+| Appearance | What it does |
+| --- | --- |
+| **Interface scale** | Sizes the whole window. The default suits 1080p; 175% or 200% is about the same physical size of letter on a 4K monitor at no scaling. |
+| **Level meters** | Bars give the peak, the RMS and the clip count to a tenth of a decibel, which is what setting a level wants. Dials have the movement of the real thing and a needle with mass, which is what watching a side from across the room wants. Both read the same scale. |
+| **Buttons** | `Words` or `Icons`, applied to the tabs along the top and the transport along the bottom at once. Icons give both rows back about a third of their width, and every button keeps its name: the tooltip still reads `Record (r)` and a screen reader still hears the word. |
+
 ## Before the first capture
 
 Check that VCW can see the machine:
@@ -425,24 +443,52 @@ every rate VCW records, as Ogg Vorbis, or as WAV.
 
 The lossy formats are for the copy you carry around. Keep the lossless one.
 
+### How a track is numbered
+
+`{tracknum}` is the position printed on the label by default, and two switches
+change what it expands to. They also change `{side}`, because a template reading
+`{side}-{tracknum}` wants `01-01` and not `A-01`:
+
+| Switch | Settings | Answers |
+| --- | --- | --- |
+| `--numbering alpha` | **Track numbers** -> Label | `A1`, `A2`, `B1` |
+| `--numbering numeric` | **Track numbers** -> Number, **Counted** -> Per side | `01`, `02`, `01` |
+| `--numbering sequence` | **Track numbers** -> Number, **Counted** -> Across the disc | `01`, `02`, `03` |
+
+A sequence runs across the sides of one **disc**, not across the release: sides
+A and B are disc 1, C and D are disc 2, and side C's first track is `01` again.
+That is the same rule a track number tag follows, so the file name and the tag
+agree on a box set instead of drifting apart after the first record.
+
+`{position}` is always the label's own `A1` whatever you pick. It is provenance
+- the one fact a vinyl rip has that a CD rip does not - so it does not change
+spelling because a file name did.
+
+In the window these are two controls in **Settings > Export**, and they apply to
+the export without changing what the project is numbered. On the command line
+`--numbering` does the same thing; `vcw release --numbering` is the one that
+writes the choice into the project.
+
 ### Narrowing a float capture
 
 An imported Audacity project is usually 32-bit **float**, and the three lossless
 and lossy codecs do not agree about it: WAV stores float as it stands, Ogg
 Vorbis is float all the way down, and FLAC is an integer codec that has no
 representation for it at all. Bringing float down to integers is lossy in a way
-that depends on what you want, so VCW refuses by default and asks instead. Three
-switches, three separate questions:
+that depends on what you want, so there are three switches for three separate
+questions:
 
 | Switch | Settings | Answers |
 | --- | --- | --- |
-| `--narrow` | **Narrow to** | `refuse` (the default), `24` or `32` |
+| `--narrow` | **Narrow to** | `24` (the default), `32` or `refuse` |
 | `--dither` | **Dither** | `tpdf` (the default) or `none` |
 | `--headroom` | **Headroom (dB)** | `0` (the default) up to `60` |
 
-**Narrow to** is the one that matters. `refuse` is where you start: nothing is
-narrowed, and a float capture exported as FLAC is refused by name exactly as
-before. `24` is the width to pick. A float sample has a 24-bit significand, so
+**Narrow to** is the one that matters, and `24` is the answer it starts on - a
+tool whose default is to produce nothing is a tool asking a question before it
+has given you a reason to care. Pick `refuse` and VCW asks instead: a float
+capture exported as FLAC is refused by name, and the refusal lists the
+containers that would have taken it as it stands. A float sample has a 24-bit significand, so
 24 bits is where a full-scale sample survives the trip intact, and it is also
 the widest FLAC stream that can still use one channel to predict the other - a
 32-bit stream has no mid/side at all, because the difference needs one bit more
@@ -463,7 +509,8 @@ it. Anything above full scale after the attenuation is clamped, not wrapped. `0`
 leaves the level alone.
 
 ```text
-vcw export side-a.vcw --into ~/Music --format flac --narrow 24 --headroom 3
+vcw export side-a.vcw --into ~/Music --format flac --headroom 3
+vcw export side-a.vcw --into ~/Music --format flac --narrow refuse  # ask me
 ```
 
 Narrowing applies only where the container needs it. An integer capture is never

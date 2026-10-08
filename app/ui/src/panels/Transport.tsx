@@ -31,6 +31,7 @@
 
 import * as api from "../api";
 import type { Audition, Capture, Side } from "../bindings/vcw";
+import { Face } from "../Face";
 import type { Region } from "./Waveform";
 import { useKeys } from "../keys";
 import type { Store } from "../store";
@@ -119,7 +120,7 @@ export function Transport({
           onClick={() => void run(() => api.transport("record"))}
           title="Record (r)"
         >
-          Record
+          <Face icon="record">Record</Face>
         </button>
         <button
           type="button"
@@ -129,7 +130,12 @@ export function Transport({
           }
           title="Pause or resume (p)"
         >
-          {recording ? "Pause" : "Resume"}
+          {/* Resume wears the play glyph, because the transport's second
+              button is the same control in two states and a paused recorder
+              is resumed by the thing that means "go". */}
+          <Face icon={recording ? "pause" : "play"}>
+            {recording ? "Pause" : "Resume"}
+          </Face>
         </button>
         <button
           type="button"
@@ -143,7 +149,7 @@ export function Transport({
           }
           title="Stop (s)"
         >
-          Stop
+          <Face icon="stop">Stop</Face>
         </button>
         <span className="spacer" />
         <button
@@ -162,7 +168,9 @@ export function Transport({
               : "Play the selection (space)"
           }
         >
-          {engine.playing ? "Pause" : "Play"}
+          <Face icon={engine.playing ? "pause" : "play"}>
+            {engine.playing ? "Pause" : "Play"}
+          </Face>
         </button>
         <button
           type="button"
@@ -180,7 +188,7 @@ export function Transport({
           }}
           title="Place a marker at the playhead (m)"
         >
-          Marker
+          <Face icon="marker">Marker</Face>
         </button>
       </div>
     </div>

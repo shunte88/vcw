@@ -189,7 +189,7 @@ The release being captured (§29, §32). One per project: §29's topology is Pro
 | `composer` | `TEXT NOT NULL DEFAULT ''` | Composer (§32), for the classical and soundtrack cases where it is the field that matters. |
 | `comments` | `TEXT NOT NULL DEFAULT ''` | Free text a person added about this copy: the pressing, the condition, the shop. Exported as a comment tag. |
 | `discs` | `INTEGER NOT NULL DEFAULT 1` | How many discs the release has. The sides follow from it (§29), and it is stored because a project may hold fewer sides than the release has. |
-| `numbering` | `TEXT NOT NULL DEFAULT 'alpha'` | 'alpha' (A1, B2) or 'numeric' (6). Numbering's two spellings; alpha is VRipr's and the one printed on the label. |
+| `numbering` | `TEXT NOT NULL DEFAULT 'alpha'` | 'alpha' (A1, B2), 'numeric' (01 within the side) or 'sequence' (01..0n across the disc). Numbering's three spellings; alpha is VRipr's and the one printed on the label. An unknown spelling reads back as alpha. |
 | `musicbrainz_id` | `TEXT` | MusicBrainz release id, where identification found one (§32). |
 | `discogs_id` | `TEXT` | Discogs release id, likewise. Both are kept rather than the search that found them, because the id is what a later lookup can use again. |
 | `confirmed` | `INTEGER NOT NULL DEFAULT 0` | §26: automatic identification shall never silently replace what a person confirmed. 1 once a person has accepted this metadata. |

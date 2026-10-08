@@ -511,7 +511,7 @@ pub struct Export {
     /// Whether to replace files that are already there.
     #[serde(default)]
     pub overwrite: bool,
-    /// `refuse`, `24` or `32`, or `null` for `refuse`.
+    /// `refuse`, `24` or `32`, or `null` for the default, `24`.
     ///
     /// What a `Float32` capture is rounded to for a container that carries only
     /// integers. Ignored by a capture that is already integers, and by WAV,
@@ -525,6 +525,9 @@ pub struct Export {
     /// narrowing.
     #[serde(default)]
     pub headroom: Option<String>,
+    /// `alpha`, `numeric` or `sequence`, or `null` for the project's own.
+    #[serde(default)]
+    pub numbering: Option<String>,
 }
 
 impl Export {
@@ -659,6 +662,20 @@ impl Export {
             );
         }
 
+        let numbering = match self.numbering.as_deref() {
+            None | Some("") => None,
+            Some(given) => Some(vcw_types::vinyl::Numbering::parse(given).ok_or_else(|| {
+                let names: Vec<&str> = vcw_types::vinyl::Numbering::ALL
+                    .iter()
+                    .map(|n| n.name())
+                    .collect();
+                Invalid {
+                    field: "numbering",
+                    why: format!("{given:?} is not a numbering scheme - {}", names.join(", ")),
+                }
+            })?),
+        };
+
         Ok(vcw_export::splitter::Request {
             container,
             template: self
@@ -670,6 +687,7 @@ impl Export {
             artwork,
             overwrite: self.overwrite,
             narrowing,
+            numbering,
         })
     }
 }

@@ -57,10 +57,10 @@
 //!
 //! - **WAV is capped at 4 GiB** by RIFF's 32-bit sizes. Reachable by a long
 //!   unsplit side at 192 kHz, not by a track.
-//! - **FLAC is an integer codec**, so a `Float32` capture has no FLAC path
-//!   until a person decides how it should be dithered. [`Narrowing`] is that
-//!   decision written down, and the refusal stands only while nobody has taken
-//!   it: the default is [`Width::Refuse`].
+//! - **FLAC is an integer codec**, so a `Float32` capture has to be rounded
+//!   before it has a FLAC path. [`Narrowing`] is that decision written down,
+//!   and the default takes it: [`Width::Bits24`] with a triangular dither.
+//!   [`Width::Refuse`] is still there for anyone who would rather be asked.
 //! - **FLAC itself stops at 32 bits and 1048575 Hz**, neither of which any
 //!   capture VCW makes can reach. This used to be a much shorter list of things
 //!   FLAC could carry: `flacenc` 0.5.1 stopped at 24 bits and 96 kHz, which are
@@ -597,16 +597,19 @@ impl Spec {
 
 /// The integer width a `Float32` capture is rounded to on the way out.
 ///
-/// `Refuse` is the default and is what VCW did before this existed: FLAC is an
-/// integer codec, and an exporter that quietly picked a width and a dither for
-/// somebody's master would be making the one decision §33 says it must not
-/// make. The other two variants are that decision, taken by a person and
-/// written down.
+/// **`Bits24` is the default**, and it did not used to be: `Refuse` was, on the
+/// argument that an exporter quietly picking a width and a dither for somebody's
+/// master makes the one decision §33 says it must not make. That argument lost
+/// to a simpler one - a tool whose default is to produce nothing is a tool that
+/// asks a question before it has given anybody a reason to care about the
+/// answer. 24 is the width the measurement already pointed at: an `f32` has a
+/// 24-bit significand, so it is where a full-scale sample survives intact, and
+/// it is the widest FLAC that can still code mid/side. The refusal is still
+/// here, one position away, for anyone who wants it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Width {
     /// Do not narrow. A float capture is refused by a container that cannot
     /// carry one, and the refusal says what else will.
-    #[default]
     Refuse,
     /// Round to 24-bit integers.
     ///
@@ -614,6 +617,7 @@ pub enum Width {
     /// 24-bit significand, so 24 bits of fixed point is the width at which the
     /// mantissa of a sample at full scale survives intact. It is also the width
     /// at which FLAC can still code mid/side - see [`Compression`].
+    #[default]
     Bits24,
     /// Round to 32-bit integers.
     ///
@@ -1904,7 +1908,11 @@ mod tests {
         assert_eq!(Width::parse("32 bit"), Some(Width::Bits32));
         assert_eq!(Width::parse("REFUSE"), Some(Width::Refuse));
         assert_eq!(Width::parse("16"), None, "VCW offers no 16-bit narrowing");
-        assert_eq!(Width::default(), Width::Refuse, "the default must refuse");
+        assert_eq!(
+            Width::default(),
+            Width::Bits24,
+            "the default narrows to 24, and `refuse` is the opt-in"
+        );
 
         assert_eq!(Dither::parse("TPDF"), Some(Dither::Tpdf));
         assert_eq!(Dither::parse(" none"), Some(Dither::None));

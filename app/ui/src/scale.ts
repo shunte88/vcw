@@ -20,7 +20,8 @@
 // is sitting at, not of their library. The settings file is synced, copied
 // between machines and read by the CLI, and none of those want to know how
 // large this person's monitor is. `vcw.library.view` in `Browser.tsx` is the
-// other one, and they are the only two.
+// other, and the two below - the meter style and the button style - are here
+// for the same reason.
 
 /** The one base the stylesheet was measured against, in pixels. */
 const BASE = 13;
@@ -88,4 +89,42 @@ export function applyMeterStyle(style: MeterStyle): void {
 export function onMeterStyle(listener: () => void): () => void {
   window.addEventListener(CHANGED, listener);
   return () => window.removeEventListener(CHANGED, listener);
+}
+
+// --- Whether the buttons wear words or glyphs ---------------------------
+//
+// The fourth screen property. A person who knows the window wants the row
+// compact and the pictures are enough; a person meeting it wants to read what
+// each button does. Neither is a default the other can live with, so it is a
+// switch - and like the three above, it is about this screen and not about
+// the library, so nothing outside the window hears about it.
+//
+// Icons never replace the name in the accessibility tree: `button.iconic`
+// hides the label visually and leaves it in the markup, so the button is
+// still reachable by its name and still carries its chord in `title`.
+
+/** Whether a button shows its word or its glyph. */
+export type ButtonStyle = "text" | "icons";
+
+/** The key in `localStorage`. */
+const BUTTONS = "vcw.buttons";
+
+/** An event of our own, for `CHANGED`'s reason. */
+const BUTTONS_CHANGED = "vcw:buttons";
+
+/** The chosen style, or text when there is none and when it is not one of ours. */
+export function buttonStyleOf(): ButtonStyle {
+  return localStorage.getItem(BUTTONS) === "icons" ? "icons" : "text";
+}
+
+/** Changes the buttons everywhere, and remembers it. */
+export function applyButtonStyle(style: ButtonStyle): void {
+  localStorage.setItem(BUTTONS, style);
+  window.dispatchEvent(new Event(BUTTONS_CHANGED));
+}
+
+/** Calls `listener` when the button style changes. Returns the unsubscribe. */
+export function onButtonStyle(listener: () => void): () => void {
+  window.addEventListener(BUTTONS_CHANGED, listener);
+  return () => window.removeEventListener(BUTTONS_CHANGED, listener);
 }

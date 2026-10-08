@@ -516,7 +516,7 @@ enum Command {
         artwork: String,
         /// What a 32-bit float capture is rounded to for a container that
         /// carries only integers: refuse, 24 or 32.
-        #[arg(long, default_value = "refuse")]
+        #[arg(long, default_value = "24")]
         narrow: String,
         /// Noise added before rounding a float capture: tpdf or none.
         #[arg(long, default_value = "tpdf")]
@@ -525,6 +525,10 @@ enum Command {
         /// capture.
         #[arg(long, default_value = "0")]
         headroom: String,
+        /// How track numbers are spelled for this export: alpha, numeric or
+        /// sequence. Omit for the project's own.
+        #[arg(long)]
+        numbering: Option<String>,
         /// Replace files that are already there.
         #[arg(long)]
         overwrite: bool,
@@ -912,7 +916,7 @@ struct ReleaseFields {
     /// How many discs the record is.
     #[arg(long)]
     discs: Option<u32>,
-    /// Track numbering: alpha for A1, numeric for a running count.
+    /// Track numbering: alpha for A1, numeric for 01 within the side, sequence for 01..0n across the disc.
     #[arg(long)]
     numbering: Option<String>,
     /// Mark the release's metadata as accepted (§26).
@@ -1178,6 +1182,7 @@ fn run() -> anyhow::Result<()> {
             narrow,
             dither,
             headroom,
+            numbering,
             overwrite,
             dry_run,
             json,
@@ -1193,6 +1198,7 @@ fn run() -> anyhow::Result<()> {
             narrow,
             dither,
             headroom,
+            numbering,
             overwrite,
             dry_run,
             json,

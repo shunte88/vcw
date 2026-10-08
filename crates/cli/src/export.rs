@@ -49,7 +49,7 @@ use anyhow::{Context, Result, bail};
 use vcw_export::encoder::{Compression, Container, Dither, Narrowing, Quality, Width};
 use vcw_export::splitter::{self, Artwork, Plan, Progress, Report, Request};
 use vcw_project::Project;
-use vcw_types::vinyl::Side;
+use vcw_types::vinyl::{Numbering, Side};
 
 /// Everything the verb was asked to do.
 pub(crate) struct Args {
@@ -75,6 +75,8 @@ pub(crate) struct Args {
     pub(crate) dither: String,
     /// Decibels of room left above full scale before rounding.
     pub(crate) headroom: String,
+    /// How track numbers are spelled, or `None` for the project's own.
+    pub(crate) numbering: Option<String>,
     /// Whether files already there may be replaced.
     pub(crate) overwrite: bool,
     /// Resolve and print the plan, and write nothing.
@@ -104,6 +106,13 @@ pub(crate) fn run(args: &Args) -> Result<()> {
         artwork: artwork(&args.artwork)?,
         overwrite: args.overwrite,
         narrowing: narrowing(&args.narrow, &args.dither, &args.headroom)?,
+        numbering: match args.numbering.as_deref() {
+            None => None,
+            Some(given) => Some(Numbering::parse(given).ok_or_else(|| {
+                let names: Vec<&str> = Numbering::ALL.iter().map(|n| n.name()).collect();
+                anyhow::anyhow!("{given:?} is not a numbering scheme - {}", names.join(", "))
+            })?),
+        },
     };
 
     // Read-only, because §33 says an export reads immutable blocks and edit

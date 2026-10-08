@@ -131,10 +131,19 @@ pub struct Request {
     pub overwrite: bool,
     /// What a `Float32` capture becomes for a container that cannot take one.
     ///
-    /// Defaults to [`crate::encoder::Width::Refuse`], which is the behavior VCW
-    /// had before this field existed: a float capture and a FLAC request is a
-    /// refusal naming the containers that would have taken it.
+    /// Defaults to [`crate::encoder::Width::Bits24`]. It defaulted to
+    /// [`crate::encoder::Width::Refuse`] when the field was new, which was the
+    /// behavior VCW had before it existed: a float capture and a FLAC request
+    /// was a refusal naming the containers that would have taken it. That
+    /// refusal is still one setting away.
     pub narrowing: Narrowing,
+    /// How track numbers are spelled, or `None` for the release's own choice.
+    ///
+    /// An override rather than a write, because the setting that supplies it
+    /// from the window is a preference about this export and not a fact about
+    /// the record: exporting a project once with `sequence` should not change
+    /// what that project is numbered the next time it is opened.
+    pub numbering: Option<Numbering>,
 }
 
 impl Request {
@@ -149,6 +158,7 @@ impl Request {
             artwork: Artwork::default(),
             overwrite: false,
             narrowing: Narrowing::default(),
+            numbering: None,
         }
     }
 
@@ -280,7 +290,10 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         });
     }
 
-    let release = release::load(conn)?.unwrap_or_default();
+    let mut release = release::load(conn)?.unwrap_or_default();
+    if let Some(numbering) = request.numbering {
+        release.numbering = numbering;
+    }
     let numbers = numbers(conn, release.numbering)?;
     let listing = track::listing(conn)?;
     if listing.is_empty() {
@@ -656,15 +669,15 @@ impl Default for Numbers {
 
 /// Track id to the three numbers, in listing order.
 ///
-/// The release-wide `sequence` is the same rule `track::positions` applies, and
-/// for `Numbering::Alpha` - the default - it is not used at all.
+/// `within_disc` does double duty: it is the tag's track number and, for
+/// `Numbering::Sequence`, the rendered one too. It is the same rule
+/// `track::positions` applies, and for `Numbering::Alpha` - the default - the
+/// rendering does not use it at all.
 fn numbers(conn: &Connection, numbering: Numbering) -> Result<HashMap<i64, Numbers>> {
     let mut map = HashMap::new();
-    let mut sequence = 0;
     let mut per_disc: HashMap<u32, u32> = HashMap::new();
     let mut discs: Vec<(i64, u32)> = Vec::new();
     for (side, record) in track::listing(conn)? {
-        sequence += 1;
         let within_disc = per_disc
             .entry(side.disc())
             .and_modify(|n| *n += 1)
@@ -674,7 +687,7 @@ fn numbers(conn: &Connection, numbering: Numbering) -> Result<HashMap<i64, Numbe
         map.insert(
             record.id,
             Numbers {
-                rendered: numbering.render(position, sequence),
+                rendered: numbering.render(position, *within_disc),
                 alpha: position.alpha(),
                 within_disc: *within_disc,
                 on_disc: 0,
@@ -742,7 +755,7 @@ fn values(
         catalog: release.catalog.clone(),
         label: release.label.clone(),
         discogs_id: release.discogs_id.clone().unwrap_or_default(),
-        side: side.letter().to_string(),
+        side: release.numbering.side(side),
         position: numbers.alpha.clone(),
         disc: side.disc().to_string(),
     }

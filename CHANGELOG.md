@@ -14,6 +14,58 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## 0.2.0-alpha
+
+*2026-10-08.*
+
+Another release about the window, and the first one you can reshape: the
+buttons, the track numbers and the settings all now do what you tell them to.
+Nothing here changes a byte that gets recorded.
+
+### The window
+
+* **Buttons can be icons instead of words.** *Settings > Appearance > Buttons*
+  switches the panel tabs along the top and the transport along the bottom at
+  once, and gives both rows back about a third of their width. Every button
+  keeps its name: the tooltip still reads `Record (r)` and a screen reader
+  still hears the word. Remembered on this machine only, like the interface
+  scale and the meter style.
+* **Opening a project lands on Tracks**, which is where you were going.
+* **An expanded event-log line reads white on the accent blue**, so the line
+  you opened is obvious among the ones you did not.
+
+### Settings
+
+* **Settings save themselves and the Save button is gone.** Change anything and
+  it is written a moment after you stop. While that write is outstanding the
+  panel says `Saving` beside its title; if the core refuses the value the word
+  stays and the reason appears in the status line, so the panel only ever shows
+  you what is actually stored.
+
+### Export
+
+* **Track numbers have three spellings.** *Settings > Export > Track numbers*
+  chooses between the position on the label (`A1`, `B2`) and a plain number,
+  and *Counted* then chooses whether the number restarts on each side (`01`
+  again on side B) or runs across the sides of one disc (`01`..`0n`, restarting
+  on the next disc). The command line takes the same choice as
+  `vcw export --numbering`. It applies to the export in hand and is not written
+  back to the project: exporting once as a sequence does not renumber the
+  record.
+* **FLAC narrows a float capture at 24-bit by default** rather than refusing
+  it. 24 bits is where an `f32` significand survives intact, with a triangular
+  dither and no attenuation. *Settings > Export* still changes the width, the
+  dither and the headroom, and can be set back to refusing.
+
+### Under it
+
+* **The application's icons are its own files.** The webview used to keep a
+  second copy of each glyph, which had already drifted from the first. There is
+  one copy of each now, and no editor state ships inside it.
+* **Twelve glyphs are still borrowed art** from SVG Repo with no license
+  recorded, and are being redrawn. See `THIRD-PARTY-NOTICES.md`; it is the one
+  open item in that file.
+
 ## 0.1.3-alpha
 
 *2026-10-07.*

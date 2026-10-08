@@ -448,9 +448,14 @@ fn what_flac_cannot_carry_is_refused_with_the_reason() {
     // What is left of WP-14's requirement gap, and it is now one format rather
     // than three. §8 allows a float capture - it is what Audacity produces -
     // and FLAC is an integer codec, so there is no encoder anywhere that would
-    // take it. Refused loudly, with the remedy in the message, rather than
-    // dithered behind the operator's back: where the samples land when 32 bits
-    // of float become integers is a decision about headroom and is not ours.
+    // take it.
+    //
+    // `--narrow refuse` is now spelled out, because it stopped being the
+    // default: an exporter whose out-of-the-box answer is "no file" asks a
+    // question before it has given anybody a reason to care. The refusal is
+    // still here and still has to be good, because it is what somebody who
+    // *wants* to be asked gets, and a refusal that does not name the way out is
+    // a dead end either way.
     let dir = tempfile::tempdir().expect("tempdir");
     let project = side(dir.path(), "f32", 1.0);
     let said = refused(&[
@@ -460,6 +465,8 @@ fn what_flac_cannot_carry_is_refused_with_the_reason() {
         &dir.path().join("out").display().to_string(),
         "--format",
         "flac",
+        "--narrow",
+        "refuse",
     ]);
     assert!(said.contains("cannot be written as FLAC"), "{said}");
     // Both containers that will take a float capture, because a refusal that
@@ -470,6 +477,32 @@ fn what_flac_cannot_carry_is_refused_with_the_reason() {
     // person meets before they ever find the setting, so it has to be the thing
     // that tells them the setting exists.
     assert!(said.contains("--narrow"), "{said}");
+}
+
+/// The same capture with nothing asked for at all: the default narrows.
+///
+/// The unit test says `Width::default()` is 24. This says the whole binary
+/// agrees - that the default reaches `clap`, survives the plan and comes out as
+/// a FLAC file - because a default that is only correct in the enum is a
+/// default nobody receives.
+#[test]
+fn a_float_capture_exports_as_flac_with_no_width_given_at_all() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "f32", 1.0);
+    let printed = vcw(&[
+        "export",
+        &project.display().to_string(),
+        "--into",
+        &dir.path().join("out").display().to_string(),
+        "--format",
+        "flac",
+        "--json",
+    ]);
+    let report: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(report["report"]["files"], 2, "{printed}");
+    assert_eq!(report["narrowed_to"], "24", "{printed}");
+    assert_eq!(report["dither"], "tpdf", "{printed}");
+    assert_eq!(report["headroom_db"], 0.0, "{printed}");
 }
 
 /// The same capture, once somebody has answered the question the refusal asks.

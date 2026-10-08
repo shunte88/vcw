@@ -451,10 +451,7 @@ impl From<&vcw_project::release::Record> for Release {
             composer: record.composer.clone(),
             comments: record.comments.clone(),
             discs: record.discs,
-            numbering: match record.numbering {
-                vcw_types::vinyl::Numbering::Alpha => "alpha".to_owned(),
-                vcw_types::vinyl::Numbering::Numeric => "numeric".to_owned(),
-            },
+            numbering: record.numbering.name().to_owned(),
             musicbrainz_id: record.musicbrainz_id.clone(),
             discogs_id: record.discogs_id.clone(),
             confirmed: record.confirmed,

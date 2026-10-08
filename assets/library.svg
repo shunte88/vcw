@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  library.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  Projects on a shelf. Worn as a mask-image, so only the shape is read.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="800px"
+     viewBox="0 0 73.768 73.768" version="1.1">
+  <path fill="none" stroke="#4f8cc9" stroke-width="2.7663"
+        stroke-linecap="round" stroke-linejoin="round"
+        d="M 5.5,62 H 68.268 M 10.4,19 H 16.6 A 2.4,2.4 0 0 1 19,21.4 V 52.6 A 2.4,2.4 0 0 1 16.6,55 H 10.4 A 2.4,2.4 0 0 1 8,52.6 V 21.4 A 2.4,2.4 0 0 1 10.4,19 Z M 23.4,11 H 29.6 A 2.4,2.4 0 0 1 32,13.4 V 52.6 A 2.4,2.4 0 0 1 29.6,55 H 23.4 A 2.4,2.4 0 0 1 21,52.6 V 13.4 A 2.4,2.4 0 0 1 23.4,11 Z M 36.4,24 H 42.6 A 2.4,2.4 0 0 1 45,26.4 V 52.6 A 2.4,2.4 0 0 1 42.6,55 H 36.4 A 2.4,2.4 0 0 1 34,52.6 V 26.4 A 2.4,2.4 0 0 1 36.4,24 Z M 51.2,55 L 58.6,26 A 2.4,2.4 0 0 1 61.5,24.2 L 65.1,25.1 A 2.4,2.4 0 0 1 66.9,28 L 59.9,55 Z" />
+</svg>

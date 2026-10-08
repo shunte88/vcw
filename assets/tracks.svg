@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  tracks.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  A side cut into tracks. Worn as a mask-image, so only the shape is read.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="800px"
+     viewBox="0 0 73.768 73.768" version="1.1">
+  <path fill="none" stroke="#4f8cc9" stroke-width="2.7663"
+        stroke-linecap="round" stroke-linejoin="round"
+        d="M 14.65,15.8 H 57.15 A 4.75,4.75 0 0 1 61.9,20.55 V 20.55 A 4.75,4.75 0 0 1 57.15,25.3 H 14.65 A 4.75,4.75 0 0 1 9.9,20.55 V 20.55 A 4.75,4.75 0 0 1 14.65,15.8 Z M 14.65,32.3 H 41.15 A 4.75,4.75 0 0 1 45.9,37.05 V 37.05 A 4.75,4.75 0 0 1 41.15,41.8 H 14.65 A 4.75,4.75 0 0 1 9.9,37.05 V 37.05 A 4.75,4.75 0 0 1 14.65,32.3 Z M 14.65,48.8 H 49.15 A 4.75,4.75 0 0 1 53.9,53.55 V 53.55 A 4.75,4.75 0 0 1 49.15,58.3 H 14.65 A 4.75,4.75 0 0 1 9.9,53.55 V 53.55 A 4.75,4.75 0 0 1 14.65,48.8 Z" />
+</svg>

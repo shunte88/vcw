@@ -28,16 +28,19 @@
 // and the panel tells them what to set. Offering an input here would mean the
 // application accepting a secret it has nowhere safe to put.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import * as api from "../api";
 import type { Credential, Device, Settings as Values } from "../bindings/vcw";
 import { effortOf } from "../effort";
 import {
+  type ButtonStyle,
   type MeterStyle,
   SCALES,
+  applyButtonStyle,
   applyMeterStyle,
   applyScale,
+  buttonStyleOf,
   meterStyleOf,
   scaleOf,
 } from "../scale";
@@ -112,8 +115,45 @@ export function Settings({
   });
   const [scale, setScale] = useState(scaleOf);
   const [meters, setMeters] = useState(meterStyleOf);
+  const [buttons, setButtons] = useState(buttonStyleOf);
 
   useEffect(() => setDraft(settings), [settings]);
+
+  // The draft saves itself, which is why there is no Save button. Three things
+  // this has to get right.
+  //
+  // Debounced, because the naming template and the contact address are text
+  // fields, and committing on change would write once a keystroke.
+  //
+  // Compared by value and not by reference, because saving refetches the
+  // settings and the effect above then hands this one a fresh object holding
+  // exactly what was just written. A reference test would save that straight
+  // back and never stop.
+  //
+  // And the timer restarts for the data and for nothing else. The first
+  // version listed `store` and `onSaved` in its dependencies, which looks
+  // correct and is fatal: `useStore` returns a new object literal every render
+  // and the window re-renders at meter rate, so the effect re-ran sixty times a
+  // second and its own cleanup cancelled the timer every time. The panel said
+  // "Saving..." and nothing was ever written, and no test saw it because a test
+  // renders when something changes and the window renders always. The write
+  // lives in a ref instead, refreshed each render, so the dependency list can
+  // be the two values that are actually a reason to save again.
+  const commit = useRef<(values: Values) => void>(() => undefined);
+  useEffect(() => {
+    commit.current = (saving: Values) => {
+      void store
+        .run(() => api.saveSettings(saving), "save settings")
+        .then(onSaved);
+    };
+  });
+  useEffect(() => {
+    if (draft === null || JSON.stringify(draft) === JSON.stringify(settings)) {
+      return;
+    }
+    const timer = setTimeout(() => commit.current(draft), 600);
+    return () => clearTimeout(timer);
+  }, [draft, settings]);
 
   if (draft === null) {
     return (
@@ -122,10 +162,6 @@ export function Settings({
       </section>
     );
   }
-
-  const save = () => {
-    void store.run(() => api.saveSettings(draft)).then(onSaved);
-  };
 
   // One helper per group rather than a generic path setter, because a generic
   // one would need a string path and lose the type that makes this file safe.
@@ -150,6 +186,8 @@ export function Settings({
     (credential) => credential.variable === "VCW_DISCOGS_TOKEN",
   );
 
+  const unsaved = JSON.stringify(draft) !== JSON.stringify(settings);
+
   const text = (value: string) => (value.trim() === "" ? null : value.trim());
   const number = (value: string) =>
     value.trim() === "" ? null : Number(value);
@@ -158,9 +196,13 @@ export function Settings({
     <section className="panel settings">
       <header className="panel-head">
         <h2>Settings</h2>
-        <button type="button" onClick={save}>
-          Save
-        </button>
+        {/* What replaced the Save button. Derived rather than remembered,
+            because `store.run` swallows a refusal to put it in the status bar
+            and resolves either way, so a flag set in `.then` would read
+            "Saved" over a write that was refused. This cannot: the word goes
+            when the stored settings catch up with the draft, and if the write
+            never lands it stays, beside the reason. */}
+        {unsaved && <span className="dim">Saving...</span>}
       </header>
 
       <div className="prefs">
@@ -234,6 +276,27 @@ export function Settings({
               the movement of the real thing - 300 ms to full deflection, and
               a needle with mass - which is what watching a side from across
               the room wants. Both read the same scale.
+            </p>
+            <label>
+              Buttons
+              <select
+                value={buttons}
+                onChange={(event) => {
+                  const chosen = event.target.value as ButtonStyle;
+                  applyButtonStyle(chosen);
+                  setButtons(chosen);
+                }}
+              >
+                <option value="text">Words</option>
+                <option value="icons">Icons</option>
+              </select>
+            </label>
+            <p className="hint">
+              Both rows at once: the panel tabs along the top and the transport
+              along the bottom. Icons give the rows back about a third of their
+              width, and every one of them keeps its name - the tooltip still
+              reads <em>Record (r)</em>, and a screen reader still hears the
+              word. Remembered on this machine only, like the two above.
             </p>
           </fieldset>
         )}
@@ -662,12 +725,66 @@ export function Settings({
             </select>
           </label>
           {/*
+            Two controls over one stored word, because the two questions a
+            person actually asks - what the number looks like, and what it
+            counts within - have three answers between them and not four:
+            `A6` is not a thing a record label prints. So the second control
+            is disabled while the first says Label, and reads "Per side",
+            which is what the label's own numbering is.
+          */}
+          <h3>Track numbering</h3>
+          <p className="hint near">
+            What <code>{"{tracknum}"}</code> and <code>{"{side}"}</code> expand
+            to in the template above, and what goes in the track number tag.
+            An export setting rather than a project one: it does not change
+            what the record is numbered, only what this export writes.
+          </p>
+          <label>
+            Track numbers
+            <select
+              value={draft.export.numbering === "alpha" ? "alpha" : "numeric"}
+              onChange={(event) =>
+                exporting({
+                  numbering:
+                    event.target.value === "alpha"
+                      ? "alpha"
+                      : draft.export.numbering === "sequence"
+                        ? "sequence"
+                        : "numeric",
+                })
+              }
+            >
+              <option value="alpha">Label (A1, B2)</option>
+              <option value="numeric">Number (01, 02)</option>
+            </select>
+          </label>
+          <label>
+            Counted
+            <select
+              value={draft.export.numbering === "sequence" ? "sequence" : "numeric"}
+              disabled={draft.export.numbering === "alpha"}
+              onChange={(event) => exporting({ numbering: event.target.value })}
+            >
+              <option value="numeric">Per side (01 again on side B)</option>
+              <option value="sequence">Across the disc (01..0n)</option>
+            </select>
+          </label>
+          <p className="hint near">
+            Sides A and B are disc 1, C and D are disc 2, so a sequence
+            restarts at the next record rather than running to the end of a box
+            set - which is also what a track number tag means. <em>Label</em>
+            leaves <code>{"{side}"}</code> as a letter; either number form
+            makes it a number too, so <code>{"{side}-{tracknum}"}</code> reads{" "}
+            <code>01-01</code> rather than <code>A-01</code>.
+          </p>
+          {/*
             Three controls and not one, because narrowing a float master is
             three decisions: how many bits, what noise, and how much room to
-            leave. The first of them defaults to "refuse", so an installation
-            nobody configures behaves as VCW always has - a float capture asked
-            for as FLAC is refused with a reason, rather than quietly rounded by
-            an exporter guessing at somebody's headroom.
+            leave. All three have answers out of the box - 24-bit, triangular,
+            no attenuation - so an installation nobody configures produces a
+            file. "Refuse" is still the first option in the list, because
+            somebody who would rather be asked than have VCW choose should not
+            have to go looking for that.
 
             Always visible rather than shown only while the default format is
             FLAC: the default format is a default, and the Export panel can be
@@ -677,11 +794,13 @@ export function Settings({
           */}
           <h3>32-bit float captures</h3>
           <p className="hint near">
-            FLAC is an integer codec, so a <code>f32</code> capture has no FLAC
-            path until somebody decides how to bring it down to whole numbers.
-            VCW will not decide that for you, because the answer changes the
-            recording and cannot be undone from the file afterwards. Nothing
-            here touches the capture: it is read as it was recorded every time.
+            FLAC is an integer codec, so a <code>f32</code> capture has to be
+            brought down to whole numbers before it has a FLAC path. VCW does
+            that at 24 bits with a triangular dither unless you say otherwise,
+            which is the answer below; choose <em>Refuse</em> and it will ask
+            instead, by refusing the export and naming the containers that would
+            have taken the capture as it is. Nothing here touches the capture:
+            it is read as it was recorded every time.
           </p>
           <label>
             Narrow to
