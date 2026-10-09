@@ -6674,3 +6674,71 @@ MIT, pure Rust and an AAC-LC encoder, which would dodge FDK entirely - first pub
 2026-04-17, so it needs burn-in on media2026 before it earns a place beside the others.
 The glyph set is finished and the attribution is settled; the darker expanded-log
 variant is unchanged.
+
+---
+
+## 2026-10-09, the first outside report, and a verb to answer it
+
+Nothing was built today. What changed is the shape of 0.3, on the strength of one
+message from somebody who does not have the repository.
+
+**Somebody put VCW on piCorePlayer and most of it worked.** LMS on a Raspberry Pi,
+TinyCore underneath, a filesystem that lives in RAM, and a turntable already wired to
+it for playing records out to Squeezebox. They unpacked the `linux-aarch64` `.deb`
+under `/home/tc` - no installer, no packages, the layout taken apart by hand - and used
+`vcw` to record a side, search for the tracks and write FLAC. All of that worked. Then
+they went looking for the window, found `localhost:5173` in the configuration, and
+found nothing listening on it.
+
+They were right twice. 5173 is `devUrl` and the Vite port, present in the build
+configuration and absent from a release build, which opens no socket at all; and
+installing libwebkit would not have rescued it either. The measurement is the argument:
+
+| | packages linked | installed size |
+| --- | --- | --- |
+| `vcw` | 3 beyond libc - `libasound2t64`, `libc6`, `libgcc-s1` | 12.2 MB |
+| `vcw-app` | **135** | **259 MB** |
+
+`libwebkit2gtk-4.1-0` alone is 95 MB and `libjavascriptcoregtk-4.1-0` another 32. On a
+desktop that is a shrug. On a host whose filesystem *is* memory it is the machine.
+
+**The seam for an answer turns out to already exist, and §2 is why.**
+`app/ui/src/api.ts` is the only file in the frontend that touches Tauri: 38 functions
+over `invoke`, one subscription over `listen`, one `Wire` union on one event name. Its
+header says as much and the grep agrees. §2 required that nothing in it decide anything
+on the grounds that *"a second frontend would have to make the same choices"* - and the
+second frontend has now been asked for by name. So the transport is small: the same
+commands over one HTTP endpoint, an event stream, `app/ui/dist` served statically, that
+one module swapped.
+
+**The transport is not the work.** The shell trusts its caller absolutely and is right
+to - the caller is a window owned by the same user on the same machine. The same 38
+commands on a LAN socket read and write arbitrary paths, open audio devices and start
+exports, on a box that is also running a music server. So §52 makes loopback the
+default, charges an environment-supplied secret for any other address, roots the path
+browser that replaces `tauri-plugin-dialog`'s native chooser, and keeps the whole thing
+behind a build feature that is off until the verb is invoked. Audio auditions on the
+host rather than in the browser, which for this deployment is correct and has to be
+said rather than left to look like a fault.
+
+**Written down as §52, and pulled into 0.3 rather than left in Phase 3.** The reason
+for jumping the queue is not that it is cheap. Everything else in §46 adds capability
+for people who already have a window; this gives a window to somebody who has none, and
+the request came from use rather than from speculation. The estimate stays blank on
+purpose: the command surface is enumerated and mechanical, the authentication model is
+a decision nobody has taken, and a number against the second would be invented. Take
+the auth decision first and the rest is transcription.
+
+**Two documents now say the thing that was only ever true implicitly.** `README.md` and
+`docs/USER-GUIDE.md` both state that the application is a native window and not a web
+page, that there is no port, and that the reason the command line runs where the window
+cannot is the 259 MB. Both give the interim answer - capture on the small machine,
+*copy* the `.vcw` to a desktop, and do not open it over NFS or SMB, because SQLite's
+locking is not dependable there and a project is not a thing to lose.
+
+### Where this leaves 0.3
+
+Three items. The **i18n extraction**, which is the bulk and wants its `Display`-versus-
+arguments decision settled before the volume work rather than after it. **AAC**, still a
+licensing question before a coding one. And now **`vcw serve`**. The glyphs, AIFF and the
+i18n path are done and pushed.

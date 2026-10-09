@@ -407,7 +407,7 @@ Add:
 Required: `chromaprint-next`; AcoustID; progressive identification; evidence resolver; metadata-assisted boundaries; album/release inference; MP3/OGG export; advanced capture diagnostics.
 ## 46. Phase 3
 Add:
-Required: non-destructive processing; playback equalization curves (§51); click detection/removal; optional normalization; advanced archival metadata; improved multi-disc workflow; Android support; plugin/provider architecture.
+Required: non-destructive processing; playback equalization curves (§51); click detection/removal; optional normalization; advanced archival metadata; improved multi-disc workflow; remote interface (§52); Android support; plugin/provider architecture.
 ## 47. Initial Engineering Spike
 Before significant UI development, create a Rust `vinyl-audio-test` utility that:
 1. lists devices
@@ -491,3 +491,38 @@ per track.
 The curve in force shall be visible wherever audio is auditioned, shall be recorded in
 the project, and shall be written into exported metadata, because an archival file whose
 equalization is unrecorded is one that cannot be reproduced.
+## 52. Remote Interface
+Numbered after §51 for the reason §51 is numbered after §50: the numbers are cited from
+source files, tests and the delivery plan, and renumbering to tidy the order is how a
+citation silently starts pointing at the wrong requirement.
+
+A turntable attached to a headless machine is a first-class deployment and not a
+workaround. The desktop shell requires a WebKit and GTK stack measured at 135 linked
+packages and 259 MB; the command line requires ALSA and libc. On a small or
+RAM-resident host the second is available and the first is not, which today leaves that
+operator with no interface beyond the command line.
+
+The application shall provide a `vcw serve` verb that offers the existing frontend over
+HTTP to a browser on another machine.
+
+`serve` shall expose the same command and event surface §35 defines, and shall add no
+command the desktop shell does not have. The frontend shall remain one codebase: the
+transport is a detail behind the single module that today issues every command and
+subscribes to the single event stream, and a second implementation of any decision
+behind that boundary is forbidden by §2 and remains forbidden here.
+
+`serve` shall bind to loopback unless an address is stated, and shall refuse to bind to
+a non-loopback address without an authentication secret supplied by the environment
+(§39). The command surface reads and writes arbitrary paths, opens audio devices and
+spawns exports; an unauthenticated listener offering it is a remote shell and shall not
+be reachable by accident.
+
+Where the desktop shell opens a native file chooser, `serve` shall offer a path browser
+rooted at a directory stated when it starts, and shall refuse a path outside it.
+
+Audio auditioned through `serve` is rendered by the host, not by the browser, because
+the host is the machine the audio hardware is attached to. The interface shall say so
+rather than appear to have failed.
+
+`serve` shall be a packaging-time feature that can be built out, and shall be off unless
+the verb is invoked. A capture-only install shall not be listening on anything.

@@ -33,6 +33,16 @@ The application - `VCW`, as distinct from the `vcw` command line - opens on the
 project browser and has six workspaces, one per step of §50's workflow,
 reachable from the tabs or from `Ctrl+1` to `Ctrl+6`:
 
+It is a native window and not a web page. There is no address to point a browser
+at and no port to open: the interface is compiled into the binary and drawn by
+WebKit through GTK, which is also why the application needs a desktop to run on
+while the command line does not. If you are running VCW on a headless or
+memory-resident machine, capture there with `vcw` and open the project on a
+desktop - a `.vcw` is one self-contained file and copies cleanly. Copy it rather
+than opening it over a network share; SQLite's locking is not dependable on NFS
+or SMB, and a project is not a thing to lose. Serving the window to a browser on
+another machine is a planned verb (§52) and is not here yet.
+
 | Workspace | What it is for |
 | --- | --- |
 | **Library** | Every project the library knows: its cover, album, artist, catalog number, sides, track count, length, size and when it last changed. `n` creates one, `Enter` opens it. |

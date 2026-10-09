@@ -97,6 +97,8 @@ MusicBrainz lookup does not require an API key. Credentials come from environmen
 
 The desktop app provides the complete workflow. VCW's service-based approach also supports command-line use, automation, and alternative interfaces.
 
+**The desktop app is a native window, not a web application.** It renders through WebKit and GTK on Linux and opens no network port; the `localhost:5173` in the build configuration is the development server and is absent from a release build. Running the app therefore needs a desktop: on Linux it links 135 packages and about 259 MB, most of it WebKit. The CLI needs ALSA and libc and nothing else, which is what makes it the usable half on a small or memory-resident host such as a headless Raspberry Pi. Serving the interface over HTTP to a browser elsewhere is specified as §52 and is not built yet; until it is, capture on the small machine with the CLI and open the `.vcw` on a desktop. A project is one self-contained file and moves cleanly - but copy it rather than opening it across a network share, because SQLite's locking is not reliable over NFS or SMB.
+
 The UI and CLI can work alongside one another: direct a recording in the app while using the CLI for metadata lookup, assignment, or export. They use the same core capabilities; you do not have to choose one interface for the entire process.
 
 For an existing project named `album.vcw`:
