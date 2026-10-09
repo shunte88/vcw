@@ -1951,6 +1951,21 @@ code {
   -webkit-mask-image: url(../../../assets/marker.svg);
 }
 
+.icon.zoom-in {
+  mask-image: url(../../../assets/zoom-in.svg);
+  -webkit-mask-image: url(../../../assets/zoom-in.svg);
+}
+
+.icon.zoom-out {
+  mask-image: url(../../../assets/zoom-out.svg);
+  -webkit-mask-image: url(../../../assets/zoom-out.svg);
+}
+
+.icon.zoom-fit {
+  mask-image: url(../../../assets/zoom-fit.svg);
+  -webkit-mask-image: url(../../../assets/zoom-fit.svg);
+}
+
 /* An icon-only button keeps its word, off the page.
  *
  * Only ever emitted beside a glyph - in text mode `Face` renders the word

@@ -157,6 +157,7 @@ import type {
   Track,
   Waveform as Peaks,
 } from "../bindings/vcw";
+import { Face } from "../Face";
 import { clock } from "../format";
 import { ticks } from "../ruler";
 import {
@@ -1249,6 +1250,10 @@ export function Waveform({
         )}
         <span>{size.width} column(s)</span>
         {failed !== null && <span className="clip">{failed}</span>}
+        {/* The third row that follows Appearance > Buttons, after the panel
+            tabs and the transport. It was text when those two switched and
+            stayed text, which made the setting look like it meant "the two
+            rows I happened to do first" rather than "the buttons". */}
         <span className="waveform-zoom">
           <button
             type="button"
@@ -1256,7 +1261,7 @@ export function Waveform({
             disabled={frames <= 0}
             onClick={() => show(zoom(span, frames, STEP, 0.5))}
           >
-            Out
+            <Face icon="zoom-out">Out</Face>
           </button>
           <button
             type="button"
@@ -1264,7 +1269,7 @@ export function Waveform({
             disabled={frames <= 0}
             onClick={() => show(zoom(span, frames, 1 / STEP, 0.5))}
           >
-            In
+            <Face icon="zoom-in">In</Face>
           </button>
           <button
             type="button"
@@ -1272,7 +1277,7 @@ export function Waveform({
             disabled={frames <= 0}
             onClick={() => show(fit())}
           >
-            Fit
+            <Face icon="zoom-fit">Fit</Face>
           </button>
         </span>
       </div>

@@ -62,9 +62,6 @@ Nothing here changes a byte that gets recorded.
 * **The application's icons are its own files.** The webview used to keep a
   second copy of each glyph, which had already drifted from the first. There is
   one copy of each now, and no editor state ships inside it.
-* **Twelve glyphs are still borrowed art** from SVG Repo with no license
-  recorded, and are being redrawn. See `THIRD-PARTY-NOTICES.md`; it is the one
-  open item in that file.
 
 ## 0.1.3-alpha
 

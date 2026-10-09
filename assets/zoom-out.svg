@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  zoom-out.svg
+
+  VCW - The Vinyl Capture Workstation
+  (c) 2026 Stue Hunter
+
+  Zoom out of the waveform. Worn as a mask-image, so only the shape is read.
+
+  MIT License - see the header in any Rust source file for the full text.
+-->
+<svg
+   width="800"
+   height="800"
+   viewBox="0 0 73.768 73.768"
+   version="1.1"
+   xml:space="preserve"
+   xmlns="http://www.w3.org/2000/svg"><circle
+     style="fill:none;fill-opacity:1;stroke:#4f8cc9;stroke-width:2.7663;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     cx="25.898521"
+     cy="26.829803"
+     r="18.441999" /><path
+     style="fill:#4f8cc9;stroke-linecap:round;stroke-linejoin:round"
+     d="m 39.568701,38.638821 a 1.38315,1.38315 0 0 0 0,1.95556 l 6.25331,6.25331 a 2.7663,2.7663 0 0 0 0.715569,2.67113 l 16.434806,16.434804 a 2.7663,2.7663 0 0 0 3.911119,0 2.7663,2.7663 0 0 0 0.0014,-3.912521 L 50.450102,45.606299 A 2.7663,2.7663 0 0 0 47.778973,44.89073 l -6.25331,-6.25331 a 1.38315,1.38315 0 0 0 -1.956961,0.0014 z" /><path
+     style="fill:none;fill-opacity:1;stroke:#4f8cc9;stroke-width:5.5326;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     d="M 14.788452,26.829803 H 37.008593" /></svg>

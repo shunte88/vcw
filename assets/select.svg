@@ -5,17 +5,6 @@
   VCW - The Vinyl Capture Workstation
   (c) 2026 Stue Hunter
 
-  The selection cursor. Worn as a mask-image, so only the shape is read.
-  Adapted from SVG Repo (www.svgrepo.com) - see THIRD-PARTY-NOTICES.md.
-
-  MIT License - see the header in any Rust source file for the full text.
--->
-<!--
-  select.svg
-
-  VCW - The Vinyl Capture Workstation
-  (c) 2026 Stue Hunter
-
   The waveform's select cursor: two arrows pointing out of a line, which is
   the gesture - open a stretch out from where you pressed. Drawn on a 24 by 24
   page, the size every platform cursor is, so it sits beside the hand the
@@ -34,7 +23,6 @@
 
   MIT License - see the header in any Rust source file for the full text.
 -->
-
 <svg
    version="1.1"
    width="24"
