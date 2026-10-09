@@ -118,14 +118,30 @@ jobs:
 
   # D7: license drift is the failure mode this catches. Advisories too, but those
   # are the reason everyone installs it and licenses are the reason we did.
+  #
+  # The tool is installed rather than run as `EmbarkStudios/cargo-deny-action`,
+  # which is a container action: it builds an image from `rust:1.85.0-alpine3.20`
+  # on every run, and the shared runner IP pool is over Docker Hub's
+  # unauthenticated pull limit. That leg failed twice with `429 Too Many
+  # Requests` during the 0.2.1-alpha tag build, both times for a reason with
+  # nothing in this repository behind it, and re-running does not help because
+  # the next runner draws from the same pool. `install-action` fetches
+  # cargo-deny's own prebuilt binary from its GitHub releases, so the only hosts
+  # in the path are the ones the checkout already came from.
+  #
+  # The version is pinned to the one the gate runs, so that `cargo deny check`
+  # here and `cargo deny check` on a developer machine are the same check. Bump
+  # both together or they stop agreeing.
   deny:
     name: cargo deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
         with:
-          command: check
+          tool: cargo-deny@0.20.2
+      - run: cargo deny check
 
   # WP-25: the MP3 encoder links libmp3lame under LGPL-3.0, so it sits behind a
   # default-on cargo feature and THIRD-PARTY-NOTICES.md tells a redistributor who
