@@ -271,6 +271,31 @@ pub enum Event {
         /// Why.
         reason: String,
     },
+    /// A command was carried out, failed partway, and moved the transport anyway.
+    ///
+    /// The third outcome, and the one §35 was missing. [`Event::Refused`] says
+    /// nothing moved and [`Event::Rejected`] says nothing was attempted; this
+    /// says the transport is somewhere new and the command that took it there
+    /// did not succeed.
+    ///
+    /// Only `stop` produces it, because [`Deck::finish`](crate::state::Deck::finish)
+    /// consumes the deck: a capture whose final commit fails has still ended.
+    /// Reported as a refusal until 2026-10-09, which told a piCorePlayer user
+    /// whose card had filled that `stop` was `refused while recording` - so
+    /// they believed the capture was still running and unstoppable, when it
+    /// had closed and the audio was on disk.
+    ///
+    /// A `phase-change` is published with it, which a refusal does not carry.
+    Failed {
+        /// The command that failed.
+        command: &'static str,
+        /// The phase the transport was in.
+        from: Phase,
+        /// The phase it is in now.
+        to: Phase,
+        /// What went wrong.
+        reason: String,
+    },
     /// A command has no meaning in the phase the transport is in.
     ///
     /// Nothing was attempted, because there was nothing to attempt: §11's
@@ -314,6 +339,7 @@ impl Event {
             Self::Warning { .. } => "capture-warning",
             Self::Finished { .. } => "capture-finished",
             Self::Refused { .. } => "command-refused",
+            Self::Failed { .. } => "command-failed",
             Self::Rejected { .. } => "command-rejected",
             Self::Auditioning { .. } => "auditioning",
             Self::Playhead { .. } => "playback-position",
@@ -425,6 +451,12 @@ impl fmt::Display for Event {
                 phase,
                 reason,
             } => write!(f, "{command} refused while {phase}: {reason}"),
+            Self::Failed {
+                command,
+                from,
+                to,
+                reason,
+            } => write!(f, "{command} failed from {from}, now {to}: {reason}"),
             Self::Rejected { command, phase } => {
                 write!(f, "{command} does not apply while {phase}")
             }

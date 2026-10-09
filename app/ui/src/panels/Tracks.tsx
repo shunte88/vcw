@@ -51,6 +51,12 @@ export type Chosen = {
 /** How far a nudge key moves a boundary, in seconds. */
 const NUDGE = 0.05;
 
+/** The side letters a release of this many discs has: two faces per disc. */
+function faces(discs: number): string[] {
+  const count = Math.min(Math.max(discs, 1), 13) * 2;
+  return Array.from({ length: count }, (_, i) => String.fromCharCode(65 + i));
+}
+
 /** The track editor. */
 export function Tracks({
   store,
@@ -63,6 +69,12 @@ export function Tracks({
 }): React.JSX.Element {
   const { project, engine, run } = store;
   const [editing, setEditing] = useState<number | null>(null);
+  // Which face the capture on screen holds. A statement, not a guess: nothing
+  // in the capture path records it, so until a person says otherwise the
+  // detector attaches what it promotes to side A. A side B only rip named
+  // that way gets side B's titles from the release; left on A it gets side
+  // A's, which is the wrong words over real audio and nothing flags it.
+  const [face, setFace] = useState("A");
   const [draft, setDraft] = useState({
     title: "",
     artist: "",
@@ -138,7 +150,7 @@ export function Tracks({
     previousBoundary: moveBoundary(-1),
     nextBoundary: moveBoundary(1),
     detect: () => void run(
-              () => api.detectTracks({ side: null, promote: true }),
+              () => api.detectTracks({ side: face, promote: true }),
               "detect",
             ),
     deleteMarker: () => {
@@ -181,6 +193,20 @@ export function Tracks({
     <section className="panel tracks">
       <header className="panel-head">
         <h2>Tracks</h2>
+        <label className="face">
+          Side
+          <select
+            value={face}
+            onChange={(event) => setFace(event.target.value)}
+            title="Which face of the record this capture holds"
+          >
+            {faces(project.release?.discs ?? 1).map((letter) => (
+              <option key={letter} value={letter}>
+                {letter}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           // A capture as well as a project. Detection reads audio, and with
@@ -190,7 +216,7 @@ export function Tracks({
           disabled={project.path === null || project.captures.length === 0}
           onClick={() =>
             void run(
-              () => api.detectTracks({ side: null, promote: true }),
+              () => api.detectTracks({ side: face, promote: true }),
               "detect",
             )
           }

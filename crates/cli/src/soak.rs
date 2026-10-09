@@ -142,6 +142,11 @@ pub(crate) struct Options {
     pub(crate) error_after: Option<f64>,
     /// Deliver one empty callback after this many seconds.
     pub(crate) starve_after: Option<f64>,
+    /// Cap the project at this many pages, so the writer meets `SQLITE_FULL`
+    /// without needing a filesystem anybody can fill. §41's disk-full
+    /// injection, and the reproduction for the piCorePlayer report: the
+    /// capture stops committing and the transport has to notice by itself.
+    pub(crate) max_pages: u32,
     /// Fail the run if resident memory grows by more than this many MiB.
     ///
     /// Growth from the settled baseline to the peak, so a long run is the one
@@ -263,6 +268,7 @@ pub(crate) fn run(options: &Options) -> Result<()> {
         checkpoint_blocks: options.checkpoint_blocks,
         wal_bytes: options.wal_mib * 1024 * 1024,
         summaries: true,
+        max_pages: options.max_pages,
         ..persistence::Config::default()
     };
 
@@ -341,6 +347,20 @@ pub(crate) fn run(options: &Options) -> Result<()> {
         // zeros behind, and four zeros is how a flawless capture is
         // spelled (§15).
         handle.note(source.diagnostics());
+        // A writer that has stopped on a failed commit keeps its error until
+        // it is joined, so without this the loop runs its full term against a
+        // dead writer and prints a progress line every tick while it does -
+        // measured at `--max-pages 40`: sixty seconds of reports for 0.8 s of
+        // audio. A harness built to find faults must not be deaf to the one
+        // it just injected. Breaking out leaves the diagnosis to `stop` below,
+        // which is where it already lives.
+        if !handle.is_running() {
+            eprintln!(
+                "  {:>6.0} s   the writer has stopped - draining for the reason",
+                started.elapsed().as_secs_f64()
+            );
+            break;
+        }
         if options.every == 0 || options.json || started.elapsed() < next_report {
             continue;
         }

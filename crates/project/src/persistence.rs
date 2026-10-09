@@ -195,6 +195,26 @@ pub struct Config {
     /// drains a running device and still sees bytes. Found by WP-17's fault
     /// harness; `--vanish-after` is the reproduction.
     pub stall_millis: u32,
+
+    /// A ceiling on the project's page count, or zero for no ceiling.
+    ///
+    /// §41 asks for disk-full injection and this is it. A real full disk is
+    /// not reproducible in a test - it needs a filesystem nobody else is using
+    /// and minutes of audio to fill it - but the error a full disk produces is
+    /// `SQLITE_FULL`, and `max_page_count` produces exactly the same one from a
+    /// pragma. The writer then fails the way it fails in the field, in
+    /// milliseconds, on any filesystem.
+    ///
+    /// Counted in pages, because that is what SQLite counts; at VCW's 64 KiB
+    /// page size, 40 pages is about 2.6 MiB. SQLite will not set a ceiling
+    /// below the pages already in use, so a value smaller than the open project
+    /// simply caps it where it stands - which is still a capture that cannot
+    /// grow, and still the fault being asked for.
+    ///
+    /// Zero by default, so nothing in the product sets a limit. Reproducing the
+    /// piCorePlayer report is `max_pages` plus a source with more audio in it
+    /// than the ceiling allows.
+    pub max_pages: u32,
 }
 
 impl Default for Config {
@@ -210,6 +230,7 @@ impl Default for Config {
             diagnostics_millis: 2_000,
             start_paused: false,
             stall_millis: 2_000,
+            max_pages: 0,
         }
     }
 }
@@ -597,6 +618,11 @@ impl Writer {
         project
             .conn()
             .pragma_update(None, "wal_autocheckpoint", pages)?;
+        if config.max_pages > 0 {
+            project
+                .conn()
+                .pragma_update(None, "max_page_count", config.max_pages)?;
+        }
 
         let frame_bytes = info.frame_bytes();
         if info.channels == 0 || frame_bytes == 0 {
@@ -1047,6 +1073,30 @@ impl Handle {
     #[must_use]
     pub fn is_paused(&self) -> bool {
         self.progress.is_paused()
+    }
+
+    /// Whether the writer thread is still alive.
+    ///
+    /// # Why anything needs to ask
+    ///
+    /// The writer stops on a failed commit rather than carry on and punch a
+    /// hole in the block tiling - see the module header. That is the right
+    /// policy, but the error it stops with is held in the thread's result
+    /// until somebody joins it, and the only other symptom is a position that
+    /// stops advancing. A position that stops advancing is also what a paused
+    /// transport looks like, and what a quiet passage looks like to anyone
+    /// watching a number, so **nothing downstream can tell a dead writer from
+    /// a working one**. A piCorePlayer user recorded into a writer that had
+    /// died 74 seconds in and did not find out for ten minutes.
+    ///
+    /// So the transport asks, on its own tick. False here means the capture is
+    /// already over and [`stop`](Handle::stop) will say why.
+    ///
+    /// Cheap: one atomic load inside `JoinHandle::is_finished`, which is why it
+    /// is affordable four times a second.
+    #[must_use]
+    pub fn is_running(&self) -> bool {
+        self.thread.as_ref().is_some_and(|t| !t.is_finished())
     }
 
     /// Asks the writer to drain what is left and stop, and waits for it.
@@ -2014,6 +2064,70 @@ mod tests {
         );
         assert!(outcome.duration_secs(RATE) > 0.0);
         assert_eq!(outcome.duration_secs(0), 0.0);
+    }
+
+    #[test]
+    fn a_writer_that_runs_out_of_room_stops_and_says_so_without_being_asked() {
+        // The piCorePlayer report, 2026-10-09: the card filled 74 seconds into
+        // a side, the writer stopped as it is meant to, and nothing said a
+        // word for the ten minutes until `stop` was typed. The error was
+        // always there - it just needed somebody to ask.
+        //
+        // `max_pages` manufactures the same `SQLITE_FULL` a full disk gives,
+        // so this runs in milliseconds on any filesystem. See Config::max_pages.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let info = info();
+        let config = Config {
+            max_pages: 40,
+            ..Config::default()
+        };
+        // Comfortably more audio than 40 pages of 64 KiB can hold.
+        let source = Canned {
+            data: pattern(16 * 1024 * 1024),
+            at: 0,
+        };
+        let handle = spawn(project(&dir), &info, config, source).expect("spawn");
+
+        // The point of the test: this becomes false on its own, with nobody
+        // joining the thread and nobody having asked it to stop.
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while handle.is_running() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !handle.is_running(),
+            "the writer filled the project and is still reported as running"
+        );
+
+        // And the reason survives to whoever does join it.
+        let error = handle.stop().expect_err("a full project cannot finish");
+        let said = error.to_string();
+        assert!(
+            said.contains("full"),
+            "a full project should say so, not {said:?}"
+        );
+    }
+
+    #[test]
+    fn a_writer_with_room_is_running_until_it_is_told_to_stop() {
+        // The negative twin, and the same test with the only the fault
+        // removed. Without it `is_running` could return false always, the
+        // test above would still pass, and the engine would end every capture
+        // on its first tick.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let info = info();
+        let source = Canned {
+            data: pattern(16 * 1024 * 1024),
+            at: 0,
+        };
+        let handle = spawn(project(&dir), &info, Config::default(), source).expect("spawn");
+        // Long enough that the writer has committed many times over, and well
+        // short of draining 16 MiB.
+        for _ in 0..30 {
+            assert!(handle.is_running(), "a healthy writer reported itself dead");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        handle.stop().expect("stop");
     }
 
     #[test]

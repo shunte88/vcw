@@ -157,8 +157,19 @@ export function titled(project: ProjectState): string {
  * Only shown until the first event arrives, after which the line is the log
  * and this would be overwriting a fact with a suggestion.
  */
-export function next(project: ProjectState, phase: string): string {
+export function next(
+  project: ProjectState,
+  phase: string,
+  library: string | null = null,
+): string {
   if (project.path === null) {
+    // With no library the first line sent a person to an empty panel. Found
+    // by launching a packaged build against an empty config directory: the
+    // redirect above put them on the right settings group and the status bar
+    // underneath it still pointed at Ctrl+1.
+    if (library === null) {
+      return "No library yet. Settings > Library says where projects are kept. n for a new one, ? for the keyboard map.";
+    }
     return "No project open. Ctrl+1 for the library, n for a new one, ? for the keyboard map.";
   }
   if (phase === "armed") {
@@ -216,6 +227,16 @@ export function App(): React.JSX.Element {
         setSettings(values);
         setCredentials(secrets);
         setLibrary(projects);
+        // A fresh install opens on the browser, which is empty, because no
+        // library is set - and nothing on that empty panel says so. The
+        // first outside user to get the window open found exactly that and
+        // asked for a wizard. This is the wizard: one redirect, on the one
+        // run where there is nothing else to do. `generation === 0` keeps it
+        // to the first read, so saving a settings file that still has no
+        // library does not drag a person back here.
+        if (generation === 0 && values.recording.library === null) {
+          setPanel("settings");
+        }
       }
     });
     return () => {
@@ -535,7 +556,7 @@ export function App(): React.JSX.Element {
         ) : (
           <span className="dim">
             {last === undefined
-              ? next(project, engine.phase)
+              ? next(project, engine.phase, settings?.recording.library ?? null)
               : `${last.event.kind}: ${describe(last.event)}`}
           </span>
         )}

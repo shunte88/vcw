@@ -210,6 +210,39 @@ fn a_tracklist_that_does_not_line_up_is_reported_rather_than_forced() {
 }
 
 #[test]
+fn a_side_b_only_rip_gets_side_bs_titles_and_not_side_as() {
+    // The sibling of the test above, and the one that was actually dangerous.
+    // A half rip that says it is side A is reported honestly. A half rip of
+    // side B that nothing recorded the *side* of is promoted on to side A by
+    // default, and then every step here succeeds: three tracks on A, three A
+    // entries to name them with, `is_exact` true, no unmatched, no warning.
+    // Side A's titles over side B's audio with nothing to show for it.
+    //
+    // Nothing in the capture path writes a side row, so the letter can only
+    // come from the operator - which is why the Tracks panel grew a side
+    // picker. This is the other end of it: say B, get B.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut project = Project::create(dir.path().join("face-b.vcw")).expect("create");
+    side::ensure(&mut project, b()).expect("side");
+    for n in 0..3u64 {
+        track::add_track(&mut project, b(), n * 200_000, n * 200_000 + 150_000).expect("track");
+    }
+
+    let applied = identity::accept(&mut project, &a_matching_release()).expect("accept");
+    assert_eq!(applied.tracks.len(), 3);
+    assert_eq!(applied.unmatched, ["A1", "A2", "A3"], "{applied:?}");
+    assert!(applied.unnamed.is_empty(), "{applied:?}");
+    assert!(applied.relaid.is_empty(), "nothing to move: {applied:?}");
+
+    let titles: Vec<String> = track::tracks(project.conn(), b())
+        .expect("tracks")
+        .into_iter()
+        .map(|row| row.title)
+        .collect();
+    assert_eq!(titles, ["Slip", "Glitch", "Piezo"]);
+}
+
+#[test]
 fn a_track_the_provider_does_not_list_is_named_as_unnamed() {
     // The other direction: the record has a lead-out groove detection picked up
     // as a fourth track, or the pressing has a track the release listing does

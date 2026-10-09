@@ -67,6 +67,8 @@ export function describe(event: Wire): string {
       return `${event.frames} frame(s), ${event.underruns} underrun(s), ${event.fidelity}`;
     case "command-refused":
       return `${event.command} in ${event.phase}: ${event.reason}`;
+    case "command-failed":
+      return `${event.command} from ${event.from}, now ${event.to}: ${event.reason}`;
     case "command-rejected":
       return `${event.command} in ${event.phase}`;
     case "status":

@@ -1,6 +1,6 @@
 # VCW - project status
 
-**As of:** 2026-10-04
+**As of:** 2026-10-09
 **Phase:** 1 is complete and committed - WP-01 through WP-20 are built, plus WP-16a, and
 WP-25, WP-28, WP-21 and WP-22 have been taken out of Phase 2, all on Linux x86_64 only.
 
@@ -6742,3 +6742,126 @@ Three items. The **i18n extraction**, which is the bulk and wants its `Display`-
 arguments decision settled before the volume work rather than after it. **AAC**, still a
 licensing question before a coding one. And now **`vcw serve`**. The glyphs, AIFF and the
 i18n path are done and pushed.
+
+## 2026-10-09, four defects found by one person with a record player
+
+The piCorePlayer user came back a second time, having actually used the thing: a side
+recorded on a Raspberry Pi through `vcw session`, the `.vcw` copied to Windows, the
+window opened on it. The waveform drew. Playback worked. Then four things went wrong in
+a row, and three of them were ours.
+
+**The silent stall, which is the one that loses audio.** Their card filled 74 seconds
+into side B. The writer did exactly what it is built to do - stop on a failed commit
+rather than punch a hole in the block tiling - and then nothing said so. The error is
+held until the thread is joined, so from outside the only symptom is a position that
+stops advancing, which is also what a pause looks like and what a quiet passage looks
+like. They went on recording into a dead writer for ten minutes before `stop` told them.
+
+The transport now asks. `Handle::is_running` reports whether the writer thread is still
+alive, `Deck::is_running` carries it up through the state machine, and the run loop ends
+the capture on its own tick when the deck has died - with `Stop` rather than a special
+case, because `Stop` joins the writer, which is what produces the real error, and
+finalizes the capture rather than abandoning it, so the audio that did commit is kept.
+Two phases, because a commit can fail on the way into a pause as easily as during a
+record.
+
+Testing it needed a disk that fills on demand. `PRAGMA max_page_count` gives the
+identical "database or disk is full" error a real full disk gives, deterministically, in
+milliseconds, on any filesystem - which finally closes §41's long-outstanding disk-full
+injection. It is a `persistence::Config` field and a `--max-pages` flag on `vcw soak`,
+and running the shipped binary against a 40-page cap on `/data2` reproduced the forum
+user's error text exactly. The soak harness turned out to be deaf to the fault it
+injects: it printed sixty seconds of progress against a writer dead since second one.
+That is fixed too.
+
+One gap is recorded rather than papered over. The three-line guard in the run loop has
+no end-to-end test. `max_page_count` does not persist across connections - 40 on the
+connection that set it, 4294967294 on a fresh one - so there is no cheap seam, and
+plumbing a page cap through `Setup` was declined because a user-facing request struct is
+the wrong home for a test hook. Its three dependencies are each proven to fail both
+ways.
+
+**The detect refusal, which is an asymmetry nobody had noticed.** `t` came back with
+`no side in this project has a capture to analyze`. Nothing in the capture path creates
+a side row: `side::attach` has exactly two production callers, `vcw tracks attach` and
+adoption. Every reader in the product falls back to the project's own captures - `vcw
+detect`, `vcw waveform`, `vcw play`, `vcw fingerprint`, the shell's view layer - except
+the shell's detect resolver, which was the only one that insisted on a side. Which is
+why they could draw the waveform and play the audio and still be told there was nothing
+to analyze. It falls back now, under the side that was asked for or A if none was, and
+the refusal that remains says what is actually missing: no capture, record one first.
+
+**"stop refused" was a lie.** A `stop` that fails published `command-refused`, whose
+contract is that nothing moved, and published no phase change at all - so the window sat
+there saying `recording` against an engine already in `Idle`. The move is real and so is
+the failure, which is a third outcome and not a rewording of the second: `Reply::Failed`
+carries both ends of the transition, `Event::Failed` and `command-failed` cross the
+wire, and the UI gets the phase change it was missing plus a message that says *did not
+complete* rather than *refused*.
+
+**And the one-sided rip, which was not where it was reported.** They had metadata and
+could not get it on to their tracks. The reported cause was `relay`'s equal-counts
+guard. It is not: `name_tracks` has always handled a partial tracklist, and there is a
+test that says so - a side A only rip against a six-track release names A1 and A2 and
+reports the other four as unmatched. The actual hole was upstream. The Tracks panel sent
+`side: null` on both of its detect seams, and with no side row to read, detection
+assumes A. A side **B** only rip therefore had its tracks promoted on to side A, and
+then every step succeeded: three tracks on A, three A entries to name them, no warning,
+side A's titles written over side B's audio.
+
+So the panel states it. A side picker beside Detect, offering two faces per disc,
+carried by the button and by the `t` key. The equal-counts guard is left alone and the
+reason is written down: loosening it to adopt a unique-count side group was considered
+and rejected, because a detector over-split that turns six tracks into seven would
+uniquely match a seven-track side B and move side A's audio on to the wrong face.
+
+**The wizard they asked for is one redirect.** A fresh install opened on the browser,
+which is empty, because no library is set - and nothing on that empty panel said so. The
+first settings read now sends a library-less install to Settings, and Settings lands on
+the Library group with the field focused instead of on Appearance. Only on a first run:
+a remembered section always wins, because clearing the library is a thing a person can
+do on purpose and they should not be dragged back here every visit. Skipped: a
+multi-step modal. It earns its keep when there is a second thing a fresh install has to
+be told.
+
+**And first light found the half the detect fix had missed.** Running the packaged
+window against the firstlight fixture, `t` got past the resolver and then failed in the
+worker: `DETECTION A: side A is not in this project`. `adopt::locked_observations` asks
+what the operator has already locked before the pass runs, and it used `side::require`,
+so it raised on exactly the projects the resolver had just been taught to accept. The
+refusal had moved from the command thread to the worker and the operator saw the same
+dead end. A side with no row has no boundaries - that is simply true, and it is the
+answer both observation readers now give. Detection runs to completion on a CLI-recorded
+project, which is the first time it has.
+
+**And reading what the fix had actually written found a third.** `side::ensure` inserts
+the row with `capture_id` NULL, because the audio is not its business - so detection
+finishing left a project with tracks on a face that named no recording. The window then
+has no current side, since §21 lets two faces share a capture and the shell will not
+guess which one, so the marker key does nothing and the mark list is empty. `relay`
+refuses outright, because a track's boundaries are frames into *some* recording. `vcw
+tracks attach` is how a CLI operator says this and the window has no such verb, so
+detection says it: the side it analyzed is pointed at the capture it analyzed, but only
+when nothing else claims it. `side::attach` is allowed to replace, which is what
+re-recording a face means, and re-pointing a face at a different take because somebody
+ran detection over it would quietly disown their audio.
+
+Two smaller things the same runs turned up. The side picker rendered stacked, label
+above control, because the bare `label` rule in `app.css` sets `flex-direction: column`
+and specificity wins a property only if you name it. And the status line under a fresh
+install still read `Ctrl+1 for the library` - a dead end, because the library is empty.
+It now names what is missing. The guard test that every hint offers the keyboard map
+caught the first draft of that string, which is the test earning its keep.
+
+**Still to ask them two things.** `df -h ~/vcw/usr` - the `df | grep mmc` they sent was
+a different filesystem from the one they wrote to, which is why 45 G free and a full
+disk are both true. And `vcw recover --apply --verify` on the side B project, because
+it is probably recoverable and it would be the first real-world exercise of that path.
+
+### 0.2.1-alpha
+
+Cut on 2026-10-09, the same day the report arrived. Four defects from one person
+with a record player, three more that first light and a careful read of what the
+fix had written turned up after them, and the before-we-begin wizard they asked
+for. Nothing in it changes a recorded byte except by keeping audio a full disk
+used to lose.

@@ -349,3 +349,56 @@ describe("the language menu", () => {
     expect(save.mock.calls[0]?.[0].language).toBe("pt-BR");
   });
 });
+
+// A fresh install opens on an empty browser, because no library is set, and
+// nothing on that panel says so - the first outside user to get the window
+// open asked for a wizard on exactly this. The wizard is one redirect, so the
+// thing worth testing is that it fires once and only on a first run.
+describe("where a first run lands", () => {
+  /** Renders with the library set or not, and nothing remembered. */
+  async function fresh(library: string | null, remembered?: string): Promise<HTMLElement> {
+    localStorage.removeItem("vcw.settings.section");
+    if (remembered !== undefined) {
+      localStorage.setItem("vcw.settings.section", remembered);
+    }
+    const held = values();
+    (held.recording as { library: string | null }).library = library;
+    const store = { run: async (what: () => Promise<unknown>) => what() };
+    const { root, container } = mount();
+    await act(async () => {
+      root.render(
+        <Settings
+          store={store as unknown as Store}
+          settings={held}
+          credentials={[]}
+          devices={[]}
+          onSaved={() => {}}
+        />,
+      );
+    });
+    return container;
+  }
+
+  /** The section tab the panel is showing. */
+  function current(container: HTMLElement): string {
+    return container.querySelector('[aria-current="true"]')?.textContent ?? "";
+  }
+
+  it("opens on Library when there is none, with the field focused", async () => {
+    const container = await fresh(null);
+    expect(current(container)).toBe("Library");
+    const input = container.querySelector<HTMLInputElement>(".prefs-pane input");
+    expect(input?.placeholder).toContain("no library");
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("opens on Appearance once a library is set", async () => {
+    expect(current(await fresh("/data2/rips"))).toBe("Appearance");
+  });
+
+  it("leaves a remembered section alone even with no library", async () => {
+    // Clearing the library is a thing a person can do on purpose. Having done
+    // it, they do not want every visit to Settings to start over here.
+    expect(current(await fresh(null, "Export"))).toBe("Export");
+  });
+});

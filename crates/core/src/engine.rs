@@ -472,6 +472,13 @@ impl Deck for Recorder {
     fn position(&self) -> u64 {
         self.writer.as_ref().map_or(0, |w| w.progress().frames())
     }
+
+    // A recorder with no writer left has already been finished; one whose
+    // writer thread has ended on its own has failed, because the only other
+    // way out of that thread is being asked to stop.
+    fn is_running(&self) -> bool {
+        self.writer.as_ref().is_some_and(Handle::is_running)
+    }
 }
 
 /// Opens a project, creating it if it is not there.
@@ -618,6 +625,30 @@ fn run(commands: &Receiver<Command>, bus: &Bus) {
             }
         }
 
+        // A capture can end without anybody ending it. The writer stops on a
+        // failed commit rather than leave a hole in the block tiling, and it
+        // holds the reason until it is joined - so from out here the only
+        // symptom is a position that stops advancing, which is also what a
+        // pause looks like and what a quiet passage looks like. Nothing
+        // noticed, and a piCorePlayer user whose card filled 74 seconds in
+        // went on recording into a dead writer for ten minutes before `stop`
+        // told them.
+        //
+        // So the transport asks, on its own tick, and a dead deck ends the
+        // capture here. `Stop` is the right command and not a special case:
+        // it joins the writer, which is what produces the real error, and it
+        // finalizes the capture rather than abandoning it, so the audio that
+        // did commit is kept and the row is closed. Two phases, because a
+        // commit can fail on the way into a pause as easily as during a
+        // record, and a paused writer that has died would otherwise be
+        // discovered by a `resume` that silently does nothing.
+        if matches!(machine.phase(), Phase::Recording | Phase::Paused) && !machine.deck_running() {
+            let (next, _) = dispatch(machine, Command::Stop, bus);
+            machine = next;
+            last_position = u64::MAX;
+            continue;
+        }
+
         // §35's `recording-position`, on the tick and on every change. Only
         // while there is something to report: a transport at rest publishing
         // "still zero" four times a second is noise a log has to be grepped
@@ -755,6 +786,21 @@ fn report(reply: Reply<Recorder>, command: &'static str, bus: &Bus) -> bool {
             bus.publish(&Event::Refused {
                 command,
                 phase,
+                reason: format!("{error}"),
+            });
+            false
+        }
+        // The transport moved, so the phase change goes out exactly as it does
+        // for a clean transition - a failed stop used to publish none, which
+        // left a UI showing `recording` against an engine sitting in `Idle`.
+        // `false` for `moved` all the same: `finished` would look for a report
+        // the failure means there is not one of.
+        Reply::Failed { from, to, error } => {
+            bus.publish(&Event::Phase { from, to });
+            bus.publish(&Event::Failed {
+                command,
+                from,
+                to,
                 reason: format!("{error}"),
             });
             false

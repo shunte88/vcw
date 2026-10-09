@@ -249,6 +249,21 @@ pub trait Deck {
     /// Must not advance while paused. The position a UI shows is a position in
     /// the *recording*, and a pause is not part of it.
     fn position(&self) -> u64;
+
+    /// Whether the deck is still able to record.
+    ///
+    /// Asked on the transport's tick while there is a capture open, because a
+    /// deck can fail without being asked to do anything: a writer that stops
+    /// on a failed commit holds its error until it is joined, and in the
+    /// meantime [`position`](Deck::position) simply stops advancing, which is
+    /// indistinguishable from a pause or a quiet passage. False means the
+    /// capture is over and [`finish`](Deck::finish) will say why.
+    ///
+    /// Defaults to true: a deck with nothing that can die out from under it -
+    /// every test deck in this crate - should not have to say so.
+    fn is_running(&self) -> bool {
+        true
+    }
 }
 
 /// The five phases of §11, as data.
@@ -581,6 +596,12 @@ pub struct Rehearsal {
     pub frames: u64,
     /// Which call, by name, should fail. `None` means none of them.
     pub refuse: Option<&'static str>,
+    /// Whether the deck reports itself dead to [`Deck::is_running`].
+    ///
+    /// A deck does not die by being called, which is the whole difficulty: it
+    /// dies on its own, between calls, and the transport only finds out by
+    /// asking. So this is a flag rather than another entry in `refuse`.
+    pub died: bool,
 }
 
 impl Rehearsal {
@@ -598,6 +619,16 @@ impl Rehearsal {
     pub fn holding(frames: u64) -> Self {
         Self {
             frames,
+            ..Self::default()
+        }
+    }
+
+    /// A deck that has died where it stands, as a writer does on a failed
+    /// commit: every call still works, and [`Deck::is_running`] is false.
+    #[must_use]
+    pub fn dead() -> Self {
+        Self {
+            died: true,
             ..Self::default()
         }
     }
@@ -658,6 +689,10 @@ impl Deck for Rehearsal {
 
     fn position(&self) -> u64 {
         self.frames
+    }
+
+    fn is_running(&self) -> bool {
+        !self.died
     }
 }
 
@@ -730,6 +765,28 @@ pub enum Reply<D: Deck> {
         /// Why the deck said no.
         error: D::Error,
     },
+    /// The move happened and failed. The transport moved anyway.
+    ///
+    /// Only `stop` can produce this, and it is the reason the variant exists.
+    /// [`Deck::finish`] consumes the deck, so a failure leaves nothing to go
+    /// on being `Recording` with and the transport falls to `Idle` - which
+    /// [`Reply::Refused`] cannot describe, because its whole contract is that
+    /// nothing moved.
+    ///
+    /// Reported as a refusal until 2026-10-09, and the conflation cost
+    /// somebody a side. A piCorePlayer user whose card filled mid-capture read
+    /// `stop refused while recording` as "I cannot stop", when the capture had
+    /// in fact stopped and been closed - and because a refusal publishes no
+    /// phase change, the transport they were watching still said `recording`
+    /// while the engine sat in `Idle`. The audio was on disk the whole time.
+    Failed {
+        /// The phase the transport was in.
+        from: Phase,
+        /// The phase it is in now, the transition having happened regardless.
+        to: Phase,
+        /// What went wrong on the way.
+        error: D::Error,
+    },
     /// The move does not exist from this phase. Nothing was attempted.
     ///
     /// Distinct from [`Reply::Refused`] on purpose: refused is a fault worth
@@ -799,6 +856,22 @@ impl<D: Deck> Machine<D> {
             Self::Recording(r) => r.position(),
             Self::Paused(p) => p.position(),
             Self::Stopped(s) => s.position(),
+        }
+    }
+
+    /// Whether the deck behind an open capture is still able to record.
+    ///
+    /// True in the phases that hold no deck, because "the deck has died" is not
+    /// a thing that can be true of a transport that has not got one. Only
+    /// `Recording` and `Paused` can answer usefully, and they are the two the
+    /// engine asks about - see [`Deck::is_running`].
+    #[must_use]
+    pub fn deck_running(&self) -> bool {
+        match self {
+            Self::Idle(_) | Self::Stopped(_) => true,
+            Self::Armed(a) => a.deck().is_running(),
+            Self::Recording(r) => r.deck().is_running(),
+            Self::Paused(p) => p.deck().is_running(),
         }
     }
 
@@ -897,8 +970,9 @@ impl<D: Deck> Machine<D> {
                 ),
                 Err(error) => (
                     Self::Idle(Idle),
-                    Reply::Refused {
-                        phase: Phase::Recording,
+                    Reply::Failed {
+                        from: Phase::Recording,
+                        to: Phase::Idle,
                         error,
                     },
                 ),
@@ -914,8 +988,9 @@ impl<D: Deck> Machine<D> {
                 ),
                 Err(error) => (
                     Self::Idle(Idle),
-                    Reply::Refused {
-                        phase: Phase::Paused,
+                    Reply::Failed {
+                        from: Phase::Paused,
+                        to: Phase::Idle,
                         error,
                     },
                 ),
@@ -958,6 +1033,41 @@ mod tests {
             }
         }
         (machine, moves)
+    }
+
+    #[test]
+    fn a_deck_that_has_died_is_reported_dead_in_the_phases_that_hold_one() {
+        // The transport's only way of learning that a capture has ended
+        // without anybody ending it. A writer that stops on a failed commit
+        // keeps its error until it is joined, so between the failure and the
+        // next `stop` the position simply stops advancing - which is what a
+        // pause looks like, and what a quiet passage looks like.
+        let mut machine = Machine::default();
+        assert!(machine.deck_running(), "idle holds no deck to lose");
+
+        let (next, _) = machine.apply(Step::Arm(Rehearsal::dead()));
+        machine = next;
+        assert!(!machine.deck_running(), "armed");
+
+        let (next, _) = machine.apply(Step::Record);
+        machine = next;
+        assert!(!machine.deck_running(), "recording");
+
+        // A commit can fail on the way into a pause as easily as during a
+        // record, and a paused writer that has died would otherwise be found
+        // by a `resume` that silently does nothing.
+        let (next, _) = machine.apply(Step::Pause);
+        machine = next;
+        assert!(!machine.deck_running(), "paused");
+
+        // The negative twin: a live deck says so in every one of them, or the
+        // engine would end every capture on its first tick.
+        let mut live = Machine::default();
+        for step in [Step::Arm(Rehearsal::default()), Step::Record, Step::Pause] {
+            let (next, _) = live.apply(step);
+            live = next;
+            assert!(live.deck_running(), "a live deck reported itself dead");
+        }
     }
 
     #[test]
@@ -1108,12 +1218,43 @@ mod tests {
         // `finish` consumes the deck, so a failure here genuinely has no
         // capture to hand back. Falling to Idle is the honest answer; claiming
         // Stopped would tell the operator a finalized capture exists.
+        //
+        // And it is `Failed`, not `Refused`: a refusal's whole contract is
+        // that the transport did not move, and this one did. Reported as a
+        // refusal until 2026-10-09, when a piCorePlayer user read `stop
+        // refused while recording` as "I cannot stop" - with no phase change
+        // published either, so the window went on saying `recording` against
+        // an engine that had gone to `Idle` and closed the capture.
+        for (phase, steps) in [
+            (Phase::Recording, vec![Step::Record]),
+            (Phase::Paused, vec![Step::Record, Step::Pause]),
+        ] {
+            let mut machine = Machine::default();
+            let (next, _) = machine.apply(Step::Arm(Rehearsal::refusing("finish")));
+            machine = next;
+            for step in steps {
+                let (next, _) = machine.apply(step);
+                machine = next;
+            }
+            let (machine, reply) = machine.apply(Step::Stop(CaptureState::Finalised));
+            match reply {
+                Reply::Failed { from, to, .. } => {
+                    assert_eq!(from, phase, "the phase it failed out of");
+                    assert_eq!(to, Phase::Idle, "and the one it landed in");
+                }
+                other => panic!("a failed stop from {phase} must not be {other:?}"),
+            }
+            assert_eq!(machine.phase(), Phase::Idle);
+        }
+
+        // The negative twin: every other failing transition is still a
+        // refusal that moves nothing, or `Failed` would swallow them.
         let machine = Machine::default();
-        let (machine, _) = machine.apply(Step::Arm(Rehearsal::refusing("finish")));
+        let (machine, _) = machine.apply(Step::Arm(Rehearsal::refusing("pause")));
         let (machine, _) = machine.apply(Step::Record);
-        let (machine, reply) = machine.apply(Step::Stop(CaptureState::Finalised));
+        let (machine, reply) = machine.apply(Step::Pause);
         assert!(matches!(reply, Reply::Refused { .. }), "{reply:?}");
-        assert_eq!(machine.phase(), Phase::Idle);
+        assert_eq!(machine.phase(), Phase::Recording, "a refusal moves nothing");
     }
 
     #[test]

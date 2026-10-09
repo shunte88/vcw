@@ -405,6 +405,14 @@ pub(crate) fn detail(event: &Event) -> serde_json::Value {
         } => serde_json::json!({
             "command": command, "phase": phase.as_str(), "reason": reason,
         }),
+        Event::Failed {
+            command,
+            from,
+            to,
+            reason,
+        } => serde_json::json!({
+            "command": command, "from": from.as_str(), "to": to.as_str(), "reason": reason,
+        }),
         Event::Rejected { command, phase } => serde_json::json!({
             "command": command, "phase": phase.as_str(),
         }),

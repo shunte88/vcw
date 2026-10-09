@@ -82,7 +82,15 @@ describe("the window title", () => {
 
 describe("the next step", () => {
   it("sends a person to the library when nothing is open", () => {
-    expect(next(project({ path: null }), "idle")).toContain("Ctrl+1");
+    expect(next(project({ path: null }), "idle", "/data2/rips")).toContain("Ctrl+1");
+  });
+
+  it("does not send a person to an empty library", () => {
+    // A fresh install has no library, so Ctrl+1 opens a panel with nothing in
+    // it. The line has to name the thing that is actually missing.
+    const said = next(project({ path: null }), "idle", null);
+    expect(said).not.toContain("Ctrl+1");
+    expect(said).toMatch(/no library/i);
   });
 
   it("names the record key once a device is armed", () => {

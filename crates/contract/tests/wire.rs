@@ -124,6 +124,12 @@ fn every_event() -> Vec<Event> {
             command: "stop",
             phase: Phase::Idle,
         },
+        Event::Failed {
+            command: "stop",
+            from: Phase::Recording,
+            to: Phase::Idle,
+            reason: "the project: database or disk is full".to_owned(),
+        },
         Event::Status {
             phase: Phase::Recording,
             frames: 44_100,
@@ -161,7 +167,7 @@ fn the_list_above_is_every_variant() {
     let names: std::collections::BTreeSet<_> = every_event().iter().map(Event::name).collect();
     assert_eq!(
         names.len(),
-        16,
+        17,
         "a core event was added or removed: {names:?}. Map it in \
          `vcw_contract::event::Wire` and add it to `every_event` above."
     );

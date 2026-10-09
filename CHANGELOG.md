@@ -14,6 +14,50 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## 0.2.1-alpha
+
+*2026-10-09.*
+
+The first release shaped by somebody else's record player. A piCorePlayer user
+recorded a side on a Raspberry Pi, copied the project to Windows and opened it
+in the window, and four things went wrong in a row. Three of them were ours.
+One of them loses audio, so install this one.
+
+### Fixed
+
+* **A capture whose disk fills no longer goes on silently.** The writer stops
+  on a failed commit rather than leave a hole in the recording, and until now
+  nothing said so: the only sign was a position that stopped moving, which is
+  also what a pause looks like. One person went on recording into a stopped
+  writer for ten minutes before pressing stop told them. The transport now
+  checks on its own, ends the capture the moment the writer dies, and keeps
+  everything that did reach the disk.
+* **Stop no longer says "refused" when it failed.** A stop that fails does
+  move the transport, so saying nothing happened was wrong twice over: the
+  window kept showing *recording* against an engine that had already stopped.
+  It now reports what happened and where it ended up.
+* **Detection works on a project recorded with `vcw session`.** The window
+  would draw the waveform and play the audio and then refuse to analyze it,
+  because the command line does not write the side row the detector insisted
+  on. Three separate places insisted on it; none do now, and detection also
+  records which recording a side came from, so markers and the release layout
+  work afterwards.
+* **A one-sided rip can be told which side it is.** The Tracks panel has a
+  side picker beside Detect. Without it, a side B recording had its tracks
+  filed under side A, and identification then wrote side A's titles over side
+  B's music with nothing to show for it.
+
+### Added
+
+* **A fresh install opens where there is something to do.** With no library
+  set the window landed on an empty browser that said nothing about why it was
+  empty. It now opens *Settings > Library* with the field focused, and the
+  status line names what is missing instead of pointing at an empty panel.
+  Only on a first run: once you have chosen a settings group, that is where
+  you land.
+* **`vcw soak --max-pages`** fills the project's disk on purpose, which is how
+  the fix above is tested without a real full disk.
+
 ## 0.2.0-alpha
 
 *2026-10-08.*

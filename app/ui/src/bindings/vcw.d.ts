@@ -210,6 +210,22 @@ phase: PhaseName,
 /**
  * Why.
  */
+reason: string, } | { "kind": "command-failed",
+/**
+ * The command that failed.
+ */
+command: string,
+/**
+ * The phase the transport was in.
+ */
+from: PhaseName,
+/**
+ * The phase it is in now.
+ */
+to: PhaseName,
+/**
+ * What went wrong.
+ */
 reason: string, } | { "kind": "command-rejected",
 /**
  * The command that does not apply.

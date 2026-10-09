@@ -618,6 +618,11 @@ enum Command {
         /// Deliver one empty callback after this many seconds.
         #[arg(long)]
         starve_after: Option<f64>,
+        /// Cap the project at this many 64 KiB pages, so the capture runs out
+        /// of room the way a full disk does. 0 is no cap. §41's disk-full
+        /// injection; 40 pages is about 2.6 MiB.
+        #[arg(long, default_value_t = 0)]
+        max_pages: u32,
         /// Fail if resident memory grows by more than this many MiB over the
         /// run, on top of the page cache each connection in the run is entitled
         /// to fill. Zero to measure without gating. §41.
@@ -1382,6 +1387,7 @@ fn run() -> anyhow::Result<()> {
             unplug_after,
             error_after,
             starve_after,
+            max_pages,
             max_growth_mib,
             readers,
             reader_hz,
@@ -1409,6 +1415,7 @@ fn run() -> anyhow::Result<()> {
             unplug_after,
             error_after,
             starve_after,
+            max_pages,
             max_growth_mib,
             readers,
             reader_hz,

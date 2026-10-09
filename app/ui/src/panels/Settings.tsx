@@ -148,6 +148,30 @@ export function Settings({
   ]);
 
   useEffect(() => setDraft(settings), [settings]);
+
+  // # Where a first run lands
+  //
+  // On Library, with the field focused, and only on a first run. A piCorePlayer
+  // user got the window open and then had nowhere to go: the browser is empty
+  // because no library is set, and nothing on screen says that setting one is
+  // the first move. Appearance is the right default for the second run and the
+  // wrong one for the first.
+  //
+  // `stored === null` is what makes it a first run - a person who has ever
+  // chosen a section has said where they want to be, and an empty library
+  // after that is a state they put the application in deliberately. An effect
+  // rather than the initializer above because `settings` is still null while
+  // the shell reads the file, so the initializer cannot see the library.
+  const [landed, setLanded] = useState(false);
+  useEffect(() => {
+    if (landed || settings === null) {
+      return;
+    }
+    setLanded(true);
+    if (localStorage.getItem(CHOSEN) === null && settings.recording.library === null) {
+      setSection("Library");
+    }
+  }, [settings, landed]);
   useEffect(() => {
     void api.languages().then(setLanguages);
   }, []);
@@ -368,6 +392,9 @@ export function Settings({
           <label>
             Where projects are kept
             <input
+              // The one field a fresh install has to be given. See "Where a
+              // first run lands" above: this is the end of that journey.
+              autoFocus={draft.recording.library === null}
               value={draft.recording.library ?? ""}
               placeholder="unset - no library"
               onChange={(event) =>

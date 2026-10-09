@@ -498,3 +498,30 @@ fn re_analysis_does_not_grow_the_evidence_column() {
         );
     }
 }
+
+#[test]
+fn a_side_with_no_row_has_no_prior_observations_rather_than_an_error() {
+    // The second half of the piCorePlayer detect refusal, and the half the
+    // first fix did not reach. Nothing in the capture path writes a side row,
+    // so the shell's detection worker asked what the operator had locked on a
+    // face that did not exist yet and got `side A is not in this project` -
+    // on a project holding a capture it had just drawn and played. The
+    // refusal moved from the command thread to the worker and the operator
+    // saw the same dead end.
+    //
+    // A side with no row has no boundaries. That is the answer, and adoption
+    // creates the row a moment later anyway.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = Project::create(dir.path().join("no-sides.vcw")).expect("create");
+
+    assert!(
+        adopt::locked_observations(&project, Side::A)
+            .expect("locked")
+            .is_empty()
+    );
+    assert!(
+        adopt::observations(&project, Side::A)
+            .expect("all")
+            .is_empty()
+    );
+}

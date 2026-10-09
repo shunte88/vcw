@@ -256,9 +256,21 @@ pub fn adopt_decisions(
 /// # Errors
 ///
 /// If the side cannot be read.
+///
+/// # Why an absent side is not an error
+///
+/// A side with no row has no boundaries - that is simply true, and it is the
+/// answer every caller wants. Raising [`vcw_project::Error::NoSuchSide`]
+/// instead was the second half of the piCorePlayer detect refusal: nothing in
+/// the capture path creates a side, so the shell's detector got past its own
+/// resolver, asked what the operator had already locked on a face that did not
+/// exist yet, and failed with `side A is not in this project` on a project
+/// holding a perfectly good capture. Adoption creates the row a moment later.
 pub fn locked_observations(project: &Project, side: Side) -> Result<Vec<BoundaryObservation>> {
     let conn = project.conn();
-    let record = side::require(conn, side)?;
+    let Some(record) = side::load(conn, side)? else {
+        return Ok(Vec::new());
+    };
     let observations = track::boundaries_of(conn, record.id)?
         .into_iter()
         .filter(|b| b.locked)
@@ -275,10 +287,13 @@ pub fn locked_observations(project: &Project, side: Side) -> Result<Vec<Boundary
 ///
 /// # Errors
 ///
-/// If the side cannot be read.
+/// If the side cannot be read. An absent side is not one: see
+/// [`locked_observations`].
 pub fn observations(project: &Project, side: Side) -> Result<Vec<BoundaryObservation>> {
     let conn = project.conn();
-    let record = side::require(conn, side)?;
+    let Some(record) = side::load(conn, side)? else {
+        return Ok(Vec::new());
+    };
     let observations = track::boundaries_of(conn, record.id)?
         .into_iter()
         .map(as_observation)

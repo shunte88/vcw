@@ -412,6 +412,24 @@ pub enum Wire {
         reason: String,
     },
 
+    /// A command was carried out, failed partway, and moved the transport anyway.
+    ///
+    /// Neither of the two above it: [`Wire::CommandRefused`] says nothing
+    /// moved, [`Wire::CommandRejected`] says nothing was attempted. Only
+    /// `stop` produces this, because a capture whose final commit fails has
+    /// still ended. A `phase-change` arrives with it.
+    #[serde(rename = "command-failed")]
+    CommandFailed {
+        /// The command that failed.
+        command: String,
+        /// The phase the transport was in.
+        from: PhaseName,
+        /// The phase it is in now.
+        to: PhaseName,
+        /// What went wrong.
+        reason: String,
+    },
+
     /// A command has no meaning in the phase the transport is in.
     ///
     /// Nothing was attempted. Reported so a UI can gray the button out.
@@ -556,6 +574,7 @@ impl Wire {
             Self::PlaybackRefused { .. } => "playback-refused",
             Self::PlaybackFinished { .. } => "playback-finished",
             Self::CommandRefused { .. } => "command-refused",
+            Self::CommandFailed { .. } => "command-failed",
             Self::CommandRejected { .. } => "command-rejected",
             Self::Status { .. } => "status",
             Self::ExportProgress { .. } => "export-progress",
@@ -678,6 +697,17 @@ impl From<&Event> for Wire {
             } => Self::CommandRefused {
                 command: (*command).to_owned(),
                 phase: (*phase).into(),
+                reason: reason.clone(),
+            },
+            Event::Failed {
+                command,
+                from,
+                to,
+                reason,
+            } => Self::CommandFailed {
+                command: (*command).to_owned(),
+                from: (*from).into(),
+                to: (*to).into(),
                 reason: reason.clone(),
             },
             Event::Rejected { command, phase } => Self::CommandRejected {

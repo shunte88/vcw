@@ -161,6 +161,34 @@ main.project {
   gap: 0.5rem;
 }
 
+/* The side picker beside Detect. A label wrapping its select so the word and
+   the control are one hit target, and `gap` rather than a margin because the
+   head is already a flex row. */
+.panel-head .face {
+  display: flex;
+  /* The bare `label` rule above stacks its children, which is right in the
+     settings forms and wrong in a toolbar: the word sat on top of the select
+     and the head grew a second line. Specificity gets `display` but not a
+     property the other rule sets and this one does not, so say it. */
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+.panel-head .face select {
+  font: inherit;
+  letter-spacing: normal;
+  /* A single letter. Left to itself the control took the width of the longest
+     thing a select can hold. */
+  width: auto;
+  min-width: 0;
+  padding-right: 1.5rem;
+}
+
 .panel-head h2 {
   font-size: 0.85rem;
   font-weight: 600;

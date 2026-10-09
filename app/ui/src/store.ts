@@ -296,6 +296,20 @@ export function fold(state: Engine, event: Wire): Engine {
           field: null,
         },
       };
+    // Not a refusal: the transport moved. The `phase-change` that arrives
+    // with it is what updates the transport, so all this has to carry is why
+    // - and it must not say "refused", because the whole reason this event
+    // exists is that a user read that word and believed a capture which had
+    // in fact ended was still running.
+    case "command-failed":
+      return {
+        ...state,
+        refusal: {
+          code: "failed",
+          message: `${event.command} did not complete: ${event.reason}`,
+          field: null,
+        },
+      };
     case "command-rejected":
       return {
         ...state,
