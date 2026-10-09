@@ -134,6 +134,175 @@ fn data_chunk(path: &Path) -> Vec<u8> {
     panic!("no data chunk in {}", path.display());
 }
 
+/// The sound chunk of an AIFF file, walked rather than assumed.
+///
+/// [`data_chunk`]'s twin, and separate from it because almost nothing is
+/// shared: IFF counts big-endian, the sound data starts eight bytes into its
+/// chunk rather than at the chunk's own start, and the form type is checked at
+/// a different offset.
+fn ssnd_chunk(path: &Path) -> Vec<u8> {
+    let bytes = std::fs::read(path).expect("read");
+    assert_eq!(&bytes[0..4], b"FORM");
+    assert_eq!(&bytes[8..12], b"AIFF");
+    let mut at = 12;
+    while at + 8 <= bytes.len() {
+        let id = &bytes[at..at + 4];
+        let size = u32::from_be_bytes(bytes[at + 4..at + 8].try_into().unwrap()) as usize;
+        if id == b"SSND" {
+            // offset and blockSize, then the samples.
+            return bytes[at + 16..at + 8 + size].to_vec();
+        }
+        at += 8 + size + size % 2;
+    }
+    panic!("no SSND chunk in {}", path.display());
+}
+
+#[test]
+fn ffprobe_agrees_about_every_aiff_we_write() {
+    let Some(ffprobe) = tool("ffprobe") else {
+        eprintln!("skipped: no ffprobe");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+
+    // The whole point of this one is the `be` on the end of every codec name.
+    // Our own tests compare the bytes against our own swap, which proves the
+    // wiring and not the byte order; this asks a reader that has never seen
+    // our code which way round the samples are.
+    let cases: &[(StorageFormat, u32, u16, &str)] = &[
+        (StorageFormat::Int16, 44_100, 2, "pcm_s16be"),
+        (StorageFormat::Int24Packed, 96_000, 2, "pcm_s24be"),
+        (StorageFormat::Int24Padded, 96_000, 2, "pcm_s24be"),
+        (StorageFormat::Int32, 192_000, 2, "pcm_s32be"),
+        (StorageFormat::Int24Packed, 48_000, 4, "pcm_s24be"),
+    ];
+
+    for &(format, rate, channels, codec) in cases {
+        let spec = Spec {
+            rate,
+            channels,
+            format,
+            frames: 4_000,
+        };
+        let path = dir
+            .path()
+            .join(format!("{format:?}-{rate}-{channels}.aiff"));
+        write(&path, Container::Aiff, spec);
+
+        let said = run(
+            &ffprobe,
+            &[
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_name,sample_rate,channels,duration_ts",
+                "-of",
+                "default=nw=1",
+                path.to_str().unwrap(),
+            ],
+        );
+        let what = format!("{format:?} at {rate} Hz, {channels} channels");
+        assert!(
+            said.contains(&format!("codec_name={codec}")),
+            "{what}: {said}"
+        );
+        assert!(
+            said.contains(&format!("sample_rate={rate}")),
+            "{what}: {said}"
+        );
+        assert!(
+            said.contains(&format!("channels={channels}")),
+            "{what}: {said}"
+        );
+        // `numSampleFrames`, read back by somebody else. A size field patched
+        // to the wrong one of the three gives a duration that is out by a
+        // factor of the frame size, which nothing else here would notice.
+        assert!(said.contains("duration_ts=4000"), "{what}: {said}");
+    }
+}
+
+#[test]
+fn an_aiff_holds_the_same_samples_a_wav_does() {
+    // The byte order proved by a round trip rather than by a name: ffmpeg
+    // decodes our AIFF back to little-endian PCM, and it has to come out as
+    // the bytes that went in. A swap in the wrong direction - or a swap of the
+    // wrong width on packed 24-bit - survives `pcm_s24be` and dies here.
+    let Some(ffmpeg) = tool("ffmpeg") else {
+        eprintln!("skipped: no ffmpeg");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let spec = Spec {
+        rate: 44_100,
+        channels: 2,
+        format: StorageFormat::Int24Packed,
+        frames: 10_000,
+    };
+    let aiff = dir.path().join("source.aiff");
+    let stored = write(&aiff, Container::Aiff, spec);
+
+    let back = dir.path().join("back.wav");
+    run(
+        &ffmpeg,
+        &[
+            "-v",
+            "error",
+            "-y",
+            "-i",
+            aiff.to_str().unwrap(),
+            "-c:a",
+            "pcm_s24le",
+            back.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(data_chunk(&back), stored, "the samples came back different");
+}
+
+#[test]
+fn a_tagged_aiff_still_holds_the_bytes_we_wrote() {
+    // [`a_tagged_wav_still_holds_the_bytes_we_wrote`] for the other chunked
+    // container. lofty puts the `ID3 ` chunk in a different place in an IFF
+    // file than in a RIFF one, and "a different place" is exactly the failure
+    // this is looking for.
+    let dir = tempfile::tempdir().unwrap();
+    let spec = Spec {
+        rate: 44_100,
+        channels: 2,
+        format: StorageFormat::Int24Packed,
+        frames: 12_000,
+    };
+    let path = dir.path().join("tagged.aiff");
+    let stored = write(&path, Container::Aiff, spec);
+
+    let mut expected = stored.clone();
+    for sample in expected.as_chunks_mut::<3>().0 {
+        sample.reverse();
+    }
+    assert_eq!(ssnd_chunk(&path), expected);
+
+    tagging::write(&path, Container::Aiff, &tags()).expect("tag");
+    assert_eq!(ssnd_chunk(&path), expected, "tagging moved the audio");
+
+    if let Some(ffprobe) = tool("ffprobe") {
+        let said = run(
+            &ffprobe,
+            &[
+                "-v",
+                "error",
+                "-show_entries",
+                "format_tags=title",
+                "-of",
+                "default=nw=1",
+                path.to_str().unwrap(),
+            ],
+        );
+        assert!(
+            said.contains("title="),
+            "a tagged aiff ffprobe reads: {said}"
+        );
+    }
+}
+
 #[test]
 fn at_least_one_verifier_is_installed() {
     let found: Vec<&str> = ["ffprobe", "ffmpeg", "flac", "metaflac", "sox", "ogginfo"]
@@ -495,14 +664,15 @@ fn tag_cases() -> Vec<Container> {
 #[test]
 fn this_build_writes_the_containers_it_is_supposed_to() {
     // The other end of `tag_cases`: a derived list cannot drift from the enum,
-    // but it can quietly shrink if a feature stops being default. Both lossless
-    // containers are unconditional, and a default build has all four.
+    // but it can quietly shrink if a feature stops being default. All three
+    // lossless containers are unconditional, and a default build has all five.
     let cases = tag_cases();
     assert!(
         cases.contains(&Container::Flac(Compression::default())),
         "{cases:?}"
     );
     assert!(cases.contains(&Container::Wav), "{cases:?}");
+    assert!(cases.contains(&Container::Aiff), "{cases:?}");
     if cfg!(all(feature = "mp3", feature = "ogg")) {
         assert_eq!(cases.len(), Container::ALL.len(), "{cases:?}");
     }
@@ -633,9 +803,9 @@ fn ffprobe_reads_the_tags_we_wrote() {
     let dir = tempfile::tempdir().unwrap();
 
     // Every container we write, and each must at least carry the fields a player
-    // puts on screen. FLAC and Ogg carry the full set as Vorbis comments; WAV and
-    // MP3 carry ID3v2, which has frames for fewer of them, so only the common
-    // fields are asserted across all four.
+    // puts on screen. FLAC and Ogg carry the full set as Vorbis comments; WAV,
+    // AIFF and MP3 carry ID3v2, which has frames for fewer of them, so only the
+    // common fields are asserted across all five.
     for container in tag_cases() {
         let path = tagged(dir.path(), container);
         // Both, because where ffprobe files a comment depends on the container

@@ -85,6 +85,14 @@ struct Cli {
     #[arg(long, global = true, value_name = "LEVEL")]
     log: Option<String>,
 
+    /// Which language to print in, as an IETF tag: de-DE, pt-BR, ja-JP.
+    ///
+    /// Default is whatever the window is set to, which is read out of the
+    /// settings file. `vcw doctor --i18n` says where catalogs go and prints
+    /// the source hash of every string in one.
+    #[arg(long, global = true, value_name = "TAG")]
+    lang: Option<String>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -92,7 +100,16 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Report what this build can see: host APIs, SQLite, supported rates.
-    Doctor,
+    Doctor {
+        /// Print the source hash of every translatable string, and stop.
+        ///
+        /// One `<hash>  <key>` a line. A translation records the hash of the
+        /// English it was made from, which is what lets VCW tell a translator
+        /// later which of their entries went stale because the English
+        /// changed underneath them - see `i18n/en-US.toml`.
+        #[arg(long)]
+        i18n: bool,
+    },
 
     /// Write a diagnostic bundle: one JSON document, no audio in it (§42).
     ///
@@ -495,7 +512,7 @@ enum Command {
         /// Directory the files go under. Created if it is not there.
         #[arg(long)]
         into: std::path::PathBuf,
-        /// Container to write: flac, wav, mp3 or ogg.
+        /// Container to write: flac, wav, aiff, mp3 or ogg.
         #[arg(long, default_value = "flac")]
         format: String,
         /// How hard a lossy container compresses: transparent, high or
@@ -976,8 +993,9 @@ fn main() -> anyhow::Result<()> {
 fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
     logging::install(cli.log.as_deref());
+    speak(cli.lang.as_deref());
     match cli.command {
-        Command::Doctor => doctor(),
+        Command::Doctor { i18n } => doctor(i18n),
         Command::Bundle {
             project,
             out,
@@ -1403,7 +1421,79 @@ fn run() -> anyhow::Result<()> {
     }
 }
 
-fn doctor() -> anyhow::Result<()> {
+/// Switches this process to the language the window is set to.
+///
+/// `--lang` first, then the settings file the shell writes, then English.
+/// Reading that file is the only thing the CLI takes from it: every other
+/// option here is a flag, deliberately, because a command that behaves
+/// differently depending on a GUI's saved state is a command nobody can
+/// script. A language is the exception because it changes no behavior at all
+/// - only which words a refusal is spelled with.
+///
+/// Silent on every failure. A missing settings file is the normal case, a
+/// broken catalog leaves VCW in English and the command still does its job,
+/// and a translation problem is not a reason to fail an export. `--log info`
+/// says what happened.
+fn speak(chosen: Option<&str>) {
+    let Some(dir) = vcw_i18n::user_dir() else {
+        return;
+    };
+    let locale = match chosen {
+        Some(tag) => tag.to_owned(),
+        None => {
+            // `settings.json` beside the catalogs, as the shell writes it.
+            // Read as untyped JSON rather than through `vcw_contract`: the
+            // one field wanted here is a string, and a settings file holding
+            // a group this build has never heard of should still answer the
+            // question rather than refusing to parse.
+            let path = dir.with_file_name("settings.json");
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                return;
+            };
+            match serde_json::from_str::<serde_json::Value>(&text) {
+                Ok(settings) => settings
+                    .get("language")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(vcw_i18n::SOURCE_LOCALE)
+                    .to_owned(),
+                Err(why) => {
+                    tracing::info!(path = %path.display(), %why, "staying in en-US");
+                    return;
+                }
+            }
+        }
+    };
+    match vcw_i18n::load(&dir, &locale) {
+        Ok(catalog) => {
+            vcw_i18n::activate(catalog);
+            tracing::info!(locale = vcw_i18n::locale(), "the language is set");
+        }
+        Err(why) => tracing::info!(%why, "staying in en-US"),
+    }
+}
+
+fn doctor(i18n: bool) -> anyhow::Result<()> {
+    if i18n {
+        // On its own, not appended: this is machine output a translator pipes
+        // into an editor, and a report about SQLite above it is noise in a
+        // file somebody is about to fill in by hand.
+        // Where a catalog goes, before the hashes that fill it in. The
+        // answer differs on three platforms and is the first thing a
+        // translator needs; reconstructing it from the user guide is how a
+        // finished translation ends up in a directory nothing reads.
+        match vcw_i18n::user_dir() {
+            Some(dir) => println!("# put your <tag>.toml in {}", dir.display()),
+            None => println!("# this process has no config directory"),
+        }
+        let source = vcw_i18n::Catalog::source();
+        for key in source.keys() {
+            println!(
+                "{}  {key}",
+                vcw_i18n::digest(source.get(key).unwrap_or(key))
+            );
+        }
+        return Ok(());
+    }
     println!("vcw {}", env!("CARGO_PKG_VERSION"));
     println!("target      {}", std::env::consts::ARCH);
     println!("os          {}", std::env::consts::OS);

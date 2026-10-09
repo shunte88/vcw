@@ -1453,6 +1453,18 @@ copyleft: boolean, };
 
 export type Settings = {
 /**
+ * The IETF tag of the language VCW speaks, or `null` for `en-US`.
+ *
+ * Here rather than in the browser's local storage, where the interface
+ * scale and the meter style live, because those two are facts about the
+ * monitor in front of this window and this one is not: the CLI prints
+ * the same sentences the window does and has no local storage to read,
+ * and a person who speaks Portuguese still speaks it on their other
+ * machine. Not a group of its own for one field - a `language` group
+ * holding a `language` is a box with one thing in it.
+ */
+language: string | null,
+/**
  * Input, output, backend, rate, format, buffer size, capture mode.
  */
 audio: AudioSettings,

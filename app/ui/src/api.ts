@@ -289,6 +289,17 @@ export function settings(): Promise<Settings> {
   return invoke("settings");
 }
 
+/**
+ * Every language this copy of VCW can be set to, source language first.
+ *
+ * IETF tags, not names: the menu asks `Intl.DisplayNames` for the name, so a
+ * translation submitted as `pt-BR.toml` appears as "portugues (Brasil)"
+ * without anybody adding it to a list here.
+ */
+export function languages(): Promise<string[]> {
+  return invoke("languages");
+}
+
 /** Where the library is, or null if nobody has chosen one. */
 export function libraryRoot(): Promise<string | null> {
   return invoke("library_root");

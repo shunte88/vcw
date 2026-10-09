@@ -126,8 +126,8 @@ use crate::error::{Error, Result};
 /// something that has to budget bandwidth, and a file on a disc is not that.
 ///
 /// The lossless containers ignore this entirely -
-/// [`with_quality`](Container::with_quality) is a no-op on WAV and FLAC - which
-/// is what lets a settings panel keep one value across all four formats instead
+/// [`with_quality`](Container::with_quality) is a no-op on WAV, AIFF and FLAC -
+/// which is what lets a settings panel keep one value across all five formats instead
 /// of a field that appears and disappears.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -342,7 +342,7 @@ impl std::fmt::Display for Compression {
 /// whatever the writer felt like would be a plan that could not be checked
 /// against the file it produced.
 ///
-/// All four exist whatever the cargo features say. A build without the `mp3`
+/// All five exist whatever the cargo features say. A build without the `mp3`
 /// feature still understands `--format mp3` and still refuses it with a
 /// sentence explaining that this binary cannot write one, which is a better
 /// answer than not knowing the word.
@@ -351,6 +351,15 @@ impl std::fmt::Display for Compression {
 pub enum Container {
     /// Uncompressed PCM in a RIFF wrapper.
     Wav,
+    /// Uncompressed big-endian PCM in an IFF wrapper.
+    ///
+    /// The same audio as [`Wav`](Self::Wav) with the bytes the other way round,
+    /// and here because it is what the Apple side of a mastering chain asks
+    /// for. Integer only: carrying a float capture means AIFF-C and a
+    /// `fl32` compression type, which is a different format wearing the same
+    /// extension, and the narrowing a person has to choose anyway is the
+    /// better answer - the same one FLAC asks for, in the same words.
+    Aiff,
     /// Lossless compression, at a level that only trades size against time.
     Flac(Compression),
     /// MPEG-1 Audio Layer III, variable bitrate.
@@ -364,9 +373,10 @@ impl Container {
     ///
     /// Lossless first, because the archival copy is the one that matters and a
     /// list opening with MP3 would be a list suggesting otherwise.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::Flac(Compression(5)),
         Self::Wav,
+        Self::Aiff,
         Self::Mp3(Quality::High),
         Self::OggVorbis(Quality::High),
     ];
@@ -376,6 +386,10 @@ impl Container {
     pub const fn extension(self) -> &'static str {
         match self {
             Self::Wav => "wav",
+            // `.aiff` and not `.aif`: the eight-dot-three spelling is the one
+            // that exists because of a filesystem that no longer does, and
+            // every reader takes both.
+            Self::Aiff => "aiff",
             Self::Flac(_) => "flac",
             Self::Mp3(_) => "mp3",
             // Xiph's own guidance is `.oga` for Ogg audio generally and `.ogg`
@@ -391,6 +405,7 @@ impl Container {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Wav => "WAV",
+            Self::Aiff => "AIFF",
             Self::Flac(_) => "FLAC",
             Self::Mp3(_) => "MP3",
             Self::OggVorbis(_) => "Ogg Vorbis",
@@ -401,7 +416,7 @@ impl Container {
     #[must_use]
     pub const fn feature(self) -> Option<&'static str> {
         match self {
-            Self::Wav | Self::Flac(_) => None,
+            Self::Wav | Self::Aiff | Self::Flac(_) => None,
             Self::Mp3(_) => Some("mp3"),
             Self::OggVorbis(_) => Some("ogg"),
         }
@@ -419,7 +434,7 @@ impl Container {
     #[must_use]
     pub const fn compiled_in(self) -> bool {
         match self {
-            Self::Wav | Self::Flac(_) => true,
+            Self::Wav | Self::Aiff | Self::Flac(_) => true,
             Self::Mp3(_) => cfg!(feature = "mp3"),
             Self::OggVorbis(_) => cfg!(feature = "ogg"),
         }
@@ -429,7 +444,7 @@ impl Container {
     #[must_use]
     pub const fn quality(self) -> Option<Quality> {
         match self {
-            Self::Wav | Self::Flac(_) => None,
+            Self::Wav | Self::Aiff | Self::Flac(_) => None,
             Self::Mp3(quality) | Self::OggVorbis(quality) => Some(quality),
         }
     }
@@ -449,7 +464,7 @@ impl Container {
     #[must_use]
     pub const fn with_quality(self, quality: Quality) -> Self {
         match self {
-            Self::Wav | Self::Flac(_) => self,
+            Self::Wav | Self::Aiff | Self::Flac(_) => self,
             Self::Mp3(_) => Self::Mp3(quality),
             Self::OggVorbis(_) => Self::OggVorbis(quality),
         }
@@ -460,7 +475,7 @@ impl Container {
     pub const fn compression(self) -> Option<Compression> {
         match self {
             Self::Flac(level) => Some(level),
-            Self::Wav | Self::Mp3(_) | Self::OggVorbis(_) => None,
+            Self::Wav | Self::Aiff | Self::Mp3(_) | Self::OggVorbis(_) => None,
         }
     }
 
@@ -473,7 +488,7 @@ impl Container {
     pub const fn with_compression(self, level: Compression) -> Self {
         match self {
             Self::Flac(_) => Self::Flac(level),
-            Self::Wav | Self::Mp3(_) | Self::OggVorbis(_) => self,
+            Self::Wav | Self::Aiff | Self::Mp3(_) | Self::OggVorbis(_) => self,
         }
     }
 
@@ -490,6 +505,10 @@ impl Container {
             .as_str()
         {
             "wav" | "wave" => Some(Self::Wav),
+            // `aifc` is not here on purpose: an AIFF-C file can hold anything
+            // from plain PCM to IMA ADPCM, and accepting the word would promise
+            // a format this writer does not produce.
+            "aiff" | "aif" => Some(Self::Aiff),
             "flac" => Some(Self::Flac(Compression::default())),
             "mp3" => Some(Self::Mp3(Quality::default())),
             "ogg" | "oga" | "vorbis" => Some(Self::OggVorbis(Quality::default())),
@@ -514,7 +533,7 @@ impl std::fmt::Display for Container {
     /// against what a decoder says it read.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Wav => f.write_str(self.name()),
+            Self::Wav | Self::Aiff => f.write_str(self.name()),
             // The level, for the same reason the lossy arms print theirs: a
             // log line that says only "FLAC" cannot be checked against the
             // file, and `flac -a` will tell you the block size it found.
@@ -527,10 +546,10 @@ impl std::fmt::Display for Container {
 
 /// What an encoder has to know before the first sample.
 ///
-/// `frames` is the length of the piece being written, which both writers need
-/// up front: WAV to refuse a file RIFF cannot describe before making it, and
-/// FLAC to declare `total_samples` in a header that is written first and
-/// corrected last.
+/// `frames` is the length of the piece being written, which three of the
+/// writers need up front: WAV and AIFF to refuse a file a 32-bit chunk size
+/// cannot describe before making it, and FLAC to declare `total_samples` in a
+/// header that is written first and corrected last.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spec {
     /// Sample rate, in Hz.
@@ -857,7 +876,7 @@ fn to_wire(spec: &Spec, stored: &[u8], out: &mut Vec<u8>) {
 /// An open output file.
 ///
 /// An enum rather than a boxed trait: `finish` consumes the writer and there
-/// are four containers, neither of which wants `dyn`.
+/// are five containers, none of which wants `dyn`.
 ///
 /// The lossy variants are absent from a build without their cargo feature.
 /// [`Container`] is not - see its own docs for why the refusal is better than
@@ -867,6 +886,8 @@ fn to_wire(spec: &Spec, stored: &[u8], out: &mut Vec<u8>) {
 pub enum Writer {
     /// A RIFF/WAVE file.
     Wav(Wav),
+    /// An IFF/AIFF file.
+    Aiff(Aiff),
     /// A FLAC file.
     ///
     /// Boxed because a [`Flac`] carries the encoder's block buffers and is an
@@ -892,6 +913,7 @@ impl Writer {
     pub fn create(path: &Path, container: Container, spec: Spec) -> Result<Self> {
         match container {
             Container::Wav => Wav::create(path, spec).map(Self::Wav),
+            Container::Aiff => Aiff::create(path, spec).map(Self::Aiff),
             Container::Flac(level) => {
                 Flac::create(path, spec, level).map(|flac| Self::Flac(Box::new(flac)))
             }
@@ -914,18 +936,20 @@ impl Writer {
     /// for free, and a plan that only fails once the first file is open has
     /// moved the argument to after the directories were made.
     ///
-    /// Both writers check again in `create`, which is not duplication. This is
+    /// Every writer checks again in `create`, which is not duplication. This is
     /// a question about a spec; that is a precondition on a file, and a writer
     /// reached any other way still owes it.
     ///
     /// # Errors
     ///
     /// [`Error::Unencodable`] for a format the container cannot carry,
-    /// [`Error::TooLargeForWav`] for a piece too long for RIFF to describe, and
-    /// [`Error::NoEncoder`] for a container this build was not compiled with.
+    /// [`Error::TooLarge`] for a piece too long for a 32-bit chunk size to
+    /// describe, and [`Error::NoEncoder`] for a container this build was not
+    /// compiled with.
     pub fn vet(container: Container, spec: &Spec) -> Result<()> {
         match container {
             Container::Wav => Wav::vet(spec),
+            Container::Aiff => Aiff::vet(spec),
             Container::Flac(_) => Flac::vet(spec),
             Container::Mp3(_) => crate::lossy::vet_mp3(spec),
             Container::OggVorbis(_) => crate::lossy::vet_ogg(spec),
@@ -941,6 +965,7 @@ impl Writer {
     pub fn write(&mut self, stored: &[u8]) -> Result<()> {
         match self {
             Self::Wav(wav) => wav.write(stored),
+            Self::Aiff(aiff) => aiff.write(stored),
             Self::Flac(flac) => flac.write(stored),
             #[cfg(feature = "mp3")]
             Self::Mp3(mp3) => mp3.write(stored),
@@ -957,6 +982,7 @@ impl Writer {
     pub fn finish(self) -> Result<u64> {
         match self {
             Self::Wav(wav) => wav.finish(),
+            Self::Aiff(aiff) => aiff.finish(),
             Self::Flac(flac) => flac.finish(),
             #[cfg(feature = "mp3")]
             Self::Mp3(mp3) => mp3.finish(),
@@ -1006,6 +1032,7 @@ const GUID_FLOAT: [u8; 16] = [
 pub(crate) fn carries(container: Container, spec: &Spec) -> bool {
     match container {
         Container::Wav => Wav::carries(spec),
+        Container::Aiff => Aiff::why(spec).is_none() && Aiff::fits(spec),
         Container::Flac(_) => Flac::why(spec).is_none(),
         Container::Mp3(_) => crate::lossy::mp3_why(spec).is_none(),
         Container::OggVorbis(_) => crate::lossy::ogg_why(spec).is_none(),
@@ -1019,7 +1046,7 @@ pub(crate) fn carries(container: Container, spec: &Spec) -> bool {
 /// version drifted four separate ways in one work package: all three FLAC
 /// refusals said "Export this one as WAV", written before Ogg Vorbis existed
 /// and never updated; the MP3 rate refusal offered FLAC, which stops at 96 kHz
-/// just as MPEG stops at 48; [`Error::TooLargeForWav`] offered FLAC for a
+/// just as MPEG stops at 48; [`Error::TooLarge`] offered FLAC for a
 /// capture FLAC would refuse on bit depth; and the MP3 refusal offered WAV for
 /// a side too long for a 32-bit RIFF size. None of them was caught by a test,
 /// because advice written as a string literal agrees with whatever it said
@@ -1096,7 +1123,8 @@ impl Wav {
         if Self::carries(spec) {
             return Ok(());
         }
-        Err(Error::TooLargeForWav {
+        Err(Error::TooLarge {
+            container: Container::Wav.name(),
             bytes: spec.wire_bytes(),
             ceiling: Self::ceiling(Self::header(spec).len() as u64),
             instead: alternatives(Container::Wav, spec),
@@ -1189,7 +1217,8 @@ impl Wav {
         to_wire(&self.spec, stored, &mut self.scratch);
         let ceiling = Self::ceiling(self.header_bytes);
         if self.data_bytes + self.scratch.len() as u64 > ceiling {
-            return Err(Error::TooLargeForWav {
+            return Err(Error::TooLarge {
+                container: Container::Wav.name(),
                 bytes: self.data_bytes + self.scratch.len() as u64,
                 ceiling,
                 instead: alternatives(Container::Wav, &self.spec),
@@ -1223,6 +1252,217 @@ impl Wav {
         self.file.flush()?;
         Ok(total)
     }
+}
+
+/// An IFF/AIFF writer.
+///
+/// [`Wav`] with the bytes the other way round and the sizes in three places
+/// instead of two, written out rather than shared with it. The two have the
+/// same shape and almost no same lines: the chunks are named differently, laid
+/// out differently and counted differently, and a `trait Chunked` with two
+/// implementations would be an interface written to hide that they are not
+/// actually the same thing.
+#[derive(Debug)]
+pub struct Aiff {
+    file: File,
+    spec: Spec,
+    data_bytes: u64,
+    scratch: Vec<u8>,
+}
+
+/// Bytes before the first sample.
+///
+/// Fixed, unlike WAV's: there is no wider variant of `COMM` to grow into, so
+/// this is a constant rather than a measurement of the header just written.
+/// `FORM`(4) + size(4) + `AIFF`(4) + `COMM`(4) + 18 + size(4) + `SSND`(4) +
+/// size(4) + offset(4) + blockSize(4).
+const AIFF_HEADER_BYTES: u64 = 54;
+
+/// Where `finish` patches the `FORM` size.
+const AIFF_FORM_SIZE_AT: u64 = 4;
+/// Where `finish` patches `numSampleFrames`.
+const AIFF_FRAMES_AT: u64 = 22;
+/// Where `finish` patches the `SSND` size.
+const AIFF_SSND_SIZE_AT: u64 = 42;
+
+impl Aiff {
+    /// The most audio an `FORM` size can describe.
+    const CEILING: u64 = u32::MAX as u64 - (AIFF_HEADER_BYTES - 8);
+
+    /// Why this capture cannot be an AIFF, if it cannot.
+    ///
+    /// Float is the only one. AIFF proper is integer PCM; a 32-bit float
+    /// stream is AIFF-C with a `fl32` compression type, which is a second
+    /// format sharing the extension and read by rather less software than
+    /// people expect. Rather than write one quietly, this asks for the
+    /// narrowing that a person exporting a float capture has to choose for
+    /// FLAC anyway - see [`Flac::why`], which refuses in the same words for the
+    /// same reason.
+    fn why(spec: &Spec) -> Option<String> {
+        // Keys, not sentences. The English lives in `i18n/en-US.toml` with
+        // every other string VCW says, and `t` returns whichever language the
+        // settings asked for - see `vcw_i18n` for why the catalog is global
+        // rather than threaded through here.
+        if spec.is_float() {
+            return Some(vcw_i18n::t("export.aiff.float"));
+        }
+        if spec.channels == 0 {
+            return Some(vcw_i18n::t("export.aiff.channels"));
+        }
+        None
+    }
+
+    /// Whether an `FORM` size can describe a file this long.
+    fn fits(spec: &Spec) -> bool {
+        spec.wire_bytes() <= Self::CEILING
+    }
+
+    /// Everything that has to be true before an AIFF file is created.
+    fn vet(spec: &Spec) -> Result<()> {
+        if let Some(why) = Self::why(spec) {
+            return Err(Error::Unencodable {
+                format: spec.format,
+                container: Container::Aiff.name(),
+                // The advice is generated, never written into `why`: see
+                // [`alternatives`] for the four ways the hand-written version
+                // went stale.
+                why: format!("{why} {}", alternatives(Container::Aiff, spec)).into(),
+            });
+        }
+        if !Self::fits(spec) {
+            return Err(Error::TooLarge {
+                container: Container::Aiff.name(),
+                bytes: spec.wire_bytes(),
+                ceiling: Self::CEILING,
+                instead: alternatives(Container::Aiff, spec),
+            });
+        }
+        Ok(())
+    }
+
+    /// Creates the file and writes a header with placeholder sizes.
+    fn create(path: &Path, spec: Spec) -> Result<Self> {
+        Self::vet(&spec)?;
+        let mut file = File::create(path)?;
+        file.write_all(&Self::header(&spec))?;
+        Ok(Self {
+            file,
+            spec,
+            data_bytes: 0,
+            scratch: Vec::new(),
+        })
+    }
+
+    /// The header, with all three size fields left as zero for `finish`.
+    ///
+    /// Zeroed for [`Wav::header`]'s reason: a header that describes audio a
+    /// short read never delivered is indistinguishable from corruption.
+    fn header(spec: &Spec) -> [u8; AIFF_HEADER_BYTES as usize] {
+        let mut out = Vec::with_capacity(AIFF_HEADER_BYTES as usize);
+        out.extend_from_slice(b"FORM");
+        out.extend_from_slice(&0u32.to_be_bytes()); // patched by `finish`
+        out.extend_from_slice(b"AIFF");
+
+        out.extend_from_slice(b"COMM");
+        out.extend_from_slice(&18u32.to_be_bytes());
+        out.extend_from_slice(&spec.channels.to_be_bytes());
+        out.extend_from_slice(&0u32.to_be_bytes()); // numSampleFrames, patched
+        out.extend_from_slice(&spec.bits().to_be_bytes());
+        out.extend_from_slice(&extended(spec.rate));
+
+        out.extend_from_slice(b"SSND");
+        out.extend_from_slice(&0u32.to_be_bytes()); // patched by `finish`
+        // An offset and a block size, both zero: the samples start where the
+        // chunk's data does and are not aligned to anything. Non-zero values
+        // exist for hardware that wanted its DMA on a boundary.
+        out.extend_from_slice(&0u32.to_be_bytes());
+        out.extend_from_slice(&0u32.to_be_bytes());
+
+        out.try_into().expect("the header is a fixed 54 bytes")
+    }
+
+    /// Appends interleaved frames.
+    fn write(&mut self, stored: &[u8]) -> Result<()> {
+        let frame = self.spec.stored_frame_bytes();
+        if frame == 0 || !stored.len().is_multiple_of(frame) {
+            return Err(Error::Partial {
+                bytes: stored.len(),
+                frame_bytes: frame,
+            });
+        }
+        to_wire(&self.spec, stored, &mut self.scratch);
+        // AIFF is big-endian and the project's blocks are not, whatever the
+        // machine writing them was: `StorageFormat` is defined little-endian so
+        // that a project opens the same on both.
+        for sample in self.scratch.chunks_exact_mut(self.spec.wire_sample_bytes()) {
+            sample.reverse();
+        }
+        if self.data_bytes + self.scratch.len() as u64 > Self::CEILING {
+            return Err(Error::TooLarge {
+                container: Container::Aiff.name(),
+                bytes: self.data_bytes + self.scratch.len() as u64,
+                ceiling: Self::CEILING,
+                instead: alternatives(Container::Aiff, &self.spec),
+            });
+        }
+        self.file.write_all(&self.scratch)?;
+        self.data_bytes += self.scratch.len() as u64;
+        Ok(())
+    }
+
+    /// Pads the sound chunk, corrects all three sizes and closes the file.
+    fn finish(mut self) -> Result<u64> {
+        // IFF chunks are even-length, as RIFF's are. The pad belongs to the
+        // enclosing `FORM` but not to the `SSND` size, which is why the two
+        // numbers below are not computed from each other.
+        let pad = u64::from(!self.data_bytes.is_multiple_of(2));
+        if pad == 1 {
+            self.file.write_all(&[0u8])?;
+        }
+        let total = AIFF_HEADER_BYTES + self.data_bytes + pad;
+        let frame = self.spec.wire_frame_bytes() as u64;
+
+        #[allow(clippy::cast_possible_truncation)] // checked in `write`
+        let form = (total - 8) as u32;
+        #[allow(clippy::cast_possible_truncation)]
+        let ssnd = (self.data_bytes + 8) as u32;
+        // Counted rather than taken from `spec.frames`, which is what was
+        // asked for and not what arrived: a capture with a hole in it comes up
+        // short, and a header that over-declares is the corruption this avoids.
+        #[allow(clippy::cast_possible_truncation)]
+        let frames = self.data_bytes.checked_div(frame).unwrap_or(0) as u32;
+
+        for (at, value) in [
+            (AIFF_FORM_SIZE_AT, form),
+            (AIFF_FRAMES_AT, frames),
+            (AIFF_SSND_SIZE_AT, ssnd),
+        ] {
+            self.file.seek(SeekFrom::Start(at))?;
+            self.file.write_all(&value.to_be_bytes())?;
+        }
+        self.file.flush()?;
+        Ok(total)
+    }
+}
+
+/// A sample rate as the 80-bit IEEE 754 extended float `COMM` declares it.
+///
+/// The one genuinely odd corner of the format, and the reason this is ten
+/// bytes rather than four: AIFF predates the idea that a sample rate is an
+/// integer. Only positive integers ever reach it, so there is no sign, no
+/// subnormal and no NaN to think about - the integer bit at position 63 is
+/// explicit in this format rather than implied, so normalising is one shift.
+fn extended(rate: u32) -> [u8; 10] {
+    let mut out = [0u8; 10];
+    if rate == 0 {
+        return out;
+    }
+    let value = u64::from(rate);
+    let shift = value.leading_zeros();
+    let exponent = 16383 + 63 - u16::try_from(shift).unwrap_or(63);
+    out[..2].copy_from_slice(&exponent.to_be_bytes());
+    out[2..].copy_from_slice(&(value << shift).to_be_bytes());
+    out
 }
 
 /// Bytes of padding written after `STREAMINFO`.
@@ -1328,17 +1568,12 @@ impl Flac {
     /// does not have them: 32-bit and 192 kHz both encode, and reference
     /// libFLAC verifies the result. What is left is the format itself, which
     /// will never carry floating point.
-    fn why(spec: &Spec) -> Option<&'static str> {
+    fn why(spec: &Spec) -> Option<String> {
         if spec.is_float() {
-            return Some(
-                "FLAC is an integer codec, and choosing how to dither 32-bit float \
-                 down to integers is a decision about headroom that belongs to a \
-                 person. Make it - Settings > Export, or `--narrow` - and this \
-                 capture exports as FLAC like any other.",
-            );
+            return Some(vcw_i18n::t("export.flac.float"));
         }
         if spec.channels == 0 || spec.channels > 8 {
-            return Some("FLAC carries between one and eight channels.");
+            return Some(vcw_i18n::t("export.flac.channels"));
         }
         None
     }
@@ -1478,7 +1713,7 @@ mod tests {
                 // A second or so, and then a side long enough to overflow a
                 // 32-bit RIFF size. Both are real: the second is a 90-minute
                 // unsplit side, which is what `--format wav` on a whole capture
-                // asks for, and it is the only way to reach TooLargeForWav -
+                // asks for, and it is the only way to reach TooLarge -
                 // whose advice was wrong in exactly the way FLAC's was.
                 for frames in [48_000, 2_000_000_000] {
                     let spec = spec(format, rate, frames);
@@ -1620,6 +1855,157 @@ mod tests {
     }
 
     #[test]
+    fn the_eighty_bit_rate_is_the_constant_every_other_writer_emits() {
+        // The one field in this format that cannot be eyeballed, so it is
+        // checked against the two byte strings that appear verbatim in every
+        // AIFF toolchain there has ever been rather than against a second
+        // implementation of the same arithmetic.
+        assert_eq!(extended(44_100), [0x40, 0x0E, 0xAC, 0x44, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(extended(48_000), [0x40, 0x0E, 0xBB, 0x80, 0, 0, 0, 0, 0, 0]);
+        // And the ends of the range VCW records, worked the other way: decode
+        // the bytes back and see the rate.
+        for rate in [8_000u32, 96_000, 192_000, 352_800, 1] {
+            let bytes = extended(rate);
+            let exponent = u16::from_be_bytes(bytes[..2].try_into().unwrap());
+            let mantissa = u64::from_be_bytes(bytes[2..].try_into().unwrap());
+            assert!(mantissa & (1 << 63) != 0, "{rate}: not normalised");
+            let shift = 63 - (exponent - 16383);
+            assert_eq!(u64::from(rate), mantissa >> shift, "{rate}");
+        }
+        assert_eq!(extended(0), [0; 10], "no rate, rather than a wrong one");
+    }
+
+    #[test]
+    fn an_aiff_header_is_the_fifty_four_bytes_a_reader_walks() {
+        let header = Aiff::header(&spec(StorageFormat::Int24Packed, 96_000, 0));
+        assert_eq!(header.len(), AIFF_HEADER_BYTES as usize);
+        assert_eq!(&header[0..4], b"FORM");
+        assert_eq!(&header[8..12], b"AIFF");
+        assert_eq!(&header[12..16], b"COMM");
+        assert_eq!(u32::from_be_bytes(header[16..20].try_into().unwrap()), 18);
+        assert_eq!(u16::from_be_bytes(header[20..22].try_into().unwrap()), 2);
+        assert_eq!(u16::from_be_bytes(header[26..28].try_into().unwrap()), 24);
+        assert_eq!(&header[28..38], &extended(96_000));
+        assert_eq!(&header[38..42], b"SSND");
+        // The three fields `finish` owns, all zero until it has counted.
+        assert_eq!(
+            u32::from_be_bytes(header[AIFF_FORM_SIZE_AT as usize..8].try_into().unwrap()),
+            0
+        );
+        assert_eq!(u32::from_be_bytes(header[22..26].try_into().unwrap()), 0);
+        assert_eq!(u32::from_be_bytes(header[42..46].try_into().unwrap()), 0);
+    }
+
+    #[test]
+    fn an_aiff_is_the_same_audio_as_a_wav_with_the_bytes_turned_round() {
+        // Both containers, same source bytes, and the only difference the
+        // format's one real claim: AIFF is big-endian. Written as a comparison
+        // rather than against a literal because the thing being checked is the
+        // byte order of *every* width, including the three-byte one where a
+        // naive swap of a four-byte word would pass a length check and still
+        // be wrong.
+        let dir = tempfile::tempdir().unwrap();
+        for format in [
+            StorageFormat::Int16,
+            StorageFormat::Int24Packed,
+            StorageFormat::Int24Padded,
+            StorageFormat::Int32,
+        ] {
+            let spec = spec(format, 44_100, 500);
+            let stored = ramp(&spec, 500);
+            let aiff = dir.path().join(format!("{format:?}.aiff"));
+            let mut writer = Aiff::create(&aiff, spec).expect("create");
+            writer.write(&stored).expect("write");
+            let total = writer.finish().expect("finish");
+
+            let bytes = std::fs::read(&aiff).expect("read");
+            assert_eq!(bytes.len() as u64, total, "{format:?}: reported size");
+            assert_eq!(
+                u32::from_be_bytes(bytes[4..8].try_into().unwrap()) as u64,
+                total - 8,
+                "{format:?}: FORM size"
+            );
+            assert_eq!(
+                u32::from_be_bytes(bytes[22..26].try_into().unwrap()),
+                500,
+                "{format:?}: numSampleFrames"
+            );
+            assert_eq!(
+                u32::from_be_bytes(bytes[42..46].try_into().unwrap()) as u64,
+                spec.wire_bytes() + 8,
+                "{format:?}: SSND size"
+            );
+
+            let mut expected = Vec::new();
+            to_wire(&spec, &stored, &mut expected);
+            for sample in expected.chunks_exact_mut(spec.wire_sample_bytes()) {
+                sample.reverse();
+            }
+            assert_eq!(
+                &bytes[AIFF_HEADER_BYTES as usize..],
+                &expected[..],
+                "{format:?}: the audio"
+            );
+        }
+    }
+
+    #[test]
+    fn an_odd_sound_chunk_is_padded_but_not_counted() {
+        // Three-byte samples in mono: the one shape that lands on an odd byte,
+        // and the one where the pad belongs to FORM and not to SSND. Getting
+        // the two numbers from each other would put the pad in both.
+        let dir = tempfile::tempdir().unwrap();
+        let mut spec = spec(StorageFormat::Int24Packed, 44_100, 3);
+        spec.channels = 1;
+        let path = dir.path().join("odd.aiff");
+        let mut writer = Aiff::create(&path, spec).expect("create");
+        writer.write(&ramp(&spec, 3)).expect("write");
+        let total = writer.finish().expect("finish");
+
+        let bytes = std::fs::read(&path).expect("read");
+        assert_eq!(bytes.len() % 2, 0, "an IFF file ends on an even byte");
+        assert_eq!(bytes.len() as u64, total);
+        assert_eq!(
+            u32::from_be_bytes(bytes[42..46].try_into().unwrap()),
+            9 + 8,
+            "SSND counts the audio and its own two fields, not the pad"
+        );
+        assert_eq!(
+            u32::from_be_bytes(bytes[4..8].try_into().unwrap()) as u64,
+            total - 8,
+            "FORM counts everything after its own size, pad included"
+        );
+    }
+
+    #[test]
+    fn a_short_read_is_declared_short_rather_than_promised() {
+        // The hole case. `spec.frames` says 500 and 300 arrive, which is what a
+        // capture with a dropout does, and the header has to describe the file
+        // that exists.
+        let dir = tempfile::tempdir().unwrap();
+        let spec = spec(StorageFormat::Int16, 44_100, 500);
+        let path = dir.path().join("short.aiff");
+        let mut writer = Aiff::create(&path, spec).expect("create");
+        writer.write(&ramp(&spec, 300)).expect("write");
+        writer.finish().expect("finish");
+
+        let bytes = std::fs::read(&path).expect("read");
+        assert_eq!(u32::from_be_bytes(bytes[22..26].try_into().unwrap()), 300);
+    }
+
+    #[test]
+    fn aiff_refuses_float_and_says_what_to_do_about_it() {
+        let float = spec(StorageFormat::Float32, 44_100, 100);
+        let err = Aiff::vet(&float).expect_err("float is AIFF-C, not AIFF");
+        let said = err.to_string();
+        assert!(said.contains("integer container"), "{said}");
+        // Generated, not written: the clause has to name a container that will
+        // actually take this capture.
+        assert!(said.contains("WAV"), "{said}");
+        assert!(Aiff::why(&spec(StorageFormat::Int32, 192_000, 0)).is_none());
+    }
+
+    #[test]
     fn sixteen_bit_stereo_keeps_the_header_everything_reads() {
         // The one case nothing is ambiguous about, and the one shape every
         // reader written since 1991 handles.
@@ -1750,7 +2136,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("huge.wav");
         let err = Writer::create(&path, Container::Wav, spec).unwrap_err();
-        assert!(matches!(err, Error::TooLargeForWav { .. }), "got {err:?}");
+        assert!(matches!(err, Error::TooLarge { .. }), "got {err:?}");
         assert!(!path.exists(), "nothing was created");
         // FLAC *and* Ogg Vorbis, and this assertion has now been both ways
         // round. It first required the word "FLAC", which for this very spec -

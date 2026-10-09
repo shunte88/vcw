@@ -106,6 +106,31 @@ machine only:
 | **Level meters** | Bars give the peak, the RMS and the clip count to a tenth of a decibel, which is what setting a level wants. Dials have the movement of the real thing and a needle with mass, which is what watching a side from across the room wants. Both read the same scale. |
 | **Buttons** | `Words` or `Icons`, applied to the tabs along the top and the transport along the bottom at once. Icons give both rows back about a third of their width, and every button keeps its name: the tooltip still reads `Record (r)` and a screen reader still hears the word. |
 
+The fourth, **Language**, is stored in the settings file rather than on this
+machine, because `vcw` on the command line prints the same sentences the window
+does and because a person who speaks Portuguese still speaks it on their other
+computer.
+
+### Translating VCW
+
+VCW ships in US English and is translated by the people who use it. The whole
+catalog is one file:
+
+1. Copy [`i18n/en-US.toml`](../i18n/en-US.toml) out of the repository to
+   `<your IETF language tag>.toml` - `de-DE`, `pt-BR`, `ja-JP`.
+2. Replace each `text` with your language. Leave the keys alone.
+3. Give each entry a `source` field holding the eight hex digits that
+   `vcw doctor --i18n` prints for its key. That records which English you
+   translated, so VCW can tell you later which entries went stale because the
+   English changed underneath them.
+4. Put the file in an `i18n` directory beside your settings file - see
+   [Where things are](#where-things-are) - and reopen Settings. Your language
+   is in the menu.
+
+Anything you have not translated stays in English rather than going blank, so a
+half-finished catalog is usable from the first entry. When you are happy with
+it, send it in as a pull request and it ships with the next release.
+
 ## Before the first capture
 
 Check that VCW can see the machine:
@@ -416,16 +441,17 @@ side B's is `B1 - ...`. Five things worth knowing:
   integer format on offer that meant the ordinary rip had no FLAC path at all.
   It does now.
 
-### The four formats
+### The five formats
 
 | `--format` | What it is | Takes |
 | --- | --- | --- |
 | `flac` | Lossless, compressed. The archival choice. | Up to 32-bit integer, any rate VCW records |
 | `wav` | Lossless, uncompressed. Takes everything, including float. | Anything, up to 4 GiB a file |
+| `aiff` | Lossless, uncompressed, big-endian. What the Apple side of a mastering chain asks for. | Integer audio at any rate VCW records, up to 4 GiB a file |
 | `mp3` | Lossy, variable bitrate. The one every car stereo reads. | 1 or 2 channels at up to 48 kHz |
 | `ogg` | Lossy Vorbis. Smaller than MP3 at the same quality. | Anything VCW records |
 
-`--quality` applies to the two lossy formats and is ignored by the two lossless
+`--quality` applies to the two lossy formats and is ignored by the three lossless
 ones, so you can leave it set while you change your mind about the format:
 
 | `--quality` | MP3 | Ogg Vorbis | Roughly |
@@ -680,3 +706,12 @@ that claimed to cover them would be describing the wrong thing.
 | A worked example of that API | [`crates/project/examples/read_a_project.rs`](../crates/project/examples/read_a_project.rs) |
 | What is built and what is not | [`docs/STATUS.md`](STATUS.md) |
 | The requirements this all answers to | [`REQUIREMENTS.md`](../REQUIREMENTS.md) |
+| The message catalog, to translate | [`i18n/en-US.toml`](../i18n/en-US.toml) |
+
+Your settings file, and the `i18n` directory beside it:
+
+| Platform | Where |
+| --- | --- |
+| Linux | `~/.config/dev.vcw.workstation/` |
+| macOS | `~/Library/Application Support/dev.vcw.workstation/` |
+| Windows | `%APPDATA%\dev.vcw.workstation\` |

@@ -176,6 +176,24 @@ fn main() {
                 app.state::<Shell>().bus.subscribe(),
                 "shell",
             );
+
+            // The language, before the first command can produce a sentence.
+            // Not fatal either way: a settings file that will not parse, or a
+            // catalog that will not read, leaves the process speaking English
+            // - which is the state it starts in - and says so in the log
+            // rather than refusing to open a window over a translation.
+            let handle = app.handle().clone();
+            match config::load(&handle).and_then(|settings| config::speak(&settings)) {
+                // The directory as well as the language: where a submitted
+                // catalog goes is the first question a translator asks, and
+                // the answer differs on three platforms.
+                Ok(()) => tracing::info!(
+                    locale = vcw_i18n::locale(),
+                    catalogs = ?vcw_i18n::user_dir(),
+                    "the language is set"
+                ),
+                Err(why) => tracing::warn!(%why, "staying in en-US"),
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -194,6 +212,7 @@ fn main() {
             library::boundaries,
             config::settings,
             config::save_settings,
+            config::languages,
             config::credentials,
             config::projects,
             config::new_project,

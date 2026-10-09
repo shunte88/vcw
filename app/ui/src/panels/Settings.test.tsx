@@ -66,6 +66,7 @@ afterEach(() => {
 
 vi.mock("../api", () => ({
   saveSettings: vi.fn(async () => undefined),
+  languages: vi.fn(async () => ["en-US", "pt-BR"]),
   support: async (page: string) => {
     opened.push(page);
   },
@@ -310,5 +311,41 @@ describe("a settings panel with no Save button", () => {
     );
     await new Promise((done) => setTimeout(done, 900));
     expect(save).not.toHaveBeenCalled();
+  });
+});
+
+describe("the language menu", () => {
+  // The menu is built from what the shell found on disk, so a translation
+  // appears by being submitted rather than by being added to a list here.
+  // What this guards is the wiring: a select whose options come from
+  // somewhere else, and a value that goes into `Settings` and not into local
+  // storage - the CLI reads that file and has no local storage to read.
+
+  it("offers what the shell found, named in its own language", async () => {
+    const panel = await shown([token(true)], "Appearance");
+    const select = panel.querySelector<HTMLSelectElement>("select");
+    const options = [...(select?.options ?? [])];
+    expect(options.map((option) => option.value)).toEqual(["en-US", "pt-BR"]);
+    // Endonyms from `Intl.DisplayNames`, not a table of our own.
+    expect(options[1]?.textContent?.toLowerCase()).toContain("portugu");
+    // A settings file with no language in it is US English.
+    expect(select?.value).toBe("en-US");
+  });
+
+  it("writes the choice into the settings file", async () => {
+    const save = vi.mocked(api.saveSettings);
+    save.mockClear();
+    const panel = await shown([token(true)], "Appearance");
+    const select = panel.querySelector<HTMLSelectElement>("select");
+    if (select === null) throw new Error("no language select");
+    await act(async () => {
+      select.value = "pt-BR";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 900));
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]?.[0].language).toBe("pt-BR");
   });
 });

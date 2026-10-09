@@ -6131,11 +6131,11 @@ build alike, so the duplication bought nothing and is deleted. `tools/tidy-glyph
 strips the Inkscape editor state - window size, zoom, two dozen inapplicable style
 properties - that was shipping inside those data URIs, and touches no geometry.
 
-**One licensing gap is now written down rather than unnoticed.** Twelve of the icons are
-borrowed art from SVG Repo whose license was never recorded, and they shipped that way in
-0.1.3-alpha. `THIRD-PARTY-NOTICES.md` now names all twelve, names the six VCW drew, and
-records the decision: they are placeholders and are being redrawn, so the obligation is
-being removed rather than traced. It is the one open item in that file.
+**A licensing gap was written down here, and there was never one.** Twelve of the icons
+were recorded as borrowed art with no license, on the strength of a comment the drawing
+editor writes into every file it saves. The author drew all of them. The entry was
+retracted on 2026-10-09 - see that day's section - and `THIRD-PARTY-NOTICES.md` carries
+no open item.
 
 **`main` went red on macOS after the release commit, on a test nothing in 0.2 touches.**
 `a_region_the_tap_lost_audio_from_is_thrown_away_rather_than_published` again, and the
@@ -6180,7 +6180,7 @@ export**, where AIFF is ordinary work - big-endian PCM, an 80-bit IEEE 754 exten
 in the `COMM` chunk, and a check that lofty will tag it - and **AAC cannot be started
 until it is settled how it gets encoded at all**, because the usual encoder is Fraunhofer
 FDK, whose license is not OSI-approved and is not MIT-compatible, and VCW ships binaries
-on four platforms; and **the twelve borrowed glyphs**, which are being redrawn. The
+on four platforms; and **the twelve glyphs still to be redrawn**. The
 darker variant of the expanded log row is deferred with them. The README was read and
 passed on 2026-10-06, and the question
 of whether `"finalised"` earns a schema v5 migration to `"finalized"` was closed the
@@ -6539,3 +6539,138 @@ the spike harness.
   anything.
 - **Stay current on CPAL.** Two blocking defects and the device-id API all landed within
   two minor releases; pinning 0.16 had already cost us a fork.
+
+## 2026-10-09, AIFF, the glyphs, and the language a refusal comes out in
+
+Three things off the 0.3 list, none of them committed yet.
+
+### AIFF export, end to end
+
+`Container::Aiff` is the fifth container, written by hand in
+`crates/export/src/encoder.rs` rather than taken from a crate: the WAV writer next to it
+is hand-rolled for the same reason, and no new dependency means nothing new for
+`deny.toml` or the notices. FORM/AIFF with an 18-byte `COMM` and an `SSND`, a fixed
+54-byte header, big-endian samples, and the sample rate as an 80-bit IEEE 754 extended
+float. The three sizes are patched in at `finish`, the odd-length pad belongs to FORM's
+size and not to `SSND`'s, and `Aiff::CEILING` is `u32::MAX` minus the header, which is
+the same 4 GiB ceiling WAV has for the same reason - so `TooLargeForWav` became
+`TooLarge` and names its container.
+
+Float is refused rather than silently narrowed, exactly as FLAC is, and routed into the
+same `Width` machinery. `alternatives()` caught the first attempt: the refusal named no
+container that would actually take the capture, because `Aiff::vet` built its error
+without the generated advice clause.
+
+Three readers agree. `ffprobe` reports `pcm_s16be`, `pcm_s24be` and `pcm_s32be` with the
+right rate, channels and `duration_ts`; `ffmpeg` transcodes an AIFF back to a 24-bit WAV
+and the samples compare byte for byte; and a real CLI export of `two-tracks-tagged.vcw`
+wrote two tagged `.aiff` files with an embedded PNG cover that `ffprobe` reads back
+whole. Both ends were proven: removing the byte-swap loop fails the ffmpeg round trip
+and the tagging test, and notably does **not** fail the ffprobe test, which is why the
+round trip exists.
+
+`Container::ALL` is the single source of truth, so `tag_cases()` picked AIFF up on its
+own and the frontend's `formats.test.ts` holds the two panels' option lists to the same
+list.
+
+### The glyphs
+
+Eight supplied glyphs tidied through `tools/tidy-glyph.py`, given the VCW MIT header,
+and three new ones drawn for the waveform zoom row. **All twenty-one glyphs are the
+author's own work and MIT with the rest of the source**, which took three corrections to
+get written down - the last paragraph of this section is the one worth reading.
+
+**`library.svg` took two passes, and the reason is worth keeping.** The first drawing
+was three overlapping records built as a white filled backing plate with blue grooves
+over it, and it rendered as a solid blob: **a `mask-image` reads coverage and nothing
+else**, so a white shape over a blue one has the same alpha as either and every
+colour-based distinction disappears. Redrawing the circles as strokes restored the
+grooves and produced an illegible ball of wool at 16 px, so the old books-on-a-shelf
+glyph was kept and the problem reported. The replacement supplied the same day is the
+same three records drawn as a single-colour fill with the grooves cut out of it, which
+is what a mask can carry: verified at 16 px and 24 px in the real tab row under Xvfb,
+busier than its neighbours but legible and distinct from `capture`.
+
+**The attribution was wrong three times in two days, each time by reading it out of the
+files.** First the `Generator: SVG Repo Mixer Tools` comment was taken as provenance: it
+is the editor's signature, written into everything saved out of it, and that editor is
+where these are drawn. Then, with that corrected, `capture` and `export` were counted as
+borrowed because their headers said `Adapted from SVG Repo` - a clause that had ridden
+along from a save-as over a file carrying it. Then ten more stayed on the borrowed list
+for the same reason, until the author said plainly that every glyph in the set is
+theirs.
+
+So: **nothing inside a glyph file records who drew it.** Not the generator comment, not
+the header - a header that disagrees with the author is a stale header, not a provenance
+record. `tools/tidy-glyph.py` has lost its `--adapted` flag and the credit line it
+wrote, `THIRD-PARTY-NOTICES.md` says all twenty-one are VCW's own with no open item, and
+the only third-party art left in `assets/` is `bmc-red-button.svg`, which is Buy Me a
+Coffee's own button and appears in `docs/README.md` rather than in the binary.
+
+A drift test between the headers and the notices would have passed on every one of the
+three bugs, because the two agreed with each other and were wrong together. That is why
+there is not one: the error was in the record, not in drift between two copies of it.
+
+### i18n, the path rather than the extraction
+
+`vcw-i18n` is a new crate holding a TOML catalog, and `i18n/en-US.toml` is the source
+language, compiled in with `include_str!` because a VCW that cannot find its own English
+cannot print the error saying so.
+
+**The hash is the point.** Every entry in a translation records `source = <FNV-1a of the
+English it was made from>`, so `Catalog::stale_against` can report an entry that is
+complete, well-formed and confidently out of date - the failure a flat `key = "string"`
+map cannot see. FNV rather than `DefaultHasher`, which is documented as unstable across
+releases. `vcw doctor --i18n` prints the directory to put a catalog in and the hash of
+every key.
+
+The slice built was the one the plan asked for: not the file format, but one string
+travelling from a Rust refusal to a window in another language.
+
+- `Aiff::why` and `Flac::why` return `vcw_i18n::t("export.aiff.float")` and friends -
+  keys, not sentences, resolved inside `Display`.
+- `crates/export/tests/in_another_language.rs` proves a `thiserror` `Display` comes out
+  as `NOPE ZORBLAX QUUX` in locale `zz-ZZ`, with English still underneath for the
+  untranslated FLAC key and for the generated `alternatives` clause.
+- `Settings.language` is a top-level field, not a machine-local one, because the CLI
+  prints the same sentences and has no local storage to read.
+- *Settings > Appearance* has a Language select, defaulting to US English, built from
+  whatever catalogs are in `i18n/` beside the settings file. Names come from
+  `Intl.DisplayNames`, so a submitted `pt-BR.toml` appears as *Português (Brasil)*
+  without anybody adding a line to a TypeScript table.
+- `vcw_i18n::user_dir()` is the single rule for where that directory is, and both the
+  shell and the CLI call it. The shell derived it from Tauri's `app_config_dir` first;
+  two rules for one path is how a person's catalog ends up somewhere their settings file
+  is not. The shell logs the directory at startup and `doctor --i18n` prints it.
+- `vcw --lang pt-BR`, and with no flag the CLI reads `language` out of the settings file
+  the window writes - the one thing it takes from that file, because a command that
+  behaves differently depending on a GUI's saved state is a command nobody can script,
+  and a language changes no behavior at all.
+
+Verified in the real window under Xvfb: the menu reads *American English* and *Português
+(Brasil)* with a catalog dropped into the config directory and no code change. Verified
+on the real CLI: `vcw export --format aiff --narrow refuse` on a Float32 project prints
+its refusal in Portuguese, with the alternatives clause still in English because nobody
+has translated it - which is the documented partial-translation behavior rather than a
+bug.
+
+`every_language_this_repository_ships_is_current` walks `i18n/*.toml` and fails on a
+short, stale or orphaned entry. It runs zero times today, and that is the point: the
+check has to be in before the first translation arrives, or the first one merges
+unchecked and the second is measured against it. Confirmed to fail on purpose with a
+stale `pt-BR.toml` dropped in.
+
+**What is left of i18n is the extraction, which is the bulk.** Four keys are in the
+catalog. The window's own English - 23 `.tsx` files - and the remaining ~272 `format!`
+sites in the crates are untouched, and the architectural question behind them is open:
+catalog lookups inside `Display`, as this slice does, or errors carrying a key and
+arguments resolved at the presentation layer. The first worked without touching
+`thiserror` and is what the four keys use.
+
+### Where this leaves 0.3
+
+AAC is still the licensing question it was, and is still unstarted. `oxideav-aac` is
+MIT, pure Rust and an AAC-LC encoder, which would dodge FDK entirely - first published
+2026-04-17, so it needs burn-in on media2026 before it earns a place beside the others.
+The glyph set is finished and the attribution is settled; the darker expanded-log
+variant is unchanged.

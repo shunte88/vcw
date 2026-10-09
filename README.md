@@ -23,9 +23,10 @@ VCW separates the tracks. It cannot settle the argument about which pressing sou
 - **Preserves the original audio.** Adjust track boundaries and metadata without rewriting the captured samples.
 - **Helps identify the release.** Look up catalog details through Discogs and MusicBrainz, with AcoustID audio identification when needed. Review and correct the result before exporting.
 - **Suggests track boundaries.** Check detection results on the waveform, listen around transitions, and adjust or lock boundaries yourself.
-- **Exports a tagged collection.** Write supported WAV, FLAC, MP3, or Ogg Vorbis files, with artist, album, track information, genres, artwork, and custom naming. Preview the export paths before writing.
+- **Exports a tagged collection.** Write supported WAV, AIFF, FLAC, MP3, or Ogg Vorbis files, with artist, album, track information, genres, artwork, and custom naming. Preview the export paths before writing.
 - **Recovers interrupted recordings.** Audio is committed throughout capture; recovery reports what was saved and can finalize the recoverable recording.
 - **Imports existing work.** Bring supported Audacity `.aup3` and `.aup4` projects into the same review and export workflow.
+- **Speaks your language, if somebody wrote it.** US English in the box, and one TOML file per language for everything else. Choose it in Settings > Appearance; the command line reads the same choice. See [Translating VCW](docs/USER-GUIDE.md#translating-vcw).
 
 ## Bit-perfect input and output
 
@@ -63,11 +64,12 @@ Choose your intended export format **before recording**:
 | Export | Preserves samples? | Current limits |
 | --- | --- | --- |
 | WAV | Yes, without processing | Supports VCW's stored sample formats, including Float32; approximately 4 GiB per file under RIFF. |
+| AIFF | Yes, without processing | Integer audio, big-endian, at any rate VCW records; approximately 4 GiB per file under IFF. A Float32 capture needs a width chosen for it first, in Settings > Export. |
 | FLAC | Yes, without processing | Integer audio up to 32-bit at any rate VCW records. A Float32 capture needs a width chosen for it first, in Settings > Export. |
 | MP3 | No: lossy | Supported rates up to 48 kHz; mono or stereo. |
 | Ogg Vorbis | No: lossy | Accepts VCW's supported capture rates, including 192 kHz, and Float32 audio. |
 
-VCW refuses unsupported combinations instead of silently reducing bit depth or resampling. FLAC is an integer codec, so a Float32 capture has to be brought down to integers first: VCW does that at 24-bit with a triangular dither and no attenuation, which is where an `f32` significand survives intact. Settings > Export changes the width, the dither and the headroom, and can be set to refuse instead - in which case a Float32 capture asked for as FLAC is refused by name and leaves as lossless WAV.
+VCW refuses unsupported combinations instead of silently reducing bit depth or resampling. FLAC and AIFF are both integer-only, so a Float32 capture has to be brought down to integers first: VCW does that at 24-bit with a triangular dither and no attenuation, which is where an `f32` significand survives intact. Settings > Export changes the width, the dither and the headroom, and can be set to refuse instead - in which case a Float32 capture asked for as FLAC is refused by name and leaves as lossless WAV.
 
 ## Get started
 

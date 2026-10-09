@@ -4479,6 +4479,7 @@ dependencies = [
  "vcw-contract",
  "vcw-core",
  "vcw-export",
+ "vcw-i18n",
  "vcw-metadata",
  "vcw-project",
  "vcw-signal",
@@ -4539,6 +4540,7 @@ dependencies = [
  "mp3lame-encoder",
  "thiserror 2.0.21",
  "tracing",
+ "vcw-i18n",
  "vcw-project",
  "vcw-types",
  "vorbis_rs",
@@ -4551,6 +4553,15 @@ dependencies = [
  "chromaprint-next",
  "thiserror 2.0.21",
  "vcw-types",
+]
+
+[[package]]
+name = "vcw-i18n"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
+ "toml 1.1.6+spec-1.1.0",
 ]
 
 [[package]]

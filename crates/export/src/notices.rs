@@ -80,7 +80,7 @@ pub struct Notice {
 impl Container {
     /// The notice linking this container's encoder incurs, where there is one.
     ///
-    /// `None` for WAV: RIFF is written by this crate and nothing else.
+    /// `None` for WAV and AIFF: both are written by this crate and nothing else.
     ///
     /// Note what this does *not* depend on - whether the feature is enabled.
     /// The obligation a container would bring is a fact about the container;
@@ -90,7 +90,7 @@ impl Container {
     #[must_use]
     pub const fn notice(self) -> Option<Notice> {
         match self {
-            Self::Wav => None,
+            Self::Wav | Self::Aiff => None,
             Self::Flac(_) => Some(Notice {
                 component: "flac-codec",
                 license: "MIT OR Apache-2.0",

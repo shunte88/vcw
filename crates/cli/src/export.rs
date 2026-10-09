@@ -283,7 +283,7 @@ fn plan_json(plan: &Plan, report: Option<&Report>) -> serde_json::Value {
         // answer "this container has no such setting" is `null`, which is not
         // the same as "high" and not the same as a typo.
         "quality": plan.container.quality().map(|quality| quality.name()),
-        // `null` on the three containers with no level, for the reason above.
+        // `null` on the four containers with no level, for the reason above.
         "compression": plan.container.compression().map(|level| level.level()),
         "lossless": !plan.container.is_lossy(),
         "fold_to_mono": plan.fold_to_mono,

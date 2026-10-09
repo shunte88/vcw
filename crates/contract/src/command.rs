@@ -572,7 +572,7 @@ impl Export {
         };
 
         // Same shape as the quality above, and applied unconditionally for the
-        // same reason: `with_compression` is a no-op on the three containers
+        // same reason: `with_compression` is a no-op on the four containers
         // that have no level, so a panel can send one with every request.
         let container = match self.compression.as_deref() {
             None => container,

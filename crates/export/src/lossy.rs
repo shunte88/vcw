@@ -51,7 +51,7 @@
 //! LGPL-2.1 and the crate says LGPL-3.0 - and wrong about Ogg Vorbis, which is
 //! BSD-3-Clause like every other piece of Xiph's work.
 //!
-//! [`crate::encoder::Container`] carries all four variants whatever the
+//! [`crate::encoder::Container`] carries all five variants whatever the
 //! features say, so a build without `mp3` still parses `--format mp3` and
 //! refuses it with [`crate::Error::NoEncoder`]. The refusals in
 //! `mp3_limits` are checked *before* that one, because MPEG's rate table is
@@ -451,7 +451,7 @@ mod xiph {
         /// which costs a rewrite of the whole file. `vorbis_rs` can take
         /// comments at build time, and using that would mean a second tag
         /// implementation living next to `tagging::mapped` with its own idea of
-        /// which fields exist - one tagger for all four containers is worth
+        /// which fields exist - one tagger for all five containers is worth
         /// more than one file rewrite per track.
         pub(super) fn create(path: &Path, spec: Spec, quality: Quality) -> Result<Self> {
             super::ogg_limits(&spec)?;

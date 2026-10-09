@@ -1,6 +1,6 @@
 [package]
 name = "vcw-export"
-description = "Splitting committed blocks into tagged WAV, FLAC, MP3 and Ogg Vorbis deliverables"
+description = "Splitting committed blocks into tagged WAV, AIFF, FLAC, MP3 and Ogg Vorbis deliverables"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+vcw-i18n = { workspace = true }
 vcw-types = { workspace = true }
 vcw-project = { workspace = true }
 flac-codec = { workspace = true }

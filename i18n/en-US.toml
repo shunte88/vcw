@@ -1,0 +1,43 @@
+#  en-US.toml
+#
+#  VCW - The Vinyl Capture Workstation
+#  (c) 2026 Stue Hunter
+#
+#  The source language. Every other catalog in this directory is a copy of this
+#  one with the `text` fields replaced.
+#
+#  MIT License - see the header in any Rust source file for the full text.
+#
+#  To translate VCW:
+#
+#    1. Copy this file to `<your IETF language tag>.toml` - `de-DE`, `pt-BR`.
+#    2. Replace each `text` with your language. Leave the keys alone.
+#    3. Give each entry a `source` field holding the eight hex digits that
+#       `vcw doctor --i18n` prints for its key. That records which English you
+#       translated, and it is what lets VCW tell you later which entries went
+#       stale because the English changed underneath them.
+#
+#  Entries here need no `source`: the source language cannot be stale against
+#  itself, so VCW computes it rather than reading it.
+#
+#  US spelling throughout - "license", "catalog", "color".
+
+["export.aiff.float"]
+text = """
+AIFF is an integer container, and choosing how to dither 32-bit float down to \
+integers is a decision about headroom that belongs to a person. Make it - \
+Settings > Export, or `--narrow` - and this capture exports as AIFF like any \
+other."""
+
+["export.aiff.channels"]
+text = "AIFF carries at least one channel."
+
+["export.flac.float"]
+text = """
+FLAC is an integer codec, and choosing how to dither 32-bit float down to \
+integers is a decision about headroom that belongs to a person. Make it - \
+Settings > Export, or `--narrow` - and this capture exports as FLAC like any \
+other."""
+
+["export.flac.channels"]
+text = "FLAC carries between one and eight channels."

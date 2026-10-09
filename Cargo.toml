@@ -46,6 +46,7 @@ vcw-core = { path = "crates/core", version = "0.2.0" }
 vcw-export = { path = "crates/export", version = "0.2.0" }
 vcw-fingerprint = { path = "crates/fingerprint", version = "0.2.0" }
 vcw-identify = { path = "crates/identify", version = "0.2.0" }
+vcw-i18n = { path = "crates/i18n", version = "0.2.0" }
 vcw-import = { path = "crates/import", version = "0.2.0" }
 vcw-metadata = { path = "crates/metadata", version = "0.2.0" }
 vcw-project = { path = "crates/project", version = "0.2.0" }
@@ -111,6 +112,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
 thiserror = "2"
+# The catalog format, and the one dependency i18n needs. Already in this tree as
+# `toml_edit` and friends; the top-level reader is what was missing. Hand-rolling
+# one was the alternative, and a translation file is submitted by a stranger -
+# which makes its parser a trust boundary and not a place to save a dependency.
+toml = "1"
 # §42's structured logging. The libraries take the facade only: an event costs a
 # relaxed load and a branch when nothing has installed a subscriber, which is what
 # makes it acceptable to leave events in code the capture path calls into. The

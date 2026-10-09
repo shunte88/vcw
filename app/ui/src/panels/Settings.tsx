@@ -64,6 +64,31 @@ const FORMATS: readonly { value: string; label: string }[] = [
 ];
 
 /**
+ * The language VCW is written in, and the one every menu has at least.
+ *
+ * Spelled here as well as in `vcw-i18n` because the select needs a value
+ * before the shell has answered, and a `null` language means this one.
+ */
+const SOURCE_LOCALE = "en-US";
+
+/**
+ * A language tag as the people who speak it write it.
+ *
+ * `Intl.DisplayNames` and no table of our own: the browser already ships
+ * every endonym, and a list in this file would mean a translator submitting
+ * `pt-BR.toml` also has to get a line into a TypeScript constant before their
+ * own language has a name. Falls back to the tag, which is still a thing a
+ * person can recognize.
+ */
+function nameOf(tag: string): string {
+  try {
+    return new Intl.DisplayNames([tag], { type: "language" }).of(tag) ?? tag;
+  } catch {
+    return tag;
+  }
+}
+
+/**
  * The groups, in the order they are listed down the side.
  *
  * A single scrolling column of six fieldsets was the panel until a 4K window
@@ -116,8 +141,16 @@ export function Settings({
   const [scale, setScale] = useState(scaleOf);
   const [meters, setMeters] = useState(meterStyleOf);
   const [buttons, setButtons] = useState(buttonStyleOf);
+  // Asked for once, when the panel opens. The list is a directory listing in
+  // the shell and the directory does not change while a person reads a menu.
+  const [languages, setLanguages] = useState<readonly string[]>([
+    SOURCE_LOCALE,
+  ]);
 
   useEffect(() => setDraft(settings), [settings]);
+  useEffect(() => {
+    void api.languages().then(setLanguages);
+  }, []);
 
   // The draft saves itself, which is why there is no Save button. Three things
   // this has to get right.
@@ -227,6 +260,34 @@ export function Settings({
         {section === "Appearance" && (
           <fieldset>
             <legend>Appearance</legend>
+            <label>
+              Language
+              {/* In `Settings` and not in local storage, unlike the three
+                  below: those are facts about the monitor in front of this
+                  window, and this one is a fact about the person. The CLI
+                  prints the same sentences and reads the same file. */}
+              <select
+                value={draft.language ?? SOURCE_LOCALE}
+                onChange={(event) =>
+                  setDraft({ ...draft, language: event.target.value })
+                }
+              >
+                {languages.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {nameOf(tag)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="hint">
+              VCW ships in US English and is translated by the people who use
+              it. To add a language, copy <code>i18n/en-US.toml</code> out of
+              the repository, replace each <code>text</code> with yours, and
+              put it beside your settings file as{" "}
+              <code>i18n/&lt;language tag&gt;.toml</code> - it appears in this
+              menu as soon as you reopen the panel. Anything you have not
+              translated stays in English rather than going blank.
+            </p>
             <label>
               Interface scale
               {/* Not part of `Settings`: this is a fact about the monitor in
@@ -632,6 +693,7 @@ export function Settings({
             >
               <option value="flac">FLAC</option>
               <option value="wav">WAV</option>
+              <option value="aiff">AIFF</option>
               <option value="mp3">MP3</option>
               <option value="ogg">Ogg Vorbis</option>
             </select>
@@ -644,7 +706,7 @@ export function Settings({
             to read "Lossy quality" whatever the format was, so a person picking
             FLAC for an archival copy was told their archival copy was lossy.
 
-            WAV has neither and gets no field. Both values stay in the draft
+            WAV and AIFF have neither and get no field. Both values stay in the draft
             whichever is on screen - the backend ignores the one that does not
             apply - so switching the default format and back does not lose a
             choice, which was the thing the old always-visible field was for.
@@ -772,7 +834,7 @@ export function Settings({
           <p className="hint near">
             Sides A and B are disc 1, C and D are disc 2, so a sequence
             restarts at the next record rather than running to the end of a box
-            set - which is also what a track number tag means. <em>Label</em>
+            set - which is also what a track number tag means. <em>Label</em>{" "}
             leaves <code>{"{side}"}</code> as a letter; either number form
             makes it a number too, so <code>{"{side}-{tracknum}"}</code> reads{" "}
             <code>01-01</code> rather than <code>A-01</code>.

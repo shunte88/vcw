@@ -265,12 +265,13 @@ fn freeform(tags: &Tags) -> Vec<(String, String)> {
 /// cannot be written back.
 pub fn write(path: &Path, container: Container, tags: &Tags) -> Result<()> {
     match container {
-        // Two backends for four containers, because what differs is the tag
-        // format and not the number of codecs: ID3v2 is what a RIFF reader and
-        // an MP3 reader both look for, and Vorbis comments are what FLAC and
-        // Ogg both carry natively. lofty puts each in the right place for the
-        // file it is handed.
-        Container::Wav | Container::Mp3(_) => write_id3(path, tags),
+        // Two backends for five containers, because what differs is the tag
+        // format and not the number of codecs: ID3v2 is what a RIFF reader, an
+        // AIFF reader and an MP3 reader all look for, and Vorbis comments are
+        // what FLAC and Ogg both carry natively. lofty puts each in the right
+        // place for the file it is handed - an `ID3 ` chunk in RIFF, an `ID3 `
+        // chunk in IFF, a prepended tag in MP3.
+        Container::Wav | Container::Aiff | Container::Mp3(_) => write_id3(path, tags),
         Container::Flac(_) | Container::OggVorbis(_) => write_vorbis(path, tags),
     }
 }
@@ -308,7 +309,7 @@ fn write_vorbis(path: &Path, tags: &Tags) -> Result<()> {
         .map_err(tagging(path))
 }
 
-/// WAV: a full ID3v2 tag in an `ID3 ` chunk, which is what a modern reader
+/// WAV and AIFF: a full ID3v2 tag in an `ID3 ` chunk, which is what a modern reader
 /// looks for. Appended after `data`, so the audio bytes are untouched.
 fn write_id3(path: &Path, tags: &Tags) -> Result<()> {
     use lofty::id3::v2::Id3v2Tag;

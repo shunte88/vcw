@@ -90,17 +90,20 @@ pub enum Error {
         why: std::borrow::Cow<'static, str>,
     },
 
-    /// A WAV file would exceed what a RIFF header can describe.
+    /// A file would exceed what its own chunk header can describe.
     ///
-    /// RIFF sizes are 32-bit, so 4 GiB is the ceiling for the whole file. A
+    /// Both of VCW's chunked containers count in 32 bits - RIFF in WAV, IFF in
+    /// AIFF - so 4 GiB is the ceiling for the whole file either way. A
     /// 30-minute side at 192 kHz in 32-bit stereo is 1.4 GiB, so this is reachable
     /// by a long unsplit side rather than by a track. Refused rather than
     /// truncated.
     #[error(
-        "{bytes} bytes will not fit in a WAV file: RIFF sizes are 32-bit, so the ceiling is \
-         {ceiling} bytes. {instead}"
+        "{bytes} bytes will not fit in a {container} file: its chunk sizes are 32-bit, so the \
+         ceiling is {ceiling} bytes. {instead}"
     )]
-    TooLargeForWav {
+    TooLarge {
+        /// The container that cannot describe it, as a person spells it.
+        container: &'static str,
         /// How many bytes of audio were to be written.
         bytes: u64,
         /// The largest a data chunk can be.

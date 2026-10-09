@@ -101,7 +101,11 @@ pub(crate) fn settings(app: AppHandle) -> Result<Settings, Error> {
 /// [`Error::Invalid`] if the file cannot be written, naming the path.
 #[tauri::command]
 pub(crate) fn save_settings(app: AppHandle, settings: Settings) -> Result<(), Error> {
-    save(&app, &settings)
+    save(&app, &settings)?;
+    // After the write, not before: a language that will not load is worth
+    // reporting, but it is not a reason to refuse to save the rest of the
+    // panel a person just filled in.
+    speak(&settings)
 }
 
 /// Whether a credential is configured, and nothing about what it is (§39).
@@ -277,6 +281,62 @@ pub(crate) fn open_path(shell: State<'_, Shell>) -> Option<String> {
         .expect("the project mutex")
         .as_ref()
         .map(|path| path.display().to_string())
+}
+
+/// Every language this copy of VCW can be set to (§39).
+///
+/// The source language plus whatever catalogs are in `i18n/` beside the
+/// settings file, which is where a submission goes to be tried out before it
+/// is sent in. Read on every call rather than at startup for the reason the
+/// settings are: a person who has just dropped a file in that directory should
+/// find it in the menu, not after a restart.
+///
+/// # Errors
+///
+/// Never. A missing directory is a machine with no translations on it.
+#[tauri::command]
+pub(crate) fn languages() -> Vec<String> {
+    vcw_i18n::user_dir()
+        .map(|dir| vcw_i18n::installed(&dir))
+        .unwrap_or_else(|| vec![vcw_i18n::SOURCE_LOCALE.to_owned()])
+}
+
+/// Switches the process to the language the settings name.
+///
+/// Called at startup and again whenever settings are saved, which is what
+/// makes the menu take effect without a restart. A catalog that will not read
+/// is reported rather than swallowed - a person who chose a language and got
+/// English back is owed the parser's complaint - but the language still falls
+/// back, so a broken submission cannot stop the application.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] naming `language` when the chosen catalog will not read.
+pub(crate) fn speak(settings: &Settings) -> Result<(), Error> {
+    let locale = settings
+        .language
+        .clone()
+        .unwrap_or_else(|| vcw_i18n::SOURCE_LOCALE.to_owned());
+    let Some(dir) = vcw_i18n::user_dir() else {
+        vcw_i18n::activate(None);
+        return Ok(());
+    };
+    match vcw_i18n::load(&dir, &locale) {
+        Ok(catalog) => {
+            vcw_i18n::activate(catalog);
+            Ok(())
+        }
+        Err(why) => {
+            vcw_i18n::activate(None);
+            Err(Error::Invalid {
+                field: "language".to_owned(),
+                why: format!(
+                    "{why} - VCW is speaking {} instead",
+                    vcw_i18n::SOURCE_LOCALE
+                ),
+            })
+        }
+    }
 }
 
 /// Where the settings file lives.
