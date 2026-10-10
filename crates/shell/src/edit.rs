@@ -45,7 +45,7 @@
 //! what a waveform is drawn in and what a drag ends at. The rate that converts
 //! it is the *capture's* rather than a default or the device's current one: a
 //! boundary at 12.5 s is 600 000 frames at 48 kHz and 551 250 at 44.1, and the
-//! wrong one would move the marker half a second. [`rate_of_side`] is why every
+//! wrong one would move the marker half a second. `rate_of_side` is why every
 //! command here reads the side before it does any arithmetic.
 //!
 //! # What is not decided here
@@ -59,7 +59,6 @@
 //! frontend saying the person meant it, and the refusal without it comes from
 //! the project crate.
 
-use tauri::State;
 use vcw_contract::command::{Lock, Marker, Merge, Placement, Removal, Split, TrackEdit};
 use vcw_project::track::NewBoundary;
 use vcw_project::{Connection, Project, session, side, track};
@@ -75,8 +74,7 @@ use crate::state::{Error, Shell};
 /// not in the project or its side has no capture to measure against, and
 /// [`Error::Project`] for a locked boundary moved without `force`, a move past a
 /// neighbor, or a file that will not open for writing.
-#[tauri::command]
-pub(crate) fn move_marker(shell: State<'_, Shell>, marker: Marker) -> Result<(), Error> {
+pub fn move_marker(shell: &Shell, marker: Marker) -> Result<(), Error> {
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
 
@@ -119,8 +117,7 @@ fn frames(seconds: f64, rate: SampleRate) -> u64 {
 /// [`Error::NoProject`] with nothing open, [`Error::Invalid`] if the side is
 /// not in the project or has no capture to measure seconds against, and
 /// [`Error::Project`] if the write fails.
-#[tauri::command]
-pub(crate) fn place_marker(shell: State<'_, Shell>, placement: Placement) -> Result<i64, Error> {
+pub fn place_marker(shell: &Shell, placement: Placement) -> Result<i64, Error> {
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     let rate = rate_of_side(project.conn(), placement.side_id, "sideId")?;
@@ -144,8 +141,7 @@ pub(crate) fn place_marker(shell: State<'_, Shell>, placement: Placement) -> Res
 ///
 /// [`Error::NoProject`] with nothing open, and [`Error::Project`] if the
 /// boundary is absent or a track is still using it.
-#[tauri::command]
-pub(crate) fn delete_marker(shell: State<'_, Shell>, removal: Removal) -> Result<(), Error> {
+pub fn delete_marker(shell: &Shell, removal: Removal) -> Result<(), Error> {
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     // No seconds, so no rate, so no side lookup: this is the one boundary
@@ -161,8 +157,7 @@ pub(crate) fn delete_marker(shell: State<'_, Shell>, removal: Removal) -> Result
 ///
 /// [`Error::NoProject`] with nothing open, and [`Error::Project`] if the
 /// boundary is absent or the write fails.
-#[tauri::command]
-pub(crate) fn lock_marker(shell: State<'_, Shell>, lock: Lock) -> Result<(), Error> {
+pub fn lock_marker(shell: &Shell, lock: Lock) -> Result<(), Error> {
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     track::set_lock(&mut project, lock.boundary_id, lock.locked)?;
@@ -176,8 +171,7 @@ pub(crate) fn lock_marker(shell: State<'_, Shell>, lock: Lock) -> Result<(), Err
 ///
 /// [`Error::NoProject`] with nothing open, and [`Error::Project`] if the track
 /// is absent.
-#[tauri::command]
-pub(crate) fn edit_track(shell: State<'_, Shell>, edit: TrackEdit) -> Result<(), Error> {
+pub fn edit_track(shell: &Shell, edit: TrackEdit) -> Result<(), Error> {
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     // An edit that names no field is allowed through rather than refused. It
@@ -196,8 +190,7 @@ pub(crate) fn edit_track(shell: State<'_, Shell>, edit: TrackEdit) -> Result<(),
 /// [`Error::NoProject`] with nothing open, [`Error::Invalid`] if the track is
 /// not in the project or its side has no capture, and [`Error::Project`] if the
 /// cut is outside the track or the write fails.
-#[tauri::command]
-pub(crate) fn split_track(shell: State<'_, Shell>, split: Split) -> Result<i64, Error> {
+pub fn split_track(shell: &Shell, split: Split) -> Result<i64, Error> {
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     let record = track::track(project.conn(), split.track_id)?.ok_or_else(|| Error::Invalid {
@@ -216,8 +209,7 @@ pub(crate) fn split_track(shell: State<'_, Shell>, split: Split) -> Result<i64, 
 ///
 /// [`Error::NoProject`] with nothing open, and [`Error::Project`] if either
 /// track is absent, they are not adjacent, or they are on different sides.
-#[tauri::command]
-pub(crate) fn merge_tracks(shell: State<'_, Shell>, merge: Merge) -> Result<(), Error> {
+pub fn merge_tracks(shell: &Shell, merge: Merge) -> Result<(), Error> {
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     track::merge(&mut project, merge.left_id, merge.right_id)?;

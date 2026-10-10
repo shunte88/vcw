@@ -64,7 +64,6 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use tauri::State;
 use vcw_contract::command::{Audition as Scope, Playback};
 use vcw_core::playback::{Audition, Player, Verb};
 use vcw_core::{Bus, Event};
@@ -83,7 +82,7 @@ const TICK: Duration = Duration::from_millis(16);
 /// Holds the channel and the thread, and stops both when dropped, so a window
 /// closing cannot leave a device open.
 #[derive(Debug)]
-pub(crate) struct Playing {
+pub struct Playing {
     /// Verbs on their way to the player.
     verbs: Sender<Verb>,
     /// The thread that owns the player.
@@ -97,7 +96,7 @@ impl Playing {
     ///
     /// [`Error::NotPlaying`] if the thread has already finished, which is the
     /// normal state a moment after an audition reaches its end.
-    pub(crate) fn send(&self, verb: Verb) -> Result<(), Error> {
+    pub fn send(&self, verb: Verb) -> Result<(), Error> {
         self.verbs.send(verb).map_err(|_| Error::NotPlaying)
     }
 
@@ -105,7 +104,7 @@ impl Playing {
     ///
     /// Waits on purpose: the next `play` opens the same device, and returning
     /// before this one had let go would refuse it as busy.
-    pub(crate) fn stop(mut self) {
+    pub fn stop(mut self) {
         let _ = self.verbs.send(Verb::Stop);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -138,9 +137,8 @@ impl Drop for Playing {
 /// not in the project, and [`Error::Invalid`] if the scope names a row that is
 /// not there. A device that will not open is *not* an error here - see the
 /// module docs.
-#[tauri::command]
-pub(crate) fn play(
-    shell: State<'_, Shell>,
+pub fn play(
+    shell: &Shell,
     capture_id: i64,
     scope: Scope,
     device: Option<String>,
@@ -182,8 +180,7 @@ pub(crate) fn play(
 ///
 /// [`Error::NotPlaying`] if nothing is playing, which includes an audition that
 /// has just reached its end.
-#[tauri::command]
-pub(crate) fn playback(shell: State<'_, Shell>, verb: Playback) -> Result<(), Error> {
+pub fn playback(shell: &Shell, verb: Playback) -> Result<(), Error> {
     if verb == Playback::Stop {
         let taken = shell.playing.lock().expect("the playing mutex").take();
         return match taken {

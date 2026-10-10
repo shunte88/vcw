@@ -51,24 +51,22 @@
 //! because the JavaScript side then has to decode what `JSON.parse` would have
 //! given it for free.
 
-use tauri::{AppHandle, Emitter};
 use vcw_contract::event::Wire;
 use vcw_core::Events;
 
-/// The event name every core event arrives under.
-pub(crate) const EVENT: &str = "vcw://event";
+use crate::host::Hosted;
 
-/// Forwards a bus to the webview until it closes.
+/// Forwards a bus to whatever is hosting, until it closes.
 ///
 /// Spawns and returns immediately. The thread ends when the stream does, which
 /// for the engine's bus means [`vcw_core::Event::Closed`] and for the shell's
 /// means the last sender was dropped.
-pub(crate) fn forward(app: &AppHandle, events: Events, label: &'static str) {
-    let app = app.clone();
+pub fn forward(host: &Hosted, events: Events, label: &'static str) {
+    let host = host.clone();
     let name = format!("vcw-pump-{label}");
     let spawned = std::thread::Builder::new()
         .name(name)
-        .spawn(move || run(&app, &events));
+        .spawn(move || run(&host, &events));
     if let Err(error) = spawned {
         // A thread that will not spawn is not recoverable, but it is also not a
         // reason to take the window down: the commands still work, and a
@@ -79,12 +77,13 @@ pub(crate) fn forward(app: &AppHandle, events: Events, label: &'static str) {
 }
 
 /// The thread body.
-fn run(app: &AppHandle, events: &Events) {
+fn run(host: &Hosted, events: &Events) {
     while let Some(event) = events.next() {
         let wire = Wire::from(&event);
-        // An emit that fails means the window has gone. There is nothing useful
-        // to do about it and nothing left to report it to, so the pump stops.
-        if app.emit(EVENT, &wire).is_err() {
+        // A host that can no longer deliver is a window that has closed. There
+        // is nothing useful to do about it and nothing left to report it to,
+        // so the pump stops rather than reading a bus on nobody's behalf.
+        if !host.emit(&wire) {
             return;
         }
         if wire.is_last() {

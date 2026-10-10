@@ -47,10 +47,10 @@
 
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, State};
 use vcw_contract::command::{Arm, Transport};
 use vcw_core::{Command, Engine, Setup};
 
+use crate::host::Hosted;
 use crate::pump;
 use crate::state::{Error, Shell};
 
@@ -66,8 +66,7 @@ use crate::state::{Error, Shell};
 /// the engine thread has gone. A device that will not open is *not* an error
 /// here: the engine reports that as a `command-refused` event, because by then
 /// the command has been accepted and the answer is asynchronous.
-#[tauri::command]
-pub(crate) fn arm(shell: State<'_, Shell>, app: AppHandle, arm: Arm) -> Result<(), Error> {
+pub fn arm(shell: &Shell, host: &Hosted, arm: Arm) -> Result<(), Error> {
     let setup = Setup::try_from(arm)?;
     let path = setup.project.clone();
 
@@ -76,7 +75,7 @@ pub(crate) fn arm(shell: State<'_, Shell>, app: AppHandle, arm: Arm) -> Result<(
         let engine = Engine::start()?;
         // Subscribed before the first command is sent, so the `armed` event
         // this call produces cannot be missed. The bus replays nothing.
-        pump::forward(&app, engine.events(), "engine");
+        pump::forward(host, engine.events(), "engine");
         *held = Some(engine);
     }
     let engine = held.as_ref().ok_or(Error::NotArmed)?;
@@ -95,8 +94,7 @@ pub(crate) fn arm(shell: State<'_, Shell>, app: AppHandle, arm: Arm) -> Result<(
 /// [`Error::NotArmed`] if nothing has been armed, because there is no engine to
 /// send to yet - which is a different thing from the engine refusing the verb,
 /// and reads differently to a person.
-#[tauri::command]
-pub(crate) fn transport(shell: State<'_, Shell>, verb: Transport) -> Result<(), Error> {
+pub fn transport(shell: &Shell, verb: Transport) -> Result<(), Error> {
     if verb == Transport::Shutdown {
         return shutdown(shell);
     }
@@ -117,8 +115,7 @@ pub(crate) fn transport(shell: State<'_, Shell>, verb: Transport) -> Result<(), 
 ///
 /// [`Error::NotArmed`] when there is no engine. A frontend can treat that as
 /// "idle" rather than as a failure.
-#[tauri::command]
-pub(crate) fn poll(shell: State<'_, Shell>) -> Result<(), Error> {
+pub fn poll(shell: &Shell) -> Result<(), Error> {
     let held = shell.engine.lock().expect("the engine mutex");
     let engine = held.as_ref().ok_or(Error::NotArmed)?;
     engine.send(Command::Poll)?;
@@ -134,7 +131,7 @@ pub(crate) fn poll(shell: State<'_, Shell>) -> Result<(), Error> {
 /// # Errors
 ///
 /// [`Error::Engine`] if the engine had already gone.
-fn shutdown(shell: State<'_, Shell>) -> Result<(), Error> {
+fn shutdown(shell: &Shell) -> Result<(), Error> {
     let taken = shell.engine.lock().expect("the engine mutex").take();
     match taken {
         Some(engine) => Ok(engine.shutdown()?),
@@ -170,8 +167,7 @@ fn shutdown(shell: State<'_, Shell>) -> Result<(), Error> {
 /// [`Error::Project`] if the file will not open, or if the upgrade fails - in
 /// which case the path is left as it was, because a shell pointing at a project
 /// it cannot read is the bug this exists to prevent.
-#[tauri::command]
-pub(crate) fn open_project(shell: State<'_, Shell>, path: String) -> Result<(), Error> {
+pub fn open_project(shell: &Shell, path: String) -> Result<(), Error> {
     let path = PathBuf::from(path);
     ensure_readable(&path)?;
     *shell.project.lock().expect("the project mutex") = Some(path);

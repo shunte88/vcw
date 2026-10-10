@@ -1765,6 +1765,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "vcw-shell"
+version = "0.2.2"
+dependencies = [
+ "base64 0.23.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tracing",
+ "vcw-audio",
+ "vcw-contract",
+ "vcw-core",
+ "vcw-export",
+ "vcw-i18n",
+ "vcw-metadata",
+ "vcw-project",
+ "vcw-signal",
+ "vcw-types",
+]
+
+[[package]]
 name = "vcw-signal"
 version = "0.2.2"
 dependencies = [

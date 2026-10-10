@@ -56,18 +56,18 @@ use crate::audition::Playing;
 
 /// Everything the shell holds.
 #[derive(Debug, Default)]
-pub(crate) struct Shell {
+pub struct Shell {
     /// The engine, once something has armed it.
     ///
     /// `None` until then, rather than started eagerly: an engine thread with
     /// nothing to do is harmless, but the window should open on a machine with
     /// no sound card at all.
-    pub(crate) engine: Mutex<Option<Engine>>,
+    pub engine: Mutex<Option<Engine>>,
     /// The project the engine was armed on, kept so a read command knows which
     /// file to open without the frontend passing the path back every time.
-    pub(crate) project: Mutex<Option<PathBuf>>,
+    pub project: Mutex<Option<PathBuf>>,
     /// The audition, if something is playing.
-    pub(crate) playing: Mutex<Option<Playing>>,
+    pub playing: Mutex<Option<Playing>>,
     /// The metadata search in flight, if there is one.
     ///
     /// The one piece of shell state that is not a copy of anything, and the
@@ -76,19 +76,19 @@ pub(crate) struct Shell {
     /// half-finished network request could be recorded. Starting a search
     /// cancels whatever was here, which is what a person retyping an album
     /// title means (§28).
-    pub(crate) searching: Mutex<Option<Cancel>>,
+    pub searching: Mutex<Option<Cancel>>,
     /// The bus playback and export publish on.
     ///
     /// Separate from the engine's, because the engine owns its own and an
     /// audition can happen when nothing is armed. Both are forwarded to the
     /// webview by [`crate::pump`], which is what makes them one stream as far
     /// as the frontend is concerned.
-    pub(crate) bus: Bus,
+    pub bus: Bus,
 }
 
 impl Shell {
     /// The project path, or a refusal naming the fact that nothing is open.
-    pub(crate) fn project_path(&self) -> Result<PathBuf, Error> {
+    pub fn project_path(&self) -> Result<PathBuf, Error> {
         self.project
             .lock()
             .expect("the project mutex")
@@ -104,7 +104,7 @@ impl Shell {
 /// what it branches on and the message is what it shows - see
 /// [`vcw_contract::command::Failure`], which is this type as it crosses.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Error {
+pub enum Error {
     /// The engine refused or could not be reached.
     #[error("{0}")]
     Engine(#[from] vcw_core::engine::Error),
@@ -146,7 +146,7 @@ pub(crate) enum Error {
 
 impl Error {
     /// The stable slug a frontend branches on.
-    pub(crate) fn code(&self) -> &'static str {
+    pub fn code(&self) -> &'static str {
         match self {
             Self::Engine(_) => "engine",
             Self::Project(_) => "project",
@@ -161,7 +161,7 @@ impl Error {
     }
 
     /// The argument at fault, where one is.
-    pub(crate) fn field(&self) -> Option<String> {
+    pub fn field(&self) -> Option<String> {
         match self {
             Self::Invalid { field, .. } => Some(field.clone()),
             _ => None,

@@ -40,6 +40,7 @@ vcw-export = { path = "../crates/export" }
 vcw-i18n = { path = "../crates/i18n" }
 vcw-metadata = { path = "../crates/metadata" }
 vcw-project = { path = "../crates/project" }
+vcw-shell = { path = "../crates/shell" }
 vcw-signal = { path = "../crates/signal" }
 vcw-types = { path = "../crates/types" }
 

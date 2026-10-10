@@ -4465,25 +4465,16 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 name = "vcw-app"
 version = "0.2.2"
 dependencies = [
- "base64 0.23.1",
- "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
  "tempfile",
- "thiserror 2.0.21",
  "tracing",
  "tracing-subscriber",
- "vcw-audio",
  "vcw-contract",
- "vcw-core",
- "vcw-export",
  "vcw-i18n",
- "vcw-metadata",
- "vcw-project",
- "vcw-signal",
- "vcw-types",
+ "vcw-shell",
 ]
 
 [[package]]
@@ -4594,6 +4585,26 @@ dependencies = [
  "rusqlite",
  "thiserror 2.0.21",
  "tracing",
+ "vcw-signal",
+ "vcw-types",
+]
+
+[[package]]
+name = "vcw-shell"
+version = "0.2.2"
+dependencies = [
+ "base64 0.23.1",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tracing",
+ "vcw-audio",
+ "vcw-contract",
+ "vcw-core",
+ "vcw-export",
+ "vcw-i18n",
+ "vcw-metadata",
+ "vcw-project",
  "vcw-signal",
  "vcw-types",
 ]

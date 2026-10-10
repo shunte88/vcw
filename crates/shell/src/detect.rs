@@ -63,7 +63,6 @@
 
 use std::path::Path;
 
-use tauri::{AppHandle, Emitter, State};
 use vcw_contract::command::Detect;
 use vcw_contract::event::Wire;
 use vcw_contract::settings::Detection;
@@ -75,7 +74,7 @@ use vcw_types::SampleRate;
 use vcw_types::vinyl::Side;
 
 use crate::config;
-use crate::pump;
+use crate::host::Hosted;
 use crate::state::{Error, Shell};
 
 /// One side to look at, with everything the pass needs about it.
@@ -104,12 +103,7 @@ struct Target {
 /// that is not one, a detector name that is not one of §39's four, or a project
 /// holding no capture at all, and [`Error::Project`] if the project will not
 /// open.
-#[tauri::command]
-pub(crate) fn detect_tracks(
-    shell: State<'_, Shell>,
-    app: AppHandle,
-    detect: Detect,
-) -> Result<(), Error> {
+pub fn detect_tracks(shell: &Shell, host: &Hosted, detect: Detect) -> Result<(), Error> {
     let path = shell.project_path()?;
     let wanted = detect.side()?;
 
@@ -117,7 +111,7 @@ pub(crate) fn detect_tracks(
     // refused command naming `algorithm` rather than a `detection-failed`
     // event. `policy` needs a rate and each side has its own, so only the
     // parse is done here and the policy is built per target below.
-    let detection = config::load(&app)?.detection;
+    let detection = config::load(host)?.detection;
     let rate = SampleRate(44_100);
     detection.policy(rate)?;
 
@@ -134,9 +128,10 @@ pub(crate) fn detect_tracks(
     }
 
     let promote = detect.promote;
+    let host = host.clone();
     std::thread::Builder::new()
         .name("vcw-detect".to_owned())
-        .spawn(move || run(&app, &path, &targets, &detection, promote))
+        .spawn(move || run(&host, &path, &targets, &detection, promote))
         .map_err(|error| Error::Project(vcw_project::Error::Io(error)))?;
     Ok(())
 }
@@ -198,14 +193,14 @@ fn resolve(path: &Path, wanted: Option<Side>) -> Result<Vec<Target>, Error> {
 }
 
 /// The detection thread.
-fn run(app: &AppHandle, path: &Path, targets: &[Target], detection: &Detection, promote: bool) {
+fn run(host: &Hosted, path: &Path, targets: &[Target], detection: &Detection, promote: bool) {
     let began = std::time::Instant::now();
     let cfg = detection.config();
     let mut total = Adopted::default();
     let mut done: Vec<String> = Vec::new();
 
     for target in targets {
-        match one(app, path, target, &cfg, detection, promote) {
+        match one(host, path, target, &cfg, detection, promote) {
             Ok(adopted) => {
                 total.boundaries.extend(adopted.boundaries);
                 total.tracks.extend(adopted.tracks);
@@ -219,7 +214,7 @@ fn run(app: &AppHandle, path: &Path, targets: &[Target], detection: &Detection, 
                     side: Some(target.side.letter().to_string()),
                     completed: u32::try_from(done.len()).unwrap_or(u32::MAX),
                 };
-                let _ = app.emit(pump::EVENT, &event);
+                let _ = host.emit(&event);
                 return;
             }
         }
@@ -233,12 +228,12 @@ fn run(app: &AppHandle, path: &Path, targets: &[Target], detection: &Detection, 
         already_settled: u32::try_from(total.already_locked).unwrap_or(u32::MAX),
         seconds: began.elapsed().as_secs_f64(),
     };
-    let _ = app.emit(pump::EVENT, &event);
+    let _ = host.emit(&event);
 }
 
 /// One side: refine, adopt, and announce each boundary as it is written.
 fn one(
-    app: &AppHandle,
+    host: &Hosted,
     path: &Path,
     target: &Target,
     cfg: &Config,
@@ -279,7 +274,7 @@ fn one(
                 confidence: row.confidence,
                 provenance: row.provenance.into(),
             };
-            let _ = app.emit(pump::EVENT, &event);
+            let _ = host.emit(&event);
         }
     }
     project.close()?;

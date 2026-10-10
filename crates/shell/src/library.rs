@@ -50,7 +50,6 @@
 
 use std::process::Command;
 
-use tauri::State;
 use vcw_contract::command::Zoom;
 use vcw_contract::read;
 use vcw_contract::view::{About, Boundary, Capture, Device, Release, Side, Track, Waveform};
@@ -71,8 +70,7 @@ use crate::state::{Error, Shell};
 /// affected device, or in the snapshot's own list if a whole host API failed -
 /// which is why the return type is a list and not a `Result` of one: a machine
 /// with one broken USB interface should still show the other three.
-#[tauri::command]
-pub(crate) fn devices() -> Vec<Device> {
+pub fn devices() -> Vec<Device> {
     vcw_audio::devices::enumerate()
         .devices
         .iter()
@@ -87,8 +85,7 @@ pub(crate) fn devices() -> Vec<Device> {
 /// particular are derived from `vcw-export`'s cargo features, which is the only
 /// place that question can be answered - `cfg!(feature = "mp3")` written here
 /// would be asking about *this* crate's features.
-#[tauri::command]
-pub(crate) fn about() -> About {
+pub fn about() -> About {
     About::current()
 }
 
@@ -136,7 +133,7 @@ fn addresses() -> Vec<(String, String)> {
         .collect()
 }
 
-/// Opens one of [`addresses`] in the operator's own browser (WP-28).
+/// Opens one of `addresses` in the operator's own browser (WP-28).
 ///
 /// The frontend names a page and not an address, which is the whole security
 /// story: a command that takes a URL opens whatever the webview asks for, and
@@ -149,13 +146,12 @@ fn addresses() -> Vec<(String, String)> {
 ///
 /// # Errors
 ///
-/// [`Error::Invalid`] if the name is not one of [`addresses`], or if the
+/// [`Error::Invalid`] if the name is not one of `addresses`, or if the
 /// platform's opener could not be started - a headless box, or a desktop with
 /// nothing registered for `https`. Starting it is as far as this goes: the
 /// opener exits as soon as it has handed the URL on, so what the browser does
 /// next is not VCW's to report.
-#[tauri::command]
-pub(crate) fn support(page: String) -> Result<(), Error> {
+pub fn support(page: String) -> Result<(), Error> {
     let known = addresses();
     let url = known
         .iter()
@@ -219,9 +215,8 @@ fn opener(url: &str) -> Command {
 ///
 /// [`Error::NoProject`] if nothing is open, [`Error::Project`] if the file will
 /// not read.
-#[tauri::command]
-pub(crate) fn release(shell: State<'_, Shell>) -> Result<Option<Release>, Error> {
-    with_project(&shell, read::release)
+pub fn release(shell: &Shell) -> Result<Option<Release>, Error> {
+    with_project(shell, read::release)
 }
 
 /// Every side, in playing order.
@@ -229,9 +224,8 @@ pub(crate) fn release(shell: State<'_, Shell>) -> Result<Option<Release>, Error>
 /// # Errors
 ///
 /// As [`release`].
-#[tauri::command]
-pub(crate) fn sides(shell: State<'_, Shell>) -> Result<Vec<Side>, Error> {
-    with_project(&shell, read::sides)
+pub fn sides(shell: &Shell) -> Result<Vec<Side>, Error> {
+    with_project(shell, read::sides)
 }
 
 /// Every track, in playing order, with §29's positions already rendered.
@@ -239,9 +233,8 @@ pub(crate) fn sides(shell: State<'_, Shell>) -> Result<Vec<Side>, Error> {
 /// # Errors
 ///
 /// As [`release`].
-#[tauri::command]
-pub(crate) fn tracks(shell: State<'_, Shell>) -> Result<Vec<Track>, Error> {
-    with_project(&shell, read::tracks)
+pub fn tracks(shell: &Shell) -> Result<Vec<Track>, Error> {
+    with_project(shell, read::tracks)
 }
 
 /// Every capture in the project, oldest first.
@@ -249,9 +242,8 @@ pub(crate) fn tracks(shell: State<'_, Shell>) -> Result<Vec<Track>, Error> {
 /// # Errors
 ///
 /// As [`release`].
-#[tauri::command]
-pub(crate) fn captures(shell: State<'_, Shell>) -> Result<Vec<Capture>, Error> {
-    with_project(&shell, read::captures)
+pub fn captures(shell: &Shell) -> Result<Vec<Capture>, Error> {
+    with_project(shell, read::captures)
 }
 
 /// Every boundary in the project, promoted into a track or not (§31).
@@ -265,9 +257,8 @@ pub(crate) fn captures(shell: State<'_, Shell>) -> Result<Vec<Capture>, Error> {
 /// # Errors
 ///
 /// As [`release`].
-#[tauri::command]
-pub(crate) fn boundaries(shell: State<'_, Shell>) -> Result<Vec<Boundary>, Error> {
-    with_project(&shell, read::boundaries)
+pub fn boundaries(shell: &Shell) -> Result<Vec<Boundary>, Error> {
+    with_project(shell, read::boundaries)
 }
 
 /// One channel of one capture, drawn to a given width (§17, §20).
@@ -281,8 +272,7 @@ pub(crate) fn boundaries(shell: State<'_, Shell>) -> Result<Vec<Boundary>, Error
 ///
 /// As [`release`], plus [`Error::Invalid`] if `pixels` is zero - a canvas no
 /// pixels wide is a frontend bug worth naming rather than an empty answer.
-#[tauri::command]
-pub(crate) fn waveform(shell: State<'_, Shell>, zoom: Zoom) -> Result<Waveform, Error> {
+pub fn waveform(shell: &Shell, zoom: Zoom) -> Result<Waveform, Error> {
     if zoom.pixels == 0 {
         return Err(Error::Invalid {
             field: "pixels".to_owned(),
@@ -319,7 +309,7 @@ pub(crate) fn waveform(shell: State<'_, Shell>, zoom: Zoom) -> Result<Waveform, 
 /// `-shm` sidecars, and an explicit close is what deletes them. A handle
 /// dropped without one leaves them behind, which looks like a crash to the next
 /// recovery check.
-fn with_project<T, F>(shell: &State<'_, Shell>, reader: F) -> Result<T, Error>
+fn with_project<T, F>(shell: &Shell, reader: F) -> Result<T, Error>
 where
     F: FnOnce(&vcw_project::Connection) -> vcw_project::Result<T>,
 {

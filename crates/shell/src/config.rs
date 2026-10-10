@@ -36,7 +36,7 @@
 //!
 //! [`crate::state`] says the shell caches nothing, because a cache here would
 //! be a second copy of the truth. Settings are no exception: every command
-//! below reads the file, and [`save`] writes it. A person editing the JSON by
+//! below reads the file, and `save` writes it. A person editing the JSON by
 //! hand and a person using the panel therefore cannot disagree, and the
 //! alternative - an in-memory copy written back on quit - is how a crash loses
 //! a configuration that was visibly applied.
@@ -58,13 +58,12 @@
 //! backed up without anybody deciding to, which makes a plaintext token there a
 //! credential with no custody. Tokens come from the environment and what
 //! crosses to a UI is [`vcw_contract::settings::Credential`] - present, and how
-//! many characters. [`save`] cannot write one because the type it takes has
+//! many characters. `save` cannot write one because the type it takes has
 //! nowhere to put one.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Manager, State};
 use vcw_contract::browse;
 use vcw_contract::command::NewProject;
 use vcw_contract::settings::{Credential, Settings};
@@ -72,6 +71,7 @@ use vcw_contract::view::Project as ProjectRow;
 use vcw_project::Project;
 use vcw_project::release::{self, Artwork};
 
+use crate::host::Hosted;
 use crate::state::{Error, Shell};
 
 /// The settings file's name inside the app config directory.
@@ -83,25 +83,23 @@ const FILE: &str = "settings.json";
 ///
 /// [`Error::Invalid`] naming the file when it exists and will not parse. A file
 /// that is not there is not an error.
-#[tauri::command]
-pub(crate) fn settings(app: AppHandle) -> Result<Settings, Error> {
-    load(&app)
+pub fn settings(host: &Hosted) -> Result<Settings, Error> {
+    load(host)
 }
 
 /// Writes §39's settings.
 ///
 /// Written whole rather than per field, because a settings panel with a save
 /// button is one decision by a person and half-applied settings are a state
-/// nothing can reason about. The config directory is created if it is not there
-/// - which is the one directory this application makes without being asked, and
-/// it makes it only when a person has pressed save.
+/// nothing can reason about. The config directory is created if it is not
+/// there, the one directory this application makes without being asked, and it
+/// makes it only when a person has pressed save.
 ///
 /// # Errors
 ///
 /// [`Error::Invalid`] if the file cannot be written, naming the path.
-#[tauri::command]
-pub(crate) fn save_settings(app: AppHandle, settings: Settings) -> Result<(), Error> {
-    save(&app, &settings)?;
+pub fn save_settings(host: &Hosted, settings: Settings) -> Result<(), Error> {
+    save(host, &settings)?;
     // After the write, not before: a language that will not load is worth
     // reporting, but it is not a reason to refuse to save the rest of the
     // panel a person just filled in.
@@ -117,8 +115,7 @@ pub(crate) fn save_settings(app: AppHandle, settings: Settings) -> Result<(), Er
 /// # Errors
 ///
 /// Never. Nothing configured is an answer, not a failure.
-#[tauri::command]
-pub(crate) fn credentials() -> Vec<Credential> {
+pub fn credentials() -> Vec<Credential> {
     Credential::survey(&vcw_metadata::credentials::Credentials::from_env())
 }
 
@@ -132,9 +129,8 @@ pub(crate) fn credentials() -> Vec<Credential> {
 /// # Errors
 ///
 /// [`Error::Invalid`] only if the settings file will not parse.
-#[tauri::command]
-pub(crate) fn projects(app: AppHandle) -> Result<Vec<ProjectRow>, Error> {
-    let settings = load(&app)?;
+pub fn projects(host: &Hosted) -> Result<Vec<ProjectRow>, Error> {
+    let settings = load(host)?;
     let Some(root) = settings.recording.library else {
         return Ok(Vec::new());
     };
@@ -157,9 +153,8 @@ pub(crate) fn projects(app: AppHandle) -> Result<Vec<ProjectRow>, Error> {
 /// [`Error::Invalid`] naming `library` when no library root is set, `name` when
 /// the derived file already exists, and [`Error::Project`] if the file cannot
 /// be created.
-#[tauri::command]
-pub(crate) fn new_project(app: AppHandle, seed: NewProject) -> Result<ProjectRow, Error> {
-    let settings = load(&app)?;
+pub fn new_project(host: &Hosted, seed: NewProject) -> Result<ProjectRow, Error> {
+    let settings = load(host)?;
     let Some(root) = settings.recording.library else {
         return Err(Error::Invalid {
             field: "library".to_owned(),
@@ -221,9 +216,8 @@ pub(crate) fn new_project(app: AppHandle, seed: NewProject) -> Result<ProjectRow
 /// # Errors
 ///
 /// As [`settings`].
-#[tauri::command]
-pub(crate) fn library_root(app: AppHandle) -> Result<Option<String>, Error> {
-    Ok(load(&app)?.recording.library)
+pub fn library_root(host: &Hosted) -> Result<Option<String>, Error> {
+    Ok(load(host)?.recording.library)
 }
 
 /// The front cover of one project in the library, as a `data:` URL (§34).
@@ -250,8 +244,7 @@ pub(crate) fn library_root(app: AppHandle) -> Result<Option<String>, Error> {
 ///
 /// [`Error::Project`] if the file will not open or will not read. A project
 /// with no front cover is `None`, which is an answer and not a failure.
-#[tauri::command]
-pub(crate) fn artwork(path: String) -> Result<Option<String>, Error> {
+pub fn artwork(path: String) -> Result<Option<String>, Error> {
     use base64::Engine as _;
 
     let project = Project::open_read_only(Path::new(&path))?;
@@ -273,8 +266,7 @@ pub(crate) fn artwork(path: String) -> Result<Option<String>, Error> {
 /// # Errors
 ///
 /// Never.
-#[tauri::command]
-pub(crate) fn open_path(shell: State<'_, Shell>) -> Option<String> {
+pub fn open_path(shell: &Shell) -> Option<String> {
     shell
         .project
         .lock()
@@ -294,8 +286,7 @@ pub(crate) fn open_path(shell: State<'_, Shell>) -> Option<String> {
 /// # Errors
 ///
 /// Never. A missing directory is a machine with no translations on it.
-#[tauri::command]
-pub(crate) fn languages() -> Vec<String> {
+pub fn languages() -> Vec<String> {
     vcw_i18n::user_dir()
         .map(|dir| vcw_i18n::installed(&dir))
         .unwrap_or_else(|| vec![vcw_i18n::SOURCE_LOCALE.to_owned()])
@@ -312,7 +303,7 @@ pub(crate) fn languages() -> Vec<String> {
 /// # Errors
 ///
 /// [`Error::Invalid`] naming `language` when the chosen catalog will not read.
-pub(crate) fn speak(settings: &Settings) -> Result<(), Error> {
+pub fn speak(settings: &Settings) -> Result<(), Error> {
     let locale = settings
         .language
         .clone()
@@ -340,24 +331,23 @@ pub(crate) fn speak(settings: &Settings) -> Result<(), Error> {
 }
 
 /// Where the settings file lives.
-fn path_of(app: &AppHandle) -> Result<PathBuf, Error> {
-    app.path()
-        .app_config_dir()
+fn path_of(host: &Hosted) -> Result<PathBuf, Error> {
+    host.config_dir()
         .map(|dir| dir.join(FILE))
-        .map_err(|why| Error::Invalid {
+        .ok_or_else(|| Error::Invalid {
             field: "settings".to_owned(),
-            why: format!("this platform has no config directory: {why}"),
+            why: "this platform has no config directory".to_owned(),
         })
 }
 
 /// Reads the settings file, or the defaults.
 ///
-/// `pub(crate)` because a command that acts on a setting has to read it: §39's
+/// `pub` because a command that acts on a setting has to read it: §39's
 /// detection group is what [`crate::detect`] runs under, and the alternative
 /// is the frontend passing thresholds back down with every request, which
 /// would put the authoritative copy of a setting in the webview.
-pub(crate) fn load(app: &AppHandle) -> Result<Settings, Error> {
-    let path = path_of(app)?;
+pub fn load(host: &Hosted) -> Result<Settings, Error> {
+    let path = path_of(host)?;
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
         // Not there is first run. Anything else - a permission problem, a
@@ -381,8 +371,8 @@ pub(crate) fn load(app: &AppHandle) -> Result<Settings, Error> {
 }
 
 /// Writes the settings file.
-fn save(app: &AppHandle, settings: &Settings) -> Result<(), Error> {
-    let path = path_of(app)?;
+fn save(host: &Hosted, settings: &Settings) -> Result<(), Error> {
+    let path = path_of(host)?;
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|why| Error::Invalid {
             field: "settings".to_owned(),

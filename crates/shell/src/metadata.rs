@@ -61,20 +61,23 @@
 //! address into the settings panel changed nothing and the only way to be
 //! identified was an environment variable nobody is told about.
 //!
-//! [`credentials`] is where the two meet. The settings file wins where it has
+//! `credentials` is where the two meet. The settings file wins where it has
 //! an address, because it is the one a person can see and change from inside
 //! the window; `VCW_CONTACT` is the fallback, and is what the CLI runs on.
 //!
-//! # Why these two are async and the rest are not
+//! # Why these two take their time, and whose problem that is
 //!
-//! A search is a network round trip, and §40 boxes it at ten seconds. A
-//! synchronous command would hold the main thread for that long, so these run
-//! on Tauri's runtime and do the blocking part in
-//! [`spawn_blocking`](tauri::async_runtime::spawn_blocking). They return a
-//! value rather than emitting events, unlike the export and the detection pass,
-//! because a person pressed a key and is looking at the result: a dialog that
-//! filled itself in from an event would have to cope with an answer to a
-//! question it had already replaced.
+//! A search is a network round trip, and §40 boxes it at ten seconds. Both
+//! functions here block for that long, and getting the waiting off whatever
+//! thread must stay answerable belongs to the host: `app/src-tauri` wraps each
+//! of them in `spawn_blocking` because a synchronous `#[tauri::command]` runs
+//! on the main thread and would freeze the window, and §52's listener is
+//! already a thread per connection and wraps nothing.
+//!
+//! They return a value rather than emitting events, unlike the export and the
+//! detection pass, because a person pressed a key and is looking at the
+//! result: a dialog that filled itself in from an event would have to cope
+//! with an answer to a question it had already replaced.
 //!
 //! # The cover comes back with the release
 //!
@@ -99,7 +102,6 @@
 
 use std::path::PathBuf;
 
-use tauri::{AppHandle, Manager, State};
 use vcw_contract::command::{Search, Selection};
 use vcw_contract::settings::Metadata;
 use vcw_contract::view::{Accepted, Candidate};
@@ -109,6 +111,7 @@ use vcw_metadata::{Cancel, ProviderId, Query, Setup, artwork};
 use vcw_project::{Project, release};
 
 use crate::config;
+use crate::host::Hosted;
 use crate::state::{Error, Shell};
 
 /// Asks the configured providers about this record. §35's `search_metadata`.
@@ -122,13 +125,12 @@ use crate::state::{Error, Shell};
 ///
 /// [`Error::Invalid`] for a provider name that is not one of the two, or a
 /// query with nothing in it, and [`Error::Metadata`] if every provider refused.
-#[tauri::command]
-pub(crate) async fn search_metadata(
-    shell: State<'_, Shell>,
-    app: AppHandle,
+pub fn search_metadata(
+    shell: &Shell,
+    host: &Hosted,
     search: Search,
 ) -> Result<Vec<Candidate>, Error> {
-    let settings = config::load(&app)?.metadata;
+    let settings = config::load(host)?.metadata;
     let (musicbrainz, discogs) = which(&search, settings.musicbrainz, settings.discogs)?;
 
     let query = query(&search)?;
@@ -136,7 +138,7 @@ pub(crate) async fn search_metadata(
     let mut setup = Setup::new()
         .online(settings.online)
         .only(musicbrainz, discogs);
-    if let Some(directory) = cache(&app) {
+    if let Some(directory) = cache(host) {
         setup = setup.with_cache(directory);
     }
 
@@ -153,7 +155,13 @@ pub(crate) async fn search_metadata(
         previous.cancel();
     }
 
-    let found = tauri::async_runtime::spawn_blocking(move || {
+    // A plain blocking call. It was a `spawn_blocking` while this lived in the
+    // shell, because a synchronous `#[tauri::command]` runs on the main thread
+    // and a provider round trip would freeze the window; that is the host's
+    // problem rather than this function's, and `app/src-tauri` still does it
+    // on the way in. §52's listener is a thread per connection and needs
+    // nothing.
+    let hunt = || -> Result<Vec<Candidate>, vcw_metadata::Error> {
         let providers = setup.providers(&identified);
         let mut candidates = Vec::new();
         let mut refusals = Vec::new();
@@ -172,14 +180,9 @@ pub(crate) async fn search_metadata(
             return Err(first);
         }
         Ok(candidates)
-    })
-    .await
-    .map_err(|why| Error::Invalid {
-        field: "provider".to_owned(),
-        why: format!("the search thread did not finish: {why}"),
-    })??;
+    };
 
-    Ok(found)
+    Ok(hunt()?)
 }
 
 /// Fetches a candidate and writes it into the project. §35's `select_release`.
@@ -189,27 +192,27 @@ pub(crate) async fn search_metadata(
 /// [`Error::NoProject`] with nothing open, [`Error::Invalid`] for a provider
 /// name that is not one of the two, [`Error::Metadata`] if the fetch refused,
 /// and [`Error::Project`] if the write fails.
-#[tauri::command]
-pub(crate) async fn select_release(
-    shell: State<'_, Shell>,
-    app: AppHandle,
+pub fn select_release(
+    shell: &Shell,
+    host: &Hosted,
     selection: Selection,
 ) -> Result<Accepted, Error> {
     let path = shell.project_path()?;
-    let settings = config::load(&app)?.metadata;
+    let settings = config::load(host)?.metadata;
     let provider = provider_id(&selection.provider)?;
 
     let mut setup = Setup::new().online(settings.online).only(
         provider == ProviderId::MusicBrainz,
         provider == ProviderId::Discogs,
     );
-    if let Some(directory) = cache(&app) {
+    if let Some(directory) = cache(host) {
         setup = setup.with_cache(directory);
     }
 
     let id = selection.id.clone();
     let identified = credentials(&settings);
-    let (found, cover) = tauri::async_runtime::spawn_blocking(move || {
+    type Fetched = (vcw_metadata::Release, Option<artwork::Artwork>);
+    let fetch = || -> Result<Fetched, vcw_metadata::Error> {
         let providers = setup.providers(&identified);
         let Some(one) = providers.first() else {
             // Unreachable through `provider_id`, which only returns a provider
@@ -231,12 +234,8 @@ pub(crate) async fn select_release(
         .ok()
         .flatten();
         Ok((found, cover))
-    })
-    .await
-    .map_err(|why| Error::Invalid {
-        field: "id".to_owned(),
-        why: format!("the fetch thread did not finish: {why}"),
-    })??;
+    };
+    let (found, cover) = fetch()?;
 
     // Opened writable only once the fetch has come back, so a provider timing
     // out does not hold a write lock on the project for ten seconds.
@@ -280,11 +279,8 @@ fn credentials(settings: &Metadata) -> Credentials {
 /// `None` if the platform has no cache directory, which leaves the client with
 /// its in-process cache rather than failing: a search that cannot be cached is
 /// still a search.
-fn cache(app: &AppHandle) -> Option<PathBuf> {
-    app.path()
-        .app_cache_dir()
-        .ok()
-        .map(|dir| dir.join("providers"))
+fn cache(host: &Hosted) -> Option<PathBuf> {
+    host.cache_dir().map(|dir| dir.join("providers"))
 }
 
 /// Which providers to ask: what the request said, narrowed by what §39 allows.

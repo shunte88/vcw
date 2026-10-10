@@ -40,13 +40,14 @@
 //! cannot reach Tauri and the `core-is-ui-free` CI job is a statement about
 //! structure rather than a promise about discipline.
 //!
-//! What is here:
+//! It is now glue over `vcw-shell` rather than over the core crates directly.
+//! §52 serves the same frontend over HTTP to a machine with no window, so
+//! every command body moved into a crate a listener can also call and what is
+//! left here is a window, a plugin, and one wrapper per command:
 //!
-//! - [`state`], the only mutable state in the shell;
-//! - [`pump`], one thread per bus turning core events into webview events;
-//! - [`transport`], [`library`], [`audition`], [`edit`], [`detect`],
-//!   [`metadata`], [`config`] and [`exporter`], which are §35's commands
-//!   grouped by what they act on.
+//! - [`host`], this window as a [`vcw_shell::Host`] - where an event goes and
+//!   where the two per-user directories are;
+//! - [`commands`], the list the frontend may call, one line each.
 //!
 //! Every verb §35 declares is now wired, and the tests at the bottom of this
 //! file are what say so: [`WIRED`] is checked against the tags in the generated
@@ -61,20 +62,12 @@
 // a debug build it should, because that is where a panic is printed.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod audition;
-mod config;
-mod detect;
-mod edit;
-mod exporter;
-mod library;
-mod metadata;
-mod pump;
-mod state;
-mod transport;
+mod commands;
+mod host;
 
 use tauri::Manager;
 
-use state::Shell;
+use vcw_shell::state::Shell;
 
 /// The commands in [`vcw_contract::Request`] that this shell honors.
 ///
@@ -171,8 +164,8 @@ fn main() {
             // subscription taken out when an audition starts would miss
             // whatever that audition published before the reader was attached.
             // One pump, from startup, and it also carries the refusals.
-            pump::forward(
-                &app.handle().clone(),
+            vcw_shell::pump::forward(
+                &host::hosted(app.handle()),
                 app.state::<Shell>().bus.subscribe(),
                 "shell",
             );
@@ -182,8 +175,10 @@ fn main() {
             // catalog that will not read, leaves the process speaking English
             // - which is the state it starts in - and says so in the log
             // rather than refusing to open a window over a translation.
-            let handle = app.handle().clone();
-            match config::load(&handle).and_then(|settings| config::speak(&settings)) {
+            let handle = host::hosted(app.handle());
+            match vcw_shell::config::load(&handle)
+                .and_then(|settings| vcw_shell::config::speak(&settings))
+            {
                 // The directory as well as the language: where a submitted
                 // catalog goes is the first question a translator asks, and
                 // the answer differs on three platforms.
@@ -197,42 +192,42 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            transport::arm,
-            transport::transport,
-            transport::poll,
-            transport::open_project,
-            library::about,
-            library::support,
-            library::devices,
-            library::release,
-            library::sides,
-            library::tracks,
-            library::captures,
-            library::waveform,
-            library::boundaries,
-            config::settings,
-            config::save_settings,
-            config::languages,
-            config::credentials,
-            config::projects,
-            config::new_project,
-            config::library_root,
-            config::artwork,
-            config::open_path,
-            edit::move_marker,
-            edit::place_marker,
-            edit::delete_marker,
-            edit::lock_marker,
-            edit::edit_track,
-            edit::split_track,
-            edit::merge_tracks,
-            detect::detect_tracks,
-            metadata::search_metadata,
-            metadata::select_release,
-            audition::play,
-            audition::playback,
-            exporter::export_plan,
-            exporter::export_run,
+            commands::arm,
+            commands::transport,
+            commands::poll,
+            commands::open_project,
+            commands::about,
+            commands::support,
+            commands::devices,
+            commands::release,
+            commands::sides,
+            commands::tracks,
+            commands::captures,
+            commands::waveform,
+            commands::boundaries,
+            commands::settings,
+            commands::save_settings,
+            commands::languages,
+            commands::credentials,
+            commands::projects,
+            commands::new_project,
+            commands::library_root,
+            commands::artwork,
+            commands::open_path,
+            commands::move_marker,
+            commands::place_marker,
+            commands::delete_marker,
+            commands::lock_marker,
+            commands::edit_track,
+            commands::split_track,
+            commands::merge_tracks,
+            commands::detect_tracks,
+            commands::search_metadata,
+            commands::select_release,
+            commands::play,
+            commands::playback,
+            commands::export_plan,
+            commands::export_run,
         ])
         .run(tauri::generate_context!())
         .expect("the VCW window could not be created");

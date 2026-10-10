@@ -51,14 +51,13 @@
 
 use std::path::Path;
 
-use tauri::{AppHandle, Emitter, State};
 use vcw_contract::command::Export;
 use vcw_contract::event::Wire;
 use vcw_contract::view::ExportPlan;
 use vcw_export::splitter::{self, Progress};
 use vcw_project::Project;
 
-use crate::pump;
+use crate::host::Hosted;
 use crate::state::{Error, Shell};
 
 /// Resolves the plan and returns it, writing nothing. §33's dry run.
@@ -69,8 +68,7 @@ use crate::state::{Error, Shell};
 /// or an artwork policy that is not one of the accepted words, and
 /// [`Error::Export`] for a plan that cannot be resolved - two tracks naming the
 /// same file, a side with no tracks, a directory that cannot be created.
-#[tauri::command]
-pub(crate) fn export_plan(shell: State<'_, Shell>, export: Export) -> Result<ExportPlan, Error> {
+pub fn export_plan(shell: &Shell, export: Export) -> Result<ExportPlan, Error> {
     let path = shell.project_path()?;
     let request = export.request()?;
     let project = Project::open_read_only(&path)?;
@@ -88,12 +86,7 @@ pub(crate) fn export_plan(shell: State<'_, Shell>, export: Export) -> Result<Exp
 /// As [`export_plan`]: the plan is resolved on this thread, so a template that
 /// will not resolve is refused before anything starts. Once the thread is
 /// running, failures arrive as `export-failed`.
-#[tauri::command]
-pub(crate) fn export_run(
-    shell: State<'_, Shell>,
-    app: AppHandle,
-    export: Export,
-) -> Result<(), Error> {
+pub fn export_run(shell: &Shell, host: &Hosted, export: Export) -> Result<(), Error> {
     let path = shell.project_path()?;
     let request = export.request()?;
 
@@ -113,17 +106,18 @@ pub(crate) fn export_run(
         }
     }
 
+    let host = host.clone();
     std::thread::Builder::new()
         .name("vcw-export".to_owned())
-        .spawn(move || run(&app, &path, &request))
+        .spawn(move || run(&host, &path, &request))
         .map_err(|error| Error::Project(vcw_project::Error::Io(error)))?;
     Ok(())
 }
 
 /// The export thread.
-fn run(app: &AppHandle, path: &Path, request: &splitter::Request) {
+fn run(host: &Hosted, path: &Path, request: &splitter::Request) {
     let written = std::cell::Cell::new(0u32);
-    let outcome = export(app, path, request, &written);
+    let outcome = export(host, path, request, &written);
     let event = match outcome {
         Ok(report) => Wire::ExportFinished {
             files: u32::try_from(report.files).unwrap_or(u32::MAX),
@@ -136,12 +130,12 @@ fn run(app: &AppHandle, path: &Path, request: &splitter::Request) {
             written: written.get(),
         },
     };
-    let _ = app.emit(pump::EVENT, &event);
+    let _ = host.emit(&event);
 }
 
 /// The part that can fail.
 fn export(
-    app: &AppHandle,
+    host: &Hosted,
     path: &Path,
     request: &splitter::Request,
     written: &std::cell::Cell<u32>,
@@ -170,7 +164,7 @@ fn export(
             frames: progress.frames,
             total: progress.total,
         };
-        let _ = app.emit(pump::EVENT, &event);
+        let _ = host.emit(&event);
     };
     let report = splitter::run(project.conn(), &plan, &mut on)?;
     project.close()?;

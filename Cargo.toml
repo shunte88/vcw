@@ -50,12 +50,16 @@ vcw-i18n = { path = "crates/i18n", version = "0.2.2" }
 vcw-import = { path = "crates/import", version = "0.2.2" }
 vcw-metadata = { path = "crates/metadata", version = "0.2.2" }
 vcw-project = { path = "crates/project", version = "0.2.2" }
+vcw-shell = { path = "crates/shell", version = "0.2.2" }
 vcw-signal = { path = "crates/signal", version = "0.2.2" }
 vcw-types = { path = "crates/types", version = "0.2.2" }
 
 # External. Single source of version truth for the whole tree; a bump happens here
 # and nowhere else.
 anyhow = "1"
+# A cover becomes a `data:` URL for an `<img>`, which is base64 and nothing
+# else. Moved here from `app/Cargo.toml` with the command bodies in WP-26.
+base64 = "0.23"
 clap = { version = "4", features = ["derive"] }
 crc32fast = "1"
 # The FLAC encoder behind `vcw export --format flac` (D5). Pure Rust and
