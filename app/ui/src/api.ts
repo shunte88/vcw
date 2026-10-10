@@ -9,17 +9,20 @@
  *  MIT License - see the header in any Rust source file for the full text.
  */
 
-// The only file in the frontend that calls `invoke`. Everything else calls
+// The only file in the frontend that issues a command. Everything else calls
 // these, which means the argument shapes are checked once, here, against types
 // generated from the Rust declarations rather than written twice.
+//
+// How a command travels is not decided here either: `./host` picks the
+// desktop shell or §52's HTTP listener at run time, and no function below
+// changes between the two.
 //
 // §2: nothing in this file decides anything. No unit conversion, no defaulting,
 // no "if the user did not pick a rate use 44100" - all of that is behind the
 // boundary, because a second frontend would have to make the same choices and
 // two implementations of a policy is one too many.
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke, subscribe, type Unsubscribe } from "./host";
 
 import type {
   About,
@@ -35,6 +38,7 @@ import type {
   Export,
   ExportPlan,
   Failure,
+  Listing,
   Lock,
   Marker,
   Merge,
@@ -57,12 +61,11 @@ import type {
   Zoom,
 } from "./bindings/vcw";
 
-/** The single event channel every core event arrives on. See `pump.rs`. */
-export const EVENT = "vcw://event";
+export { EVENT } from "./host";
 
 /** Subscribes to the event stream. Returns the function that unsubscribes. */
-export function onEvent(handler: (event: Wire) => void): Promise<UnlistenFn> {
-  return listen<Wire>(EVENT, (message) => handler(message.payload));
+export function onEvent(handler: (event: Wire) => void): Promise<Unsubscribe> {
+  return subscribe(handler);
 }
 
 /**
@@ -303,6 +306,17 @@ export function languages(): Promise<string[]> {
 /** Where the library is, or null if nobody has chosen one. */
 export function libraryRoot(): Promise<string | null> {
   return invoke("library_root");
+}
+
+/**
+ * One directory of the host's filesystem (§52).
+ *
+ * Only under `vcw serve`: the window opens the platform's own chooser, so a
+ * host with no path browser refuses this rather than answering. `at` is a
+ * directory the last answer named, or null for the root.
+ */
+export function browse(at: string | null): Promise<Listing> {
+  return invoke("browse", { at });
 }
 
 /** The project the shell has open, which survives a window reload. */

@@ -50,6 +50,7 @@ vcw-i18n = { path = "crates/i18n", version = "0.2.2" }
 vcw-import = { path = "crates/import", version = "0.2.2" }
 vcw-metadata = { path = "crates/metadata", version = "0.2.2" }
 vcw-project = { path = "crates/project", version = "0.2.2" }
+vcw-serve = { path = "crates/serve", version = "0.2.2" }
 vcw-shell = { path = "crates/shell", version = "0.2.2" }
 vcw-signal = { path = "crates/signal", version = "0.2.2" }
 vcw-types = { path = "crates/types", version = "0.2.2" }
@@ -142,6 +143,17 @@ ts-rs = "12"
 # rather than native-tls so a Windows build needs no OpenSSL and the license
 # allowlist in deny.toml already covers it.
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+# The HTTP server behind `vcw serve` (§52), and the only two dependencies that
+# verb adds. Blocking and thread-per-connection, because the note on `ureq`
+# above still holds: this tree has no async runtime and is not getting one, and
+# that rules out every server built on tokio. `tiny_http` is four small
+# permissive crates (ascii, chunked_transfer, httpdate, log) and no TLS unless
+# asked, which matters because `serve` exists for a host chosen for being small.
+tiny_http = { version = "0.12", default-features = false }
+# Minting the §52 session secret when the environment supplies none. There is no
+# CSPRNG in std and a token from a clock or a PID is not a token. Already in the
+# graph underneath rustls, so this adds an edge rather than a crate.
+getrandom = "0.4"
 
 # Enforced as errors in CI (`clippy --all-targets -- -D warnings`), warnings locally.
 # `missing_docs` is deliberate: a scaffold whose modules do not say what they are for

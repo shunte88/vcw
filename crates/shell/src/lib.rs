@@ -44,7 +44,7 @@
 //! §52 serves the same frontend over HTTP to a machine that has no window and
 //! no WebKit to draw one with. Writing the bodies twice was the alternative and
 //! §2 forbids it: one authoritative answer to each question, in one place.
-//! What varies between the two hosts is three things, and [`host::Host`] names
+//! What varies between the two hosts is four things, and [`host::Host`] names
 //! them.
 //!
 //! `app/src-tauri` is now a window, a plugin, a list of `#[tauri::command]`

@@ -1611,6 +1611,16 @@ code {
   width: 1rem;
 }
 
+/* Where the sound is actually coming out, under `vcw serve` (§52). Quiet, to
+   the right of the buttons, and not a banner: it is a standing fact about the
+   deployment rather than something that just happened. */
+.transport-buttons .elsewhere {
+  margin-left: 1rem;
+  color: var(--dim);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+
 /* --- Status line --------------------------------------------------------- */
 
 .status {
@@ -2052,4 +2062,60 @@ code {
    a heading is set in and which made a 16px line drawing read as a smudge. */
 .about-group h3 .icon {
   color: var(--accent);
+}
+
+/* §52's directory browser, under the Into field.
+
+   Bounded and scrolling rather than as tall as the directory happens to be:
+   a library root with two hundred record folders in it would otherwise push
+   the whole Export panel off the bottom of the window, and the list is a
+   thing you step through rather than read. */
+.directories {
+  margin-top: 0.4rem;
+  border: 1px solid var(--line);
+  background: var(--sunken);
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.directories .row {
+  position: sticky;
+  top: 0;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised);
+}
+
+.directories .at {
+  flex: 1;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+.directories ul {
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+}
+
+/* The whole row is the target, not the word: a directory name is three
+   characters wide as often as it is thirty. */
+.directories li button {
+  width: 100%;
+  border-color: transparent;
+  background: none;
+  text-align: left;
+}
+
+.directories li button:hover {
+  border-color: var(--line);
+  background: var(--raised);
+}
+
+.directories .quiet {
+  margin: 0;
+  padding: 0.4rem;
+  color: var(--dim);
 }

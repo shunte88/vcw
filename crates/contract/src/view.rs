@@ -1036,6 +1036,43 @@ impl About {
     }
 }
 
+/// One directory, as a path browser draws it (§52).
+///
+/// `serve` has no native file chooser to open - the chooser belongs to the
+/// machine running the browser and the paths belong to the machine running
+/// VCW - so the listener draws one, and this is what it draws from.
+///
+/// Directories only. The one question a person is answering is "which
+/// directory do the files go in", and listing the files in it would be a
+/// hundred rows of answer to a question nobody asked.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Listing {
+    /// The directory being listed, absolute.
+    pub at: String,
+    /// The directory above it, or `None` at the root the host confines this
+    /// to - which is how the browser knows not to draw an up link.
+    pub parent: Option<String>,
+    /// The subdirectories, sorted by name.
+    pub directories: Vec<Directory>,
+}
+
+/// One subdirectory in a [`Listing`].
+///
+/// Both the name and the whole path, which looks redundant and is not: the
+/// frontend draws the name and sends the path back, and joining them itself
+/// would mean knowing the host's separator. A Windows host canonicalizes to
+/// `\\?\C:\rips`, and that form rejects the forward slash a browser would
+/// have used.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Directory {
+    /// What to draw.
+    pub name: String,
+    /// What to ask for next.
+    pub path: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::About;

@@ -22,12 +22,24 @@ vcw-export = { workspace = true }
 vcw-i18n = { workspace = true }
 vcw-import = { workspace = true }
 vcw-project = { workspace = true }
+vcw-serve = { workspace = true, optional = true }
 vcw-types = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[features]
+# §52: "`serve` shall be a packaging-time feature that can be built out, and
+# shall be off unless the verb is invoked. A capture-only install shall not be
+# listening on anything." On by default because the headless deployment is the
+# one that wants it and a feature nobody enables is a feature nobody has;
+# `--no-default-features` leaves a `vcw` with no listener in it at all, which
+# is what a distribution packaging the CLI for capture only would build. The
+# gate builds both.
+default = ["serve"]
+serve = ["dep:vcw-serve"]
 
 [dev-dependencies]
 rusqlite = { workspace = true }

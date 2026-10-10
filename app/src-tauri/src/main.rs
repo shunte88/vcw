@@ -212,6 +212,7 @@ fn main() {
             commands::projects,
             commands::new_project,
             commands::library_root,
+            commands::browse,
             commands::artwork,
             commands::open_path,
             commands::move_marker,

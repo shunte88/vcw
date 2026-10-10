@@ -6962,3 +6962,87 @@ What is still open on `serve` is transport, not trust: the command surface is 38
 functions over `invoke` and one `listen` in `app/ui/src/api.ts`, and the server behind
 them has to be a threaded blocking one, because this tree has no async runtime and
 `Cargo.toml` says in as many words that it is not getting one.
+
+### `vcw serve` - built
+
+2026-10-10. The same interface, in a browser, on a machine with no desktop. Two new
+crates and a verb.
+
+**The window was never the shell.** `app/src-tauri` held 36 command bodies, and
+`AppHandle` was used in them for exactly three things: emit an event, name the config
+directory, name the cache directory. That is a trait, not a framework, so the bodies
+moved to a new crate, `vcw-shell`, behind `Host` with those three methods - a fourth
+arrived with the path browser below - and what is left in `app/src-tauri` is a window,
+a plugin, one adapter, 35 one-line wrappers and the two searches that step off the
+main thread.
+`core-is-ui-free` still holds: `vcw-shell` and `vcw-serve` are in the root workspace and
+`cargo tree` there still cannot reach Tauri.
+
+**One rule for one directory.** Two of the three `Host` methods were a platform
+convention written twice, once by Tauri and once by hand, agreeing on this machine with
+nothing saying they had to. The rule now lives in `vcw-i18n`, which already owned the
+catalog path and depends on no other VCW crate, and `the_window_and_the_rule_agree` in
+`vcw-app` asks Tauri and asks the rule and compares the answers. It fails when the
+bundle identifier moves, which was checked by moving it.
+
+**The listener.** `vcw-serve` is `tiny_http` with a thread per request, a 37-arm
+dispatch onto `vcw-shell`, and an `/events` endpoint that is Server-Sent Events. The
+fanout holds a `Vec` of senders and drops the ones that will not take a frame, which is
+`Host::emit` for a host with any number of windows, or none. A refusal is the same
+`Failure` the window rejects with, so `app/ui/src/api.ts` did not change at all: one new
+file, `host.ts`, picks Tauri or `fetch` by asking whether `__TAURI_INTERNALS__` is on
+`window`, and one `dist` serves both deployments.
+
+**Two tests hold the command surface together.** One parses `api.ts` for every
+`invoke("...")` and fails if the dispatch has no arm for it; the other fails on an arm
+nothing calls. Deleting one arm was tried and the first test caught it.
+
+**What first light found.** The served page came up with `no project is open` in the
+status bar before anyone had touched it, and an empty library behind an `about` block
+that was fully populated. `null` is a real answer from three commands and the HTTP path
+read it as "no answer" by way of a `??`. Over Tauri the same code was fine, because
+`invoke` hands the `null` straight back. The lesson is in `host.ts` in eleven lines and
+in `host.test.ts` in five assertions.
+
+**And what serve cannot do.** Play auditions through the host's output device, because
+the samples never leave the machine holding the project, and the meters are that
+machine's input. The transport bar says so where the Play button is, because the thing
+it explains is silence and silence looks like a fault.
+
+**The path browser is rooted, and unrooted means absent.** Export's Browse button
+cannot open a file chooser from a browser: the chooser would list the wrong machine's
+disks. Under `serve` the same button asks the host for a directory listing instead -
+`browse`, the 37th command, fenced by a fourth `Host` method, `browse_root`, which the
+window answers `None` and the listener answers with whatever `--files` named.
+`contract::browse::directories` canonicalizes both ends and falls back to the root for
+anything that does not start with it, so a path typed into the request cannot walk out;
+`the_path_browser_stays_inside_its_root` checks that with a `..` and with a symlink.
+Directories only, never files: the person is choosing where an export lands, and
+listing the files would be listing the host's record collection to whoever reached the
+port. An entry carries its name *and* its whole path, which looks redundant and is not
+- the frontend draws the name and sends the path back, and joining them itself would
+mean knowing a separator it does not have. A Windows host canonicalizes to
+`\\?\C:\rips`, and that form rejects the forward slash a browser would have used.
+
+`--files` has no default on purpose. The convenient guess - the home directory - is the
+operator's whole account, offered to whoever reaches the port, chosen for them by a
+line of code. §52 says the root is "stated when it starts", so an unstated one is not a
+smaller fence but no browser: the command refuses with a sentence naming the flag, and
+the typed path still works. `a_path_browser_needs_a_directory_stated_for_it` holds all
+three cases.
+
+**Authentication as §52 settled it**, verified end to end: `?t=` returns 303 with an
+`HttpOnly; SameSite=Strict` cookie and a `Location` of `/`, a request with no cookie is
+refused with the sentence that says where to find the address, and a wildcard bind with
+no `--allow-host` is refused before the socket is opened.
+
+**`serve` is a packaging-time feature**, as §52 requires: `vcw-cli` has a `serve`
+feature, on by default because the headless deployment is the one that wants it, and
+`--no-default-features` produces a `vcw` with no `tiny_http` in its tree and no `serve`
+in its `--help`. The gate's `features` leg and CI's `builds without their optional
+features` job both build and test that shape, so a capture-only package is not a claim
+that stops being checked.
+
+The Linux package installs the frontend to `/usr/share/vcw/ui`, which is where `serve`
+looks relative to the sidecar in `/usr/bin`, and a test fails if either of those two
+moves without the other.

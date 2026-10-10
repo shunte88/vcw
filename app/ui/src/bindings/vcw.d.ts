@@ -1138,6 +1138,31 @@ preview: Array<number>,
  */
 problem: string | null, };
 
+export type Listing = {
+/**
+ * The directory being listed, absolute.
+ */
+at: string,
+/**
+ * The directory above it, or `None` at the root the host confines this
+ * to - which is how the browser knows not to draw an up link.
+ */
+parent: string | null,
+/**
+ * The subdirectories, sorted by name.
+ */
+directories: Array<Directory>, };
+
+export type Directory = {
+/**
+ * What to draw.
+ */
+name: string,
+/**
+ * What to ask for next.
+ */
+path: string, };
+
 export type Release = {
 /**
  * Release title.

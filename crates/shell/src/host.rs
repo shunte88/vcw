@@ -33,12 +33,13 @@
 //! What a command needs from whatever is hosting it.
 //!
 //! Two hosts now: the Tauri window, and §52's HTTP listener. A command body
-//! needs three things from either of them and nothing else - somewhere to put
-//! an event, and the two per-user directories whose location is the host's
-//! question rather than VCW's. Everything else a command touches is a core
+//! needs four things from either of them and nothing else - somewhere to put
+//! an event, the two per-user directories whose location is the host's
+//! question rather than VCW's, and the directory a path browser may show, if
+//! this host has one at all. Everything else a command touches is a core
 //! crate or the [`crate::state::Shell`] it was handed.
 //!
-//! Three methods rather than a handle, because the alternative is the one this
+//! Four methods rather than a handle, because the alternative is the one this
 //! crate exists to undo: a command that takes an `AppHandle` is a command only
 //! a window can call, and §52 needs the same bodies answering a socket.
 
@@ -74,6 +75,20 @@ pub trait Host: Send + Sync {
 
     /// Where this user's cache lives, if the host can say.
     fn cache_dir(&self) -> Option<PathBuf>;
+
+    /// The directory §52's path browser is confined to, if this host has one.
+    ///
+    /// `None` is the window, and means there is no path browser here at all:
+    /// the desktop shell opens the platform's own file chooser, which is not
+    /// VCW's to root. §52's listener answers `Some`, because the chooser it
+    /// would open belongs to the wrong machine, so it draws one and this is
+    /// the fence around it.
+    ///
+    /// Defaulted, so that a host which has no such browser says nothing about
+    /// it rather than writing `None` out longhand.
+    fn browse_root(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// A host, shared.

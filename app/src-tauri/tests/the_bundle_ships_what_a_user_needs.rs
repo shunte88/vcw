@@ -97,11 +97,35 @@ fn every_file_the_bundle_names_is_where_it_says() {
         .iter()
     {
         let path = beside_config(source.as_str().expect("a source path"));
+        // `exists` and not `is_file`: the bundler copies a directory source
+        // recursively, which is how the frontend gets into the package for
+        // `vcw serve` to find.
         assert!(
-            path.is_file(),
+            path.exists(),
             "deb.files would install {installed} from {source}, which is not there"
         );
     }
+
+    // §52 serves the same `dist` the window compiles in, and it finds it by
+    // walking up from its own executable - so the path the package installs
+    // to and the path `vcw serve` falls back to are one fact written in two
+    // files. The sidecar lands in `/usr/bin`, which makes
+    // `<exe>/../share/vcw/ui` the directory below.
+    let installed = bundle["linux"]["deb"]["files"]
+        .as_object()
+        .expect("deb.files is an object")
+        .keys()
+        .any(|at| at == "/usr/share/vcw/ui");
+    assert!(
+        installed,
+        "the Linux package does not install the frontend, so `vcw serve` on a          packaged machine has nothing to serve"
+    );
+    let looks_in = std::fs::read_to_string(beside_config("../../crates/cli/src/serve.rs"))
+        .expect("the serve verb is where this test looks");
+    assert!(
+        looks_in.contains("../share/vcw/ui"),
+        "`vcw serve` no longer looks in the directory the package installs to"
+    );
 
     // The frontend build command runs with `app/` as its working directory, so
     // its `--dir` is relative to that and not to this crate.

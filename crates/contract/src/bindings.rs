@@ -226,6 +226,8 @@ pub fn typescript() -> String {
             decl::<crate::view::Boundary>(),
             decl::<crate::view::Measurement>(),
             decl::<crate::view::Project>(),
+            decl::<crate::view::Listing>(),
+            decl::<crate::view::Directory>(),
             decl::<crate::view::Release>(),
             decl::<crate::view::Candidate>(),
             decl::<crate::view::Accepted>(),

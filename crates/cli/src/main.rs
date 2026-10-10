@@ -60,6 +60,8 @@ mod metadata;
 mod play;
 mod recover;
 mod release;
+#[cfg(feature = "serve")]
+mod serve;
 mod session;
 mod soak;
 mod tracks;
@@ -109,6 +111,39 @@ enum Command {
         /// changed underneath them - see `i18n/en-US.toml`.
         #[arg(long)]
         i18n: bool,
+    },
+
+    /// Serve the whole VCW frontend over HTTP, for a machine with no screen (§52).
+    ///
+    /// The same window, in a browser on another machine. Every command the
+    /// desktop shell answers is answered here by the same code; what differs
+    /// is that audio plays out of *this* machine's sound card, because that
+    /// is where the record is.
+    ///
+    /// Loopback by default, which on a headless box means "nothing can reach
+    /// it until you say so". Give `--address` a real address, or a wildcard
+    /// and the names to answer to.
+    ///
+    /// Every request is authenticated, loopback included. The token comes from
+    /// `VCW_SERVE_TOKEN` or is minted for the run, and is printed once in a
+    /// URL. Nothing on the connection is encrypted and the banner says so.
+    #[cfg(feature = "serve")]
+    Serve {
+        /// Address to bind, `host:port`.
+        #[arg(long, default_value = "127.0.0.1:7437")]
+        address: String,
+        /// Directory holding the built frontend. Defaults to `VCW_SERVE_ROOT`,
+        /// then to `ui/` beside this executable.
+        #[arg(long)]
+        root: Option<std::path::PathBuf>,
+        /// A `host:port` this listener will answer to. Repeatable, and
+        /// required for a wildcard bind.
+        #[arg(long)]
+        allow_host: Vec<String>,
+        /// Directory the Export path browser may show, and may not leave.
+        /// Without it there is no browser and a path is typed.
+        #[arg(long)]
+        files: Option<std::path::PathBuf>,
     },
 
     /// Write a diagnostic bundle: one JSON document, no audio in it (§42).
@@ -1001,6 +1036,18 @@ fn run() -> anyhow::Result<()> {
     speak(cli.lang.as_deref());
     match cli.command {
         Command::Doctor { i18n } => doctor(i18n),
+        #[cfg(feature = "serve")]
+        Command::Serve {
+            address,
+            root,
+            allow_host,
+            files,
+        } => serve::run(serve::Args {
+            address,
+            root,
+            allow_host,
+            files,
+        }),
         Command::Bundle {
             project,
             out,

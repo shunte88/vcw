@@ -67,7 +67,7 @@ use std::path::{Path, PathBuf};
 use vcw_contract::browse;
 use vcw_contract::command::NewProject;
 use vcw_contract::settings::{Credential, Settings};
-use vcw_contract::view::Project as ProjectRow;
+use vcw_contract::view::{Listing, Project as ProjectRow};
 use vcw_project::Project;
 use vcw_project::release::{self, Artwork};
 
@@ -218,6 +218,40 @@ pub fn new_project(host: &Hosted, seed: NewProject) -> Result<ProjectRow, Error>
 /// As [`settings`].
 pub fn library_root(host: &Hosted) -> Result<Option<String>, Error> {
     Ok(load(host)?.recording.library)
+}
+
+/// One directory of the host's filesystem, for §52's path browser.
+///
+/// The desktop shell never calls this: it opens the platform's own chooser,
+/// which draws better and knows about bookmarks and removable volumes. A
+/// browser pointed at `vcw serve` cannot, because that chooser would open on
+/// the wrong machine, so the listener draws a list instead and this is where
+/// the list comes from.
+///
+/// The command exists on both hosts even so, because §52 forbids a command
+/// `serve` has and the window does not. What differs is the fence:
+/// [`crate::Host::browse_root`] is `None` in the window, and a host with no root has
+/// nothing to browse.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] when the host has no path browser. That is a refusal
+/// rather than an empty listing because it is a deployment fact and not a
+/// directory that happens to be empty, and the frontend hides the button it
+/// belongs to either way.
+pub fn browse(host: &Hosted, at: Option<String>) -> Result<Listing, Error> {
+    let root = host.browse_root().ok_or_else(|| Error::Invalid {
+        // The argument was fine; what is missing is the fence. Naming the
+        // flag as the field puts it in front of the sentence without the
+        // sentence having to say it twice - `Error::Invalid` renders as
+        // `{field}: {why}`.
+        field: "--files".to_owned(),
+        why: "this copy of VCW has no directory browser - type the export \
+              path as the machine running VCW names it, or restart it with \
+              a directory to browse under"
+            .to_owned(),
+    })?;
+    Ok(browse::directories(&root, at.as_deref().map(Path::new)))
 }
 
 /// The front cover of one project in the library, as a `data:` URL (§34).

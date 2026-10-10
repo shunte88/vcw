@@ -151,7 +151,7 @@ jobs:
   # three of the four would break silently. Linux only and `vcw-export` only -
   # this is about a feature combination, not about a platform.
   export-features:
-    name: export without its lossy features
+    name: builds without their optional features
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -172,6 +172,14 @@ jobs:
         run: cargo test -p vcw-export --no-default-features --features mp3
       - name: Ogg only - the escape hatch the notices name
         run: cargo test -p vcw-export --no-default-features --features ogg
+      # §52: `vcw serve` is a packaging-time feature for the same reason, less
+      # the license. "A capture-only install shall not be listening on
+      # anything", so a `vcw` with the listener built out has to compile and
+      # pass its tests, and nothing else in this file builds that shape.
+      - name: The command line with no listener in it
+        run: |
+          cargo clippy -p vcw-cli --all-targets --no-default-features -- -D warnings
+          cargo test -p vcw-cli --no-default-features
 
   # §2 is an architectural rule, so it gets a test rather than a code review habit:
   # nothing in crates/ may depend on Tauri, directly or transitively. WP-15 adds the

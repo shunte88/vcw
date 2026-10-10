@@ -556,11 +556,13 @@ export function App(): React.JSX.Element {
             <strong>{engine.refusal.code}</strong>
             {/* Its own element so it can wrap where the bar does not. A
                 refusal ends in advice naming what to do instead, and that
-                clause is exactly what the bar's ellipsis was eating. */}
-            <span className="reason">
-              {engine.refusal.message}
-              {engine.refusal.field !== null && ` (${engine.refusal.field})`}
-            </span>
+                clause is exactly what the bar's ellipsis was eating.
+
+                The field is not drawn, because it is already in the message:
+                `field` is `Some` only for `Error::Invalid`, whose `Display`
+                is `{field}: {why}`. The parenthesis after it was printing
+                every argument name twice. */}
+            <span className="reason">{engine.refusal.message}</span>
             <button type="button" onClick={store.dismiss}>
               Dismiss (Esc)
             </button>

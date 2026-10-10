@@ -227,9 +227,107 @@ fn preview_of(conn: &rusqlite::Connection, capture_id: i64) -> Option<Vec<f32>> 
     )
 }
 
+/// The subdirectories of `at`, for §52's path browser.
+///
+/// `root` confines it. Every answer is somewhere at or under `root`, the
+/// parent link stops there, and a path that escapes it - by `..`, by a
+/// symlink, or by being somewhere else entirely - is answered with `root`
+/// itself rather than a refusal. A browser is a thing a person clicks around
+/// in, and "that is not allowed" in response to a link the browser drew is a
+/// bug report; the only way out is to not draw the link, which is what the
+/// `None` parent does.
+///
+/// Canonicalized, so the containment test compares resolved paths. A `root`
+/// that does not resolve - deleted between starting and asking - lists
+/// nothing, which is the same answer as an empty directory and the only one
+/// that is safe.
+#[must_use]
+pub fn directories(root: &Path, at: Option<&Path>) -> view::Listing {
+    let Ok(root) = fs::canonicalize(root) else {
+        return view::Listing {
+            at: root.display().to_string(),
+            parent: None,
+            directories: Vec::new(),
+        };
+    };
+    let here = at
+        .and_then(|path| fs::canonicalize(path).ok())
+        .filter(|path| path.starts_with(&root))
+        .unwrap_or_else(|| root.clone());
+
+    let mut directories: Vec<view::Directory> = fs::read_dir(&here)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                // `metadata` and not `file_type`: a symlink to a directory is
+                // a directory to the person clicking it, and the containment
+                // test above is on the resolved path either way.
+                .filter(|entry| entry.metadata().is_ok_and(|meta| meta.is_dir()))
+                .filter_map(|entry| {
+                    entry
+                        .file_name()
+                        .into_string()
+                        .ok()
+                        .map(|name| view::Directory {
+                            path: entry.path().display().to_string(),
+                            name,
+                        })
+                })
+                .filter(|entry| !entry.name.starts_with('.'))
+                .collect()
+        })
+        .unwrap_or_default();
+    directories.sort_unstable_by(|left, right| left.name.cmp(&right.name));
+
+    view::Listing {
+        parent: (here != root)
+            .then(|| here.parent().map(|up| up.display().to_string()))
+            .flatten(),
+        at: here.display().to_string(),
+        directories,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The path browser lists what is under it and nothing above it.
+    #[test]
+    fn the_path_browser_stays_inside_its_root() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let root = dir.path().join("rips");
+        fs::create_dir_all(root.join("kraftwerk")).expect("a subdirectory");
+        fs::create_dir_all(root.join(".hidden")).expect("a dotted one");
+        fs::write(root.join("notes.txt"), b"x").expect("a file");
+
+        let top = directories(&root, None);
+        let names: Vec<&str> = top
+            .directories
+            .iter()
+            .map(|entry| entry.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["kraftwerk"],
+            "files and dot directories are not choices"
+        );
+        assert_eq!(top.parent, None, "there is no up from the root");
+
+        let down = directories(&root, Some(Path::new(&top.directories[0].path)));
+        assert!(down.directories.is_empty());
+        assert_eq!(
+            down.parent.as_deref(),
+            Some(top.at.as_str()),
+            "and up from there is the root"
+        );
+
+        // The whole point. `..` out of the root, and out again, and the answer
+        // is the root rather than the machine's filesystem.
+        let out = directories(&root, Some(&root.join("../..")));
+        assert_eq!(out.at, top.at, "{:?} escaped the root", out.at);
+        assert_eq!(out.parent, None);
+    }
 
     /// A root that does not exist is an empty library, not a failure.
     #[test]

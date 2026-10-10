@@ -32,6 +32,7 @@
 import * as api from "../api";
 import type { Audition, Capture, Side } from "../bindings/vcw";
 import { Face } from "../Face";
+import { inTheShell } from "../host";
 import type { Region } from "./Waveform";
 import { useKeys } from "../keys";
 import type { Store } from "../store";
@@ -198,6 +199,21 @@ export function Transport({
         >
           <Face icon="marker">Marker</Face>
         </button>
+        {/* §52: "Audio auditioned through `serve` is rendered by the host, not
+            by the browser, because the host is the machine the audio hardware
+            is attached to. The interface shall say so rather than appear to
+            have failed."
+
+            On the bar rather than in a tooltip, and always rather than only
+            while playing, because the thing it explains is silence: a person
+            whose laptop stays quiet does not hover the button that just did
+            what they asked, they decide Play is broken. The meters are the
+            same machine's, which is why this says audio and not playback. */}
+        {!inTheShell() && (
+          <span className="elsewhere" title="VCW is running on another machine">
+            Audio plays on the VCW host
+          </span>
+        )}
       </div>
     </div>
   );

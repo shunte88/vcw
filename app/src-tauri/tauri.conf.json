@@ -55,7 +55,8 @@
           "libasound2"
         ],
         "files": {
-          "/usr/share/doc/vcw/copyright": "../../LICENSE"
+          "/usr/share/doc/vcw/copyright": "../../LICENSE",
+          "/usr/share/vcw/ui": "../ui/dist"
         }
       }
     },

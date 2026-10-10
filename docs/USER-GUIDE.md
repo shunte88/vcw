@@ -44,11 +44,12 @@ It is a native window and not a web page. There is no address to point a browser
 at and no port to open: the interface is compiled into the binary and drawn by
 WebKit through GTK, which is also why the application needs a desktop to run on
 while the command line does not. If you are running VCW on a headless or
-memory-resident machine, capture there with `vcw` and open the project on a
-desktop - a `.vcw` is one self-contained file and copies cleanly. Copy it rather
-than opening it over a network share; SQLite's locking is not dependable on NFS
-or SMB, and a project is not a thing to lose. Serving the window to a browser on
-another machine is a planned verb (§52) and is not here yet.
+memory-resident machine you have two choices. Capture there with `vcw` and open
+the project on a desktop - a `.vcw` is one self-contained file and copies
+cleanly, and you should copy it rather than open it over a network share,
+because SQLite's locking is not dependable on NFS or SMB and a project is not a
+thing to lose. Or serve the same interface to a browser, which is the next
+section.
 
 | Workspace | What it is for |
 | --- | --- |
@@ -104,6 +105,73 @@ there is no selection.
 When the application refuses something it says so in a banner and leaves the
 refusal there until you dismiss it with `Escape`. That is deliberate: a refusal
 that disappears on its own is a refusal nobody read.
+
+### The same window, in a browser
+
+`vcw serve` puts the interface you have just read about on an HTTP port, so a
+machine with no desktop - the one the turntable is actually plugged into - can
+be driven from the laptop on your knee. It is the same interface: the same
+tabs, the same keyboard map, the same waveform. Nothing is rendered on your
+laptop that was not rendered in the window.
+
+```
+vcw serve
+```
+
+That binds `127.0.0.1:7437` and prints an address with a token on the end:
+
+```
+http://127.0.0.1:7437/?t=c90e2d10...
+```
+
+Open that once. Your browser keeps the token in a cookie and the bare address
+works from then on. The token is minted fresh for each run and written nowhere,
+so restarting `vcw serve` invalidates it and prints a new one; set
+`VCW_SERVE_TOKEN` if you would rather pin your own and keep a bookmark.
+
+To reach it from another machine, bind an address that machine can see:
+
+```
+vcw serve --address 192.168.1.42:7437
+```
+
+Three things to know before you do.
+
+**It is plain HTTP.** Nothing on the connection is encrypted - not the token,
+not what you type, not what you record. On a home network behind a router that
+is usually what people want. Across anything else, leave it bound to localhost
+and put an SSH tunnel around it, which is one command on your laptop:
+
+```
+ssh -L 127.0.0.1:7437:127.0.0.1:7437 the-machine
+```
+
+and then the address to open is `http://127.0.0.1:7437/` on your own machine.
+
+**Binding a wildcard needs you to say which names you will use.** `--address
+0.0.0.0:7437` is refused on its own, because a browser on your network can be
+made to send requests to it by a web page you did not write. Name the host you
+will type - `--allow-host 192.168.1.42:7437` - and anything else is turned
+away. Naming one address is simpler and is what the refusal suggests.
+
+**The audio plays where VCW is.** Play auditions the record through the
+*host's* output device, not your laptop's, because the samples never leave the
+machine holding the project. So does the meter: what you see is what that
+machine's input is doing. The transport bar says so, rather than letting
+silence look like a fault.
+
+**Export browses the host's directories, if you let it.** The Browse button
+cannot open your own machine's file chooser, because the directory you are
+picking is on the other machine. Start `serve` with `--files /srv/rips` and
+Browse draws that directory and everything under it, and nothing above it.
+Without `--files` there is no browser at all and the path is typed: an
+unstated root would have to be a guess, and the obvious guess - your home
+directory - is your whole account, offered to whoever reaches the port.
+
+The interface is the same `dist` the window uses and it is not compiled into
+the `vcw` binary. `serve` looks for it beside the executable (`ui/`, then
+`../share/vcw/ui`), and `--root` or `VCW_SERVE_ROOT` says where it is when you
+are running out of a build tree.
 
 ### Settings keep themselves
 
@@ -604,7 +672,9 @@ samples    32-bit float rounded to 24-bit integer, triangular dither, 3 dB of he
 
 `Ctrl+5` is the export panel, and it is the same two steps. **Browse...** opens
 the system's own directory chooser, starting at your library, so the output
-directory does not have to be typed. **Plan** resolves it and lists every file
+directory does not have to be typed. In a browser it opens VCW's own list of
+the host's directories instead, which is the same button doing the only thing
+it can from there. **Plan** resolves it and lists every file
 with the path it will have. **Export** (`Ctrl+E`) writes, reports `Writing 2 of
 3...` as it goes, and finishes with a line saying what came out:
 

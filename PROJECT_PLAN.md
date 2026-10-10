@@ -882,6 +882,20 @@ surface is mechanical and already enumerated, while the authentication model is 
 decision nobody has taken. Writing a number against the second would be inventing one.
 Take the auth decision first, and the rest is transcription.
 
+**Built 2026-10-10**, and the transcription was the easy half, as predicted. Two new
+crates in the root workspace: `vcw-shell`, which is every command body with no window
+around it, behind a four-method `Host` trait the window and the listener answer
+differently; and `vcw-serve`, a `tiny_http` listener with a thread per request, a
+37-arm dispatch and an `/events` stream. `app/src-tauri` is now a window, a plugin, an
+adapter and the wrappers. One `dist` serves both deployments and picks its transport at
+run time by asking whether `__TAURI_INTERNALS__` is on `window`, so a build flag never
+decides it. `vcw serve` is a cargo feature, on by default and provably removable.
+The two consequences §52 named are both answered rather than documented away: the
+rooted path browser is the `browse` command, fenced by `Host::browse_root`, which the
+window answers `None` and `--files` fills in - and which has no default, because the
+convenient one is the operator's whole account; and the transport bar says where the
+audio is coming out, because the thing it explains is silence.
+
 ---
 
 ## 8. Quality strategy

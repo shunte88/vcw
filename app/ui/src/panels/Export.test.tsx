@@ -43,6 +43,13 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: (options: Record<string, unknown>) => chosen(options),
 }));
 
+/** Which deployment the panel thinks it is in. */
+const inTheShell = vi.fn(() => true);
+
+vi.mock("../host", () => ({
+  inTheShell: () => inTheShell(),
+}));
+
 const planned = vi.fn(async (_request: Record<string, unknown>) => ({
   files: ["/data2/exports/A1 Europe Endless.flac"],
   covers: [],
@@ -53,9 +60,20 @@ const planned = vi.fn(async (_request: Record<string, unknown>) => ({
   foldToMono: false,
 }));
 
+/** The host's directories, as §52's listener would report them. */
+const listed = vi.fn(async (at: string | null) => ({
+  at: at ?? "/srv/rips",
+  parent: at === null ? null : "/srv/rips",
+  directories:
+    at === null
+      ? [{ name: "kraftwerk", path: "/srv/rips/kraftwerk" }]
+      : [],
+}));
+
 vi.mock("../api", () => ({
   exportPlan: (request: Record<string, unknown>) => planned(request),
   exportRun: vi.fn(async () => undefined),
+  browse: (at: string | null) => listed(at),
 }));
 
 function report(over: Partial<Exported> = {}): Exported {
@@ -130,6 +148,15 @@ async function choose(select: HTMLSelectElement, value: string) {
 }
 
 /** The browse button, by its label rather than its position. */
+function entry(
+  container: HTMLElement,
+  label: string,
+): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll<HTMLButtonElement>(".directories button")].find(
+    (button) => button.textContent === label,
+  );
+}
+
 function browseButton(container: HTMLElement): HTMLButtonElement | undefined {
   return [...container.querySelectorAll("button")].find((button) =>
     /browse/i.test(button.textContent ?? ""),
@@ -178,6 +205,11 @@ describe("the export panel", () => {
     chosen.mockClear();
     chosen.mockResolvedValue("/data2/exports");
     planned.mockClear();
+    // The browse button asks `host.ts` whether there is a desktop shell
+    // around it, because under §52 the chooser would open on the wrong
+    // machine. jsdom is nobody's shell, so these tests have to say they are
+    // one - and the test below says what happens when they are not.
+    inTheShell.mockReturnValue(true);
   });
 
   it("says nothing about an export while one is still running", async () => {
@@ -224,6 +256,36 @@ describe("the export panel", () => {
     });
     expect(chosen).toHaveBeenCalledTimes(1);
     expect(chosen.mock.calls[0]?.[0]).not.toHaveProperty("defaultPath");
+  });
+
+  it("browses the host's directories when the window is somewhere else", async () => {
+    // §52 serves this same `dist` to a browser on another machine, where the
+    // chooser `open` draws would list that machine's disks and not the one
+    // the files land on. The listener draws a list of its own directories
+    // instead, fenced to what `--files` named.
+    inTheShell.mockReturnValue(false);
+    const container = await render({});
+
+    await act(async () => {
+      browseButton(container)?.click();
+    });
+    expect(chosen).not.toHaveBeenCalled();
+    expect(listed).toHaveBeenCalledWith(null);
+    expect(container.textContent).toMatch(/kraftwerk/);
+
+    // Stepping in asks for that directory by the path the host gave, which is
+    // the whole reason an entry carries one: nothing here joins a separator.
+    await act(async () => {
+      entry(container, "kraftwerk")?.click();
+    });
+    expect(listed).toHaveBeenCalledWith("/srv/rips/kraftwerk");
+
+    await act(async () => {
+      entry(container, "Use this one")?.click();
+    });
+    const input = container.querySelector<HTMLInputElement>("input.wide");
+    expect(input?.value).toBe("/srv/rips/kraftwerk");
+    expect(container.querySelector(".directories")).toBeNull();
   });
 
   it("keeps the typed path when the picker is canceled", async () => {

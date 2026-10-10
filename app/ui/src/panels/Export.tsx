@@ -27,13 +27,19 @@
 // a file manager and paste it back. `Browse` is `dialog:allow-open` in
 // `capabilities/default.json` and nothing else - open a directory, never save a
 // file, because every filename VCW writes comes from the template.
+//
+// And the one place in the frontend that behaves differently per deployment.
+// §52's browser cannot open that dialog, so `Browse` asks the host for a
+// directory listing instead; `Directories` at the bottom of this file draws
+// it. Everything else in here is the same code in both.
 
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
 import * as api from "../api";
-import type { ExportPlan, Settings } from "../bindings/vcw";
+import type { ExportPlan, Listing, Settings } from "../bindings/vcw";
 import { effortOf } from "../effort";
+import { inTheShell } from "../host";
 import { useKeys } from "../keys";
 import type { Exported, Store } from "../store";
 
@@ -101,7 +107,20 @@ export function Export({
   // person who opens the dialog to look and changes their mind still has the
   // path they typed. The plan is dropped either way, because a plan resolved
   // against the old directory describes files nobody asked for.
+  const [listing, setListing] = useState<Listing | null>(null);
   const browse = () => {
+    // Two browsers, because there are two hosts. In the window the platform's
+    // own chooser is better than anything drawn here - bookmarks, removable
+    // volumes, typing a path with completion. Over §52 it is not available at
+    // all: it would open on the machine running the browser, which is not the
+    // machine the files land on. So `serve` draws a list of the host's own
+    // directories, fenced to the one `--files` names.
+    if (!inTheShell()) {
+      void run(async () => {
+        setListing(await api.browse(into.trim() === "" ? null : into));
+      });
+      return;
+    }
     void run(async () => {
       // Somewhere useful to start. Left to itself the chooser opens on the
       // process working directory, which for a dev run is `app/src-tauri` and
@@ -186,6 +205,24 @@ export function Export({
               Browse...
             </button>
           </span>
+          {listing !== null && (
+            <Directories
+              listing={listing}
+              onGo={(at) => {
+                void run(async () => {
+                  setListing(await api.browse(at));
+                });
+              }}
+              onPick={() => {
+                setInto(listing.at);
+                setPlan(null);
+                setListing(null);
+              }}
+              onClose={() => {
+                setListing(null);
+              }}
+            />
+          )}
         </label>
         <label>
           Format
@@ -381,4 +418,74 @@ export function size(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
   }
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
+}
+
+/**
+ * The host's directories, for a browser that cannot open a file chooser (§52).
+ *
+ * Directories only. A person is choosing where the export lands, and the files
+ * already there are not the choice - listing them would also list the record
+ * collection of whoever is running the host to whoever reached the port.
+ *
+ * Each entry carries its own path rather than just a name, so nothing here
+ * joins one. The host knows its separator and a browser does not: a Windows
+ * host canonicalizes to `\\?\C:\rips`, and that form rejects the forward slash
+ * this would otherwise have used.
+ */
+function Directories({
+  listing,
+  onGo,
+  onPick,
+  onClose,
+}: {
+  listing: Listing;
+  onGo: (at: string) => void;
+  onPick: () => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  return (
+    <div className="directories">
+      <div className="row">
+        <code className="at">{listing.at}</code>
+        <button type="button" onClick={onPick}>
+          Use this one
+        </button>
+        <button type="button" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+      <ul>
+        {listing.parent !== null && (
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                onGo(listing.parent as string);
+              }}
+            >
+              .. up
+            </button>
+          </li>
+        )}
+        {listing.directories.map((entry) => (
+          <li key={entry.path}>
+            <button
+              type="button"
+              onClick={() => {
+                onGo(entry.path);
+              }}
+            >
+              {entry.name}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {listing.parent === null && listing.directories.length === 0 && (
+        <p className="quiet">
+          Nothing below here. Export into this directory, or start VCW with
+          --files pointing somewhere with more in it.
+        </p>
+      )}
+    </div>
+  );
 }

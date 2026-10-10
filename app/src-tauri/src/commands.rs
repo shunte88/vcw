@@ -56,7 +56,7 @@ use vcw_contract::command::{
 };
 use vcw_contract::settings::{Credential, Settings};
 use vcw_contract::view::{
-    About, Accepted, Boundary, Candidate, Capture, Device, ExportPlan,
+    About, Accepted, Boundary, Candidate, Capture, Device, ExportPlan, Listing,
     Project as ProjectRow, Release, Side, Track, Waveform,
 };
 use vcw_shell::state::{Error, Shell};
@@ -161,6 +161,11 @@ pub(crate) fn new_project(app: AppHandle, seed: NewProject) -> Result<ProjectRow
 #[tauri::command]
 pub(crate) fn library_root(app: AppHandle) -> Result<Option<String>, Error> {
     vcw_shell::config::library_root(&hosted(&app))
+}
+
+#[tauri::command]
+pub(crate) fn browse(app: AppHandle, at: Option<String>) -> Result<Listing, Error> {
+    vcw_shell::config::browse(&hosted(&app), at)
 }
 
 #[tauri::command]

@@ -254,7 +254,7 @@ fn the_guide_documents_every_verb_a_person_needs() {
     let text = guide();
     for verb in [
         "doctor", "devices", "formats", "session", "recover", "import", "detect", "tracks",
-        "metadata", "release", "export", "bundle",
+        "metadata", "release", "export", "bundle", "serve",
     ] {
         assert!(
             text.contains(&format!("vcw {verb}")),

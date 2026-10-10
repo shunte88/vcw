@@ -1,0 +1,25 @@
+[package]
+name = "vcw-serve"
+description = "The VCW frontend over HTTP, for a turntable on a machine with no screen (§52)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+vcw-contract = { workspace = true }
+vcw-i18n = { workspace = true }
+vcw-shell = { workspace = true }
+getrandom = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tiny_http = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
