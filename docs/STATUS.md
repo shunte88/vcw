@@ -7046,3 +7046,19 @@ that stops being checked.
 The Linux package installs the frontend to `/usr/share/vcw/ui`, which is where `serve`
 looks relative to the sidecar in `/usr/bin`, and a test fails if either of those two
 moves without the other.
+
+**And the feature's own test was the thing that broke.** CI's `builds without their
+optional features` job went red on the first push: `the_user_guide_names_real_commands`
+drives clap with every `vcw <verb>` the guide prints, and a build with no `serve` has
+no such subcommand, so the guide looked wrong to it. The guide is right - it documents
+the product, not one build of it - so the test now skips those lines when the feature
+is off, and a typo in any of them still fails the build that has it. Proven both ways
+by breaking `--address` to `--addresss` and watching only the default build complain.
+
+The second half of that is worse than the first. The gate had said `features OK`.
+`/data2/vcw-bench/gate.sh` is a hand-copied second copy of the gate script that nothing
+synchronized, so the two `vcw-cli --no-default-features` commands §52 added to that leg
+existed here and not there, and the leg reported a pass for work it never did. A gate
+that reports a leg it did not run is worse than one that does not have the leg.
+`/data2/vcw-scratch/offload-gate.sh` now rsyncs the tree and `gate.sh` and launches in
+one command, so there is no step left to forget.

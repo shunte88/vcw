@@ -185,6 +185,14 @@ fn documented() -> Vec<(String, Vec<String>)> {
 fn every_command_line_in_the_user_guide_is_one_the_cli_accepts() {
     let mut checked = 0usize;
     for (line, args) in documented() {
+        // §52 makes `serve` a packaging-time feature, and the guide documents
+        // the product rather than one build of it. A `vcw` built without the
+        // listener has no such subcommand, so those lines are not its to check
+        // - and a typo in any of them still fails the build that does have it.
+        #[cfg(not(feature = "serve"))]
+        if args.first().is_some_and(|word| word == "serve") {
+            continue;
+        }
         let truncated = args.iter().any(|word| word == "...");
         let mut path: Vec<String> = Vec::new();
         let mut page = help(&path);
