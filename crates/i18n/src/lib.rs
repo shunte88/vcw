@@ -313,6 +313,21 @@ pub const IDENTIFIER: &str = "dev.vcw.workstation";
 /// they have to reconstruct from this comment.
 #[must_use]
 pub fn user_dir() -> Option<std::path::PathBuf> {
+    config_dir().map(|dir| dir.join("i18n"))
+}
+
+/// Where this user's VCW settings live.
+///
+/// Here, in the smallest crate that needed the rule first, because the whole
+/// argument above is that there must be one of it. §52's listener asks this
+/// directly - it has no Tauri to ask - and the window still asks Tauri, which
+/// is the same answer by the same rule and is checked by
+/// `the_window_and_the_rule_agree` in `vcw-app`.
+///
+/// `None` is a process with no home rather than a failure: the caller decides
+/// whether that is worth refusing over, and [`user_dir`] decides it is not.
+#[must_use]
+pub fn config_dir() -> Option<std::path::PathBuf> {
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
     let base = if cfg!(target_os = "windows") {
         std::env::var_os("APPDATA").map(std::path::PathBuf::from)
@@ -324,7 +339,29 @@ pub fn user_dir() -> Option<std::path::PathBuf> {
             .filter(|dir| dir.is_absolute())
             .or_else(|| home.map(|home| home.join(".config")))
     };
-    base.map(|base| base.join(IDENTIFIER).join("i18n"))
+    base.map(|base| base.join(IDENTIFIER))
+}
+
+/// Where this user's VCW cache lives.
+///
+/// §40's provider cache and nothing else. The platform rule differs from
+/// [`config_dir`] on all three - `$XDG_CACHE_HOME` or `~/.cache`,
+/// `~/Library/Caches`, `%LOCALAPPDATA%` - which is why it is written out
+/// rather than derived from it.
+#[must_use]
+pub fn cache_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        home.map(|home| home.join("Library/Caches"))
+    } else {
+        std::env::var_os("XDG_CACHE_HOME")
+            .map(std::path::PathBuf::from)
+            .filter(|dir| dir.is_absolute())
+            .or_else(|| home.map(|home| home.join(".cache")))
+    };
+    base.map(|base| base.join(IDENTIFIER))
 }
 
 /// Every language this copy of VCW can be set to, source language first.
@@ -435,6 +472,19 @@ pub fn t(key: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The active catalog is one process-wide slot, and two tests below write
+    /// it. The harness runs them at once, so `a_string_travels...` could put
+    /// `xx-XX` in the slot between the `activate(None)` and the `locale()`
+    /// assertion of `a_missing_string...` - which is what went red on the
+    /// gate rather than anything about translation. Same mutex idiom as
+    /// `vcw-core`'s `metering_live.rs`, for the same reason: shared state
+    /// that a test mutates has to be held, not hoped about.
+    fn alone() -> std::sync::MutexGuard<'static, ()> {
+        static GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        GATE.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 
     #[test]
     fn the_source_catalog_is_a_catalog() {
@@ -560,6 +610,7 @@ mod tests {
 
     #[test]
     fn a_missing_string_shows_its_key_rather_than_nothing() {
+        let _held = alone();
         activate(None);
         assert_eq!(
             t("export.aiff.channels"),
@@ -571,6 +622,7 @@ mod tests {
 
     #[test]
     fn a_string_travels_from_the_catalog_to_the_caller() {
+        let _held = alone();
         let source = Catalog::source();
         let them = translated(&[(
             "export.aiff.channels",
