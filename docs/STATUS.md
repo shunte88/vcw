@@ -7062,3 +7062,32 @@ existed here and not there, and the leg reported a pass for work it never did. A
 that reports a leg it did not run is worse than one that does not have the leg.
 `/data2/vcw-scratch/offload-gate.sh` now rsyncs the tree and `gate.sh` and launches in
 one command, so there is no step left to forget.
+
+### ALAC replaces AAC on the 0.3 list
+
+AAC is withdrawn, by decision rather than by deferral, and ALAC takes the slot. The
+reasoning is in §33 and is not the licensing question it had been filed under: a vinyl
+capture is an archival act, FLAC already returns the samples that went in on every
+platform VCW ships to, and the one place that is awkward is the Apple ecosystem. ALAC
+fills that gap; a third lossy encoder beside MP3 and Ogg fills none. The FDK problem is
+real and would have decided it the same way, but it is no longer the reason.
+
+What the work actually is, because it is not the shape the AAC entry had. The codec
+half is a dependency: `alac-encoder` 0.3.0, a Rust port of Apple's own library,
+Apache-2.0 OR MIT, no C and no system library, returning packets and a 24-byte magic
+cookie. The container half is ours, the way AIFF's was - the crate muxes nothing, and
+an ALAC file that players open is an MP4, so `Container::Alac` writes a minimal `.m4a`
+by hand: `ftyp`, `moov` down to an `alac` sample entry holding the cookie, and `mdat`,
+with the sample-size table built from what the encoder hands back. The crate last
+released in January 2022 and has modest traffic, so it gets the same burn-in on the
+corpus that `oxideav-aac` would have, and for a better reason: a lossless codec can be
+checked exactly, where a lossy one can only be listened to.
+
+Which is what makes the exit criterion cheap. Decode the export, compare it to the
+source blocks byte for byte - the criterion WP-14 already set for WAV - with `ffmpeg`
+and `afconvert` as the third-party readers. lofty 0.25 already reads MP4 and already
+recognizes ALAC, parsing the very cookie we will have written, so the tagger that has
+to tag the file is also an independent reader of the container. The width rule carries
+over unchanged: 16, 20, 24 and 32-bit integer are in, which gives a default S32 capture
+a path, and `Float32` is refused through the same `Width` machinery, because choosing
+dither is a person's decision and not an exporter's.

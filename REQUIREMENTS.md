@@ -339,11 +339,29 @@ Required: artist; album artist; album; title; track/disc/side numbers; year; gen
 VRipr genre normalization shall be retained.
 ## 33. Export
 Initial export formats:
-Required: FLAC; WAV; MP3; OGG.
+Required: FLAC; WAV; AIFF; MP3; OGG.
 Potential later formats:
-Required: ALAC; AAC; Opus.
+Required: ALAC; Opus.
 Export operates from immutable source blocks plus project edit instructions.
 Export shall support metadata, artwork, and configurable naming templates.
+
+AIFF is listed above rather than below because it shipped in 0.2; the list is of what
+VCW writes, not of what it was once expected to write.
+
+**AAC was listed as a later format and is withdrawn, 2026-10-10.** A vinyl capture is
+an archival act, and the format worth adding to one is a format that returns the
+samples that went in. FLAC already does that on every platform VCW ships to, and the
+one place it is awkward is the Apple ecosystem - which is the gap ALAC fills and the
+only reason to add it. A third lossy encoder beside MP3 and Ogg fills no gap at all.
+The licensing position points the same way and is not the reason: the usable AAC
+encoders are FDK, whose license VCW cannot carry onto four platforms, or a
+platform-supplied codec that does not exist on Linux. The decision would be the same
+if AAC were public domain.
+
+ALAC shall be written into an MP4 container, as `.m4a`, because that is the form the
+players that want ALAC will open. Lossless is a property of the encoder and a
+statement about the export only; it says nothing about the capture that preceded it,
+which §9 governs and which this requirement does not touch.
 ## 34. Frontend Responsibilities
 React/TypeScript shall provide:
 Required: project browser; capture workspace; transport controls; meters; waveform display; track editor; metadata browser; export UI; settings.

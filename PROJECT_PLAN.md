@@ -40,7 +40,7 @@ by. So the plan is deliberately inverted against the temptation to build screens
 | **G1** | Headless core | Record → store → recover → detect → edit → export, all from the CLI, no GUI in existence | 96 |
 | **G2** | MVP release 0.1 | §44 scope plus Audacity import, GUI, packaged for every Tier 1 platform | 53 |
 | **G3** | Release 0.2 | §45 scope (chromaprint-next, AcoustID, evidence resolver, MP3/OGG) | 47 |
-| **G4** | Release 0.3+ | §46 scope (processing, click removal, remote interface §52, Android, plugins), plus i18n and the AIFF/AAC containers | re-plan at G3 |
+| **G4** | Release 0.3+ | §46 scope (processing, click removal, remote interface §52, Android, plugins), plus i18n and the ALAC container (AIFF shipped in 0.2; AAC withdrawn 2026-10-10) | re-plan at G3 |
 
 *Weight* is relative effort in sessions (~3 focused hours), used for sequencing and for
 noticing when something is running away - not for forecasting dates.
@@ -784,6 +784,28 @@ click/pop detection and removal · optional normalization · ONNX detector reviv
 advanced archival metadata · improved multi-disc workflow · plugin/provider architecture ·
 Android (AAudio, the largest single unknown - needs its own feasibility spike). Not
 estimated; re-plan at G3.
+
+**ALAC replaces AAC, 2026-10-10.** §33 carries the reasoning; this is the shape of the
+work. It is two pieces, and only one of them is a codec. `alac-encoder` 0.3.0 is a Rust
+port of Apple's own ALAC library, Apache-2.0 OR MIT, no C and no system library, and it
+hands back encoded packets plus the 24-byte magic cookie that describes them - which is
+all the codec half needs. The other half is a container: the crate muxes nothing, and
+an ALAC file that players will open is an MP4, so `Container::Alac` means writing a
+minimal `.m4a` by hand the way `Container::Aiff` writes a `FORM`. That is `ftyp`,
+`moov` down through `stbl` with the cookie inside an `alac` sample entry, and `mdat`,
+with the sample-size table built as the packets come back. Bigger than AIFF's 54 fixed
+bytes and bounded: nothing in it varies with the content except three tables.
+
+Two things make the exit criterion cheap. lofty 0.25 already reads MP4 and already
+recognizes ALAC - `Mp4Codec::ALAC`, with `alac_properties` parsing the very cookie we
+will have written - so handing our own file back to the tagger that will tag it is a
+real check of the container, not a self-consistent one. And lossless means the exit
+criterion is the one WP-14 already set for WAV: decode the export and compare it to the
+source blocks byte for byte. `ffmpeg` and `afconvert` are the third-party readers.
+Watch the width. ALAC takes 16, 20, 24 and 32-bit integer, so a default S32 capture has
+a path where FLAC once did not, but a `Float32` capture is refused through the same
+`Width` machinery FLAC and AIFF use, for the same reason: choosing dither is a person's
+decision.
 
 **Playback equalization curves, for the people who care most.** RIAA has only been
 the standard since 1954. Records cut before it - and a good many 78s after it - were
