@@ -201,6 +201,13 @@ describe("the about dialog", () => {
     expect(text).toContain("Team Badger shirts");
   });
 
+  it("thanks the first outside user, by name and by forum", async () => {
+    const text = (await shown([flacenc])).textContent ?? "";
+    expect(text).toMatch(/Thanks to/i);
+    expect(text).toContain("Paul Webster");
+    expect(text).toContain("forum.lyrion.com");
+  });
+
   it("says why when no browser would start, rather than looking dead", async () => {
     opened = [];
     refusal = "no browser could be started for https://www.buymeacoffee.com/shunte88";

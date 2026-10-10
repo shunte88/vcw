@@ -334,3 +334,45 @@ export function toBand(
   const right = Math.min(100, ((high - start) / across) * 100);
   return right <= left ? null : { left, width: right - left };
 }
+
+/**
+ * The frame nearest `x` among `frames`, or `null` if none is within `within`.
+ *
+ * Everything is in the picture's own coordinates: `x` and `within` in CSS
+ * pixels from its left edge, `width` its width, `start` and `end` the frames at
+ * its two ends. The caller turns the answer back into seconds, because this
+ * module knows about frames and pixels and deliberately not about clocks.
+ *
+ * # Why a click needs to snap
+ *
+ * `split` cuts a track at the playhead and nowhere else, so re-cutting at a
+ * boundary means landing the playhead on that exact frame. Without a snap that
+ * means zooming until one pixel is one frame. The first outside report walked
+ * into the dead end: a merge dropped a track, re-running detection put the
+ * boundary back on the screen - adoption rewrites it, it just will not pair it
+ * into a track while something already spans it - and no gesture could reach
+ * the frame it was drawn at.
+ */
+export function nearestFrame(
+  frames: readonly number[],
+  x: number,
+  width: number,
+  start: number,
+  end: number,
+  within: number,
+): number | null {
+  const across = end - start;
+  if (across <= 0 || width <= 0 || !Number.isFinite(x)) {
+    return null;
+  }
+  let best: number | null = null;
+  let nearest = Infinity;
+  for (const frame of frames) {
+    const away = Math.abs(((frame - start) / across) * width - x);
+    if (away < nearest) {
+      nearest = away;
+      best = frame;
+    }
+  }
+  return nearest <= within ? best : null;
+}

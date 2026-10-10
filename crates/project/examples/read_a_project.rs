@@ -44,7 +44,7 @@
 //! a poor introduction.
 //!
 //! ```text
-//! cargo run -p vcw-project --example read_a_project -- side-a.vcw
+//! cargo run -p vcw-project --example read_a_project -- album.vcw
 //! ```
 
 use std::process::ExitCode;

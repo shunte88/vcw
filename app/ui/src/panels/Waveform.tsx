@@ -165,6 +165,7 @@ import {
   type Span,
   fit,
   follow,
+  nearestFrame,
   pan,
   region,
   resolve,
@@ -254,6 +255,15 @@ const SCRUB = 90;
 const SLOP = 3;
 
 /**
+ * How near a boundary a click must land to snap to it, in CSS pixels.
+ *
+ * Wider than `SLOP`, because this is a target being aimed at rather than a
+ * tremor being tolerated. A boundary is drawn one or two pixels wide, so a
+ * tolerance the width of the line would mean hitting it exactly.
+ */
+const SNAP = 6;
+
+/**
  * How much of the window a wheel notch pans.
  *
  * A tenth, so crossing a whole side takes ten flicks at any zoom - the same
@@ -296,6 +306,11 @@ export type Region = { readonly from: number; readonly to: number };
  * rate for a reason other than drawing, which is the beginning of it knowing
  * things.
  *
+ * `onCue` is the other half of that, and the difference is whether anything is
+ * meant to be heard. A scrub seeks, because a scrub is a person listening for
+ * where they are. A click cues: it puts the playhead down and plays nothing,
+ * which is what somebody lining up a split is doing.
+ *
  * `tracks` are the ones on a side this capture holds, which the caller decides
  * for the same reason it decides which capture is current. This draws what it
  * is given, in the seconds it is given them in.
@@ -316,6 +331,7 @@ export function Waveform({
   playhead,
   playing,
   onSeek,
+  onCue,
   selection,
   onSelect,
   generation,
@@ -328,6 +344,7 @@ export function Waveform({
   playhead: number;
   playing: boolean;
   onSeek: (seconds: number) => void;
+  onCue: (seconds: number) => void;
   selection: Region | null;
   onSelect: (selection: Region | null) => void;
   generation: number;
@@ -843,6 +860,37 @@ export function Waveform({
   };
 
   /**
+   * The boundary nearest a pointer, in seconds, or `null` if none is in reach.
+   *
+   * The search is [`nearestFrame`], which is where the frame-to-pixel
+   * arithmetic lives and where it is tested. This half is only the plumbing:
+   * the element's box, the frames at its two ends, and the conversion back to
+   * the seconds the callbacks speak.
+   */
+  const boundaryNear = (clientX: number, element: HTMLElement): number | null => {
+    if (peaks === null) {
+      return null;
+    }
+    const bounds = element.getBoundingClientRect();
+    const at = nearestFrame(
+      boundaries.map((boundary) => boundary.atFrame),
+      clientX - bounds.left,
+      bounds.width,
+      peaks.startFrame,
+      peaks.endFrame,
+      SNAP,
+    );
+    if (at === null) {
+      return null;
+    }
+    const across = peaks.endFrame - peaks.startFrame;
+    return (
+      peaks.startSeconds +
+      ((at - peaks.startFrame) / across) * (peaks.endSeconds - peaks.startSeconds)
+    );
+  };
+
+  /**
    * Whether a pointer is on one of the two rulers, and so whether a drag from
    * here would scroll.
    *
@@ -940,7 +988,9 @@ export function Waveform({
         ? "dragging"
         : (shift && playing) || onHandle(at.x, at.y, element) || onRuler(at.y, element)
           ? "grab"
-          : "select";
+          : boundaryNear(at.x, element) !== null
+            ? "snap"
+            : "select";
   };
 
   // Through a ref so the listener below can be attached once. An effect that
@@ -1152,9 +1202,16 @@ export function Waveform({
               dragged.current = false;
               return;
             }
-            const seconds = secondsAt(event.clientX, event.currentTarget);
+            // Snapped to a boundary in reach first, because the frame a person
+            // is aiming at is almost always one a detector has already found
+            // and drawn, and never the pixel they managed to hit. Splitting a
+            // track exactly where it was split before is the move this makes
+            // possible, and it was the one nothing here could do.
+            const seconds =
+              boundaryNear(event.clientX, event.currentTarget) ??
+              secondsAt(event.clientX, event.currentTarget);
             if (seconds !== null) {
-              onSeek(seconds);
+              onCue(seconds);
             }
             // And a click puts the selection away. Nothing else can: the band
             // outlives the gesture that drew it, so there has to be a way to

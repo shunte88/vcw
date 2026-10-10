@@ -6865,3 +6865,66 @@ with a record player, three more that first light and a careful read of what the
 fix had written turned up after them, and the before-we-begin wizard they asked
 for. Nothing in it changes a recorded byte except by keeping audio a full disk
 used to lose.
+
+### The third report: a playhead nobody could aim
+
+Same person, a day later, now editing tracks in the window on Windows. He could zoom
+in and see a boundary, and could not work out which action made it the end of one
+track or the start of the next. He tried **Merge with next**, it joined track 2 into
+track 1 and removed it from the list, and he could not get it back: quitting did not
+undo it because it was already committed, re-running **Detect** appeared to do
+nothing, and unlocking everything did not help either. He had found `vcw tracks
+album.vcw split 3 12345678` in the docs and assumed the workflow would be obvious once
+he understood it.
+
+**Three mechanisms, and none of them was the bug.** The selection bar is a readout and
+says so - no action consumes a selection, which is why no action looked right.
+`track::merge` deletes both inner boundaries unless they are locked, which is
+deliberate and tested, and a merge that left litter behind would be a worse default.
+`adopt` filters any boundary falling inside an existing track out of pairing, on
+purpose, so re-detection *did* rewrite the boundary at 1.5 s and then declined to pair
+it, reported "N boundary(s), 0 track(s)", and read as a no-op.
+
+**The bug is underneath all three: the playhead was a readout of playback and not a
+position.** It moved only while audio was running and it reset to zero when playback
+stopped. "Split at playhead" and "Place marker" were therefore actions nobody could
+aim - the only way to put the playhead on a frame was to play up to it and press the
+button at the right instant. His recovery path existed the whole time and was
+unreachable: the boundary was still on screen, drawn, and there was no gesture that
+turned a drawn boundary into a position.
+
+So a click on the waveform now **cues**: it puts the playhead down, plays nothing, and
+snaps to a boundary within six CSS pixels. `store.cue` is the new verb, the one place
+the playhead can be set by a person. The snapping arithmetic is `zoom::nearestFrame`,
+pure and beside its own test, because the component should not own a search. A click
+during playback still seeks, because then "go there" does mean "and keep playing". The
+transport's playhead readout no longer hides itself when stopped, which it had to -
+the number Split is about has to be legible exactly when nothing is running, which is
+when somebody is lining Split up.
+
+**Driven in the real window rather than asserted in jsdom.** Under Xvfb at 1600x1000,
+on a two-track project with its boundary at frame 72,000: a click four pixels to the
+right of the drawn line put the playhead on 766 px, exactly the boundary's own column,
+with the transport still reading IDLE; a click at 400 px, far from anything, landed on
+400 and did not snap, which is the control that matters. Then his sequence - Merge with
+next, which left one track from 0 to 3.0 s and the two boundaries listed as *not a
+track*; a click four pixels to the *left* of the line; Split at playhead - and the
+project came back as two tracks split at frame 72,000. Not near it. It.
+
+**And the docs told him something false.** They used `side-a.vcw` as the example
+filename everywhere, and "What a project is" said a project normally holds one side.
+The schema disagrees: `release_id` is always 1, sides hang off the release, and the
+whole file is one record. That is why the library lists a project by album and why a
+metadata lookup matches a whole tracklist against it - which is the connection he made
+himself, at the end of his report, and he was right. The example is now `album.vcw`
+and the section says what a project is.
+
+The About dialog has a **Thanks to** section now, with him at the top of it.
+
+### 0.2.2-alpha
+
+Cut on 2026-10-10. One report, one root cause three behaviors were hiding, and the
+docs correction the same person's last paragraph asked for without quite asking.
+Nothing in it changes a recorded byte: the audio a merge appears to destroy was
+never touched, and this is the release that lets you prove it by cutting the track
+again on the same sample.

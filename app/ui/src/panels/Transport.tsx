@@ -106,8 +106,16 @@ export function Transport({
           {clock(engine.seconds)}
         </span>
         <span className="phase">{engine.phase}</span>
-        {engine.playing && (
-          <span className="clock playhead" title="The audition playhead">
+        {/* Not only while playing. The playhead is where Split and Place
+            marker will land, and a click on the waveform now puts it there
+            without playing anything - so the number those two buttons are
+            about has to be readable when nothing is running, which is
+            exactly when a person is lining one of them up. */}
+        {(engine.playing || engine.playhead > 0) && (
+          <span
+            className="clock playhead"
+            title="The playhead: where Split and Place marker will land"
+          >
             {clock(engine.playhead)}
           </span>
         )}

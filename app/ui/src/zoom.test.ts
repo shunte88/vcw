@@ -18,6 +18,7 @@ import {
   clamp,
   fit,
   follow,
+  nearestFrame,
   pan,
   region,
   resolve,
@@ -345,5 +346,70 @@ describe("the band a drag paints", () => {
   it("is nothing when the drag has not moved, and nothing to divide by", () => {
     expect(toBand(500, 500, 0, 1000)).toBeNull();
     expect(toBand(250, 500, 1000, 1000)).toBeNull();
+  });
+});
+
+describe("snapping a click to a boundary", () => {
+  // A thousand pixels across a thousand frames, so a frame is a pixel and the
+  // arithmetic stays out of the way of what is being asserted.
+  const PICTURE = { width: 1000, start: 0, end: 1000, within: 6 };
+  const snap = (frames: readonly number[], x: number) =>
+    nearestFrame(
+      frames,
+      x,
+      PICTURE.width,
+      PICTURE.start,
+      PICTURE.end,
+      PICTURE.within,
+    );
+
+  it("takes the boundary under the pointer", () => {
+    expect(snap([200, 500, 800], 500)).toBe(500);
+  });
+
+  it("reaches a boundary a few pixels away, which is the whole point", () => {
+    // Nobody hits a two-pixel line exactly, and `split` needs the frame and
+    // not the neighborhood.
+    expect(snap([200, 500, 800], 504)).toBe(500);
+    expect(snap([200, 500, 800], 496)).toBe(500);
+  });
+
+  it("lets go of a click that was not aimed at one", () => {
+    // Null rather than the nearest, because the caller falls back to the
+    // pixel: a click in the middle of a track means that spot, not the
+    // boundary four hundred frames away.
+    expect(snap([200, 500, 800], 400)).toBeNull();
+  });
+
+  it("takes the nearer of two, not the first in reach", () => {
+    expect(snap([498, 503], 502)).toBe(503);
+    expect(snap([498, 503], 499)).toBe(498);
+  });
+
+  it("keeps the earlier of two equally close, so the answer is not arbitrary", () => {
+    // Dead between them. Either is defensible and neither is obviously right,
+    // so the rule is written down here and the first one wins - without this
+    // the comparison could be loosened to `<=` and the answer would quietly
+    // change to the later frame with nothing to notice.
+    expect(snap([498, 502], 500)).toBe(498);
+  });
+
+  it("holds at the edge of the tolerance rather than just inside it", () => {
+    expect(snap([500], 506)).toBe(500);
+    expect(snap([500], 507)).toBeNull();
+  });
+
+  it("has nothing to say about an empty side or a picture with no width", () => {
+    expect(snap([], 500)).toBeNull();
+    expect(nearestFrame([500], 500, 0, 0, 1000, 6)).toBeNull();
+    expect(nearestFrame([500], 500, 1000, 1000, 1000, 6)).toBeNull();
+  });
+
+  it("works zoomed in, where a pixel is a fraction of a frame", () => {
+    // 100 frames across 1000 pixels: ten pixels to the frame, so the six-pixel
+    // tolerance is less than one frame and only a near-exact click lands.
+    expect(nearestFrame([50], 500, 1000, 0, 100, 6)).toBe(50);
+    expect(nearestFrame([50], 505, 1000, 0, 100, 6)).toBe(50);
+    expect(nearestFrame([50], 520, 1000, 0, 100, 6)).toBeNull();
   });
 });

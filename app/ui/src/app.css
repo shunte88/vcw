@@ -1261,6 +1261,14 @@ code {
   cursor: grabbing;
 }
 
+/* A boundary is under the pointer and a click will land on the frame it was
+   drawn at rather than on the pixel. `col-resize` because what is on offer is
+   a vertical line in a horizontal picture, which is the thing that cursor
+   draws - and it is a platform cursor, so it needs no asset and no 2x twin. */
+.waveform canvas[data-gesture="snap"] {
+  cursor: col-resize;
+}
+
 /*
  * The window's own scrollbar, drawn rather than borrowed from `overflow: auto`.
  * A native one has to be driven by writing `scrollLeft` and read back out of a

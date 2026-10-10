@@ -466,6 +466,18 @@ export function App(): React.JSX.Element {
               selection={selection}
               onSelect={setSelection}
               generation={generation}
+              onCue={(seconds) => {
+                // The playhead goes where it was clicked and nothing plays.
+                // If something already is playing, it follows - a click
+                // during playback is still "go there", and the position
+                // events that follow will overwrite this one anyway.
+                store.cue(seconds);
+                if (engine.playing) {
+                  void store.run(() =>
+                    api.playback({ verb: "seek", to: seconds }),
+                  );
+                }
+              }}
               onSeek={(seconds) => {
                 if (engine.playing) {
                   void store.run(() =>

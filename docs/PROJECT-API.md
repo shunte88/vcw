@@ -19,7 +19,7 @@ calls are in and which are out, and where the working example is.
 uses all four surfaces and nothing else:
 
 ```text
-cargo run -p vcw-project --example read_a_project -- side-a.vcw
+cargo run -p vcw-project --example read_a_project -- album.vcw
 ```
 
 It is in the tree rather than in this document because the gate compiles it:
@@ -33,7 +33,7 @@ such property.
 ```rust
 use vcw_project::{Project, pcm, session, meta, disc, side, track, release};
 
-let project = Project::open_read_only("side-a.vcw")?;      // mode=ro
+let project = Project::open_read_only("album.vcw")?;      // mode=ro
 let layout = pcm::Layout::of(project.conn(), capture_id)?; // rate, channels, format, frames
 let mut reader = pcm::Reader::open(project.conn(), capture_id, layout.span())?;
 let filled = reader.fill(&mut buffer)?;                    // interleaved, stored format

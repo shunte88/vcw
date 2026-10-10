@@ -19,13 +19,20 @@ and the artwork - everything, so a project can be moved, copied or backed up by
 copying one file. It is a SQLite database, which means it is also readable by
 anything that can open one (see `SCHEMA.md`), and it is written with the
 write-ahead log on, which means **two more files appear beside it while it is
-open**: `side-a.vcw-wal` and `side-a.vcw-shm`. Those are not junk. If you copy a
+open**: `album.vcw-wal` and `album.vcw-shm`. Those are not junk. If you copy a
 project that is open, copy all three or you will copy it mid-sentence.
 
-A project normally holds one side of one record. Nothing stops it holding both,
-and the importer will put both faces in one capture if that is how they were
-recorded, but the grain that works is a side: it is the length of one continuous
-recording, and it is what the transport and the detector are built around.
+**A project is one release**, not one side: one record, both its faces, and both
+discs of a double. That is why the library lists it by album rather than by
+side, and why a metadata lookup matches a whole tracklist against the tracks the
+project holds.
+
+Capture fills one side at a time, because one capture is one take and a side is
+the length of one continuous recording - that is the grain the transport and the
+detector are built around. Record side A, flip the record, record side B into
+the same project. Recording each side into a project of its own works too, but
+then each one is a separate release with its own metadata, and a lookup will
+only ever see the tracks of the side in front of it.
 
 ## In the window
 
@@ -174,7 +181,7 @@ format deliberately.
 The short version, from the command line:
 
 ```text
-vcw session side-a.vcw --device "ALC1150 Analog" --rate 48000 --channels 2 --format s24
+vcw session album.vcw --device "ALC1150 Analog" --rate 48000 --channels 2 --format s24
 ```
 
 That opens the transport and waits for commands: `arm`, `record`, `pause`,
@@ -210,8 +217,8 @@ Set it once in **Settings -> Audio -> Equalization on input**, and every capture
 the window takes carries it. From the command line it is a flag:
 
 ```text
-vcw session side-a.vcw --capture-eq riaa      # an ordinary phono stage
-vcw session side-a.vcw --capture-eq flat      # flat transfer, no curve applied
+vcw session album.vcw --capture-eq riaa      # an ordinary phono stage
+vcw session album.vcw --capture-eq flat      # flat transfer, no curve applied
 ```
 
 Saying nothing records `unknown`, which is the honest answer and is what every
@@ -226,10 +233,10 @@ If the process died, the machine lost power, or the device vanished, the project
 is still there and so is almost all of the audio.
 
 ```text
-vcw recover side-a.vcw            # report only; writes nothing
-vcw recover side-a.vcw --apply    # close the capture honestly
-vcw recover side-a.vcw --repair   # also drop blocks stranded past the end
-vcw recover side-a.vcw --verify   # recheck every block's checksum afterwards
+vcw recover album.vcw            # report only; writes nothing
+vcw recover album.vcw --apply    # close the capture honestly
+vcw recover album.vcw --repair   # also drop blocks stranded past the end
+vcw recover album.vcw --verify   # recheck every block's checksum afterwards
 ```
 
 The report first is the default on purpose. It tells you how many frames are
@@ -278,15 +285,15 @@ refuses before it writes anything rather than producing half a library.
 ## Finding the tracks
 
 ```text
-vcw detect side-a.vcw                          # propose boundaries
-vcw detect side-a.vcw --adaptive --evidence    # and show the reasoning
-vcw tracks side-a.vcw list --boundaries        # what is there now
-vcw tracks side-a.vcw adopt                    # write what the policy accepts
-vcw tracks side-a.vcw split 3 12345678         # track 3, at that frame
-vcw tracks side-a.vcw merge 3 4
-vcw tracks side-a.vcw move 7 12345678          # boundary 7, to that frame
-vcw tracks side-a.vcw lock 7
-vcw tracks side-a.vcw delete 3                 # keeps every sample it covered
+vcw detect album.vcw                          # propose boundaries
+vcw detect album.vcw --adaptive --evidence    # and show the reasoning
+vcw tracks album.vcw list --boundaries        # what is there now
+vcw tracks album.vcw adopt                    # write what the policy accepts
+vcw tracks album.vcw split 3 12345678         # track 3, at that frame
+vcw tracks album.vcw merge 3 4
+vcw tracks album.vcw move 7 12345678          # boundary 7, to that frame
+vcw tracks album.vcw lock 7
+vcw tracks album.vcw delete 3                 # keeps every sample it covered
 ```
 
 `vcw detect` proposes and writes nothing; `vcw tracks ... adopt` is what commits
@@ -301,13 +308,49 @@ A track is the span between two boundaries, half-open: it starts at one and stop
 just before the next, so adjacent tracks share an edge and there is no gap and no
 overlap.
 
+### Moving where a track starts and ends
+
+This follows from the half-open rule and is worth saying plainly, because the
+first person to try it in the window could not work it out.
+
+**There is no "make this an end" or "make this a start".** Adjacent tracks share
+one boundary, so an edge is both at once: the end of the track on its left and
+the start of the track on its right. Moving it moves both. That is why `move`
+takes a boundary and not a side of one.
+
+So the three things you can do are:
+
+* **Move an edge.** Select the boundary and nudge it with `Ctrl+Left` and
+  `Ctrl+Right`, or `vcw tracks album.vcw move 7 12345678`. Both neighbors follow.
+* **Cut one track into two.** Put the playhead where the cut goes and press
+  **Split at playhead**, or `vcw tracks album.vcw split 3 12345678`. This writes
+  the pair of boundaries the new edge needs.
+* **Join two into one.** Select the left one and press **Merge with next**, or
+  `vcw tracks album.vcw merge 3 4`.
+
+**Click the waveform to put the playhead down.** Nothing plays; the number
+appears next to the transport clock, and that is exactly where Split will cut
+and where `m` will place a marker. A click within a few pixels of a drawn
+boundary **snaps to it**, so you can land on an existing edge to the sample
+rather than near it.
+
+That snap is also how to undo a merge you did not want. **Merge discards the
+boundaries between the tracks it joins** unless they were locked - the tracks
+are gone, not hidden, and there is no undo. The audio is untouched, so the way
+back is to cut it again: if the boundary is still drawn, click it and Split; if
+it is not, run detection again to propose it, then click and Split. Detection
+will report the boundary and **no new tracks**, which is correct and looks like
+nothing happened - it will not pair a boundary that falls inside a track that
+already exists, because that would be it overruling an edit you made. Locking a
+boundary you care about before you experiment avoids the whole trip.
+
 ## Fingerprinting what you captured
 
 ```text
-vcw fingerprint side-a.vcw                       # the whole side, as one fingerprint
-vcw fingerprint side-a.vcw --from 120 --length 60   # one minute, starting at two
-vcw fingerprint side-a.vcw --tracks              # one per track the detectors imply
-vcw fingerprint side-a.vcw --tracks --json       # the same, for a script
+vcw fingerprint album.vcw                       # the whole side, as one fingerprint
+vcw fingerprint album.vcw --from 120 --length 60   # one minute, starting at two
+vcw fingerprint album.vcw --tracks              # one per track the detectors imply
+vcw fingerprint album.vcw --tracks --json       # the same, for a script
 ```
 
 An acoustic fingerprint is a compact description of what a piece of audio *sounds*
@@ -335,9 +378,9 @@ it.
 ```text
 vcw metadata search --artist "Kraftwerk" --album "Trans-Europe Express"
 vcw metadata fetch <id>                    # one release, with its tracklist
-vcw release side-a.vcw set --album "Trans-Europe Express" --artist "Kraftwerk" --year 1977
-vcw release side-a.vcw artwork front.jpg
-vcw tracks side-a.vcw set 1 --title "Europe Endless"
+vcw release album.vcw set --album "Trans-Europe Express" --artist "Kraftwerk" --year 1977
+vcw release album.vcw artwork front.jpg
+vcw tracks album.vcw set 1 --title "Europe Endless"
 ```
 
 MusicBrainz needs no credential. Discogs does, and **credentials are never
@@ -381,11 +424,11 @@ title is not the same as knowing which side it is on.
 ## Exporting
 
 ```text
-vcw export side-a.vcw --into ~/Music --format flac
-vcw export side-a.vcw --into ~/Music --format wav
-vcw export side-a.vcw --into ~/Music --format mp3 --quality high
-vcw export side-a.vcw --into ~/Music --format ogg --quality transparent
-vcw export side-a.vcw --into ~/Music --dry-run    # the whole plan, no files
+vcw export album.vcw --into ~/Music --format flac
+vcw export album.vcw --into ~/Music --format wav
+vcw export album.vcw --into ~/Music --format mp3 --quality high
+vcw export album.vcw --into ~/Music --format ogg --quality transparent
+vcw export album.vcw --into ~/Music --dry-run    # the whole plan, no files
 ```
 
 Files are laid out and named from a template, tagged from the release and the
@@ -545,8 +588,8 @@ it. Anything above full scale after the attenuation is clamped, not wrapped. `0`
 leaves the level alone.
 
 ```text
-vcw export side-a.vcw --into ~/Music --format flac --headroom 3
-vcw export side-a.vcw --into ~/Music --format flac --narrow refuse  # ask me
+vcw export album.vcw --into ~/Music --format flac --headroom 3
+vcw export album.vcw --into ~/Music --format flac --narrow refuse  # ask me
 ```
 
 Narrowing applies only where the container needs it. An integer capture is never
@@ -592,9 +635,9 @@ is what a track number means to everything that will read it.
 ## When you need to report a problem
 
 ```text
-vcw bundle side-a.vcw --out bundle.json
+vcw bundle album.vcw --out bundle.json
 vcw bundle --out bundle.json                 # no project: just the machine
-vcw bundle side-a.vcw --checksums --out bundle.json
+vcw bundle album.vcw --checksums --out bundle.json
 ```
 
 That writes one JSON document: the version and build, the OS, the audio backend
@@ -614,7 +657,7 @@ For a running problem rather than a stored one, turn the log up. It goes to
 stderr, so it never disturbs a verb's output:
 
 ```text
-vcw --log debug session side-a.vcw ...
+vcw --log debug session album.vcw ...
 VCW_LOG=vcw_audio=trace vcw capture ...      # one crate, loudly
 VCW_LOG=warn,vcw_project=debug vcw ...       # a filter per target
 ```

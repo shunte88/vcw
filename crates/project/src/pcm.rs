@@ -57,7 +57,7 @@
 //! use vcw_project::{pcm, Project};
 //! use vcw_types::Span;
 //!
-//! let project = Project::open_read_only("side-a.vcw")?;
+//! let project = Project::open_read_only("album.vcw")?;
 //! let layout = pcm::Layout::of(project.conn(), 1)?;
 //! let mut reader = pcm::Reader::open(project.conn(), 1, Span::whole(layout.frames))?;
 //!

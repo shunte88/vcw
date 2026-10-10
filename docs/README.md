@@ -116,7 +116,7 @@ The engine (WP-07) is built, and with it the transport: §11's state machine is 
 *typestate*, so an invalid transition is not rejected at runtime but has no method to
 call - `Idle` cannot stop, `Stopped` cannot record, and a `Paused` that has been
 resumed no longer exists. What drives it is a command in and an event out, nothing
-else, which is what lets `vcw session side-a.vcw --script "arm,record,sleep 30,stop"`
+else, which is what lets `vcw session album.vcw --script "arm,record,sleep 30,stop"`
 record a side with no UI compiled at all. That is the architectural rule in §2 being
 tested rather than asserted: a core that could only be driven from the interface would
 have leaked into it.
@@ -127,7 +127,7 @@ than from the moment it records - because the workflow sets the level before the
 goes down and there is nothing to set it against otherwise:
 
 ```sh
-vcw session side-a.vcw --script "arm,sleep 10,record,sleep 1200,stop" --meters
+vcw session album.vcw --script "arm,sleep 10,record,sleep 1200,stop" --meters
 ```
 
 Two things about that are worth stating, because both were decisions. Full scale is
@@ -178,12 +178,12 @@ Playback (WP-10) closes the second milestone: **it plays back.** Capture, wavefo
 playback and seek all run headless:
 
 ```sh
-vcw play side-a.vcw --capture 1                          # the whole capture
-vcw play side-a.vcw --start 65 --end 130                  # a region
-vcw play side-a.vcw --track 3                             # one track
-vcw play side-a.vcw --boundary 65.4                       # 3 s either side of a boundary
-vcw play side-a.vcw --render out.raw --start 0 --end 5     # no device needed
-vcw play side-a.vcw --script "play, sleep 2, seek 15, skip-back, stop"
+vcw play album.vcw --capture 1                          # the whole capture
+vcw play album.vcw --start 65 --end 130                  # a region
+vcw play album.vcw --track 3                             # one track
+vcw play album.vcw --boundary 65.4                       # 3 s either side of a boundary
+vcw play album.vcw --render out.raw --start 0 --end 5     # no device needed
+vcw play album.vcw --script "play, sleep 2, seek 15, skip-back, stop"
 ```
 
 There is **no resampler**, and that is a feature
@@ -237,8 +237,8 @@ other two detectors report six, so what the resolver says is that six of them ha
 second witness and 264 do not.
 
 ```sh
-vcw detect side-a.vcw --min-sources 2      # boundaries a second detector seconded
-vcw detect side-a.vcw --evidence --json    # every measurement behind every boundary
+vcw detect album.vcw --min-sources 2      # boundaries a second detector seconded
+vcw detect album.vcw --evidence --json    # every measurement behind every boundary
 ```
 
 Nothing there writes a track, and §23 is the reason: an analysis subsystem publishes
@@ -279,12 +279,12 @@ the side rows are the reality, so the gap between them is the answer to what sti
 recording.
 
 ```sh
-vcw tracks side-a.vcw adopt --side A --min-sources 2 --dry-run   # 270 found, 6 seconded
-vcw tracks side-a.vcw split 1 --at 140.0
-vcw tracks side-a.vcw set 1 --title "The Rainbow" --confirmed
-vcw tracks side-a.vcw lock 4                                     # analysis may not move it
-vcw tracks side-a.vcw list --boundaries
-vcw release side-a.vcw set --artist "Talk Talk" --title "Spirit of Eden" --discs 1
+vcw tracks album.vcw adopt --side A --min-sources 2 --dry-run   # 270 found, 6 seconded
+vcw tracks album.vcw split 1 --at 140.0
+vcw tracks album.vcw set 1 --title "The Rainbow" --confirmed
+vcw tracks album.vcw lock 4                                     # analysis may not move it
+vcw tracks album.vcw list --boundaries
+vcw release album.vcw set --artist "Talk Talk" --title "Spirit of Eden" --discs 1
 ```
 
 Every edit is non-destructive, and that is asserted rather than intended: a test
@@ -313,9 +313,9 @@ block-aligned, and compares each exported WAV's data chunk against the exact sli
 what went in, for three stored formats and for four channels as well as two.
 
 ```sh
-vcw export side-a.vcw --into ~/rips --format flac
-vcw export side-a.vcw --into ~/rips --side A --dry-run --json
-vcw export side-a.vcw --into ~/rips --template "{album_artist}/{year} - {album}/{tracknum} {title}"
+vcw export album.vcw --into ~/rips --format flac
+vcw export album.vcw --into ~/rips --side A --dry-run --json
+vcw export album.vcw --into ~/rips --template "{album_artist}/{year} - {album}/{tracknum} {title}"
 ```
 
 `plan` resolves every track to a path, a span and a set of tags before a single byte is
@@ -450,8 +450,8 @@ write-ahead log, and whether anything was lost - and exits non-zero if it was.
 a UI:
 
 ```sh
-vcw waveform side-a.vcw --pixels 160 --rows 21
-vcw waveform side-a.vcw --start 300 --end 400 --pixels 1920 --json
+vcw waveform album.vcw --pixels 160 --rows 21
+vcw waveform album.vcw --start 300 --end 400 --pixels 1920 --json
 ```
 
 It says which rung it read and how long the read took, so the claim above is verifiable
@@ -471,8 +471,8 @@ project cannot be rewritten by a redraw.
 `detect` runs the post-capture pass and shows its working:
 
 ```sh
-vcw detect side-a.vcw
-vcw detect side-a.vcw --adaptive --min-sources 2 --evidence
+vcw detect album.vcw
+vcw detect album.vcw --adaptive --min-sources 2 --evidence
 ```
 
 ```

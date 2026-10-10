@@ -234,7 +234,7 @@ export function Tracks({
               ).then(store.reload);
             }
           }}
-          title="Split the selected track at the playhead"
+          title="Split the selected track at the playhead. Click the waveform to move the playhead; it snaps to a boundary."
         >
           Split at playhead
         </button>

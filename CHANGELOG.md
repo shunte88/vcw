@@ -14,6 +14,51 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## 0.2.2-alpha
+
+*2026-10-10.*
+
+The same person, a day later, now editing tracks. He merged two of them by
+mistake and could not get them back - and the reason turned out to be
+underneath the three things that each looked like the cause.
+
+### Fixed
+
+* **The playhead is a position you can put somewhere.** It used to move only
+  while audio was playing and snap back to zero when it stopped, which made
+  **Split at playhead** and **Place marker** two buttons nobody could aim: the
+  only way to put the playhead on a frame was to play up to it and press the
+  button at the right instant. Click the waveform and the playhead goes there.
+  Nothing plays.
+* **A click near a track boundary snaps to it.** Within a few pixels of a drawn
+  boundary the playhead lands on the frame it was drawn at, not on the pixel
+  you managed to hit - so splitting a track exactly where it was split before
+  is one click and one button. This is the way back from a merge you did not
+  mean: the audio was never touched, and the cut can be made again on the
+  sample.
+* **The playhead readout no longer hides when nothing is playing.** The number
+  Split is about has to be legible exactly when you are lining Split up.
+
+### Documentation
+
+* **A project is one release, not one side.** The guide said a project normally
+  holds one side of one record. The format says otherwise - one file is one
+  release, both faces of it, and both discs of a double - which is why the
+  library lists a project by album and why a metadata lookup matches a whole
+  tracklist against it. The example filename throughout is now `album.vcw`
+  rather than `side-a.vcw`, which had been quietly teaching the wrong thing.
+* **How to move where a track starts and ends**, which the guide never said.
+  There is no "make this an end" or "make this a start": adjacent tracks share
+  one boundary, so an edge is both at once and moving it moves both. The new
+  section covers that, what Split and Merge each do, and that **Merge has no
+  undo** - it discards the boundaries between the tracks it joins unless they
+  were locked.
+
+### Added
+
+* **A "Thanks to" section in the About dialog**, with the first person to run
+  VCW who did not write it at the top of it.
+
 ## 0.2.1-alpha
 
 *2026-10-09.*

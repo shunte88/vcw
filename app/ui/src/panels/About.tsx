@@ -41,6 +41,21 @@ const CREDITS: [string, string][] = [
   ],
 ];
 
+/**
+ * The people outside the work who shaped it.
+ *
+ * Prose for the same reason the credits are: there is no fact to derive it
+ * from. Paul is first because he is first - the first person to run VCW who
+ * did not write it, on hardware nobody here owns, and every report he sent
+ * back turned into a change.
+ */
+const THANKS: [string, string][] = [
+  [
+    "Paul Webster, forum.lyrion.com",
+    "the first outside user: piCorePlayer, and the reports that followed",
+  ],
+];
+
 /** The about overlay. */
 export function About({
   onClose,
@@ -225,6 +240,20 @@ export function About({
                 <table className="rows">
                   <tbody>
                     {CREDITS.map(([who, what]) => (
+                      <tr key={who}>
+                        <td>{who}</td>
+                        <td className="dim">{what}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+
+              <section className="about-group">
+                <h3>Thanks to</h3>
+                <table className="rows">
+                  <tbody>
+                    {THANKS.map(([who, what]) => (
                       <tr key={who}>
                         <td>{who}</td>
                         <td className="dim">{what}</td>

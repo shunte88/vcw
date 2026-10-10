@@ -49,7 +49,7 @@
 //! # fn main() -> Result<(), vcw_project::Error> {
 //! use vcw_project::{validate, Options, Project};
 //!
-//! let project = Project::create("side-a.vcw")?;
+//! let project = Project::create("album.vcw")?;
 //! assert!(validate(&project, Options::default())?.is_clean());
 //! project.close()?;
 //! # Ok(()) }

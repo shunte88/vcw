@@ -363,6 +363,17 @@ export type Store = {
     what: () => Promise<unknown>,
     command?: string,
   ) => Promise<void>;
+  /**
+   * Puts the playhead somewhere, without playing anything.
+   *
+   * The playhead was a readout of playback and nothing else: it moved only
+   * while audio was running, and it went back to zero when playback stopped.
+   * "Split at playhead" was therefore an action nobody could aim - the only
+   * way to put the playhead on a frame was to play up to it and press the
+   * button at the right instant. This is the other way, and it is what a
+   * click on the waveform does.
+   */
+  readonly cue: (seconds: number) => void;
   /** Clears the last refusal. */
   readonly dismiss: () => void;
   /** Re-reads the project rows. */
@@ -554,6 +565,12 @@ export function useEngine(): Store {
     [],
   );
 
+  const cue = useCallback(
+    (seconds: number) =>
+      setEngine((previous) => ({ ...previous, playhead: seconds })),
+    [],
+  );
+
   const dismiss = useCallback(
     () => setEngine((previous) => ({ ...previous, refusal: null })),
     [],
@@ -567,5 +584,5 @@ export function useEngine(): Store {
     [run, bump],
   );
 
-  return { engine, project, run, dismiss, reload: bump, open };
+  return { engine, project, run, cue, dismiss, reload: bump, open };
 }
