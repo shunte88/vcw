@@ -99,26 +99,51 @@ fn ended(state: CaptureState, why: &str) {
 /// Pausing flushes the part-filled block, so frames keep landing *after* the
 /// phase event. That audio belongs to the recording - it was captured before
 /// the pause - so the baseline has to be taken once the flush has settled, and
-/// "settled" is two polls in a row that agree rather than a sleep long enough
-/// to look safe. The sleep was 200 ms against a 250 ms commit interval, which
-/// is to say it was shorter than the thing it was waiting for and passed only
-/// because Linux flushes promptly. A Windows runner read 24000 frames here and
-/// 34080 half a second later, and reported the engine as having recorded while
-/// paused when all it had done was finish writing what it already had.
+/// "settled" is the value holding still rather than a sleep long enough to look
+/// safe. The sleep was 200 ms against a 250 ms commit interval, which is to say
+/// it was shorter than the thing it was waiting for and passed only because
+/// Linux flushes promptly. A Windows runner read 24000 frames here and 34080
+/// half a second later, and reported the engine as having recorded while paused
+/// when all it had done was finish writing what it already had.
+///
+/// Holding still has to be measured against that same interval, which is the
+/// part the first fix got wrong. A block is 250 ms (`Config::block_millis`) and
+/// this polls at 100 ms, so "two polls in a row that agree" is the normal state
+/// of affairs *between* two blocks: it says the writer has not committed in the
+/// last 100 ms, not that it has nothing left to commit. Linux CI then read
+/// 24000 twice, returned it, and found 34080 waiting half a second later - the
+/// same failure the helper was written to stop, on the other platform. So the
+/// quiet window is a duration rather than a count, and it is longer than a
+/// block: a value that has not moved for two block periods has no block left
+/// in flight behind it.
+///
+/// An exact signal does exist and is not reachable from here. The writer sets
+/// `Progress::is_paused` *after* flushing the partial block, so it says
+/// precisely what this infers - but the engine announces `Phase::Paused` on the
+/// request, and waiting for the writer before announcing it would block the
+/// command thread for up to a block. The transport is right to answer at once;
+/// the test is the one that has to wait.
 fn settled(engine: &Engine, events: &Events, seen: &mut Vec<Event>) -> u64 {
+    // Two blocks and a margin, against `Config::block_millis` of 250.
+    const QUIET: Duration = Duration::from_millis(600);
+
     // Four seconds of patience, in the same spirit as `wait_for`'s thirty: long
     // enough that a loaded runner is never the reason, short enough that a
     // transport which really does keep recording still fails rather than hangs.
+    let deadline = Instant::now() + Duration::from_secs(4);
     let mut last = None;
-    for _ in 0..40 {
+    let mut still_since = Instant::now();
+    while Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(100));
         engine.send(Command::Poll).expect("poll");
         let (phase, frames) = next_status(events, seen);
         assert_eq!(phase, Phase::Paused, "the pause did not hold: {seen:?}");
-        if last == Some(frames) {
+        if last != Some(frames) {
+            last = Some(frames);
+            still_since = Instant::now();
+        } else if still_since.elapsed() >= QUIET {
             return frames;
         }
-        last = Some(frames);
     }
     panic!("the commit never settled after a pause: {seen:?}");
 }
