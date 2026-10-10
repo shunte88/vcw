@@ -77,6 +77,18 @@ jobs:
       - name: Install the third-party export verifiers (Windows)
         if: runner.os == 'Windows'
         run: choco install -y ffmpeg
+      # `choco install` exits 0 when it installs nothing. On 2026-10-10 the
+      # community feed answered 503, choco printed "Chocolatey installed 0/0
+      # packages", the step went green, and the failure surfaced four minutes
+      # later as `at_least_one_verifier_is_installed` - which is the right test
+      # failing for the wrong reason, in the wrong job, a long way from the
+      # cause. apt and brew both exit non-zero when a package is missing, so
+      # only this one needs saying out loud. A separate step on purpose: choco
+      # edits the machine PATH, and the step that ran it does not see the
+      # change.
+      - name: The Windows verifier is actually installed
+        if: runner.os == 'Windows'
+        run: ffprobe -version
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --workspace --all-targets
