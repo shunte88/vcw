@@ -511,11 +511,34 @@ transport is a detail behind the single module that today issues every command a
 subscribes to the single event stream, and a second implementation of any decision
 behind that boundary is forbidden by §2 and remains forbidden here.
 
-`serve` shall bind to loopback unless an address is stated, and shall refuse to bind to
-a non-loopback address without an authentication secret supplied by the environment
-(§39). The command surface reads and writes arbitrary paths, opens audio devices and
-spawns exports; an unauthenticated listener offering it is a remote shell and shall not
-be reachable by accident.
+`serve` shall bind to loopback unless an address is stated. The command surface reads
+and writes arbitrary paths, opens audio devices and spawns exports; an unauthenticated
+listener offering it is a remote shell and shall not be reachable by accident.
+
+`serve` shall therefore authenticate every request, on loopback as well as off it. A
+trusted-address exemption is rejected: the headless deployment this requirement exists
+for is reached from another machine, so the authenticated path is the common one and an
+exemption buys nothing while adding a branch that decides whether a caller is trusted.
+Loopback is not a trust boundary in either direction - every local account can reach it,
+and a page in the operator's own browser can reach it by rebinding a name it controls to
+a loopback address.
+
+The secret shall be supplied by the environment (§39). Where the environment supplies
+none, `serve` shall mint one for the life of the process and print the URL carrying it;
+it shall not write a secret anywhere, and shall not reuse one across runs. A stable URL
+is available to anyone who states a secret in the environment, which is the case a
+bookmark or a service unit has.
+
+The secret shall be accepted once from the URL and thereafter held by the browser, so
+that it does not accumulate in history, logs or a referrer. `serve` shall reject a
+request whose `Host` header is not the address it was asked to bind, because a secret
+the browser presents on its own is one a rebound name can borrow.
+
+`serve` shall not offer transport encryption and shall say so where it says everything
+else about where it is listening. A certificate it generated itself would be answered by
+a browser interstitial on every visit, and the habit that teaches is worse than the
+plaintext it replaces. Crossing an untrusted network is a tunnel's job and `serve` shall
+name that in the same breath.
 
 Where the desktop shell opens a native file chooser, `serve` shall offer a path browser
 rooted at a directory stated when it starts, and shall refuse a path outside it.

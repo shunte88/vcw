@@ -6928,3 +6928,37 @@ docs correction the same person's last paragraph asked for without quite asking.
 Nothing in it changes a recorded byte: the audio a merge appears to destroy was
 never touched, and this is the release that lets you prove it by cutting the track
 again on the same sample.
+
+### The serve authentication model, settled before the transport
+
+2026-10-10. §52 was written the day before with a deliberate hole in it: it required a
+secret for a non-loopback bind and said nothing about loopback, which left the one
+decision that shapes the whole module unmade. It is made now, and §52 carries it.
+
+**Authenticate everything, loopback included.** The argument for a trusted-address
+exemption is that loopback is the local machine, and the argument against it is the
+deployment §52 exists for. A turntable on a headless pi is browsed from somewhere else,
+so the authenticated path is the common one and the exemption is a branch that earns
+nothing. Loopback is also not the boundary it is taken for: every local account reaches
+it, and a page in the operator's own browser reaches it by pointing a name it controls
+at 127.0.0.1. The token stops that cold because the attacking page cannot read it - and
+the `Host` header check stops the version of it where the browser presents the token on
+its own.
+
+**The environment first, a minted secret otherwise.** `VCW_SERVE_TOKEN` wins when it is
+set, because a bookmark and a service unit both want a URL that survives a restart.
+Unset, `serve` mints one for the life of the process and prints the URL carrying it.
+Nothing is written to disk in either case, so §39 holds without an exception: VCW never
+stores a credential, and the one it invents does not outlive the process that invented
+it.
+
+**Plain HTTP, said out loud.** A self-signed certificate buys encryption at the cost of
+training the operator to click through a browser's certificate warning, which is a
+worse thing to leave behind than the plaintext. The banner states that the traffic is
+unencrypted and names the tunnel in the same breath. Anyone with an internal CA is not
+served by this and knows it; the honest answer is better than a reassuring one.
+
+What is still open on `serve` is transport, not trust: the command surface is 38
+functions over `invoke` and one `listen` in `app/ui/src/api.ts`, and the server behind
+them has to be a threaded blocking one, because this tree has no async runtime and
+`Cargo.toml` says in as many words that it is not getting one.

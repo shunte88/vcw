@@ -857,16 +857,20 @@ module swapped.
 absolutely, and is right to - the caller is a window owned by the same user on the same
 machine. Those same 38 commands on a LAN socket read and write arbitrary paths, open
 audio devices and start exports, on a host that is probably also running a music
-server. §52 therefore makes loopback the default and an authentication secret the price
-of any other address, roots the path browser and refuses to leave it, and keeps the
-whole thing behind a cargo feature that is off until the verb is invoked. Two smaller
+server. §52 therefore makes loopback the default *address* and a secret the price of
+every request at any address, roots the path browser and refuses to leave it, and keeps
+the whole thing behind a cargo feature that is off until the verb is invoked. The
+trusted-loopback exemption was considered and **rejected on 2026-10-10**, which is the
+decision that unblocked this work: the deployment it exists for is browsed from another
+machine, so the authenticated path is the common one, and loopback is reachable by every
+local account and by any page that points a name it controls at 127.0.0.1. Two smaller
 consequences: `tauri-plugin-dialog`'s native chooser has no equivalent and needs that
 rooted browser, and audio auditioned remotely comes out of the host rather than the
 listener's laptop - which for this deployment is correct, and has to be said rather
 than left to look like a fault.
 
-Specified as **§52, drafted 2026-10-09**, listed in §46, and **pulled forward into 0.3
-the same day it was drafted** rather than left to sit behind the processing chain. The
+Specified as **§52, drafted 2026-10-09** with its authentication model **settled
+2026-10-10**, listed in §46, and **pulled forward into 0.3 the same day it was drafted** rather than left to sit behind the processing chain. The
 argument for jumping the queue is not that it is easy: it is that an outside user has
 already done the hard half themselves, on a platform nobody targeted, and is using the
 product daily through the one interface that fits. Everything else in §46 adds capability
