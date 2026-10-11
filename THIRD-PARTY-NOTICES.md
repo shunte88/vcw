@@ -162,6 +162,32 @@ turned off together; there is no license reason to turn this one off.
 
 ---
 
+## Apache-2.0 OR MIT - the ALAC encoder, vendored (shipped)
+
+VCW writes ALAC through `crates/alac`, published here as `vcw-alac`. It is a fork of
+[`alac-encoder` 0.3.0](https://crates.io/crates/alac-encoder) by Linus Unnebäck, itself
+a Rust port of Apple's reference `ALACEncoder`. It is **`Apache-2.0 OR MIT`**, the same
+dual license as most of the Rust ecosystem, and both license texts travel with the code
+as `crates/alac/LICENSE-APACHE` and `crates/alac/LICENSE-MIT`. Apache-2.0 section 4
+wants the notices carried and the modifications stated; `crates/alac/PROVENANCE.md`
+states every one of them, and `crates/export/src/notices.rs` puts the attribution in
+front of anyone who runs `vcw notices`.
+
+It is vendored rather than depended on because the published crate can only emit
+16-bit ALAC: `FormatDescription::alac` hardcodes `bits_per_channel: 16`, the field is
+private and there is no setter, while the encoder's internals carry complete arms for
+16, 20, 24 and 32. Every one of the 59 rips in VCW's own source corpus is 24 or
+32-bit, so a 16-bit-only writer would refuse all of them. Upstream has not taken a commit since
+January 2022. The fork widens the format description, fixes the 20- and 24-bit input
+reads - which were big-endian while their 16- and 32-bit neighbours were not, and
+unreachable from the published API, so nothing had ever noticed - and drops the `log`
+dependency. The patch has been offered upstream as a courtesy.
+
+The container around the codec is VCW's own: `crates/export/src/mp4.rs` writes the
+`.m4a` directly, the way `aiff.rs` writes a FORM. No MP4 muxing crate is linked.
+
+---
+
 ## The icons
 
 VCW's button and tab glyphs are inlined into the stylesheet as `mask-image` data URIs,

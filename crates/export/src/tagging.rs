@@ -265,7 +265,7 @@ fn freeform(tags: &Tags) -> Vec<(String, String)> {
 /// cannot be written back.
 pub fn write(path: &Path, container: Container, tags: &Tags) -> Result<()> {
     match container {
-        // Two backends for five containers, because what differs is the tag
+        // Three backends for six containers, because what differs is the tag
         // format and not the number of codecs: ID3v2 is what a RIFF reader, an
         // AIFF reader and an MP3 reader all look for, and Vorbis comments are
         // what FLAC and Ogg both carry natively. lofty puts each in the right
@@ -273,6 +273,10 @@ pub fn write(path: &Path, container: Container, tags: &Tags) -> Result<()> {
         // chunk in IFF, a prepended tag in MP3.
         Container::Wav | Container::Aiff | Container::Mp3(_) => write_id3(path, tags),
         Container::Flac(_) | Container::OggVorbis(_) => write_vorbis(path, tags),
+        // MP4 shares nothing with either. Its tags are iTunes atoms in an
+        // `ilst` box inside `moov`, which is a third format and the reason
+        // ALAC could not simply be pointed at one of the other two.
+        Container::Alac => write_ilst(path, tags),
     }
 }
 
@@ -322,6 +326,50 @@ fn write_id3(path: &Path, tags: &Tags) -> Result<()> {
         id3.insert_picture(picture(cover));
     }
     id3.save_to_path(path, WriteOptions::default())
+        .map_err(tagging(path))
+}
+
+/// ALAC: iTunes atoms in an `ilst` box, where a freeform key is a reverse-DNS
+/// triple rather than a word.
+///
+/// The insert goes into `moov`, which `crates::mp4` writes *after* `mdat`.
+/// That ordering is what makes tagging safe to do afterwards: growing `moov`
+/// moves nothing in front of the audio, so the chunk offset in `stco` is still
+/// true once lofty has been through the file. A `moov`-first layout would need
+/// every offset rewritten.
+fn write_ilst(path: &Path, tags: &Tags) -> Result<()> {
+    use lofty::mp4::{Atom, AtomData, AtomIdent, Ilst};
+
+    let mut ilst = Ilst::from(mapped(tags, TagType::Mp4Ilst));
+    // `mapped` pushes one item per value so that two artists stay two artists,
+    // and lofty turns each of those into its own top-level atom. An ilst with
+    // two `©ART` atoms is not what the format says: the convention is one
+    // atom holding two `data` boxes, and a reader handed the duplicates takes
+    // the last one - ffmpeg files our two-artist track under the second artist
+    // alone. Merging them back is the MP4 spelling of the same intent.
+    for fourcc in [*b"\xa9ART", *b"aART", *b"\xa9gen"] {
+        let ident = AtomIdent::Fourcc(fourcc);
+        let values: Vec<AtomData> = ilst.remove(&ident).flat_map(Atom::into_data).collect();
+        if let Some(merged) = Atom::from_collection(ident, values) {
+            ilst.insert(merged);
+        }
+    }
+    for (key, value) in freeform(tags) {
+        // `com.apple.iTunes` is the mean every other tagger writes for a
+        // custom field, so a key VCW puts here comes back out of ffmpeg,
+        // MusicBrainz Picard and Music under the name it went in with.
+        ilst.insert(Atom::new(
+            AtomIdent::Freeform {
+                mean: "com.apple.iTunes".into(),
+                name: key.into(),
+            },
+            AtomData::UTF8(value),
+        ));
+    }
+    if let Some(cover) = &tags.cover {
+        ilst.insert_picture(picture(cover));
+    }
+    ilst.save_to_path(path, WriteOptions::default())
         .map_err(tagging(path))
 }
 

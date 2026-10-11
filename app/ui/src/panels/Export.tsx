@@ -240,6 +240,7 @@ export function Export({
             <option value="flac">FLAC</option>
             <option value="wav">WAV</option>
             <option value="aiff">AIFF</option>
+            <option value="alac">ALAC</option>
             <option value="mp3">MP3</option>
             <option value="ogg">Ogg Vorbis</option>
           </select>

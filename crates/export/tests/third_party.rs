@@ -815,13 +815,17 @@ fn ffprobe_reads_the_tags_we_wrote() {
         // failure for a file mutagen can see every field in.
         let said = probe(&ffprobe, &path, "format_tags:stream_tags");
         let lower = said.to_lowercase();
-        for expected in [
-            "l'enfant sauvage",
-            "terra incognita",
-            "gojira",
-            "2012",
-            "gab 001",
-        ] {
+        // The catalog number has no standard key in any of these formats, and
+        // in MP4 that means a `----` freeform atom - which ffmpeg neither reads
+        // nor writes. `ffmpeg -metadata CATALOGNUMBER=...` into an `.m4a` and
+        // ffprobe reports nothing either, so this is ffmpeg's limit rather than
+        // ours. `mutagen_reads_the_tags_we_wrote` is the reader that checks the
+        // atom is really there.
+        let mut expected = vec!["l'enfant sauvage", "terra incognita", "gojira", "2012"];
+        if container != Container::Alac {
+            expected.push("gab 001");
+        }
+        for expected in expected {
             assert!(
                 lower.contains(expected),
                 "{container}: ffprobe did not report {expected:?}, it reported:\n{said}"
@@ -846,7 +850,13 @@ fn mutagen_reads_the_tags_we_wrote() {
     let dir = tempfile::tempdir().unwrap();
     let flac = tagged(dir.path(), Container::Flac(Compression::default()));
     let wav = tagged(dir.path(), Container::Wav);
+    let m4a = tagged(dir.path(), Container::Alac);
 
+    // The `.m4a` is checked here and not with ffprobe because mutagen is the
+    // only reader in this file that reports a `----` freeform atom, and that is
+    // where every vinyl field with no standard key lives. It is also the only
+    // one that distinguishes "one atom with two values" from "two atoms", which
+    // is the difference between a two-artist track and a one-artist track.
     let script = "
 import sys, mutagen
 flac = mutagen.File(sys.argv[1])
@@ -860,11 +870,34 @@ assert flac.pictures[0].type == 3, flac.pictures[0].type
 wav = mutagen.File(sys.argv[2])
 assert str(wav.tags['TIT2']) == \"L'Enfant Sauvage\", wav.tags['TIT2']
 assert str(wav.tags['TALB']) == 'Terra Incognita', wav.tags['TALB']
+m4a = mutagen.File(sys.argv[3])
+assert m4a.info.codec == 'alac', m4a.info.codec
+assert m4a.info.channels == 2, m4a.info.channels
+assert m4a.info.sample_rate == 44100, m4a.info.sample_rate
+assert m4a.tags['\\xa9nam'] == [\"L'Enfant Sauvage\"], m4a.tags['\\xa9nam']
+assert m4a.tags['\\xa9ART'] == ['Gojira', 'Joe Duplantier'], m4a.tags['\\xa9ART']
+assert m4a.tags['\\xa9gen'] == ['Metal', 'Progressive'], m4a.tags['\\xa9gen']
+assert m4a.tags['trkn'] == [(3, 11)], m4a.tags['trkn']
+catalog = m4a.tags['----:com.apple.iTunes:CATALOGNUMBER']
+assert [bytes(v) for v in catalog] == [b'GAB 001'], catalog
+stylus = m4a.tags['----:com.apple.iTunes:STYLUS']
+assert [bytes(v) for v in stylus] == [b'Ortofon 2M Blue'], stylus
+assert len(m4a.tags['covr']) == 1, m4a.tags['covr']
+assert bytes(m4a.tags['covr'][0]) == open(sys.argv[4], 'rb').read()
 print('ok')
 ";
+    let png = dir.path().join("cover.png");
+    std::fs::write(&png, PNG).expect("write the cover to compare against");
     let said = run(
         &python,
-        &["-c", script, flac.to_str().unwrap(), wav.to_str().unwrap()],
+        &[
+            "-c",
+            script,
+            flac.to_str().unwrap(),
+            wav.to_str().unwrap(),
+            m4a.to_str().unwrap(),
+            png.to_str().unwrap(),
+        ],
     );
     assert!(said.trim_end().ends_with("ok"), "mutagen said:\n{said}");
 }

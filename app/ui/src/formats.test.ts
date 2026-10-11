@@ -67,6 +67,7 @@ describe("the format pickers", () => {
       flac: "compression",
       wav: null,
       aiff: null,
+      alac: null,
       mp3: "quality",
       ogg: "quality",
     };

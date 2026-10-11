@@ -562,17 +562,18 @@ side B's is `B1 - ...`. Five things worth knowing:
   integer format on offer that meant the ordinary rip had no FLAC path at all.
   It does now.
 
-### The five formats
+### The six formats
 
 | `--format` | What it is | Takes |
 | --- | --- | --- |
 | `flac` | Lossless, compressed. The archival choice. | Up to 32-bit integer, any rate VCW records |
 | `wav` | Lossless, uncompressed. Takes everything, including float. | Anything, up to 4 GiB a file |
 | `aiff` | Lossless, uncompressed, big-endian. What the Apple side of a mastering chain asks for. | Integer audio at any rate VCW records, up to 4 GiB a file |
+| `alac` | Lossless, compressed, in an `.m4a`. What Apple Music and an iPhone read. | 16, 24 or 32-bit integer, 1 to 8 channels, any rate VCW records |
 | `mp3` | Lossy, variable bitrate. The one every car stereo reads. | 1 or 2 channels at up to 48 kHz |
 | `ogg` | Lossy Vorbis. Smaller than MP3 at the same quality. | Anything VCW records |
 
-`--quality` applies to the two lossy formats and is ignored by the three lossless
+`--quality` applies to the two lossy formats and is ignored by the four lossless
 ones, so you can leave it set while you change your mind about the format:
 
 | `--quality` | MP3 | Ogg Vorbis | Roughly |
@@ -618,10 +619,10 @@ writes the choice into the project.
 
 ### Narrowing a float capture
 
-An imported Audacity project is usually 32-bit **float**, and the three lossless
-and lossy codecs do not agree about it: WAV stores float as it stands, Ogg
-Vorbis is float all the way down, and FLAC is an integer codec that has no
-representation for it at all. Bringing float down to integers is lossy in a way
+An imported Audacity project is usually 32-bit **float**, and the lossless and
+lossy codecs do not agree about it: WAV stores float as it stands, Ogg Vorbis
+is float all the way down, and FLAC, AIFF and ALAC are integer codecs that have
+no representation for it at all. Bringing float down to integers is lossy in a way
 that depends on what you want, so there are three switches for three separate
 questions:
 

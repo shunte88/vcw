@@ -303,6 +303,84 @@ fn a_flac_export_decodes_back_to_the_blocks() {
     );
 }
 
+/// Decodes an `.m4a` with Symphonia and returns the samples interleaved, packed
+/// back to the width the file declares.
+///
+/// Symphonia parsed neither half of what it is reading here: the container is
+/// ours and the codec is our fork of someone else's encoder, and Symphonia's
+/// demuxer and decoder were written against neither. That is the point - a
+/// `.m4a` only we can read is a `.m4a` nobody can play.
+fn alac_samples(path: &Path) -> Vec<u8> {
+    use symphonia_codec_alac::AlacDecoder;
+    use symphonia_core::audio::{Audio, GenericAudioBufferRef};
+    use symphonia_core::codecs::CodecParameters;
+    use symphonia_core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
+    use symphonia_core::formats::{FormatOptions, FormatReader};
+    use symphonia_core::io::{MediaSourceStream, MediaSourceStreamOptions};
+    use symphonia_core::packet::PacketRef;
+    use symphonia_format_isomp4::IsoMp4Reader;
+
+    let file = std::fs::File::open(path).expect("open the m4a");
+    let stream = MediaSourceStream::new(Box::new(file), MediaSourceStreamOptions::default());
+    let mut reader = IsoMp4Reader::try_new(stream, FormatOptions::default()).expect("demux");
+
+    let track = reader.tracks().first().expect("one track").clone();
+    let Some(CodecParameters::Audio(params)) = track.codec_params else {
+        panic!("the only track is not an audio track");
+    };
+    // Out of the magic cookie rather than out of `bits_per_sample`, which
+    // Symphonia leaves unset for ALAC: its demuxer reads the channel count and
+    // the rate from the cookie and never looks at the sample entry's width.
+    // Byte 5 of an `ALACSpecificConfig` is the bit depth, after the four byte
+    // frame length and the one byte compatible version.
+    let cookie = params.extra_data.as_deref().expect("a magic cookie");
+    let bits = u32::from(cookie[5]);
+    let channels = params.channels.clone().expect("declared channels").count();
+    let mut decoder =
+        AlacDecoder::try_new(&params, &AudioDecoderOptions::default()).expect("the cookie reads");
+
+    let width = bits.div_ceil(8) as usize;
+    let shift = 32 - bits;
+    let mut out = Vec::new();
+    while let Some(packet) = reader.next_packet().expect("read a packet") {
+        let decoded = decoder
+            .decode_ref(&PacketRef::from(&packet))
+            .expect("packet decodes");
+        let GenericAudioBufferRef::S32(buffer) = decoded else {
+            panic!("ALAC decodes to signed 32-bit, got something else");
+        };
+        // Left-aligned in an `i32` on the way out of Symphonia, whatever the
+        // width. Shifting down is exact, so a mismatch after it is a real one.
+        for frame in 0..buffer.frames() {
+            for channel in 0..channels {
+                let sample = buffer.plane(channel).expect("channel")[frame] >> shift;
+                out.extend_from_slice(&sample.to_le_bytes()[..width]);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn an_alac_export_decodes_back_to_the_blocks() {
+    // [`a_flac_export_decodes_back_to_the_blocks`]'s twin for the container we
+    // hand-wrote: §33 calls ALAC lossless, and lossless is a claim about these
+    // exact bytes rather than about the codec's reputation.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, sent, frame_bytes) = recorded(dir.path(), StorageFormat::Int16, 2, 90_000);
+    described(&mut project);
+    titled(&mut project, &[(2_048, 61_237, "Metropolis")]);
+
+    let out = dir.path().join("out");
+    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Alac)).expect("plan");
+    splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+
+    assert_eq!(
+        alac_samples(&plan.items[0].path),
+        &sent[2_048 * frame_bytes..61_237 * frame_bytes]
+    );
+}
+
 #[test]
 fn the_template_names_the_files_and_the_release_fills_it_in() {
     let dir = tempfile::tempdir().unwrap();

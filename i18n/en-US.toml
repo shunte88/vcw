@@ -32,6 +32,19 @@ other."""
 ["export.aiff.channels"]
 text = "AIFF carries at least one channel."
 
+["export.alac.float"]
+text = """
+ALAC is an integer codec, and choosing how to dither 32-bit float down to \
+integers is a decision about headroom that belongs to a person. Make it - \
+Settings > Export, or `--narrow` - and this capture exports as ALAC like any \
+other."""
+
+["export.alac.channels"]
+text = "ALAC carries between one and eight channels."
+
+["export.alac.depth"]
+text = "ALAC carries 16, 24 and 32-bit samples."
+
 ["export.flac.float"]
 text = """
 FLAC is an integer codec, and choosing how to dither 32-bit float down to \

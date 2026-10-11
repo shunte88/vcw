@@ -339,14 +339,17 @@ Required: artist; album artist; album; title; track/disc/side numbers; year; gen
 VRipr genre normalization shall be retained.
 ## 33. Export
 Initial export formats:
-Required: FLAC; WAV; AIFF; MP3; OGG.
+Required: FLAC; WAV; AIFF; ALAC; MP3; OGG.
 Potential later formats:
-Required: ALAC; Opus.
+Required: Opus.
 Export operates from immutable source blocks plus project edit instructions.
 Export shall support metadata, artwork, and configurable naming templates.
 
-AIFF is listed above rather than below because it shipped in 0.2; the list is of what
-VCW writes, not of what it was once expected to write.
+AIFF and ALAC are listed above rather than below because they shipped - AIFF in 0.2,
+ALAC in 0.3. The list is of what VCW writes, not of what it was once expected to
+write. ALAC is written into an `.m4a` of VCW's own making, carries 16, 24 and 32-bit
+integer audio in 1 to 8 channels at any rate VCW records, and refuses float through
+the same `Width` machinery FLAC and AIFF use.
 
 **AAC was listed as a later format and is withdrawn, 2026-10-10.** A vinyl capture is
 an archival act, and the format worth adding to one is a format that returns the

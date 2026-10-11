@@ -721,6 +721,7 @@ export function Settings({
               <option value="flac">FLAC</option>
               <option value="wav">WAV</option>
               <option value="aiff">AIFF</option>
+              <option value="alac">ALAC</option>
               <option value="mp3">MP3</option>
               <option value="ogg">Ogg Vorbis</option>
             </select>
@@ -733,10 +734,11 @@ export function Settings({
             to read "Lossy quality" whatever the format was, so a person picking
             FLAC for an archival copy was told their archival copy was lossy.
 
-            WAV and AIFF have neither and get no field. Both values stay in the draft
-            whichever is on screen - the backend ignores the one that does not
-            apply - so switching the default format and back does not lose a
-            choice, which was the thing the old always-visible field was for.
+            WAV, AIFF and ALAC have neither and get no field. Both values stay in
+            the draft whichever is on screen - the backend ignores the one that
+            does not apply - so switching the default format and back does not
+            lose a choice, which was the thing the old always-visible field was
+            for.
           */}
           {effort !== null && (
             <label>

@@ -1,0 +1,32 @@
+# Vendored third-party code. See PROVENANCE.md, and read it before editing
+# anything in `src/`.
+#
+# `license` is upstream's, not VCW's. Everything else in this workspace is MIT;
+# this crate is "Apache-2.0 OR MIT" because that is what Linus Unneback released
+# `alac-encoder` under, and vendoring does not change the terms. It is also why
+# `license.workspace` is not used here - the workspace value would be a lie.
+#
+# `publish = false`: this is a fork carrying a patch upstream has not taken, and
+# putting it on crates.io under a VCW name would make a second published ALAC
+# encoder for people to pick wrongly between.
+[package]
+name = "vcw-alac"
+description = "Apple Lossless encoding at 16, 20, 24 and 32 bits - a vendored and widened alac-encoder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0 OR MIT"
+repository.workspace = true
+authors = ["Linus Unnebäck <linus@folkdatorn.se>", "Stue Hunter"]
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+symphonia-codec-alac = { workspace = true }
+symphonia-core = { workspace = true }
+
+# No `[lints] workspace = true`, deliberately: see the comment at the top of
+# `src/lib.rs`. Vendored code is kept diffable against upstream rather than
+# linted into house style, and `src/lib.rs` carries the allows that makes
+# `-D warnings` survivable. The tests in `tests/` are ours and do opt in.

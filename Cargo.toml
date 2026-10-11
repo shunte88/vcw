@@ -40,6 +40,7 @@ description = "VCW the de facto tool for vinyl capture across platforms: a compl
 [workspace.dependencies]
 # Internal. Versioned as well as pathed so the crates stay publishable if that ever
 # becomes useful, and so a stale path cannot resolve to the wrong thing.
+vcw-alac = { path = "crates/alac", version = "0.2.2" }
 vcw-audio = { path = "crates/audio", version = "0.2.2" }
 vcw-contract = { path = "crates/contract", version = "0.2.2" }
 vcw-core = { path = "crates/core", version = "0.2.2" }
@@ -115,6 +116,15 @@ rustfft = "6"
 lofty = "0.25"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# ALAC decoding, for tests only. Symphonia reads Apple Lossless and the MP4 it
+# travels in, and neither it nor VCW wrote the other's half - which is the whole
+# value of it. `crates/alac` round trips its encoder through this decoder at
+# every supported width, and `crates/export` opens the finished `.m4a` with it
+# and compares the samples to the ones that went in. MPL-2.0, and a
+# dev-dependency, so nothing VCW ships links it.
+symphonia-codec-alac = { version = "0.6", default-features = false }
+symphonia-core = { version = "0.6", default-features = false }
+symphonia-format-isomp4 = { version = "0.6", default-features = false }
 tempfile = "3"
 thiserror = "2"
 # The catalog format, and the one dependency i18n needs. Already in this tree as

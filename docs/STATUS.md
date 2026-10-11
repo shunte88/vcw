@@ -6171,6 +6171,11 @@ are the two Phase 2 packages taken out of order: WP-25's lossy encoders and sche
 tagged at `4829f76`, pushed, packaged and published - see the section above it - and
 `main` is at the tag with nothing past it.
 
+**Superseded, 2026-10-11.** Read the three paragraphs below as the state on
+2026-10-06. AIFF shipped in 0.2, AAC was withdrawn on 2026-10-10 and ALAC shipped in
+its place on 2026-10-11, the glyphs are all drawn, and the i18n path is built with the
+extraction still to do. The dated sections at the end of this file are current.
+
 **0.3 has three things on it, and one of them is a licensing question before it is a
 coding one.** The second UI change list shipped whole in 0.2.0-alpha, so what is waiting
 is: **i18n** - a language select in *Settings > Appearance* defaulting to US English and
@@ -7091,3 +7096,115 @@ to tag the file is also an independent reader of the container. The width rule c
 over unchanged: 16, 20, 24 and 32-bit integer are in, which gives a default S32 capture
 a path, and `Float32` is refused through the same `Width` machinery, because choosing
 dither is a person's decision and not an exporter's.
+
+---
+
+## 2026-10-11, ALAC: a codec we had to widen and a container we had to write
+
+ALAC ships. `vcw export --format alac` writes an `.m4a` that Symphonia demuxes,
+Symphonia decodes and mutagen tags, and the samples that come back out are the blocks
+that went in, byte for byte. Neither half of it was the shape the plan predicted.
+
+### The published encoder can only write 16-bit, and the corpus has none
+
+`alac-encoder` 0.3.0 is the only ALAC encoder on crates.io - four searches, and the
+three other hits are decoders. It is a faithful Rust port of Apple's reference
+`ALACEncoder`, Apache-2.0 OR MIT, one dependency, no C. It also cannot be asked for
+anything but 16-bit: `FormatDescription::alac` hardcodes `bits_per_channel: 16`, the
+field is private, there is no setter, and `AlacEncoder::new` asserts the description
+came from that function. A probe compiled out of tree printed `encoder bit_depth=16`
+for every channel count. The *internals* have complete, working arms for 16, 20, 24
+and 32; nothing can reach them.
+
+That is fatal rather than inconvenient. Reading headers across `/data2/source_rips` -
+59 files, no copies - gives 32-bit WAV x46 and 24-bit FLAC x13, and **not one 16-bit
+file**. A 16-bit-only ALAC writer would refuse 100% of the real corpus. Upstream last
+took a commit on 2022-01-15 and has one PR open since the same day.
+
+So it is vendored: `crates/alac`, published in-tree as `vcw-alac`, both license files
+carried, `PROVENANCE.md` stating every change, a THIRD-PARTY-NOTICES section, an entry
+in `vcw notices`, and the patch offered upstream as a courtesy. The changes are four.
+
+**Bit depth is a parameter.** `FormatDescription::alac(rate, frames, channels, bits)`
+and `pcm(rate, channels, bits)`, a public `SUPPORTED_BIT_DEPTHS`, and an assertion in
+`encode` that the input width is the width the encoder was built for.
+
+**The 20- and 24-bit input reads were big-endian.** All fourteen three-byte reads in
+`matrix.rs` were `i32::from_be_bytes([0, b0, b1, b2])` while `mix16` and `mix32`, in
+the same file, already read little-endian. One encoder, two endiannesses, depending on
+the width. Nothing had ever noticed because the published API could not reach those
+arms. Widening the description reached them and the first 24-bit round trip came back
+as noise. The fix is mechanical; what matters is that it is **load-bearing and
+silent** - reverting the fourteen reads still produces a file that decodes and plays,
+it is just not the record. `cargo test -p vcw-alac` is what says so:
+`frame 0 channel 0 went in as -8388608 and came back as 128`.
+
+**20-bit is deliberately not supported**, though upstream's arms for it are left where
+they are. A 20-bit sample is *left-aligned* in its three-byte word, `(val << 8) >> 12`
+rather than `>> 8`: a second input contract, for a width nothing in VCW can produce.
+`SUPPORTED_BIT_DEPTHS` is 16, 24, 32, and the round trip is driven off that constant
+rather than off a list, so offering a width without proving it is not possible.
+
+**Six unaligned, native-endian pointer casts are gone**, replaced by `from_le_bytes`
+helpers. `lib.rs` has no `unsafe` left in it. The `log` dependency, the `PcmFormat`
+trait - implemented for `i16` only, which is where the ceiling began - and a test
+module needing fixtures the published crate excludes all went too.
+
+`src/` has been through `cargo fmt`, because the gate's `fmt` leg covers every crate
+and rustfmt has no stable way to skip one. That costs the clean diff against upstream,
+so `PROVENANCE.md` is the record instead, and says to format an upstream unpack before
+diffing it.
+
+### The container is ours, and `moov` goes last
+
+The crate muxes nothing, so `crates/export/src/mp4.rs` writes the `.m4a` by hand the
+way `aiff.rs` writes a `FORM`: `ftyp`, `mdat`, then `moov` down through `stbl` with
+the magic cookie inside an `alac` sample entry, `stts` in one or two runs, one chunk.
+`moov` is last because ALAC packets are variable length - `stsz` is not known until
+the last one - and because two cookie fields are running maxima the encoder only
+finishes filling in at the end. That ordering turns out to be what makes tagging safe
+afterwards: growing `moov` moves nothing in front of the audio, so `stco` stays true.
+`-movflags +faststart` is the fix if progressive streaming is ever wanted.
+
+Three things the writing taught that the format does not tell you:
+
+- **The sample entry's 16.16 rate cannot hold 96 or 192 kHz.** ffmpeg writes zero
+  rather than a truncated rate in that case, and so does VCW. The real rate is in
+  `mdhd` and in the cookie; a plausible-looking wrong number is worse than an
+  obviously absent one.
+- **A 64-bit `mdat` breaks lofty.** Writing the wide header unconditionally removes
+  the 4 GiB ceiling WAV and AIFF have, which is why it was there - but lofty 0.25's
+  `skip_atom` seeks `len - 8` from *after* the sixteen byte header instead of after
+  the first eight, lands eight bytes inside `moov`, and tagging dies with "failed to
+  fill whole buffer". Sixteen bytes are now reserved either way and `finish` decides
+  which header fills them: under 4 GiB, an eight byte `free` box and an ordinary
+  32-bit header; over it, the wide one. No size is refused and nothing is cosmetic.
+- **ffmpeg cannot see a `----` freeform atom.** Every vinyl field with no standard
+  key - catalog number, Discogs ID, label, stylus - lives in one, and `ffprobe`
+  reports none of them. This is ffmpeg's limit, not ours: `ffmpeg -metadata
+  CATALOGNUMBER=... out.m4a` then `ffprobe out.m4a` reports nothing either. The
+  `ffprobe` test asserts the catalog number only for the five containers that can
+  carry it to ffmpeg, and mutagen is the reader that proves the atom is there.
+
+One real tagging defect fell out of the same session. `mapped` pushes one item per
+value so that two artists stay two artists, and lofty's `Tag` to `Ilst` conversion
+turns each into its own top-level atom - an ilst with two `©ART` atoms, which is not
+what the format says. A reader takes the last, so a Gojira track came back filed under
+Joe Duplantier. The three multi-value fourccs are now merged into one atom with
+multiple `data` boxes before the write.
+
+### What proves it
+
+`an_alac_export_decodes_back_to_the_blocks` is WP-14's criterion for the new
+container: export a real cut, demux it with `symphonia-format-isomp4`, decode it with
+`symphonia-codec-alac`, and compare the samples to the source blocks byte for byte.
+Symphonia wrote neither half of what it is reading. It runs everywhere - no external
+tool, so macOS and Windows CI check it too. `mutagen_reads_the_tags_we_wrote` adds the
+container's metadata: codec `alac`, two channels, 44100, multi-value artist and genre,
+`trkn`, both freeform atoms, and a cover compared against the PNG that went in.
+`tag_cases()` is derived from `Container::ALL`, so ALAC was in the tagging tests before
+anything was written for it.
+
+On the real thing: a seven-track two-sided Talk Talk rip exported from the CLI in one
+run, `--dry-run` first. `Container::ALL`, the two format pickers, `effortOf`, the
+`--format` help and the user guide's table all agree there are six formats now.

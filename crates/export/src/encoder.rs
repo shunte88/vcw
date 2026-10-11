@@ -4,7 +4,7 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  Container selection and the two lossless writers (D5).
+ *  Container selection and the lossless writers (D5).
  *
  * MIT License
  *
@@ -30,7 +30,7 @@
  *
  */
 
-//! Container selection and the two lossless writers (D5).
+//! Container selection and the lossless writers (D5).
 //!
 //! Our own WAV writer - trivial to write, and it avoids `hound`'s format limits
 //! at 24/192. FLAC through `flac-codec`, pure Rust and MIT OR Apache-2.0. The
@@ -110,9 +110,11 @@ use std::path::{Path, PathBuf};
 
 use flac_codec::byteorder::LittleEndian;
 use flac_codec::encode::{FlacByteWriter, Options};
+use vcw_alac::{AlacEncoder, FormatDescription, SUPPORTED_BIT_DEPTHS};
 use vcw_types::StorageFormat;
 
 use crate::error::{Error, Result};
+use crate::mp4::FRAMES_PER_PACKET;
 
 /// How hard a lossy encoder should work.
 ///
@@ -126,9 +128,9 @@ use crate::error::{Error, Result};
 /// something that has to budget bandwidth, and a file on a disc is not that.
 ///
 /// The lossless containers ignore this entirely -
-/// [`with_quality`](Container::with_quality) is a no-op on WAV, AIFF and FLAC -
-/// which is what lets a settings panel keep one value across all five formats instead
-/// of a field that appears and disappears.
+/// [`with_quality`](Container::with_quality) is a no-op on WAV, AIFF, FLAC and
+/// ALAC - which is what lets a settings panel keep one value across all six formats
+/// instead of a field that appears and disappears.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum Quality {
@@ -342,7 +344,7 @@ impl std::fmt::Display for Compression {
 /// whatever the writer felt like would be a plan that could not be checked
 /// against the file it produced.
 ///
-/// All five exist whatever the cargo features say. A build without the `mp3`
+/// All six exist whatever the cargo features say. A build without the `mp3`
 /// feature still understands `--format mp3` and still refuses it with a
 /// sentence explaining that this binary cannot write one, which is a better
 /// answer than not knowing the word.
@@ -366,6 +368,20 @@ pub enum Container {
     Mp3(Quality),
     /// Vorbis in an Ogg stream.
     OggVorbis(Quality),
+    /// Apple Lossless in an MP4 container.
+    ///
+    /// The lossless answer for a chain that ends at Apple software, which FLAC
+    /// is not: iTunes, Music and the Finder have never read a FLAC file, and
+    /// the alternative people reach for instead is a lossy one. §33 asks for
+    /// ALAC for exactly that reason, and it replaced AAC on the plan for
+    /// exactly that reason too.
+    ///
+    /// No quality and no compression level, unlike every other variant that
+    /// carries one. ALAC has a single encoding mode in the library Apple
+    /// published; there is a "fast mode" in the reference encoder that this
+    /// port does not expose, and inventing a knob with one position would put
+    /// a setting in the UI that cannot change the file.
+    Alac,
 }
 
 impl Container {
@@ -373,10 +389,11 @@ impl Container {
     ///
     /// Lossless first, because the archival copy is the one that matters and a
     /// list opening with MP3 would be a list suggesting otherwise.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Flac(Compression(5)),
         Self::Wav,
         Self::Aiff,
+        Self::Alac,
         Self::Mp3(Quality::High),
         Self::OggVorbis(Quality::High),
     ];
@@ -397,6 +414,11 @@ impl Container {
             // phone and car stereo expects, so it is what gets written; `.oga`
             // is accepted on the way in.
             Self::OggVorbis(_) => "ogg",
+            // `.m4a` and not `.mp4`: the bytes are an ISO base media file
+            // either way, and the extension is the only thing telling a file
+            // manager that this one is an album track rather than a video.
+            // Apple's own encoder writes `.m4a` and so does ffmpeg.
+            Self::Alac => "m4a",
         }
     }
 
@@ -409,6 +431,7 @@ impl Container {
             Self::Flac(_) => "FLAC",
             Self::Mp3(_) => "MP3",
             Self::OggVorbis(_) => "Ogg Vorbis",
+            Self::Alac => "ALAC",
         }
     }
 
@@ -416,7 +439,7 @@ impl Container {
     #[must_use]
     pub const fn feature(self) -> Option<&'static str> {
         match self {
-            Self::Wav | Self::Aiff | Self::Flac(_) => None,
+            Self::Wav | Self::Aiff | Self::Flac(_) | Self::Alac => None,
             Self::Mp3(_) => Some("mp3"),
             Self::OggVorbis(_) => Some("ogg"),
         }
@@ -434,7 +457,11 @@ impl Container {
     #[must_use]
     pub const fn compiled_in(self) -> bool {
         match self {
-            Self::Wav | Self::Aiff | Self::Flac(_) => true,
+            // ALAC is not behind a feature, and the other two lossless
+            // containers are the reason. The features exist for the license -
+            // libmp3lame is LGPL-3.0 - and `vcw-alac` is "Apache-2.0 OR MIT"
+            // with no obligation to pass on and no C to build.
+            Self::Wav | Self::Aiff | Self::Flac(_) | Self::Alac => true,
             Self::Mp3(_) => cfg!(feature = "mp3"),
             Self::OggVorbis(_) => cfg!(feature = "ogg"),
         }
@@ -444,7 +471,7 @@ impl Container {
     #[must_use]
     pub const fn quality(self) -> Option<Quality> {
         match self {
-            Self::Wav | Self::Aiff | Self::Flac(_) => None,
+            Self::Wav | Self::Aiff | Self::Flac(_) | Self::Alac => None,
             Self::Mp3(quality) | Self::OggVorbis(quality) => Some(quality),
         }
     }
@@ -464,7 +491,7 @@ impl Container {
     #[must_use]
     pub const fn with_quality(self, quality: Quality) -> Self {
         match self {
-            Self::Wav | Self::Aiff | Self::Flac(_) => self,
+            Self::Wav | Self::Aiff | Self::Flac(_) | Self::Alac => self,
             Self::Mp3(_) => Self::Mp3(quality),
             Self::OggVorbis(_) => Self::OggVorbis(quality),
         }
@@ -475,7 +502,7 @@ impl Container {
     pub const fn compression(self) -> Option<Compression> {
         match self {
             Self::Flac(level) => Some(level),
-            Self::Wav | Self::Aiff | Self::Mp3(_) | Self::OggVorbis(_) => None,
+            Self::Wav | Self::Aiff | Self::Alac | Self::Mp3(_) | Self::OggVorbis(_) => None,
         }
     }
 
@@ -488,7 +515,7 @@ impl Container {
     pub const fn with_compression(self, level: Compression) -> Self {
         match self {
             Self::Flac(_) => Self::Flac(level),
-            Self::Wav | Self::Aiff | Self::Mp3(_) | Self::OggVorbis(_) => self,
+            Self::Wav | Self::Aiff | Self::Alac | Self::Mp3(_) | Self::OggVorbis(_) => self,
         }
     }
 
@@ -512,6 +539,10 @@ impl Container {
             "flac" => Some(Self::Flac(Compression::default())),
             "mp3" => Some(Self::Mp3(Quality::default())),
             "ogg" | "oga" | "vorbis" => Some(Self::OggVorbis(Quality::default())),
+            // `alac` because it is what the format is called and what somebody
+            // will type; `m4b` is not here, because an audiobook is a
+            // different thing wearing the same boxes.
+            "m4a" | "alac" => Some(Self::Alac),
             _ => None,
         }
     }
@@ -533,7 +564,9 @@ impl std::fmt::Display for Container {
     /// against what a decoder says it read.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Wav | Self::Aiff => f.write_str(self.name()),
+            // Nothing to add for these three: no quality, no level, and in
+            // ALAC's case no mode either.
+            Self::Wav | Self::Aiff | Self::Alac => f.write_str(self.name()),
             // The level, for the same reason the lossy arms print theirs: a
             // log line that says only "FLAC" cannot be checked against the
             // file, and `flac -a` will tell you the block size it found.
@@ -857,7 +890,7 @@ pub fn narrowed(container: Container, narrowing: Narrowing, spec: Spec) -> Spec 
 
 /// Rewrites stored interleaved bytes into the shape the container wants.
 ///
-/// A verbatim copy for four of the five formats, which is what makes the
+/// A verbatim copy for five of the six formats, which is what makes the
 /// bit-exactness claim checkable: the WAV data chunk is the block bytes.
 /// `Int24Padded` drops the pad byte, losing nothing - the stored sample is a
 /// little-endian value in +/-2^23, so the fourth byte is sign extension.
@@ -876,7 +909,7 @@ fn to_wire(spec: &Spec, stored: &[u8], out: &mut Vec<u8>) {
 /// An open output file.
 ///
 /// An enum rather than a boxed trait: `finish` consumes the writer and there
-/// are five containers, none of which wants `dyn`.
+/// are six containers, none of which wants `dyn`.
 ///
 /// The lossy variants are absent from a build without their cargo feature.
 /// [`Container`] is not - see its own docs for why the refusal is better than
@@ -901,6 +934,13 @@ pub enum Writer {
     /// An Ogg Vorbis file. Needs the `ogg` feature.
     #[cfg(feature = "ogg")]
     OggVorbis(Box<crate::lossy::Ogg>),
+    /// An Apple Lossless file in an MP4 container.
+    ///
+    /// Boxed for [`Flac`](Self::Flac)'s reason: an [`Alac`] holds the
+    /// encoder's per-channel coefficient tables, a packet's worth of
+    /// interleaved input and the sample size table, and every `Writer` moved
+    /// by value would otherwise be as big as the largest of the six.
+    Alac(Box<Alac>),
 }
 
 impl Writer {
@@ -924,6 +964,7 @@ impl Writer {
             // to be trusted.
             Container::Mp3(quality) => crate::lossy::mp3(path, spec, quality),
             Container::OggVorbis(quality) => crate::lossy::ogg(path, spec, quality),
+            Container::Alac => Alac::create(path, spec).map(|alac| Self::Alac(Box::new(alac))),
         }
     }
 
@@ -953,6 +994,7 @@ impl Writer {
             Container::Flac(_) => Flac::vet(spec),
             Container::Mp3(_) => crate::lossy::vet_mp3(spec),
             Container::OggVorbis(_) => crate::lossy::vet_ogg(spec),
+            Container::Alac => Alac::vet(spec),
         }
     }
 
@@ -971,6 +1013,7 @@ impl Writer {
             Self::Mp3(mp3) => mp3.write(stored),
             #[cfg(feature = "ogg")]
             Self::OggVorbis(ogg) => ogg.write(stored),
+            Self::Alac(alac) => alac.write(stored),
         }
     }
 
@@ -988,6 +1031,7 @@ impl Writer {
             Self::Mp3(mp3) => mp3.finish(),
             #[cfg(feature = "ogg")]
             Self::OggVorbis(ogg) => ogg.finish(),
+            Self::Alac(alac) => alac.finish(),
         }
     }
 }
@@ -1036,6 +1080,7 @@ pub(crate) fn carries(container: Container, spec: &Spec) -> bool {
         Container::Flac(_) => Flac::why(spec).is_none(),
         Container::Mp3(_) => crate::lossy::mp3_why(spec).is_none(),
         Container::OggVorbis(_) => crate::lossy::ogg_why(spec).is_none(),
+        Container::Alac => Alac::why(spec).is_none(),
     }
 }
 
@@ -1610,6 +1655,160 @@ impl Flac {
     }
 }
 
+/// An Apple Lossless writer.
+///
+/// Two halves that know nothing about each other: `vcw-alac` turns frames into
+/// packets and the private `crate::mp4` turns packets into a file. The join is
+/// this struct, and almost all of it is the buffer in the middle - ALAC wants
+/// exactly `FRAMES_PER_PACKET` frames at a time and a caller writes whatever a
+/// block holds.
+pub struct Alac {
+    mp4: crate::mp4::Mp4,
+    spec: Spec,
+    encoder: AlacEncoder,
+    /// The input description handed to every `encode` call. Built once because
+    /// it never changes and because building it is where the width check is.
+    source: FormatDescription,
+    /// Where an encoded packet lands.
+    packet: Vec<u8>,
+    /// Wire bytes that have arrived but do not yet make a whole packet.
+    pending: Vec<u8>,
+    /// `to_wire`'s output, reused across calls.
+    scratch: Vec<u8>,
+}
+
+impl std::fmt::Debug for Alac {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // `AlacEncoder` is not `Debug` and holds eight channels' worth of
+        // search coefficients, which would not help anyone read a log.
+        f.debug_struct("Alac")
+            .field("spec", &self.spec)
+            .field("pending", &self.pending.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl Alac {
+    /// Checks the format, opens the file and writes everything before the audio.
+    fn create(path: &Path, spec: Spec) -> Result<Self> {
+        Self::vet(&spec)?;
+
+        let channels = u32::from(spec.channels);
+        let bits = u32::from(spec.bits());
+        let rate = f64::from(spec.rate);
+        let target = FormatDescription::alac(rate, FRAMES_PER_PACKET, channels, bits);
+        // Four bytes past what the encoder says it needs. `BitBuffer::write`
+        // puts down a whole 32-bit word at the current byte position even when
+        // fewer bits remain, so the last word of a packet can reach past the
+        // length the packet turns out to have. See `crates/alac/PROVENANCE.md`.
+        let packet = vec![0; target.max_packet_size() + 4];
+        let encoder = AlacEncoder::new(&target);
+
+        Ok(Self {
+            mp4: crate::mp4::Mp4::create(File::create(path)?)?,
+            spec,
+            encoder,
+            source: FormatDescription::pcm(rate, channels, bits),
+            packet,
+            pending: Vec::new(),
+            scratch: Vec::new(),
+        })
+    }
+
+    /// Everything that has to be true before an ALAC file is created.
+    fn vet(spec: &Spec) -> Result<()> {
+        match Self::why(spec) {
+            None => Ok(()),
+            Some(reason) => Err(Error::Unencodable {
+                format: spec.format,
+                container: Container::Alac.name(),
+                why: format!("{reason} {}", alternatives(Container::Alac, spec)).into(),
+            }),
+        }
+    }
+
+    /// Why ALAC cannot carry this audio, or `None` if it can.
+    ///
+    /// The same two refusals as FLAC and for the same two reasons, which is not
+    /// a coincidence: both are integer lossless codecs that top out at eight
+    /// channels. What ALAC does not have is FLAC's old rate and depth ceilings,
+    /// so a 192 kHz 32-bit capture goes out whole.
+    fn why(spec: &Spec) -> Option<String> {
+        if spec.is_float() {
+            return Some(vcw_i18n::t("export.alac.float"));
+        }
+        if spec.channels == 0 || spec.channels > 8 {
+            return Some(vcw_i18n::t("export.alac.channels"));
+        }
+        // Unreachable today and kept anyway: `Spec::bits` returns 16, 24 or 32
+        // for every integer `StorageFormat` there is, and all three are
+        // supported. A fifth storage format would land here rather than in the
+        // panic inside `AlacEncoder::new`.
+        if !SUPPORTED_BIT_DEPTHS.contains(&u32::from(spec.bits())) {
+            return Some(vcw_i18n::t("export.alac.depth"));
+        }
+        None
+    }
+
+    /// Bytes of wire audio in one whole ALAC packet.
+    fn packet_bytes(&self) -> usize {
+        FRAMES_PER_PACKET as usize * self.spec.wire_frame_bytes()
+    }
+
+    /// Appends interleaved frames, in the project's stored format.
+    ///
+    /// Unlike FLAC's library, `vcw-alac` does not buffer a partial packet, so
+    /// that is this function's job: whatever arrives is repacked, added to
+    /// `pending`, and drained a packet at a time. Everything left over waits
+    /// for the next call or becomes the short last packet in
+    /// [`finish`](Self::finish).
+    fn write(&mut self, stored: &[u8]) -> Result<()> {
+        let frame = self.spec.stored_frame_bytes();
+        if frame == 0 || !stored.len().is_multiple_of(frame) {
+            return Err(Error::Partial {
+                bytes: stored.len(),
+                frame_bytes: frame,
+            });
+        }
+        to_wire(&self.spec, stored, &mut self.scratch);
+        self.pending.extend_from_slice(&self.scratch);
+
+        let packet_bytes = self.packet_bytes();
+        let mut consumed = 0;
+        while self.pending.len() - consumed >= packet_bytes {
+            let chunk = &self.pending[consumed..consumed + packet_bytes];
+            let size = self.encoder.encode(&self.source, chunk, &mut self.packet);
+            self.mp4.packet(&self.packet[..size], FRAMES_PER_PACKET)?;
+            consumed += packet_bytes;
+        }
+        self.pending.drain(..consumed);
+        Ok(())
+    }
+
+    /// Encodes the short last packet, then writes the index.
+    ///
+    /// The magic cookie is read here and not in `create`, because two of its
+    /// fields - the largest frame and the average bit rate - are maxima the
+    /// encoder is still accumulating until the last packet has gone through it.
+    /// A cookie taken at the start would declare both as zero.
+    fn finish(mut self) -> Result<u64> {
+        if !self.pending.is_empty() {
+            let frames = self.pending.len() / self.spec.wire_frame_bytes();
+            let size = self
+                .encoder
+                .encode(&self.source, &self.pending, &mut self.packet);
+            let frames = u32::try_from(frames).expect("under one packet of frames");
+            self.mp4.packet(&self.packet[..size], frames)?;
+        }
+        self.mp4.finish(
+            self.spec.rate,
+            self.spec.channels,
+            self.spec.bits(),
+            &self.encoder.magic_cookie(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1637,6 +1836,7 @@ mod tests {
             ("MP3", Container::Mp3(Quality::High)),
             ("Ogg Vorbis", Container::OggVorbis(Quality::High)),
             ("Ogg", Container::OggVorbis(Quality::High)),
+            ("ALAC", Container::Alac),
         ] {
             if said.contains(word) && !found.contains(&container) {
                 found.push(container);

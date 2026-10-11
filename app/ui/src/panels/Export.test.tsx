@@ -324,13 +324,14 @@ describe("the format and its quality", () => {
     });
   }
 
-  it("offers the five containers VCW writes", async () => {
+  it("offers the six containers VCW writes", async () => {
     const container = await render({});
     const format = selectFor(container, "flac");
     expect([...(format?.options ?? [])].map((option) => option.value)).toEqual([
       "flac",
       "wav",
       "aiff",
+      "alac",
       "mp3",
       "ogg",
     ]);

@@ -547,14 +547,14 @@ enum Command {
         /// Directory the files go under. Created if it is not there.
         #[arg(long)]
         into: std::path::PathBuf,
-        /// Container to write: flac, wav, aiff, mp3 or ogg.
+        /// Container to write: flac, wav, aiff, alac, mp3 or ogg.
         #[arg(long, default_value = "flac")]
         format: String,
         /// How hard a lossy container compresses: transparent, high or
-        /// compact. Ignored by flac and wav.
+        /// compact. Ignored by every lossless container.
         #[arg(long, default_value = "high")]
         quality: String,
-        /// How hard flac compresses: 0 to 8. Ignored by the other three.
+        /// How hard flac compresses: 0 to 8. Ignored by the other five.
         #[arg(long, default_value = "5")]
         compression: String,
         /// Naming template. Omit for the default.

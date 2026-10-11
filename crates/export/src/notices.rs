@@ -91,6 +91,18 @@ impl Container {
     pub const fn notice(self) -> Option<Notice> {
         match self {
             Self::Wav | Self::Aiff => None,
+            // Apache-2.0 section 4 wants the attribution carried, which is why
+            // a permissive component still appears in the dialog. `vcw-alac`
+            // is a vendored and patched copy of `alac-encoder`, and the thing
+            // worth naming is the upstream it came from - see
+            // `crates/alac/PROVENANCE.md` for what was changed and why.
+            Self::Alac => Some(Notice {
+                component: "alac-encoder, vendored and widened as vcw-alac",
+                license: "Apache-2.0 OR MIT",
+                provides: "ALAC export",
+                source: "https://crates.io/crates/alac-encoder",
+                copyleft: false,
+            }),
             Self::Flac(_) => Some(Notice {
                 component: "flac-codec",
                 license: "MIT OR Apache-2.0",

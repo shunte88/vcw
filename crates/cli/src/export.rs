@@ -61,7 +61,7 @@ pub(crate) struct Args {
     pub(crate) format: String,
     /// How hard a lossy container compresses. Ignored by WAV and FLAC.
     pub(crate) quality: String,
-    /// How hard FLAC compresses, 0 to 8. Ignored by the other three.
+    /// How hard FLAC compresses, 0 to 8. Ignored by the other five.
     pub(crate) compression: String,
     /// Naming template, or `None` for the default.
     pub(crate) template: Option<String>,

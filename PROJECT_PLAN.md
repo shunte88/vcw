@@ -40,7 +40,7 @@ by. So the plan is deliberately inverted against the temptation to build screens
 | **G1** | Headless core | Record → store → recover → detect → edit → export, all from the CLI, no GUI in existence | 96 |
 | **G2** | MVP release 0.1 | §44 scope plus Audacity import, GUI, packaged for every Tier 1 platform | 53 |
 | **G3** | Release 0.2 | §45 scope (chromaprint-next, AcoustID, evidence resolver, MP3/OGG) | 47 |
-| **G4** | Release 0.3+ | §46 scope (processing, click removal, remote interface §52, Android, plugins), plus i18n and the ALAC container (AIFF shipped in 0.2; AAC withdrawn 2026-10-10) | re-plan at G3 |
+| **G4** | Release 0.3+ | §46 scope (processing, click removal, remote interface §52, Android, plugins), plus i18n (AIFF shipped in 0.2, ALAC 2026-10-11; AAC withdrawn 2026-10-10) | re-plan at G3 |
 
 *Weight* is relative effort in sessions (~3 focused hours), used for sequencing and for
 noticing when something is running away - not for forecasting dates.
@@ -785,27 +785,54 @@ advanced archival metadata · improved multi-disc workflow · plugin/provider ar
 Android (AAudio, the largest single unknown - needs its own feasibility spike). Not
 estimated; re-plan at G3.
 
-**ALAC replaces AAC, 2026-10-10.** §33 carries the reasoning; this is the shape of the
-work. It is two pieces, and only one of them is a codec. `alac-encoder` 0.3.0 is a Rust
-port of Apple's own ALAC library, Apache-2.0 OR MIT, no C and no system library, and it
-hands back encoded packets plus the 24-byte magic cookie that describes them - which is
-all the codec half needs. The other half is a container: the crate muxes nothing, and
-an ALAC file that players will open is an MP4, so `Container::Alac` means writing a
-minimal `.m4a` by hand the way `Container::Aiff` writes a `FORM`. That is `ftyp`,
-`moov` down through `stbl` with the cookie inside an `alac` sample entry, and `mdat`,
-with the sample-size table built as the packets come back. Bigger than AIFF's 54 fixed
-bytes and bounded: nothing in it varies with the content except three tables.
+**ALAC replaces AAC, 2026-10-10. It shipped 2026-10-11.** §33 carries the reasoning;
+this is what the work turned out to be. It was two pieces, and only one of them was a
+codec.
 
-Two things make the exit criterion cheap. lofty 0.25 already reads MP4 and already
-recognizes ALAC - `Mp4Codec::ALAC`, with `alac_properties` parsing the very cookie we
-will have written - so handing our own file back to the tagger that will tag it is a
-real check of the container, not a self-consistent one. And lossless means the exit
-criterion is the one WP-14 already set for WAV: decode the export and compare it to the
-source blocks byte for byte. `ffmpeg` and `afconvert` are the third-party readers.
-Watch the width. ALAC takes 16, 20, 24 and 32-bit integer, so a default S32 capture has
-a path where FLAC once did not, but a `Float32` capture is refused through the same
-`Width` machinery FLAC and AIFF use, for the same reason: choosing dither is a person's
-decision.
+The codec half is `crates/alac`, a vendored and widened fork of `alac-encoder` 0.3.0 -
+a Rust port of Apple's own ALAC library, Apache-2.0 OR MIT, no C and no system library.
+It had to be vendored rather than depended on: the published crate can only emit
+16-bit, because `FormatDescription::alac` hardcodes `bits_per_channel: 16` behind a
+private field with no setter, while the encoder's internals carry complete arms for 16,
+20, 24 and 32. Every rip in `/data2/source_rips` is 24 or 32-bit, so a 16-bit-only
+writer would have refused all of them, and upstream has not taken a commit since
+January 2022. Widening the description made the 20- and 24-bit arms reachable for the
+first time and immediately proved they read their input big-endian while their 16- and
+32-bit neighbours read it little-endian; the first 24-bit round trip came back as
+noise. 20-bit is left out of `SUPPORTED_BIT_DEPTHS` because a 20-bit sample is
+left-aligned in its three-byte word, a second input contract for a width nothing in VCW
+can produce. `crates/alac/PROVENANCE.md` states every change, THIRD-PARTY-NOTICES.md
+carries the attribution, and the patch has been offered upstream.
+
+The other half is the container: the crate muxes nothing, and an ALAC file players
+will open is an MP4, so `crates/export/src/mp4.rs` writes a minimal `.m4a` by hand the
+way `aiff.rs` writes a `FORM` - `ftyp`, `mdat`, then `moov` down through `stbl` with
+the cookie inside an `alac` sample entry. `moov` goes **last**, because ALAC packets
+are variable length and `stsz` is not known until the end, and that ordering is also
+what makes tagging safe afterwards: growing `moov` moves nothing in front of the audio,
+so `stco` stays true.
+
+Three things the writing taught, none of them predictable from the format:
+
+- The 16.16 sample rate in the sample entry cannot hold 96 or 192 kHz. ffmpeg writes
+  zero rather than a truncated rate in that case and so does VCW; the real rate is in
+  `mdhd` and in the cookie.
+- A 64-bit `mdat` would remove the 4 GiB limit WAV and AIFF have, but lofty 0.25 skips
+  an extended atom eight bytes too far and cannot then find `moov`. Sixteen bytes are
+  reserved either way and `finish` decides: under 4 GiB, an eight byte `free` box and
+  an ordinary 32-bit header; over it, the wide one. No size is refused.
+- ffmpeg neither writes nor reads `----` freeform MP4 atoms, so every vinyl field with
+  no standard key - catalog number, Discogs ID, stylus - is invisible to `ffprobe` in
+  an `.m4a` however correctly it is written. mutagen is the reader that proves those
+  atoms are there.
+
+The exit criterion is the one WP-14 set for WAV, and it passes:
+`an_alac_export_decodes_back_to_the_blocks` demuxes the export with Symphonia's
+`isomp4`, decodes it with
+Symphonia's ALAC decoder - neither of which has seen a line of ours - and compares the
+samples to the source blocks byte for byte. A `Float32` capture is refused through the
+same `Width` machinery FLAC and AIFF use, for the same reason: choosing dither is a
+person's decision.
 
 **Playback equalization curves, for the people who care most.** RIAA has only been
 the standard since 1954. Records cut before it - and a good many 78s after it - were

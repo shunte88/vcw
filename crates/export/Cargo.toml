@@ -1,6 +1,6 @@
 [package]
 name = "vcw-export"
-description = "Splitting committed blocks into tagged WAV, AIFF, FLAC, MP3 and Ogg Vorbis deliverables"
+description = "Splitting committed blocks into tagged WAV, AIFF, FLAC, ALAC, MP3 and Ogg Vorbis deliverables"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+vcw-alac = { workspace = true }
 vcw-i18n = { workspace = true }
 vcw-types = { workspace = true }
 vcw-project = { workspace = true }
@@ -36,6 +37,11 @@ mp3 = ["dep:mp3lame-encoder"]
 ogg = ["dep:vorbis_rs"]
 
 [dev-dependencies]
+# An independent reader for the `.m4a` this crate now writes: Symphonia parses
+# the container and decodes the ALAC inside it, and wrote neither half of ours.
+symphonia-codec-alac = { workspace = true }
+symphonia-core = { workspace = true }
+symphonia-format-isomp4 = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

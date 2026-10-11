@@ -4462,6 +4462,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
+name = "vcw-alac"
+version = "0.2.2"
+
+[[package]]
 name = "vcw-app"
 version = "0.2.2"
 dependencies = [
@@ -4531,6 +4535,7 @@ dependencies = [
  "mp3lame-encoder",
  "thiserror 2.0.21",
  "tracing",
+ "vcw-alac",
  "vcw-i18n",
  "vcw-project",
  "vcw-types",
