@@ -945,6 +945,15 @@ window answers `None` and `--files` fills in - and which has no default, because
 convenient one is the operator's whole account; and the transport bar says where the
 audio is coming out, because the thing it explains is silence.
 
+**Shipped 2026-10-11 in 0.3.0-alpha.** The verb landed after the `v0.2.2-alpha` tag,
+so nothing downloadable had it, and the frontend it serves was in one package of four:
+`bundle.linux.deb.files` is a deb-only key. `bundle.resources` replaces it and reaches
+every platform, and `root()` in `crates/cli/src/serve.rs` now tries the three places
+`tauri_utils::platform::resource_dir` computes - the executable's directory on
+Windows, `../Resources` on macOS, `../lib/VCW` on Linux - with two tests holding the
+spelling to `tauri.conf.json`. Verified from an unpacked deb and from the AppImage
+`AppDir`, each serving with no `--root` stated.
+
 ---
 
 ## 8. Quality strategy

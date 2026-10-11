@@ -39,8 +39,10 @@ the format that was asked for.
 
 Upstream cannot supply the fix on any useful timescale: the repository's last
 push was 2022-01-15 and its one open pull request has sat there since. The
-patch below was offered upstream anyway, as a courtesy; nothing here waits on
-it.
+patch below was offered upstream anyway, as a courtesy, on 2026-10-11:
+<https://github.com/LinusU/rust-alac-encoder/pull/11>. Nothing here waits on
+it. If it is ever merged and released, this crate goes away and
+`crates/export` depends on the published `alac-encoder` again.
 
 It is `publish = false`. Putting a forked ALAC encoder on crates.io under a VCW
 name would leave two for people to choose wrongly between, and the fix belongs

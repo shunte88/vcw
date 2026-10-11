@@ -1,6 +1,6 @@
 # VCW - project status
 
-**As of:** 2026-10-09
+**As of:** 2026-10-11
 **Phase:** 1 is complete and committed - WP-01 through WP-20 are built, plus WP-16a, and
 WP-25, WP-28, WP-21 and WP-22 have been taken out of Phase 2, all on Linux x86_64 only.
 
@@ -7303,3 +7303,47 @@ Apariencia, Biblioteca, Idioma, with the Spanish hint keeping its three code spa
 its italic, and every untranslated paragraph still in English beside them. Clicking
 *Biblioteca* opened the Library group, which is the thing that would have broken if
 the nav had been translated by value rather than by label.
+
+## 2026-10-11, 0.3.0-alpha: the browser UI goes in the package
+
+`vcw serve` was built on 2026-10-10 and was not in anything a person could download:
+it landed after the `v0.2.2-alpha` tag, and the frontend it serves was in exactly one
+package out of four.
+
+**The frontend is a bundle resource now.** `bundle.resources` in `tauri.conf.json`
+maps `../ui/dist` to `ui`, which is the only mechanism Tauri has that reaches every
+platform - `bundle.linux.deb.files`, which is what carried it before, is a deb-only
+key. `tauri_utils::platform::resource_dir` decides where that lands: the executable's
+own directory on Windows, `../Resources` on macOS, `../lib/<productName>` on Linux
+for both the deb and the AppImage. `vcw` is an `externalBin`, so it installs beside
+`vcw-app` and sees the same three. `root()` in `crates/cli/src/serve.rs` now tries all
+of them, plus `../share/vcw/ui` for a hand install and for the 0.2 debs that put it
+there.
+
+The product name is spelled out in that list, because `/usr/lib/VCW` is what the
+Linux bundler makes. A rename in `tauri.conf.json` would break it silently on a
+machine none of us is sitting at, so `the_bundle_directory_is_the_product_name` reads
+the Tauri config and holds the two together, and
+`the_frontend_is_bundled_as_a_resource` fails if the `resources` map goes. Both were
+checked by breaking them: renaming the directory to `Vcw` printed `productName is
+"VCW" but serve looks in [...]`, and renaming the resource target to `frontend`
+turned the other one red.
+
+**The deb got smaller.** 14.5 MB to 13.9 MB, from two changes that were both waste.
+The `files` map and `resources` were each shipping a copy of `dist`, so the `files`
+entry for the UI is gone; and `build.sourcemap` in `vite.config.ts` was putting a
+1.6 MB source map in the package - four times the bundle it describes - for a build
+that is never debugged from a package. `vite dev` maps sources from memory either
+way.
+
+**Run from a real install, twice.** A deb unpacked to a scratch root and the AppImage
+`AppDir`, each started as `vcw serve --address 127.0.0.1:<port>` with no `--root`:
+both printed `.../usr/bin/../lib/VCW/ui` and served it. `/` with no token is 403,
+`/?t=<token>` is a 303 with the cookie, `/` with the cookie is the 420-byte
+`index.html`, `/assets/index-*.js` is 347,606 bytes of `text/javascript`, and
+`POST /command/strings` returns all 472 catalog entries. Then the page itself in a
+browser on Xvfb: the library listing eight projects with sizes and dates, the
+transport saying *Audio plays on the VCW host*, and Settings rendering the Appearance
+group with its code spans and italics. The packaged `vcw-app` was launched from the
+same unpacked deb and drew its window too, so the desktop path did not pay for the
+served one.

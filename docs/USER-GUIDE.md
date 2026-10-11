@@ -169,9 +169,13 @@ unstated root would have to be a guess, and the obvious guess - your home
 directory - is your whole account, offered to whoever reaches the port.
 
 The interface is the same `dist` the window uses and it is not compiled into
-the `vcw` binary. `serve` looks for it beside the executable (`ui/`, then
-`../share/vcw/ui`), and `--root` or `VCW_SERVE_ROOT` says where it is when you
-are running out of a build tree.
+the `vcw` binary - it is installed alongside it, by every package VCW ships.
+`serve` looks for it beside the executable in the places a package leaves it
+(`ui/` on Windows, `../Resources/ui` on macOS, `../lib/VCW/ui` on Linux, and
+`../share/vcw/ui` for a hand install), and `--root` or `VCW_SERVE_ROOT` says
+where it is when you are running out of a build tree. If it finds none of
+them it refuses at startup and names every directory it tried, rather than
+serving a blank page.
 
 ### Settings keep themselves
 

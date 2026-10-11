@@ -14,6 +14,46 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## 0.3.0-alpha
+
+*2026-10-11.*
+
+Three things this release, and the first one is a second way to reach VCW.
+
+### Added
+
+* **`vcw serve` - the same window, over a socket.** A machine with no desktop
+  on it can still be driven: `vcw serve` puts the window on a port, and a
+  browser anywhere you can reach it gets the panels, the meters, the waveform
+  and the keyboard map. Audio still plays on the VCW host, which the transport
+  says out loud. Every request is authenticated, loopback included: the token
+  comes from `VCW_SERVE_TOKEN` or is minted for the run and printed once, and
+  nothing is written to disk. The connection is plain HTTP, which is said out
+  loud too - put it behind a tunnel or a reverse proxy if it leaves the
+  machine. A wildcard bind is refused until you name the host you will type.
+* **ALAC, in an `.m4a`.** Apple Lossless joins WAV, FLAC and AIFF as a
+  bit-perfect export, at 16, 24 and 32 bits and at every rate VCW captures.
+  Tags go in as the atoms iTunes and Apple Music read. This replaces the AAC
+  encoder the plan used to name: a lossless format fills the gap a lossy one
+  does not.
+* **The window reads its sentences from a catalog.** Every word the window
+  says is now one of 472 entries in `i18n/en-US.toml`. To add a language, copy
+  that file out of the repository, replace each value with yours, and put it
+  beside your settings file as `i18n/<language tag>.toml`; it appears in
+  Settings as soon as you reopen the panel, and anything you have not
+  translated stays in English rather than going blank. The CLI's reports and
+  the error text in a diagnostic bundle stay English on purpose - they get
+  piped, grepped and pasted into bug reports.
+
+### Changed
+
+* **Every package now carries the browser UI.** The deb, the AppImage, the
+  `.msi` and the macOS app all ship the built frontend, so `vcw serve` finds
+  it with nothing stated. Before this only the deb had it, and only at a path
+  no other platform used.
+* **No source map in the shipped build.** It was 1.6 MB of the deb, four times
+  the bundle it described.
+
 ## 0.2.2-alpha
 
 *2026-10-10.*

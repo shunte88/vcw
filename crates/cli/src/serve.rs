@@ -56,7 +56,7 @@
 //! something, and a person who cannot see it will assume the padlock they are
 //! used to.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -114,13 +114,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
 ///
 /// On stdout rather than through `tracing`, and unconditionally: the URL is
 /// the only way in and a log level is not something to discover it behind.
-fn banner(
-    bound: &str,
-    url: &str,
-    origin: Origin,
-    root: &std::path::Path,
-    files: Option<&std::path::Path>,
-) {
+fn banner(bound: &str, url: &str, origin: Origin, root: &Path, files: Option<&Path>) {
     println!("VCW is serving {} on http://{bound}", root.display());
     println!();
     println!("  Open this, once, from the machine you want to drive it from:");
@@ -184,11 +178,38 @@ fn files(stated: Option<PathBuf>) -> Result<Option<PathBuf>> {
 
 /// Where the built frontend is.
 ///
-/// In order: what the operator said, `VCW_SERVE_ROOT`, then the two places a
+/// In order: what the operator said, `VCW_SERVE_ROOT`, then the places a
 /// package puts it relative to this executable. A directory with no
 /// `index.html` in it is refused here rather than at the first request,
 /// because "I started it and the page is blank" is a worse report than a
 /// sentence naming the directory that was looked in.
+///
+/// The bundle paths are the ones `tauri_utils::platform::resource_dir`
+/// computes, because `bundle.resources` in `tauri.conf.json` is what puts
+/// `dist` into the package: the executable's own directory on Windows,
+/// `../Resources` on macOS, and `../lib/<productName>` on Linux. `vcw` is an
+/// `externalBin`, so it is installed beside `vcw-app` and sees the same ones.
+/// `../share/vcw/ui` is not a bundle path - it is where a hand install puts
+/// it, and where VCW's own deb put it before 0.3.
+/// The four places a package leaves the frontend, relative to the executable.
+///
+/// Named `VCW` because that is `productName` in `tauri.conf.json`, which is
+/// the directory the Linux bundler makes under `/usr/lib`. A rename there
+/// would break this silently, so a test holds the two to each other.
+fn beside(dir: &Path) -> [PathBuf; 4] {
+    [
+        // Windows: resources sit in the executable's own directory.
+        dir.join("ui"),
+        // macOS: `VCW.app/Contents/Resources`, from `Contents/MacOS`.
+        dir.join("../Resources/ui"),
+        // Linux deb and AppImage: `/usr/lib/VCW`, from `/usr/bin`.
+        dir.join("../lib/VCW/ui"),
+        // Not a bundle path: where a hand install puts it, and where VCW's
+        // own deb put it before 0.3.
+        dir.join("../share/vcw/ui"),
+    ]
+}
+
 fn root(stated: Option<PathBuf>) -> Result<PathBuf> {
     let mut tried = Vec::new();
     let mut candidates = Vec::new();
@@ -201,8 +222,7 @@ fn root(stated: Option<PathBuf>) -> Result<PathBuf> {
         if let Ok(exe) = std::env::current_exe()
             && let Some(dir) = exe.parent()
         {
-            candidates.push(dir.join("ui"));
-            candidates.push(dir.join("../share/vcw/ui"));
+            candidates.extend(beside(dir));
         }
     }
     for candidate in candidates {
@@ -294,6 +314,42 @@ mod tests {
             root(Some(dir.path().to_owned())).expect("found"),
             dir.path()
         );
+    }
+
+    /// The Linux bundle directory is `productName`, and this file spells it
+    /// out. A rename in `tauri.conf.json` would leave `vcw serve` looking in
+    /// a directory the packager no longer makes, and the only symptom would
+    /// be a refusal on a machine none of us is sitting at.
+    #[test]
+    fn the_bundle_directory_is_the_product_name() {
+        let conf = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src-tauri/tauri.conf.json"),
+        )
+        .expect("the Tauri config");
+        let name = conf
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("\"productName\": \""))
+            .and_then(|rest| rest.split('"').next())
+            .expect("a productName");
+        let looked = beside(Path::new("/usr/bin"));
+        assert!(
+            looked.contains(&PathBuf::from(format!("/usr/bin/../lib/{name}/ui"))),
+            "productName is {name:?} but serve looks in {looked:?}"
+        );
+    }
+
+    /// macOS and Windows have no `files` map in `tauri.conf.json`, so
+    /// `bundle.resources` is the only thing putting `dist` into those
+    /// packages. If it goes, `vcw serve` ships with nothing to serve on two
+    /// of the three platforms and the deb keeps working, which is the shape
+    /// of bug that reaches a user rather than a test.
+    #[test]
+    fn the_frontend_is_bundled_as_a_resource() {
+        let conf = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src-tauri/tauri.conf.json"),
+        )
+        .expect("the Tauri config");
+        assert!(conf.contains(r#""../ui/dist": "ui""#), "{conf}");
     }
 
     #[test]

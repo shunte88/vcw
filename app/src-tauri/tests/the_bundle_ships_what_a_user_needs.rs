@@ -109,23 +109,38 @@ fn every_file_the_bundle_names_is_where_it_says() {
     // §52 serves the same `dist` the window compiles in, and it finds it by
     // walking up from its own executable - so the path the package installs
     // to and the path `vcw serve` falls back to are one fact written in two
-    // files. The sidecar lands in `/usr/bin`, which makes
-    // `<exe>/../share/vcw/ui` the directory below.
-    let installed = bundle["linux"]["deb"]["files"]
+    // files. `bundle.resources` is the one mechanism that reaches all four
+    // packages; `linux.deb.files` carried it until 0.3 and is a deb-only key,
+    // which left the `.msi` and the macOS app with nothing to serve.
+    let resources = bundle["resources"]
         .as_object()
-        .expect("deb.files is an object")
-        .keys()
-        .any(|at| at == "/usr/share/vcw/ui");
-    assert!(
-        installed,
-        "the Linux package does not install the frontend, so `vcw serve` on a          packaged machine has nothing to serve"
+        .expect("bundle.resources is an object");
+    for (source, installed) in resources {
+        let path = beside_config(source);
+        // `exists` and not `is_file`: the bundler copies a directory source
+        // recursively, which is how the frontend gets into the package.
+        assert!(
+            path.exists(),
+            "bundle.resources would install {installed} from {source}, which is not there"
+        );
+    }
+    assert_eq!(
+        resources.get("../ui/dist").and_then(|at| at.as_str()),
+        Some("ui"),
+        "the packages do not install the frontend, so `vcw serve` on a packaged \
+         machine has nothing to serve"
     );
+
+    // Where `tauri_utils::platform::resource_dir` puts `ui` on each platform,
+    // relative to the sidecar in `/usr/bin` or beside `vcw-app`.
     let looks_in = std::fs::read_to_string(beside_config("../../crates/cli/src/serve.rs"))
         .expect("the serve verb is where this test looks");
-    assert!(
-        looks_in.contains("../share/vcw/ui"),
-        "`vcw serve` no longer looks in the directory the package installs to"
-    );
+    for at in [r#"join("ui")"#, "../Resources/ui", "../lib/VCW/ui"] {
+        assert!(
+            looks_in.contains(at),
+            "`vcw serve` no longer looks in {at}, which is where a package puts it"
+        );
+    }
 
     // The frontend build command runs with `app/` as its working directory, so
     // its `--dir` is relative to that and not to this crate.

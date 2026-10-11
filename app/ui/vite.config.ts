@@ -40,6 +40,9 @@ export default defineConfig({
     // no reason to down-level. Safari 16 is the floor WebKitGTK and WKWebView
     // agree on.
     target: "safari16",
-    sourcemap: true,
+    // No source map in the shipped build. It was 1.6 MB of the deb - four
+    // times the bundle it describes - and `vite dev` maps sources from memory
+    // regardless of this setting, so development loses nothing.
+    sourcemap: false,
   },
 });
