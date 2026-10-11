@@ -109,6 +109,40 @@ fn collect(events: &Events, done: impl Fn(&Event) -> bool) -> Vec<Event> {
     panic!("gave up waiting; saw {} events", seen.len());
 }
 
+/// Drains until the capture has committed `want` seconds of audio.
+///
+/// Not `sleep(want)`. The simulated source is a `Pace::RealTime` capture, so
+/// on a runner that does not provide real time a wall-clock sleep buys less
+/// record than it asks for: a Windows CI job sat out 2.2 s, saw 48 events and
+/// no marker at all, because the settling lag had not elapsed *in the audio*.
+/// The claim this test makes is about the capture, so wait on the capture -
+/// `Event::Position` is published every engine tick and carries the seconds
+/// committed.
+///
+/// Everything drained is returned, because a marker published while waiting is
+/// exactly what this test exists to catch.
+fn recorded_seconds(events: &Events, want: f64) -> Vec<Event> {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut seen = Vec::new();
+    while Instant::now() < deadline {
+        match events.try_next() {
+            Some(event) => {
+                let far_enough =
+                    matches!(&event, Event::Position { seconds, .. } if *seconds >= want);
+                seen.push(event);
+                if far_enough {
+                    return seen;
+                }
+            }
+            None => std::thread::sleep(Duration::from_millis(2)),
+        }
+    }
+    panic!(
+        "the capture never reached {want} s of audio; saw {} events",
+        seen.len()
+    );
+}
+
 /// Every marker in a run, in the order it was published.
 fn markers(seen: &[Event]) -> Vec<(u64, Edge, f32, Provenance)> {
     seen.iter()
@@ -145,15 +179,16 @@ fn a_marker_is_published_before_the_capture_is_finished() {
 
     // Past the settling lag - min_silence + gap_fill + both paddings, 1.2 s at the
     // defaults - plus a drain interval, so a marker that is going to be announced
-    // has had its chance.
-    std::thread::sleep(Duration::from_millis(2_200));
+    // has had its chance. Measured in recorded audio and not in wall clock; see
+    // `recorded_seconds`.
+    let mut seen = recorded_seconds(&events, 2.2);
     engine.send(Command::Stop).expect("stop");
-    let seen = collect(&events, |e| matches!(e, Event::Finished { .. }));
+    seen.extend(collect(&events, |e| matches!(e, Event::Finished { .. })));
 
     let found = markers(&seen);
     assert!(
         !found.is_empty(),
-        "no track-detected in a 2.2 s capture; saw {} events",
+        "no track-detected in 2.2 s of recorded audio; saw {} events",
         seen.len()
     );
 
