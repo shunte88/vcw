@@ -24,6 +24,8 @@
 // the panel that owns the action decides what it means, because "what does
 // SKIP FORWARD do" is a question about the transport and not about a keyboard.
 
+import { key } from "./i18n";
+
 /**
  * §44's MVP list, as the things a person has to be able to do.
  *
@@ -85,7 +87,14 @@ export type Binding = {
   readonly workflow: Workflow;
   /** Where it applies. `global` means everywhere. */
   readonly scope: Scope;
-  /** What the help overlay shows. */
+  /**
+   * The catalog key for what the help overlay shows.
+   *
+   * A key rather than the English, because the overlay is the one place a
+   * person reads the whole map and it has to read in their language. The key
+   * is written out per entry rather than built from the action name, so
+   * `crates/i18n/tests/callers.rs` can see it.
+   */
   readonly label: string;
   /**
    * Whether §43 names this chord specifically.
@@ -111,28 +120,28 @@ export const BINDINGS = {
     chord: "space",
     workflow: "play",
     scope: "global",
-    label: "Play or pause the audition",
+    label: key("keys.play"),
     suggested: true,
   },
   record: {
     chord: "r",
     workflow: "record",
     scope: "global",
-    label: "Start recording",
+    label: key("keys.record"),
     suggested: true,
   },
   stop: {
     chord: "s",
     workflow: "stop",
     scope: "global",
-    label: "Stop",
+    label: key("keys.stop"),
     suggested: true,
   },
   marker: {
     chord: "m",
     workflow: "place-marker",
     scope: "global",
-    label: "Place a marker at the playhead",
+    label: key("keys.marker"),
     suggested: true,
   },
   deleteMarker: {
@@ -140,35 +149,35 @@ export const BINDINGS = {
     also: "Backspace",
     workflow: "delete-marker",
     scope: "tracks",
-    label: "Delete the selected marker",
+    label: key("keys.delete.marker"),
     suggested: true,
   },
   seekBack: {
     chord: "ArrowLeft",
     workflow: "seek",
     scope: "global",
-    label: "Seek back",
+    label: key("keys.seek.back"),
     suggested: true,
   },
   seekForward: {
     chord: "ArrowRight",
     workflow: "seek",
     scope: "global",
-    label: "Seek forward",
+    label: key("keys.seek.forward"),
     suggested: true,
   },
   checkpoint: {
     chord: "Ctrl+s",
     workflow: "checkpoint",
     scope: "global",
-    label: "Commit what has been recorded so far",
+    label: key("keys.checkpoint"),
     suggested: true,
   },
   exportRun: {
     chord: "Ctrl+e",
     workflow: "export",
     scope: "global",
-    label: "Export",
+    label: key("keys.export.run"),
     suggested: true,
   },
 
@@ -177,85 +186,85 @@ export const BINDINGS = {
     chord: "p",
     workflow: "pause",
     scope: "global",
-    label: "Pause or resume recording",
+    label: key("keys.pause"),
   },
   arm: {
     chord: "a",
     workflow: "arm",
     scope: "capture",
-    label: "Arm the chosen device on the open project",
+    label: key("keys.arm"),
   },
   chooseDevice: {
     chord: "d",
     workflow: "choose-device",
     scope: "capture",
-    label: "Focus the device list",
+    label: key("keys.choose.device"),
   },
   chooseFormat: {
     chord: "f",
     workflow: "choose-rate-format",
     scope: "capture",
-    label: "Focus the rate and format fields",
+    label: key("keys.choose.format"),
   },
   skipForward: {
     chord: "Shift+ArrowRight",
     workflow: "skip",
     scope: "global",
-    label: "Skip to the next track",
+    label: key("keys.skip.forward"),
   },
   skipBack: {
     chord: "Shift+ArrowLeft",
     workflow: "skip",
     scope: "global",
-    label: "Skip to the previous track",
+    label: key("keys.skip.back"),
   },
   nudgeBack: {
     chord: "Ctrl+ArrowLeft",
     workflow: "move-marker",
     scope: "tracks",
-    label: "Nudge the selected marker earlier",
+    label: key("keys.nudge.back"),
   },
   nudgeForward: {
     chord: "Ctrl+ArrowRight",
     workflow: "move-marker",
     scope: "tracks",
-    label: "Nudge the selected marker later",
+    label: key("keys.nudge.forward"),
   },
   detect: {
     chord: "t",
     workflow: "detect-tracks",
     scope: "tracks",
-    label: "Run track detection over the capture",
+    label: key("keys.detect"),
   },
   rename: {
     chord: "Enter",
     workflow: "edit-track-metadata",
     scope: "tracks",
-    label: "Edit the selected track",
+    label: key("keys.rename"),
   },
   lookup: {
     chord: "l",
     workflow: "search-metadata",
     scope: "metadata",
-    label: "Look the record up with a provider",
+    label: key("keys.lookup"),
   },
   accept: {
     chord: "Enter",
     workflow: "choose-release",
     scope: "metadata",
-    label: "Accept the selected release",
+    label: key("keys.accept"),
   },
   openProject: {
     chord: "Enter",
     workflow: "navigate",
     scope: "browser",
-    label: "Open the selected project",
+    label: key("keys.open.project"),
   },
   newProject: {
     chord: "n",
     workflow: "navigate",
     scope: "browser",
-    label: "Create a project",
+    label: key("keys.new.project"),
   },
   // --- Moving a selection ---------------------------------------------------
   //
@@ -277,49 +286,49 @@ export const BINDINGS = {
     chord: "ArrowUp",
     workflow: "navigate",
     scope: "browser",
-    label: "Select the project above",
+    label: key("keys.previous.project"),
   },
   nextProject: {
     chord: "ArrowDown",
     workflow: "navigate",
     scope: "browser",
-    label: "Select the project below",
+    label: key("keys.next.project"),
   },
   previousTrack: {
     chord: "ArrowUp",
     workflow: "edit-track-metadata",
     scope: "tracks",
-    label: "Select the track above",
+    label: key("keys.previous.track"),
   },
   nextTrack: {
     chord: "ArrowDown",
     workflow: "edit-track-metadata",
     scope: "tracks",
-    label: "Select the track below",
+    label: key("keys.next.track"),
   },
   previousBoundary: {
     chord: "Shift+ArrowUp",
     workflow: "move-marker",
     scope: "tracks",
-    label: "Select the marker above",
+    label: key("keys.previous.boundary"),
   },
   nextBoundary: {
     chord: "Shift+ArrowDown",
     workflow: "move-marker",
     scope: "tracks",
-    label: "Select the marker below",
+    label: key("keys.next.boundary"),
   },
   previousCandidate: {
     chord: "ArrowUp",
     workflow: "choose-release",
     scope: "metadata",
-    label: "Select the candidate above",
+    label: key("keys.previous.candidate"),
   },
   nextCandidate: {
     chord: "ArrowDown",
     workflow: "choose-release",
     scope: "metadata",
-    label: "Select the candidate below",
+    label: key("keys.next.candidate"),
   },
   // --- Seeing what you are about to mark -----------------------------------
   //
@@ -347,32 +356,32 @@ export const BINDINGS = {
     also: "=",
     workflow: "place-marker",
     scope: "global",
-    label: "Zoom the waveform in",
+    label: key("keys.zoom.in"),
   },
   zoomOut: {
     chord: "-",
     workflow: "place-marker",
     scope: "global",
-    label: "Zoom the waveform out",
+    label: key("keys.zoom.out"),
   },
   zoomFit: {
     chord: "0",
     workflow: "place-marker",
     scope: "global",
-    label: "Show the whole capture",
+    label: key("keys.zoom.fit"),
   },
   zoomSelection: {
     chord: "z",
     workflow: "move-marker",
     scope: "global",
-    label: "Zoom to the selection, the selected marker, or the selected track",
+    label: key("keys.zoom.selection"),
   },
   help: {
     chord: "?",
     also: "F1",
     workflow: "help",
     scope: "global",
-    label: "Show the keyboard map",
+    label: key("keys.help"),
   },
 
   // --- Getting between the panels ------------------------------------------
@@ -390,43 +399,43 @@ export const BINDINGS = {
     chord: "Ctrl+1",
     workflow: "navigate",
     scope: "global",
-    label: "Library",
+    label: key("keys.goto.browser"),
   },
   gotoCapture: {
     chord: "Ctrl+2",
     workflow: "navigate",
     scope: "global",
-    label: "Capture",
+    label: key("keys.goto.capture"),
   },
   gotoTracks: {
     chord: "Ctrl+3",
     workflow: "navigate",
     scope: "global",
-    label: "Tracks",
+    label: key("keys.goto.tracks"),
   },
   gotoMetadata: {
     chord: "Ctrl+4",
     workflow: "navigate",
     scope: "global",
-    label: "Metadata",
+    label: key("keys.goto.metadata"),
   },
   gotoExport: {
     chord: "Ctrl+5",
     workflow: "navigate",
     scope: "global",
-    label: "Export",
+    label: key("keys.goto.export"),
   },
   gotoSettings: {
     chord: "Ctrl+6",
     workflow: "navigate",
     scope: "global",
-    label: "Settings",
+    label: key("keys.goto.settings"),
   },
   log: {
     chord: "Ctrl+d",
     workflow: "navigate",
     scope: "global",
-    label: "Show the event log",
+    label: key("keys.log"),
   },
   // The only overlay that had no chord at all, which made §44's "no workflow
   // needs the mouse" false for the one panel a person opens to answer "what
@@ -438,13 +447,13 @@ export const BINDINGS = {
     chord: "Ctrl+i",
     workflow: "help",
     scope: "global",
-    label: "Show the build, its license and its notices",
+    label: key("keys.about"),
   },
   dismiss: {
     chord: "Escape",
     workflow: "navigate",
     scope: "global",
-    label: "Close the overlay, or clear the last refusal",
+    label: key("keys.dismiss"),
   },
 } satisfies Record<string, Binding> & { [K in string]: Binding };
 

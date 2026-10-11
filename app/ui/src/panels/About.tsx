@@ -31,14 +31,17 @@ import { useEffect, useState } from "react";
 
 import * as api from "../api";
 import type { About as Build } from "../bindings/vcw";
+import { key, useText } from "../i18n";
 
-/** The people, and the model, the work is by. */
+/**
+ * The people, and the model, the work is by.
+ *
+ * A name is a name in every language; what each of them did is a sentence, so
+ * the second column is a catalog key and the first is not.
+ */
 const CREDITS: [string, string][] = [
-  ["Stue Hunter", "design, architecture and implementation"],
-  [
-    "Claude Opus 5 (Anthropic)",
-    "pair programming throughout, by the author's invitation",
-  ],
+  ["Stue Hunter", key("about.credits.author")],
+  ["Claude Opus 5 (Anthropic)", key("about.credits.claude")],
 ];
 
 /**
@@ -50,10 +53,7 @@ const CREDITS: [string, string][] = [
  * back turned into a change.
  */
 const THANKS: [string, string][] = [
-  [
-    "Paul Webster, forum.lyrion.com",
-    "the first outside user: piCorePlayer, and the reports that followed",
-  ],
+  ["Paul Webster, forum.lyrion.com", key("about.thanks.paul")],
 ];
 
 /** The about overlay. */
@@ -62,6 +62,7 @@ export function About({
 }: {
   onClose: () => void;
 }): React.JSX.Element {
+  const text = useText();
   const [build, setBuild] = useState<Build | null>(null);
   // A browser that will not start is the one thing in this dialog that can
   // fail, and a button that silently does nothing is worse than a sentence
@@ -89,18 +90,18 @@ export function About({
   }, []);
 
   return (
-    <div className="overlay" role="dialog" aria-label="About VCW">
+    <div className="overlay" role="dialog" aria-label={text("about.title")}>
       <div className="overlay-box about">
         <header className="panel-head">
-          <h2>About VCW</h2>
+          <h2>{text("about.title")}</h2>
           <button type="button" onClick={onClose}>
-            Close (Esc)
+            {text("help.close")}
           </button>
         </header>
 
         <div className="about-scroll">
           {build === null ? (
-            <p className="dim">Reading the build...</p>
+            <p className="dim">{text("about.reading")}</p>
           ) : (
             <>
               {/* The name reads before the art rather than under it, and the
@@ -128,43 +129,45 @@ export function About({
                   <img
                     className="about-logo"
                     src="/vcw-logo.webp"
-                    alt={`VCW on GitHub: ${build.repository}`}
+                    alt={text("about.logo.alt", { address: build.repository })}
                     width={280}
                   />
                 </button>
                 <section className="about-group">
-                  <h3>This build</h3>
+                  <h3>{text("about.build")}</h3>
                   <table className="rows">
                     <tbody>
                       <tr>
-                        <td className="dim">Version</td>
+                        <td className="dim">{text("about.version")}</td>
                         <td>
                           {build.version} ({build.profile})
                         </td>
                       </tr>
                       <tr>
-                        <td className="dim">Built</td>
+                        <td className="dim">{text("about.built")}</td>
                         <td>{build.built}</td>
                       </tr>
                       <tr>
-                        <td className="dim">Platform</td>
+                        <td className="dim">{text("about.platform")}</td>
                         <td>
                           {build.os} {build.arch}
                         </td>
                       </tr>
                       <tr>
                         <td className="dim">SQLite</td>
-                        <td>{build.sqlite} (bundled)</td>
+                        <td>{text("about.sqlite", { version: build.sqlite })}</td>
                       </tr>
                       <tr>
-                        <td className="dim">Project format</td>
+                        <td className="dim">{text("about.format")}</td>
                         <td>
-                          schema v{build.schemaVersion}, audio v
-                          {build.formatVersion}
+                          {text("about.format.versions", {
+                            schema: build.schemaVersion,
+                            audio: build.formatVersion,
+                          })}
                         </td>
                       </tr>
                       <tr>
-                        <td className="dim">Source</td>
+                        <td className="dim">{text("about.source")}</td>
                         <td>{build.repository}</td>
                       </tr>
                     </tbody>
@@ -173,28 +176,26 @@ export function About({
               </div>
 
               <section className="about-group">
-                <h3>What this is</h3>
+                <h3>{text("about.what")}</h3>
                 <p>{build.description}</p>
               </section>
 
               <section className="about-group">
                 <h3>
                   <span className="icon scales" aria-hidden="true" />
-                  License
+                  {text("about.license")}
                 </h3>
                 <p>
-                  VCW&apos;s own code is {build.license}. Copyright (c) 2026{" "}
-                  {build.authors.join(", ")}.
+                  {text("about.license.line", {
+                    license: build.license,
+                    authors: build.authors.join(", "),
+                  })}
                 </p>
               </section>
 
               <section className="about-group">
-                <h3>Third-party components</h3>
-                <p className="dim">
-                  What this build links, derived from the features it was
-                  compiled with. THIRD-PARTY-NOTICES.md and Cargo.lock in the
-                  repository are the full inventory.
-                </p>
+                <h3>{text("about.notices")}</h3>
+                <p className="dim">{text("about.notices.hint")}</p>
                 <table className="rows notices">
                   <tbody>
                     {build.notices.map((notice) => (
@@ -203,8 +204,12 @@ export function About({
                           <button
                             type="button"
                             className="globe"
-                            title={`Open ${notice.source}`}
-                            aria-label={`Source for ${notice.component}`}
+                            title={text("about.notices.open", {
+                              address: notice.source,
+                            })}
+                            aria-label={text("about.notices.aria", {
+                              component: notice.component,
+                            })}
                             onClick={() => {
                               visit(notice.component);
                             }}
@@ -221,28 +226,24 @@ export function About({
                 </table>
                 {build.notices.some((notice) => notice.copyleft) && (
                   <p>
-                    The components marked above as{" "}
-                    {build.notices
-                      .filter((notice) => notice.copyleft)
-                      .map((notice) => notice.license)
-                      .join(", ")}{" "}
-                    are weak copyleft. You may modify them and relink them into
-                    VCW: their complete source is at the addresses listed, the
-                    exact versions this build used are recorded in Cargo.lock at
-                    its release tag, and the complete source of VCW itself is
-                    available under its own license at the repository above.
+                    {text("about.copyleft", {
+                      licenses: build.notices
+                        .filter((notice) => notice.copyleft)
+                        .map((notice) => notice.license)
+                        .join(", "),
+                    })}
                   </p>
                 )}
               </section>
 
               <section className="about-group">
-                <h3>Credits</h3>
+                <h3>{text("about.credits")}</h3>
                 <table className="rows">
                   <tbody>
                     {CREDITS.map(([who, what]) => (
                       <tr key={who}>
                         <td>{who}</td>
-                        <td className="dim">{what}</td>
+                        <td className="dim">{text(what)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -250,13 +251,13 @@ export function About({
               </section>
 
               <section className="about-group">
-                <h3>Thanks to</h3>
+                <h3>{text("about.thanks")}</h3>
                 <table className="rows">
                   <tbody>
                     {THANKS.map(([who, what]) => (
                       <tr key={who}>
                         <td>{who}</td>
-                        <td className="dim">{what}</td>
+                        <td className="dim">{text(what)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -275,12 +276,12 @@ export function About({
                   }}
                 >
                   <img src="/bmac-icon.png" alt="" width={56} height={56} />
-                  <span>Buy me a coffee</span>
+                  <span>{text("about.coffee")}</span>
                 </button>
 
-                <h3>Like The App - Git The Shirt</h3>
+                <h3>{text("about.shirts")}</h3>
                 <p>
-                  Team Badger shirts and other goodies are available at{" "}
+                  {text("about.shirts.line")}{" "}
                   <button
                     type="button"
                     className="as-link"

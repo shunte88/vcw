@@ -12,13 +12,16 @@
 import { describe, expect, it } from "vitest";
 
 import { effortOf } from "./effort";
+import { t } from "./i18n";
 
 describe("the export effort field", () => {
   // The defect this was written for: FLAC was offered "Lossy quality", which
-  // says the one thing about FLAC that is not true.
+  // says the one thing about FLAC that is not true. Asserted through `t`
+  // rather than on the key, because the key is not what anybody reads and a
+  // catalog entry is the other half of where that defect could come back.
   it("never calls FLAC lossy, and defaults it to 5", () => {
     const flac = effortOf("flac");
-    expect(flac?.caption).toBe("Compression");
+    expect(t(flac?.caption ?? "")).toBe("Compression");
     expect(flac?.field).toBe("compression");
     expect(flac?.options.map(([value]) => value)).toEqual([
       "0",
@@ -31,7 +34,7 @@ describe("the export effort field", () => {
       "7",
       "8",
     ]);
-    expect(flac?.options.find(([value]) => value === "5")?.[1]).toContain(
+    expect(t(flac?.options.find(([value]) => value === "5")?.[1] ?? "")).toContain(
       "default",
     );
   });
@@ -39,7 +42,7 @@ describe("the export effort field", () => {
   it("gives the lossy containers a quality and WAV nothing at all", () => {
     for (const format of ["mp3", "ogg", "oga", "vorbis"]) {
       expect(effortOf(format)?.field, format).toBe("quality");
-      expect(effortOf(format)?.caption, format).toBe("Lossy quality");
+      expect(t(effortOf(format)?.caption ?? ""), format).toBe("Lossy quality");
     }
     expect(effortOf("wav")).toBeNull();
   });

@@ -33,6 +33,7 @@ import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import type { Credential, Device, Settings as Values } from "../bindings/vcw";
 import { effortOf } from "../effort";
+import { key, useText } from "../i18n";
 import {
   type ButtonStyle,
   type MeterStyle,
@@ -57,10 +58,10 @@ import { Switch } from "./Switch";
  * and this field does not - and find out at arming time.
  */
 const FORMATS: readonly { value: string; label: string }[] = [
-  { value: "s16", label: "s16 (16-bit integer)" },
-  { value: "s24", label: "s24 (24-bit integer)" },
-  { value: "s32", label: "s32 (32-bit integer)" },
-  { value: "f32", label: "f32 (32-bit float)" },
+  { value: "s16", label: key("settings.format.s16") },
+  { value: "s24", label: key("settings.format.s24") },
+  { value: "s32", label: key("settings.format.s32") },
+  { value: "f32", label: key("settings.format.f32") },
 ];
 
 /**
@@ -116,6 +117,26 @@ const SECTIONS = [
 /** One of [`SECTIONS`]. */
 type Section = (typeof SECTIONS)[number];
 
+/**
+ * What each group is called on screen.
+ *
+ * The name down the side and the name in local storage are two different
+ * things: one is read by a person and the other is written to
+ * `vcw.settings.section` and compared against [`SECTIONS`] on the next run.
+ * Translating the first would have translated the second, and a panel
+ * remembered as "Apariencia" opens on Appearance for somebody who has since
+ * switched back to English.
+ */
+const NAMES: Record<Section, string> = {
+  Appearance: key("settings.section.appearance"),
+  Library: key("settings.section.library"),
+  Audio: key("settings.section.audio"),
+  Detection: key("settings.section.detection"),
+  Metadata: key("settings.section.metadata"),
+  Export: key("settings.section.export"),
+  Credentials: key("settings.section.credentials"),
+};
+
 /** Which group is on screen, remembered across a remount of the panel. */
 const CHOSEN = "vcw.settings.section";
 
@@ -133,6 +154,7 @@ export function Settings({
   devices: readonly Device[];
   onSaved: () => void;
 }): React.JSX.Element {
+  const text = useText();
   const [draft, setDraft] = useState<Values | null>(settings);
   const [section, setSection] = useState<Section>(() => {
     const stored = localStorage.getItem(CHOSEN) as Section | null;
@@ -215,7 +237,7 @@ export function Settings({
   if (draft === null) {
     return (
       <section className="panel settings empty">
-        <p>Reading settings...</p>
+        <p>{text("settings.reading")}</p>
       </section>
     );
   }
@@ -245,25 +267,25 @@ export function Settings({
 
   const unsaved = JSON.stringify(draft) !== JSON.stringify(settings);
 
-  const text = (value: string) => (value.trim() === "" ? null : value.trim());
+  const blank = (value: string) => (value.trim() === "" ? null : value.trim());
   const number = (value: string) =>
     value.trim() === "" ? null : Number(value);
 
   return (
     <section className="panel settings">
       <header className="panel-head">
-        <h2>Settings</h2>
+        <h2>{text("settings.title")}</h2>
         {/* What replaced the Save button. Derived rather than remembered,
             because `store.run` swallows a refusal to put it in the status bar
             and resolves either way, so a flag set in `.then` would read
             "Saved" over a write that was refused. This cannot: the word goes
             when the stored settings catch up with the draft, and if the write
             never lands it stays, beside the reason. */}
-        {unsaved && <span className="dim">Saving...</span>}
+        {unsaved && <span className="dim">{text("settings.saving")}</span>}
       </header>
 
       <div className="prefs">
-        <nav className="prefs-nav" aria-label="Settings sections">
+        <nav className="prefs-nav" aria-label={text("settings.nav")}>
           {SECTIONS.map((name) => (
             <button
               key={name}
@@ -275,7 +297,7 @@ export function Settings({
                 setSection(name);
               }}
             >
-              {name}
+              {text(NAMES[name])}
             </button>
           ))}
         </nav>
@@ -283,9 +305,9 @@ export function Settings({
         <div className="prefs-pane">
         {section === "Appearance" && (
           <fieldset>
-            <legend>Appearance</legend>
+            <legend>{text("settings.section.appearance")}</legend>
             <label>
-              Language
+              {text("settings.language")}
               {/* In `Settings` and not in local storage, unlike the three
                   below: those are facts about the monitor in front of this
                   window, and this one is a fact about the person. The CLI
@@ -303,17 +325,9 @@ export function Settings({
                 ))}
               </select>
             </label>
-            <p className="hint">
-              VCW ships in US English and is translated by the people who use
-              it. To add a language, copy <code>i18n/en-US.toml</code> out of
-              the repository, replace each <code>text</code> with yours, and
-              put it beside your settings file as{" "}
-              <code>i18n/&lt;language tag&gt;.toml</code> - it appears in this
-              menu as soon as you reopen the panel. Anything you have not
-              translated stays in English rather than going blank.
-            </p>
+            <Hint text={text("settings.language.hint")} />
             <label>
-              Interface scale
+              {text("settings.scale")}
               {/* Not part of `Settings`: this is a fact about the monitor in
                   front of this window, not about the library, and the settings
                   file is read by the CLI and copied between machines. It is
@@ -335,14 +349,9 @@ export function Settings({
                 ))}
               </select>
             </label>
-            <p className="hint">
-              The default is sized for a 1080p screen or a desktop that is
-              already scaling for you. On a 4K monitor at no scaling, 175% or
-              200% is about the same physical size of letter. It takes effect
-              as you choose it and is remembered on this machine only.
-            </p>
+            <Hint text={text("settings.scale.hint")} />
             <label>
-              Level meters
+              {text("settings.meters")}
               <select
                 value={meters}
                 onChange={(event) => {
@@ -351,19 +360,13 @@ export function Settings({
                   setMeters(chosen);
                 }}
               >
-                <option value="bars">Bars</option>
-                <option value="vu">VU dials</option>
+                <option value="bars">{text("settings.meters.bars")}</option>
+                <option value="vu">{text("settings.meters.vu")}</option>
               </select>
             </label>
-            <p className="hint">
-              The bars give the peak, the RMS and the clip count to a tenth of
-              a decibel, which is what setting a level wants. The dials have
-              the movement of the real thing - 300 ms to full deflection, and
-              a needle with mass - which is what watching a side from across
-              the room wants. Both read the same scale.
-            </p>
+            <Hint text={text("settings.meters.hint")} />
             <label>
-              Buttons
+              {text("settings.buttons")}
               <select
                 value={buttons}
                 onChange={(event) => {
@@ -372,62 +375,54 @@ export function Settings({
                   setButtons(chosen);
                 }}
               >
-                <option value="text">Words</option>
-                <option value="icons">Icons</option>
+                <option value="text">{text("settings.buttons.words")}</option>
+                <option value="icons">{text("settings.buttons.icons")}</option>
               </select>
             </label>
-            <p className="hint">
-              Both rows at once: the panel tabs along the top and the transport
-              along the bottom. Icons give the rows back about a third of their
-              width, and every one of them keeps its name - the tooltip still
-              reads <em>Record (r)</em>, and a screen reader still hears the
-              word. Remembered on this machine only, like the two above.
-            </p>
+            <Hint text={text("settings.buttons.hint")} />
           </fieldset>
         )}
 
         {section === "Library" && (
         <fieldset>
-          <legend>Library</legend>
+          <legend>{text("settings.section.library")}</legend>
           <label>
-            Where projects are kept
+            {text("settings.library.path")}
             <input
               // The one field a fresh install has to be given. See "Where a
               // first run lands" above: this is the end of that journey.
               autoFocus={draft.recording.library === null}
               value={draft.recording.library ?? ""}
-              placeholder="unset - no library"
+              placeholder={text("settings.library.unset")}
               onChange={(event) =>
-                recording({ library: text(event.target.value) })
+                recording({ library: blank(event.target.value) })
               }
             />
           </label>
           <label>
-            Commit every (seconds)
+            {text("settings.commit")}
             <input
               type="number"
               min="1"
               value={draft.recording.checkpointSeconds ?? ""}
-              placeholder="unset - built-in"
+              placeholder={text("settings.unset.builtin")}
               onChange={(event) =>
                 recording({ checkpointSeconds: number(event.target.value) })
               }
             />
           </label>
-          <p className="hint">
-            The commit interval is the crash-loss floor: a crash loses the
-            uncommitted frames plus whatever the driver was holding, and the ring
-            size does not enter into it.
-          </p>
+          <Hint text={text("settings.commit.hint")} />
           <label>
-            A project that was not closed cleanly
+            {text("settings.recovery")}
             <select
               value={draft.recording.recovery ?? "ask"}
               onChange={(event) => recording({ recovery: event.target.value })}
             >
-              <option value="ask">Ask</option>
-              <option value="recover">Recover it</option>
-              <option value="leave">Leave it alone</option>
+              <option value="ask">{text("settings.recovery.ask")}</option>
+              <option value="recover">
+                {text("settings.recovery.recover")}
+              </option>
+              <option value="leave">{text("settings.recovery.leave")}</option>
             </select>
           </label>
         </fieldset>
@@ -435,17 +430,17 @@ export function Settings({
 
         {section === "Audio" && (
         <fieldset>
-          <legend>Audio</legend>
+          <legend>{text("settings.section.audio")}</legend>
           <label>
-            Host API
+            {text("settings.host")}
             {/* The hosts this build enumerated, not the five that exist. A text
                 input here accepted "pulse" on a machine with no such host and
                 said nothing until something tried to open a device. */}
             <select
               value={draft.audio.backend ?? ""}
-              onChange={(event) => audio({ backend: text(event.target.value) })}
+              onChange={(event) => audio({ backend: blank(event.target.value) })}
             >
-              <option value="">Whatever the build picks</option>
+              <option value="">{text("settings.host.any")}</option>
               {hosts(devices).map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -454,62 +449,64 @@ export function Settings({
               {draft.audio.backend !== null &&
                 !hosts(devices).includes(draft.audio.backend) && (
                   <option value={draft.audio.backend}>
-                    {draft.audio.backend} (not on this machine)
+                    {text("settings.host.absent", { name: draft.audio.backend })}
                   </option>
                 )}
             </select>
           </label>
           <label>
-            Rate (Hz)
+            {text("settings.rate")}
             <input
               type="number"
               value={draft.audio.rate ?? ""}
-              placeholder="unset - device"
+              placeholder={text("settings.unset.device")}
               onChange={(event) => audio({ rate: number(event.target.value) })}
             />
           </label>
           <label>
-            Format
+            {text("settings.format")}
             <select
               value={draft.audio.format ?? ""}
-              onChange={(event) => audio({ format: text(event.target.value) })}
+              onChange={(event) => audio({ format: blank(event.target.value) })}
             >
-              <option value="">Whatever the device offers</option>
+              <option value="">{text("settings.format.any")}</option>
               {FORMATS.map((row) => (
                 <option key={row.value} value={row.value}>
-                  {row.label}
+                  {text(row.label)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Exclusivity
+            {text("settings.mode")}
             <select
               value={draft.audio.mode ?? "shared"}
               onChange={(event) => audio({ mode: event.target.value })}
             >
-              <option value="shared">Shared</option>
-              <option value="native">Native</option>
-              <option value="exclusive">Exclusive</option>
+              <option value="shared">{text("settings.mode.shared")}</option>
+              <option value="native">{text("settings.mode.native")}</option>
+              <option value="exclusive">
+                {text("settings.mode.exclusive")}
+              </option>
             </select>
           </label>
           <label>
-            Equalization on input
+            {text("settings.eq")}
             <select
               value={draft.audio.eq ?? "unknown"}
               onChange={(event) => audio({ eq: event.target.value })}
             >
-              <option value="unknown">Not stated</option>
-              <option value="riaa">RIAA, from a phono stage</option>
-              <option value="flat">Flat, no curve applied</option>
+              <option value="unknown">{text("settings.eq.unknown")}</option>
+              <option value="riaa">{text("settings.eq.riaa")}</option>
+              <option value="flat">{text("settings.eq.flat")}</option>
             </select>
           </label>
           <label>
-            Ring (milliseconds)
+            {text("settings.ring")}
             <input
               type="number"
               value={draft.audio.ringMillis ?? ""}
-              placeholder="unset - built-in"
+              placeholder={text("settings.unset.builtin")}
               onChange={(event) =>
                 audio({ ringMillis: number(event.target.value) })
               }
@@ -520,21 +517,25 @@ export function Settings({
 
         {section === "Detection" && (
         <fieldset>
-          <legend>Detection</legend>
+          <legend>{text("settings.section.detection")}</legend>
           <label>
-            Detectors
+            {text("settings.detectors")}
             <select
               value={draft.detection.algorithm}
               onChange={(event) => detection({ algorithm: event.target.value })}
             >
-              <option value="all">All of them</option>
-              <option value="silence">Silence only</option>
-              <option value="spectral">Spectral change only</option>
-              <option value="hmm">HMM only</option>
+              <option value="all">{text("settings.detectors.all")}</option>
+              <option value="silence">
+                {text("settings.detectors.silence")}
+              </option>
+              <option value="spectral">
+                {text("settings.detectors.spectral")}
+              </option>
+              <option value="hmm">{text("settings.detectors.hmm")}</option>
             </select>
           </label>
           <label>
-            Detectors that must agree
+            {text("settings.sources")}
             <input
               type="number"
               min="1"
@@ -545,7 +546,7 @@ export function Settings({
             />
           </label>
           <label>
-            Least confidence to promote
+            {text("settings.confidence")}
             <input
               type="number"
               min="0"
@@ -558,7 +559,7 @@ export function Settings({
             />
           </label>
           <label>
-            Shortest gap that counts as silence (seconds)
+            {text("settings.silence")}
             <input
               type="number"
               min="0"
@@ -570,7 +571,7 @@ export function Settings({
             />
           </label>
           <label>
-            Shortest track (seconds)
+            {text("settings.shortest")}
             <input
               type="number"
               min="0"
@@ -581,16 +582,13 @@ export function Settings({
               }
             />
           </label>
-          <p className="hint">
-            A boundary a person has locked is promoted whatever these say. That is
-            the point of the lock.
-          </p>
+          <Hint text={text("settings.detection.hint")} />
         </fieldset>
         )}
 
         {section === "Metadata" && (
         <fieldset className="stacked">
-          <legend>Metadata</legend>
+          <legend>{text("settings.section.metadata")}</legend>
 
           {/* The master switch, and it stays a switch of its own. The two below
               it choose which *catalogs a search consults*; this one chooses the
@@ -599,78 +597,58 @@ export function Settings({
               through MusicBrainz or Discogs. Derived from "either provider is
               on", a both-off configuration would still reach the network. */}
           <div className="setting-switch">
-            <span>Allow network lookups</span>
+            <span>{text("settings.online")}</span>
             <Switch
               checked={draft.metadata.online}
               onChange={(online) => metadata({ online })}
-              off="Offline"
-              on="Online"
-              title="The master switch: offline, VCW opens no socket at all"
+              off={text("settings.online.off")}
+              on={text("settings.online.on")}
+              title={text("settings.online.title")}
             />
           </div>
-          <p className="hint">
-            Offline, nothing here reaches the network: no catalog search, and
-            also no AcoustID fingerprint lookup and no cover art, neither of
-            which the two switches below cover. Online, those two choose which
-            catalogs a search asks.
-          </p>
+          <Hint text={text("settings.online.hint")} />
 
           <div className="setting-switch">
             <span>MusicBrainz</span>
             <Switch
               checked={draft.metadata.musicbrainz}
               onChange={(musicbrainz) => metadata({ musicbrainz })}
-              off="Skip"
-              on="Search"
-              title="Consult MusicBrainz when searching for a release"
+              off={text("settings.provider.skip")}
+              on={text("settings.provider.search")}
+              title={text("settings.musicbrainz.title")}
             />
           </div>
           <label>
-            Contact address for the user agent
+            {text("settings.contact")}
             <input
               value={draft.metadata.contact ?? ""}
-              placeholder="unset - VCW_CONTACT, or nothing"
-              onChange={(event) => metadata({ contact: text(event.target.value) })}
+              placeholder={text("settings.contact.unset")}
+              onChange={(event) => metadata({ contact: blank(event.target.value) })}
             />
           </label>
-          <p className="hint">
-            MusicBrainz needs no account, but it does ask who is calling: an
-            address here is sent in the user agent on every request, and without
-            one the rate limit is harder and a lookup can be refused outright. An
-            email address or a URL, and public by design - it is not a secret, so
-            unlike the token below it can live in settings. <code>VCW_CONTACT</code>{" "}
-            in the environment is used when this is empty.
-          </p>
+          <Hint text={text("settings.contact.hint")} />
 
           <div className="setting-switch">
             <span>Discogs</span>
             <Switch
               checked={draft.metadata.discogs}
               onChange={(discogs) => metadata({ discogs })}
-              off="Skip"
-              on="Search"
-              title="Consult Discogs when searching for a release"
+              off={text("settings.provider.skip")}
+              on={text("settings.provider.search")}
+              title={text("settings.discogs.title")}
             />
           </div>
           <p className="hint">
             <code>VCW_DISCOGS_TOKEN</code>{" "}
             {discogsToken?.present === true ? (
               <span className="ok">
-                set, {discogsToken.characters} characters
+                {text("settings.token.set", { n: discogsToken.characters })}
               </span>
             ) : (
-              <span className="dim">not set in this process</span>
+              <span className="dim">{text("settings.token.unset")}</span>
             )}
           </p>
-          <p className="hint">
-            Discogs needs a personal access token, which is a secret: §39 keeps
-            it out of every project and settings file, so there is no field for
-            it here. Export it before starting VCW and the line above says
-            whether it arrived - a desktop launcher starts VCW with its own
-            environment rather than your shell&apos;s, which is the usual reason
-            a token you have exported reads as not set. Generating one takes a
-            Discogs account and no application review.
-          </p>
+          <Hint text={text("settings.discogs.hint")} />
           <p className="hint">
             <button
               type="button"
@@ -680,40 +658,29 @@ export function Settings({
               }}
             >
               <span className="icon globe-mark" aria-hidden="true" />
-              Get Discogs API Token
+              {text("settings.discogs.link")}
             </button>
           </p>
 
           <label>
-            Genre map
+            {text("settings.genre")}
             <input
               value={draft.metadata.genreMap ?? ""}
-              placeholder="unset - built-in"
+              placeholder={text("settings.unset.builtin")}
               onChange={(event) =>
-                metadata({ genreMap: text(event.target.value) })
+                metadata({ genreMap: blank(event.target.value) })
               }
             />
           </label>
-          <p className="hint">
-            What a provider calls a genre is not what your catalog calls one:
-            Discogs answers <code>Electronic</code> with a style of{" "}
-            <code>Dub Techno</code>, and a 1994 pressing carries whatever its
-            cataloger typed. The genre map folds those into your own names
-            before they are stored or written to a tag. Leave it empty for the
-            built-in table - 639 mappings ported from VRipr - or give the path
-            to a file of <code>key|Genre; Another</code> lines, one per row,{" "}
-            <code>#</code> for a comment. Matching is exact first and
-            case-insensitive second, and a genre the table does not mention
-            passes through unchanged.
-          </p>
+          <Hint text={text("settings.genre.hint")} />
         </fieldset>
         )}
 
         {section === "Export" && (
         <fieldset>
-          <legend>Export defaults</legend>
+          <legend>{text("settings.export.legend")}</legend>
           <label>
-            Format
+            {text("settings.format")}
             <select
               value={draft.export.format}
               onChange={(event) => exporting({ format: event.target.value })}
@@ -742,7 +709,7 @@ export function Settings({
           */}
           {effort !== null && (
             <label>
-              {effort.caption}
+              {text(effort.caption)}
               <select
                 value={draft.export[effort.field]}
                 onChange={(event) =>
@@ -751,21 +718,21 @@ export function Settings({
               >
                 {effort.options.map(([value, label]) => (
                   <option key={value} value={value}>
-                    {label}
+                    {text(label)}
                   </option>
                 ))}
               </select>
             </label>
           )}
           <label>
-            Output directory
+            {text("settings.output")}
             <input
               value={draft.export.output ?? ""}
-              onChange={(event) => exporting({ output: text(event.target.value) })}
+              onChange={(event) => exporting({ output: blank(event.target.value) })}
             />
           </label>
           <label>
-            Naming template
+            {text("settings.template")}
             {/* Twice the width of the other fields, because it is the only one
                 whose value is longer than a word: the default is 44 characters
                 and a template with a catalog number and a year in it runs to
@@ -783,19 +750,16 @@ export function Settings({
               it with a "did you mean" if it is still wrong by then. This is
               the help, not the gate. */}
           {unknownTokens(draft.export.template).length > 0 && (
-            <p className="hint warn near">
-              No such token:{" "}
-              {unknownTokens(draft.export.template)
-                .map((token) => `{${token}}`)
-                .join(", ")}
-              . An export with this template would be refused.
-            </p>
+            <Hint
+              className="hint warn near"
+              text={text("settings.template.unknown", {
+                tokens: unknownTokens(draft.export.template)
+                  .map((token) => `{${token}}`)
+                  .join(", "),
+              })}
+            />
           )}
-          <p className="hint near">
-            Anything in <code>{"{braces}"}</code> is substituted; anything in{" "}
-            <code>[square brackets]</code> disappears if every token inside it
-            is empty. The extension comes from the format, not the template.
-          </p>
+          <Hint className="hint near" text={text("settings.template.hint")} />
           <ul className="tokens">
             {TOKENS.map((token) => (
               <li key={token}>
@@ -804,15 +768,15 @@ export function Settings({
             ))}
           </ul>
           <label>
-            Artwork
+            {text("settings.artwork")}
             <select
               value={draft.export.artwork}
               onChange={(event) => exporting({ artwork: event.target.value })}
             >
-              <option value="none">None</option>
-              <option value="embed">Embedded</option>
-              <option value="folder">Folder image</option>
-              <option value="both">Both</option>
+              <option value="none">{text("settings.artwork.none")}</option>
+              <option value="embed">{text("settings.artwork.embed")}</option>
+              <option value="folder">{text("settings.artwork.folder")}</option>
+              <option value="both">{text("settings.artwork.both")}</option>
             </select>
           </label>
           {/*
@@ -823,15 +787,10 @@ export function Settings({
             is disabled while the first says Label, and reads "Per side",
             which is what the label's own numbering is.
           */}
-          <h3>Track numbering</h3>
-          <p className="hint near">
-            What <code>{"{tracknum}"}</code> and <code>{"{side}"}</code> expand
-            to in the template above, and what goes in the track number tag.
-            An export setting rather than a project one: it does not change
-            what the record is numbered, only what this export writes.
-          </p>
+          <h3>{text("settings.numbering")}</h3>
+          <Hint className="hint near" text={text("settings.numbering.hint")} />
           <label>
-            Track numbers
+            {text("settings.numbering.scheme")}
             <select
               value={draft.export.numbering === "alpha" ? "alpha" : "numeric"}
               onChange={(event) =>
@@ -845,29 +804,24 @@ export function Settings({
                 })
               }
             >
-              <option value="alpha">Label (A1, B2)</option>
-              <option value="numeric">Number (01, 02)</option>
+              <option value="alpha">{text("settings.numbering.alpha")}</option>
+              <option value="numeric">
+                {text("settings.numbering.numeric")}
+              </option>
             </select>
           </label>
           <label>
-            Counted
+            {text("settings.counted")}
             <select
               value={draft.export.numbering === "sequence" ? "sequence" : "numeric"}
               disabled={draft.export.numbering === "alpha"}
               onChange={(event) => exporting({ numbering: event.target.value })}
             >
-              <option value="numeric">Per side (01 again on side B)</option>
-              <option value="sequence">Across the disc (01..0n)</option>
+              <option value="numeric">{text("settings.counted.side")}</option>
+              <option value="sequence">{text("settings.counted.disc")}</option>
             </select>
           </label>
-          <p className="hint near">
-            Sides A and B are disc 1, C and D are disc 2, so a sequence
-            restarts at the next record rather than running to the end of a box
-            set - which is also what a track number tag means. <em>Label</em>{" "}
-            leaves <code>{"{side}"}</code> as a letter; either number form
-            makes it a number too, so <code>{"{side}-{tracknum}"}</code> reads{" "}
-            <code>01-01</code> rather than <code>A-01</code>.
-          </p>
+          <Hint className="hint near" text={text("settings.counted.hint")} />
           {/*
             Three controls and not one, because narrowing a float master is
             three decisions: how many bits, what noise, and how much room to
@@ -883,90 +837,55 @@ export function Settings({
             other two are disabled while the first says refuse, which is the
             honest way to say they are read but not yet.
           */}
-          <h3>32-bit float captures</h3>
-          <p className="hint near">
-            FLAC is an integer codec, so a <code>f32</code> capture has to be
-            brought down to whole numbers before it has a FLAC path. VCW does
-            that at 24 bits with a triangular dither unless you say otherwise,
-            which is the answer below; choose <em>Refuse</em> and it will ask
-            instead, by refusing the export and naming the containers that would
-            have taken the capture as it is. Nothing here touches the capture:
-            it is read as it was recorded every time.
-          </p>
+          <h3>{text("settings.narrowing")}</h3>
+          <Hint className="hint near" text={text("settings.narrowing.hint")} />
           <label>
-            Narrow to
+            {text("settings.narrow.to")}
             <select
               value={draft.export.narrowing}
               onChange={(event) => exporting({ narrowing: event.target.value })}
             >
-              <option value="refuse">Refuse (export as WAV instead)</option>
-              <option value="24">24-bit integer</option>
-              <option value="32">32-bit integer</option>
+              <option value="refuse">{text("settings.narrow.refuse")}</option>
+              <option value="24">{text("settings.narrow.24")}</option>
+              <option value="32">{text("settings.narrow.32")}</option>
             </select>
           </label>
           <label>
-            Dither
+            {text("settings.dither")}
             <select
               value={draft.export.dither}
               disabled={draft.export.narrowing === "refuse"}
               onChange={(event) => exporting({ dither: event.target.value })}
             >
-              <option value="tpdf">Triangular</option>
-              <option value="none">None (round only)</option>
+              <option value="tpdf">{text("settings.dither.tpdf")}</option>
+              <option value="none">{text("settings.dither.none")}</option>
             </select>
           </label>
           <label>
-            Headroom (dB)
+            {text("settings.headroom")}
             <input
               value={draft.export.headroom}
               disabled={draft.export.narrowing === "refuse"}
               onChange={(event) => exporting({ headroom: event.target.value })}
             />
           </label>
-          <p className="hint near">
-            24-bit is the archival answer: an <code>f32</code> sample carries a
-            24-bit significand, so that is the width at which a sample at full
-            scale arrives intact, and it is also the width at which FLAC can
-            still code one channel against the other. 32-bit adds no resolution
-            to any single sample and does keep the float's scale, which matters
-            on a capture with very quiet passages.
-          </p>
-          <p className="hint near">
-            Triangular dither trades about 5 dB of noise floor - at 24 bits,
-            some 120 dB below full scale and well under the surface noise of any
-            record - for a rounding error that is noise rather than distortion.
-            Headroom is attenuation applied before rounding: nothing clips in
-            floating point, so a capture peaking above 0 dBFS is rounded to the
-            ceiling unless you leave it room.
-          </p>
+          <Hint className="hint near" text={text("settings.narrow.width.hint")} />
+          <Hint className="hint near" text={text("settings.dither.hint")} />
         </fieldset>
         )}
 
         {section === "Credentials" && (
         <fieldset>
-          <legend>Credentials</legend>
-          <p className="hint">
-            Read from the environment and never written to a project file. This
-            list is everything the application can tell you about one.
-          </p>
-          <p className="hint">
-            Read once, when VCW starts, from the environment of whatever started
-            it - which is why a credential you have exported can read as not set
-            here. A desktop launcher, a dock icon or a .desktop entry starts VCW
-            from the session&apos;s environment and not from your shell&apos;s,
-            so an <code>export</code> in <code>.bashrc</code> or typed into a
-            terminal is invisible to it. Either start VCW from that same
-            terminal, or put the variable somewhere the session reads -{" "}
-            <code>~/.profile</code> on Linux, <code>launchctl setenv</code> on
-            macOS, the user environment variables on Windows - and log in again.
-          </p>
+          <legend>{text("settings.section.credentials")}</legend>
+          <Hint text={text("settings.credentials.hint")} />
+          <Hint text={text("settings.credentials.environment")} />
           <table className="rows">
             <thead>
               <tr>
-                <th>Credential</th>
-                <th>Set</th>
-                <th className="n">Characters</th>
-                <th>Environment variable</th>
+                <th>{text("settings.column.credential")}</th>
+                <th>{text("settings.column.set")}</th>
+                <th className="n">{text("settings.column.characters")}</th>
+                <th>{text("settings.column.variable")}</th>
               </tr>
             </thead>
             <tbody>
@@ -975,9 +894,9 @@ export function Settings({
                   <td>{credential.name}</td>
                   <td>
                     {credential.present ? (
-                      <span className="ok">yes</span>
+                      <span className="ok">{text("settings.yes")}</span>
                     ) : (
-                      <span className="dim">no</span>
+                      <span className="dim">{text("settings.no")}</span>
                     )}
                   </td>
                   <td className="n">
@@ -996,6 +915,56 @@ export function Settings({
       </div>
     </section>
   );
+}
+
+/**
+ * A paragraph of catalog prose, with its literals and its emphasis kept.
+ *
+ * This panel is the only one that marks anything up inside a sentence: a file
+ * name, an environment variable, the name of an option being referred to.
+ * Cutting each paragraph into a key per fragment would hand a translator
+ * three half sentences and no way to reorder them, and dropping the markup
+ * would make `i18n/en-US.toml` read as prose in the middle of a paragraph
+ * about file names. So the catalog keeps one entry per paragraph and marks a
+ * literal with backticks and an emphasis with asterisks, which is what a
+ * translator editing a TOML file is already looking at.
+ */
+function Hint({
+  text,
+  className = "hint",
+}: {
+  text: string;
+  className?: string;
+}): React.JSX.Element {
+  return (
+    <p className={className}>
+      {marked(text).map(([kind, value], index) =>
+        kind === "code" ? (
+          <code key={index}>{value}</code>
+        ) : kind === "em" ? (
+          <em key={index}>{value}</em>
+        ) : (
+          value
+        ),
+      )}
+    </p>
+  );
+}
+
+/** A marked paragraph, split into its runs. Exported for its test. */
+export function marked(
+  source: string,
+): readonly (readonly ["text" | "code" | "em", string])[] {
+  return source
+    .split(/(`[^`]+`|\*[^*]+\*)/)
+    .filter((part) => part !== "")
+    .map((part) =>
+      part.startsWith("`")
+        ? (["code", part.slice(1, -1)] as const)
+        : part.startsWith("*")
+          ? (["em", part.slice(1, -1)] as const)
+          : (["text", part] as const),
+    );
 }
 
 /**

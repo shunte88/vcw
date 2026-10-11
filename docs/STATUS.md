@@ -6173,8 +6173,8 @@ tagged at `4829f76`, pushed, packaged and published - see the section above it -
 
 **Superseded, 2026-10-11.** Read the three paragraphs below as the state on
 2026-10-06. AIFF shipped in 0.2, AAC was withdrawn on 2026-10-10 and ALAC shipped in
-its place on 2026-10-11, the glyphs are all drawn, and the i18n path is built with the
-extraction still to do. The dated sections at the end of this file are current.
+its place on 2026-10-11, the glyphs are all drawn, and i18n is built and extracted -
+see the dated section at the end of this file for where the catalog stops. The dated sections at the end of this file are current.
 
 **0.3 has three things on it, and one of them is a licensing question before it is a
 coding one.** The second UI change list shipped whole in 0.2.0-alpha, so what is waiting
@@ -7208,3 +7208,98 @@ anything was written for it.
 On the real thing: a seven-track two-sided Talk Talk rip exported from the CLI in one
 run, `--dry-run` first. `Container::ALL`, the two format pickers, `effortOf`, the
 `--format` help and the user guide's table all agree there are six formats now.
+
+## 2026-10-11, the extraction: every panel, and the line where it stops
+
+The language path was built on 2026-10-09 with four strings behind it. The catalog
+now holds 472 entries. Every panel is extracted - Export, Capture, Transport, Meters, Tracks,
+Metadata, Browser, Waveform, SelectionBar, Help, Diagnostics, About, the window chrome
+and the keyboard map - and so is Settings, which was most of the work on its own.
+
+### What had to be decided before string five
+
+**`Display` stays English.** There are 122 `#[error(...)]` variants across the
+workspace and not one of them is a catalog key. A `Display` is embedded verbatim in
+the §42 diagnostic bundle, which exists to be safe to send to a stranger, and it is
+what a person pastes into a bug report. A refusal somebody is meant to *act* on is
+already a separate entry resolved at the surface - `export.flac.float` and its six
+siblings, which the window and the CLI both show through `t`. Translating `Display`
+would translate the thing being quoted and leave the acting-on refusals exactly where
+they already are.
+
+**The CLI's reports stay English too, and this is the scope call of the day.** The
+earlier plan counted "about 272 `format!` sites" as part of this work. Reading them
+settles it: they are column-aligned key-and-value tables that get piped, grepped and
+pasted, clap's own `--help` comes from doc comments no catalog can reach, and `vcw
+bundle` writes JSON. The CLI still loads the active language, because the refusals it
+prints are catalog entries. The same argument already covered the event log in the
+window, which `describe.ts` says at its head. It is written down in three places now -
+`crates/i18n/src/lib.rs`, the user guide, and here - so it is not re-derived.
+
+### Three mechanisms the extraction needed
+
+**A key held as data is invisible to a reader that only knows how to see a call.**
+`keymap.ts` gives all 45 bindings a help label, `Help.tsx` names seven scopes,
+`App.tsx` labels nine tabs, `Capture.tsx` names five capture states. None of those
+strings is inside a `t(...)`, so `crates/i18n/tests/callers.rs` called them orphans
+and would have had a translator translating nothing. `i18n.ts` now exports
+`key(name)`, an identity function, and `callers.rs` reads `key("` as a call site.
+That is the whole fix, and it is one line per entry rather than a special case per
+field name.
+
+**A record keyed by a wire word falls back to the wire word.** `Record<CaptureStateName,
+string>` does not typecheck, because `row.state` and `engine.phase` are `string` in the
+store; keying them `Record<string, string>` and writing `text(STATES[row.state] ??
+row.state)` means a state this build has never heard of shows as the shell wrote it
+rather than as a dotted key. Same for the transport's phases and the track editor's
+edges.
+
+**A paragraph with a file name in it is one entry, not three.** Settings is the only
+panel that marks anything up inside a sentence - `i18n/en-US.toml`, `VCW_CONTACT`,
+*Refuse*, *Label* - and 20 of its hints do it. Cutting each into a key per fragment
+would hand a translator three half sentences and no way to reorder them. So the
+catalog marks a literal with backticks and an emphasis with asterisks, and `Hint` in
+`Settings.tsx` splits on them. `marked()` is exported and tested directly; the panel
+test also asserts the three `<code>` elements come out of the language hint in order.
+
+### Two things the extraction changed that were not strings
+
+`effortOf` in `effort.ts` was handing the Settings panel and the Export panel a
+caption and nine option labels in English, which neither panel was translating - a
+miss from the Export extraction a day earlier. Both now render it through `t`, and
+`effort.test.ts` asserts through `t` as well, because the key is not what anybody
+reads and "FLAC is never called lossy" is the defect that test exists for. The six
+bare numerals are left as numerals: a numeral is the same in every language, and `t`
+renders a key it does not know as itself.
+
+`document.documentElement.lang` now follows the setting. `index.html` can only ever
+say the language the bundle was built in, and a screen reader picks its voice from
+that attribute.
+
+### What proves it
+
+Three Rust tests hold the two sides together. `frontend_catalog.rs` generates
+`app/ui/src/bindings/strings.ts` from the TOML and fails if the committed copy has
+drifted - D9's `VCW_BLESS` convention, so there is one habit to learn rather than two
+- and also refuses a catalog entry whose braces hold something that is not a
+placeholder name. `callers.rs` walks `crates/`, `app/src-tauri/src` and `app/ui/src`,
+reads every `t("`, `text("`, `key("` and `count(` literal in either language, and
+asserts in both directions: a key asked for that the catalog does not have, and a
+catalog entry nobody asks for. A line carrying `i18n-exempt` is skipped, which is how
+the two deliberate missing-key tests stay in the suite.
+
+`apptest` caught the one real break. `the_user_guide_lists_every_key_the_window_binds`
+parses `keymap.ts` and compares it with the guide's keyboard tables, and every row now
+read `key("keys.play")` instead of "Play". It resolves the key through
+`Catalog::source()` and fails on one the catalog has never heard of, so the guide can
+never print a dotted path. Worth noting where it was caught: media2026 cannot run
+`apptest` at all, so the offloaded gate was green on 13 legs with this sitting in it.
+
+First light on Xvfb, with every group opened and read: all seven Settings sections in
+English, the markup rendering as code and emphasis, an unknown template token raising
+the amber refusal, FLAC's "Compression / 5 - default" coming out of the catalog, and
+then `Español de España` chosen from the menu - the panel switched live to AJUSTES,
+Apariencia, Biblioteca, Idioma, with the Spanish hint keeping its three code spans and
+its italic, and every untranslated paragraph still in English beside them. Clicking
+*Biblioteca* opened the Library group, which is the thing that would have broken if
+the nav had been translated by value rather than by label.

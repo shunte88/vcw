@@ -159,6 +159,7 @@ import type {
 } from "../bindings/vcw";
 import { Face } from "../Face";
 import { clock } from "../format";
+import { useText } from "../i18n";
 import { ticks } from "../ruler";
 import {
   STEP,
@@ -349,6 +350,7 @@ export function Waveform({
   onSelect: (selection: Region | null) => void;
   generation: number;
 }): React.JSX.Element {
+  const text = useText();
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
   const bar = useRef<HTMLDivElement | null>(null);
@@ -1273,9 +1275,9 @@ export function Waveform({
       </div>
       <div className="waveform-foot">
         {capture === undefined || view === null ? (
-          <span>Nothing captured yet.</span>
+          <span>{text("waveform.empty")}</span>
         ) : capture.channels < 2 ? (
-          <span>1 channel</span>
+          <span>{text("waveform.mono")}</span>
         ) : (
           // `view.channel` has existed since WP-09 and nothing ever wrote to
           // it, so every stereo capture was drawn as its left channel with a
@@ -1283,7 +1285,7 @@ export function Waveform({
           // A select rather than a left/right pair of buttons because a
           // four-channel interface is allowed by §8 and two buttons are not.
           <label className="waveform-channel">
-            Channel
+            {text("waveform.channel")}
             <select
               value={view.channel}
               onChange={(event) =>
@@ -1293,7 +1295,7 @@ export function Waveform({
               {Array.from({ length: capture.channels }, (_, index) => (
                 <option key={index} value={index}>
                   {capture.channels === 2
-                    ? ["Left", "Right"][index]
+                    ? [text("meters.left"), text("meters.right")][index]
                     : `${index + 1}`}
                 </option>
               ))}
@@ -1302,10 +1304,13 @@ export function Waveform({
         )}
         {peaks !== null && (
           <span>
-            {clock(peaks.startSeconds)} to {clock(peaks.endSeconds)}
+            {text("waveform.range", {
+              from: clock(peaks.startSeconds),
+              to: clock(peaks.endSeconds),
+            })}
           </span>
         )}
-        <span>{size.width} column(s)</span>
+        <span>{text("waveform.columns", { columns: size.width })}</span>
         {failed !== null && <span className="clip">{failed}</span>}
         {/* The third row that follows Appearance > Buttons, after the panel
             tabs and the transport. It was text when those two switched and
@@ -1314,27 +1319,27 @@ export function Waveform({
         <span className="waveform-zoom">
           <button
             type="button"
-            title="Zoom out (-)"
+            title={text("waveform.out.title", { chord: "-" })}
             disabled={frames <= 0}
             onClick={() => show(zoom(span, frames, STEP, 0.5))}
           >
-            <Face icon="zoom-out">Out</Face>
+            <Face icon="zoom-out">{text("waveform.out")}</Face>
           </button>
           <button
             type="button"
-            title="Zoom in (+)"
+            title={text("waveform.in.title", { chord: "+" })}
             disabled={frames <= 0}
             onClick={() => show(zoom(span, frames, 1 / STEP, 0.5))}
           >
-            <Face icon="zoom-in">In</Face>
+            <Face icon="zoom-in">{text("waveform.in")}</Face>
           </button>
           <button
             type="button"
-            title="Show the whole capture (0)"
+            title={text("waveform.fit.title", { chord: "0" })}
             disabled={frames <= 0}
             onClick={() => show(fit())}
           >
-            <Face icon="zoom-fit">Fit</Face>
+            <Face icon="zoom-fit">{text("waveform.fit")}</Face>
           </button>
         </span>
       </div>

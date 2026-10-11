@@ -192,9 +192,9 @@ machine only:
 | **Buttons** | `Words` or `Icons`, applied to the tabs along the top and the transport along the bottom at once. Icons give both rows back about a third of their width, and every button keeps its name: the tooltip still reads `Record (r)` and a screen reader still hears the word. |
 
 The fourth, **Language**, is stored in the settings file rather than on this
-machine, because `vcw` on the command line prints the same sentences the window
-does and because a person who speaks Portuguese still speaks it on their other
-computer.
+machine, because a person who speaks Portuguese still speaks it on their other
+computer and because `vcw` on the command line reads the same file: a refusal
+it prints comes out in the language the window is in.
 
 ### Translating VCW
 
@@ -215,6 +215,26 @@ catalog is one file:
 Anything you have not translated stays in English rather than going blank, so a
 half-finished catalog is usable from the first entry. When you are happy with
 it, send it in as a pull request and it ships with the next release.
+
+Two things to know while you work:
+
+- **A `{name}` in braces is a value VCW puts in.** Move it wherever your
+  language wants it and leave the spelling alone; a name VCW does not
+  recognize is left on screen as itself, which is how you spot a typo.
+- **In the Settings panel, a backtick marks a literal and an asterisk marks an
+  emphasis.** `` `i18n/en-US.toml` `` comes out as a file name in a monospace
+  face and `*Refuse*` as the name of an option. Each paragraph is one entry
+  rather than several, so you can put the sentence in whatever order your
+  language puts it.
+
+**What is not in the catalog**, and will not be: the reports `vcw` prints on
+the command line, and the event log in the window. Those are column-aligned
+tables and one-line event records that get piped into other programs, grepped,
+and pasted into bug reports, so they stay in the source language the way a log
+file does. What is in the file you just copied is the window - every panel,
+every button, every hint - and the refusals VCW gives when it will not export
+a capture into a format that cannot carry it, which the command line prints in
+your language too.
 
 ## Before the first capture
 

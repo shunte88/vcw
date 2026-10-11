@@ -203,6 +203,7 @@ impl Backend for Served {
                 args.get("settings")?,
             )),
             "languages" => ok(&vcw_shell::config::languages()),
+            "strings" => ok(&vcw_i18n::strings()),
             "credentials" => ok(&vcw_shell::config::credentials()),
             "projects" => done(vcw_shell::config::projects(host)),
             "new_project" => done(vcw_shell::config::new_project(host, args.get("seed")?)),

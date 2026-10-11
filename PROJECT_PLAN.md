@@ -40,7 +40,7 @@ by. So the plan is deliberately inverted against the temptation to build screens
 | **G1** | Headless core | Record → store → recover → detect → edit → export, all from the CLI, no GUI in existence | 96 |
 | **G2** | MVP release 0.1 | §44 scope plus Audacity import, GUI, packaged for every Tier 1 platform | 53 |
 | **G3** | Release 0.2 | §45 scope (chromaprint-next, AcoustID, evidence resolver, MP3/OGG) | 47 |
-| **G4** | Release 0.3+ | §46 scope (processing, click removal, remote interface §52, Android, plugins), plus i18n (AIFF shipped in 0.2, ALAC 2026-10-11; AAC withdrawn 2026-10-10) | re-plan at G3 |
+| **G4** | Release 0.3+ | §46 scope (processing, click removal, remote interface §52, Android, plugins), plus i18n (the window extracted 2026-10-11; AIFF shipped in 0.2, ALAC 2026-10-11; AAC withdrawn 2026-10-10) | re-plan at G3 |
 
 *Weight* is relative effort in sessions (~3 focused hours), used for sequencing and for
 noticing when something is running away - not for forecasting dates.

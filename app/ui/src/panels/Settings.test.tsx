@@ -34,7 +34,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../api";
 import type { Credential, Settings as Values } from "../bindings/vcw";
 import type { Store } from "../store";
-import { Settings } from "./Settings";
+import { Settings, marked } from "./Settings";
 
 /** Which pages the shell was asked to open, in order. */
 let opened: string[] = [];
@@ -400,5 +400,40 @@ describe("where a first run lands", () => {
     // Clearing the library is a thing a person can do on purpose. Having done
     // it, they do not want every visit to Settings to start over here.
     expect(current(await fresh(null, "Export"))).toBe("Export");
+  });
+});
+
+describe("a marked-up hint", () => {
+  // The one thing in this panel that is parsing rather than wiring. A
+  // paragraph is a single catalog entry so a translator can reorder it, and
+  // the file names and option names inside it are marked rather than cut out
+  // into keys of their own - so the marks have to survive to the screen.
+
+  it("renders a literal as code and an emphasis as emphasis", () => {
+    expect(marked("copy `en-US.toml` and choose *Refuse*")).toEqual([
+      ["text", "copy "],
+      ["code", "en-US.toml"],
+      ["text", " and choose "],
+      ["em", "Refuse"],
+    ]);
+  });
+
+  it("leaves an unmarked paragraph as one run", () => {
+    expect(marked("Nothing to mark here.")).toEqual([
+      ["text", "Nothing to mark here."],
+    ]);
+  });
+
+  it("puts the marks in the panel, not in the words", async () => {
+    const pane = (await shown([token(true)], "Appearance")).querySelector(
+      ".prefs-pane",
+    );
+    const hint = [...(pane?.querySelectorAll("p.hint") ?? [])].find((line) =>
+      line.textContent?.includes("ships in US English"),
+    );
+    expect(hint?.textContent).toContain("copy i18n/en-US.toml out of");
+    expect(
+      [...(hint?.querySelectorAll("code") ?? [])].map((at) => at.textContent),
+    ).toEqual(["i18n/en-US.toml", "text", "i18n/<language tag>.toml"]);
   });
 });

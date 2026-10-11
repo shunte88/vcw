@@ -119,6 +119,28 @@ fn field(line: &str) -> Option<(&str, &str)> {
     Some((name.trim(), value))
 }
 
+/// The English a `label:` holds, which is written as a catalog key.
+///
+/// `keymap.ts` gives every binding `key("keys.play")` rather than the sentence
+/// itself, so that the coverage test in `crates/i18n/tests/callers.rs` can see
+/// the key is asked for. The guide prints what a person reads, so the key is
+/// resolved here - and one the catalog has never heard of fails this test
+/// rather than putting a dotted path in the documentation.
+fn label(value: &str) -> String {
+    let Some(key) = value
+        .strip_prefix("key(\"")
+        .and_then(|rest| rest.strip_suffix("\")"))
+    else {
+        return value.to_owned();
+    };
+    vcw_i18n::Catalog::source()
+        .get(key)
+        .unwrap_or_else(|| {
+            panic!("keymap.ts asks for `{key}`, which i18n/en-US.toml does not have")
+        })
+        .to_owned()
+}
+
 /// Every binding in `keymap.ts`, read as data.
 ///
 /// Hand-parsed rather than pattern-matched. A regular expression over this file
@@ -167,7 +189,7 @@ fn bindings() -> BTreeSet<Row> {
             "also" => entry.also = value.to_owned(),
             "workflow" => entry.workflow = value.to_owned(),
             "scope" => entry.scope = value.to_owned(),
-            "label" => entry.label = value.to_owned(),
+            "label" => entry.label = label(value),
             "suggested" => entry.suggested = value == "true",
             other => panic!("unknown field `{other}` in binding `{}`", entry.name),
         }

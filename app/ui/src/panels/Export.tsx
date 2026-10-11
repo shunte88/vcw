@@ -40,6 +40,7 @@ import * as api from "../api";
 import type { ExportPlan, Listing, Settings } from "../bindings/vcw";
 import { effortOf } from "../effort";
 import { inTheShell } from "../host";
+import { count, t, useText, type Translate } from "../i18n";
 import { useKeys } from "../keys";
 import type { Exported, Store } from "../store";
 
@@ -51,6 +52,7 @@ export function Export({
   store: Store;
   settings: Settings | null;
 }): React.JSX.Element {
+  const text = useText();
   const { project, engine, run } = store;
   const [into, setInto] = useState("");
   const [format, setFormat] = useState("flac");
@@ -137,7 +139,7 @@ export function Export({
       const chosen = await open({
         directory: true,
         multiple: false,
-        title: "Where the exported files go",
+        title: text("export.browse.title"),
         ...(start === null || start === undefined ? {} : { defaultPath: start }),
       });
       if (typeof chosen === "string") {
@@ -165,26 +167,30 @@ export function Export({
   return (
     <section className="panel export">
       <header className="panel-head">
-        <h2>Export</h2>
+        <h2>{text("export.title")}</h2>
         <button
           type="button"
           disabled={project.path === null || into.trim() === ""}
           onClick={makePlan}
         >
-          Plan
+          {text("export.plan")}
         </button>
         <button
           type="button"
           disabled={project.path === null || into.trim() === ""}
           onClick={write}
         >
-          Export (Ctrl+E)
+          {/* The chord is an argument and not part of the sentence: it
+              comes from the keymap in every other place it is shown, and a
+              translator who retyped it would be the one place it could
+              disagree with what the key actually does. */}
+          {text("export.run", { chord: "Ctrl+E" })}
         </button>
       </header>
 
       <div className="fields">
         <label>
-          Into
+          {text("export.into")}
           {/*
             The input and its button are a row inside the label, because a
             `label` is a flex column: a button added as a sibling of the input
@@ -195,14 +201,14 @@ export function Export({
             <input
               className="wide"
               value={into}
-              placeholder="a directory that will be created if it is not there"
+              placeholder={text("export.into.placeholder")}
               onChange={(event) => {
                 setInto(event.target.value);
                 setPlan(null);
               }}
             />
             <button type="button" onClick={browse}>
-              Browse...
+              {text("export.browse")}
             </button>
           </span>
           {listing !== null && (
@@ -225,7 +231,10 @@ export function Export({
           )}
         </label>
         <label>
-          Format
+          {/* The option names below are not here: FLAC, WAV, AIFF, ALAC, MP3
+              and Ogg Vorbis are what the formats are called in every
+              language. */}
+          {text("export.format")}
           {/* Lossless first: the archival copy is the one that matters, and a
               list opening with MP3 would be a list suggesting otherwise. The
               plan is dropped on a change because the paths in it end in the
@@ -247,7 +256,7 @@ export function Export({
         </label>
         {effort !== null && (
           <label>
-            {effort.caption}
+            {text(effort.caption)}
             {/* Only for the containers it means anything to, and under the
                 name that container's setting actually has: FLAC's number
                 changes the size and the time and nothing else, so calling it
@@ -267,14 +276,14 @@ export function Export({
             >
               {effort.options.map(([value, label]) => (
                 <option key={value} value={value}>
-                  {label}
+                  {text(label)}
                 </option>
               ))}
             </select>
           </label>
         )}
         <label>
-          Artwork
+          {text("export.artwork")}
           <select
             value={artwork}
             onChange={(event) => {
@@ -282,10 +291,10 @@ export function Export({
               setPlan(null);
             }}
           >
-            <option value="none">None</option>
-            <option value="embed">Embedded</option>
-            <option value="folder">Folder image</option>
-            <option value="both">Both</option>
+            <option value="none">{text("export.artwork.none")}</option>
+            <option value="embed">{text("export.artwork.embed")}</option>
+            <option value="folder">{text("export.artwork.folder")}</option>
+            <option value="both">{text("export.artwork.both")}</option>
           </select>
         </label>
         <label className="tick">
@@ -294,15 +303,13 @@ export function Export({
             checked={overwrite}
             onChange={(event) => setOverwrite(event.target.checked)}
           />
-          Overwrite files that are already there
+          {text("export.overwrite")}
         </label>
       </div>
 
       <fieldset className="sides">
-        <legend>Sides</legend>
-        <p className="hint">
-          Nothing ticked exports every side that has tracks.
-        </p>
+        <legend>{text("export.sides")}</legend>
+        <p className="hint">{text("export.sides.hint")}</p>
         {project.sides.map((side) => (
           <label className="tick" key={side.id}>
             <input
@@ -324,12 +331,15 @@ export function Export({
 
       {engine.exporting !== null && (
         <p className="hint">
-          Writing {engine.exporting[0]} of {engine.exporting[1]}...
+          {text("export.writing", {
+            done: engine.exporting[0],
+            total: engine.exporting[1],
+          })}
         </p>
       )}
 
       {engine.exporting === null && engine.exported !== null && (
-        <p className="hint">{wrote(engine.exported)}</p>
+        <p className="hint">{wrote(engine.exported, text)}</p>
       )}
 
       {plan !== null && (
@@ -341,8 +351,12 @@ export function Export({
             §2 says the answer comes from a view model or not at all.
           */}
           <h3>
-            Plan: {plan.files.length} file(s) in {plan.container},{" "}
-            {plan.covers.length} cover(s), {plan.frames} frame(s)
+            {text("export.plan.summary", {
+              files: plan.files.length,
+              container: plan.container,
+              covers: plan.covers.length,
+              frames: plan.frames,
+            })}
           </h3>
           {/*
             The fold is invisible once the files exist - they are simply mono -
@@ -350,19 +364,15 @@ export function Export({
             export runs. The release said so at setup; this is the reminder.
           */}
           {plan.foldToMono && (
-            <p className="hint">
-              This release is marked mono, so every file is written with one
-              channel: the captured channels are summed at -6 dB each, which
-              cannot clip. The capture itself is unchanged.
-            </p>
+            <p className="hint">{text("export.plan.mono")}</p>
           )}
           <table className="rows">
             <thead>
               <tr>
-                <th>Pos</th>
-                <th>Title</th>
-                <th>Path</th>
-                <th className="n">Frames</th>
+                <th>{text("export.column.position")}</th>
+                <th>{text("export.column.title")}</th>
+                <th>{text("export.column.path")}</th>
+                <th className="n">{text("export.column.frames")}</th>
               </tr>
             </thead>
             <tbody>
@@ -390,14 +400,28 @@ export function Export({
  * place to pin them. Frames are deliberately not turned into a duration for the
  * same reason the plan does not - the rate belongs to the capture, and this
  * report spans every side in the export.
+ *
+ * Two whole sentences in the catalog rather than one sentence and an optional
+ * clause. A translator can move `{covers}` to wherever their word order wants
+ * it; a clause this function glued on could only ever land where English puts
+ * it.
+ *
+ * `text` is passed rather than read, because this is called from the panel's
+ * render and the panel already holds the subscription - calling the module's
+ * `t` here would render the right words and then not re-render when the
+ * language changed under it. It defaults to `t` for a caller outside React.
  */
-export function wrote(report: Exported): string {
-  const files = `${report.files} file${report.files === 1 ? "" : "s"}`;
-  const covers =
-    report.covers === 0
-      ? ""
-      : `, ${report.covers} cover image${report.covers === 1 ? "" : "s"}`;
-  return `Wrote ${files}${covers}, ${size(report.bytesWritten)}.`;
+export function wrote(report: Exported, text: Translate = t): string {
+  const files = count(report.files, "export.wrote.files");
+  const bytes = size(report.bytesWritten);
+  if (report.covers === 0) {
+    return text("export.wrote", { files, size: bytes });
+  }
+  return text("export.wrote.covers", {
+    files,
+    covers: count(report.covers, "export.wrote.covers"),
+    size: bytes,
+  });
 }
 
 /**
@@ -444,15 +468,16 @@ function Directories({
   onPick: () => void;
   onClose: () => void;
 }): React.JSX.Element {
+  const text = useText();
   return (
     <div className="directories">
       <div className="row">
         <code className="at">{listing.at}</code>
         <button type="button" onClick={onPick}>
-          Use this one
+          {text("export.browse.use")}
         </button>
         <button type="button" onClick={onClose}>
-          Cancel
+          {text("export.browse.cancel")}
         </button>
       </div>
       <ul>
@@ -464,7 +489,7 @@ function Directories({
                 onGo(listing.parent as string);
               }}
             >
-              .. up
+              {text("export.browse.up")}
             </button>
           </li>
         )}
@@ -482,10 +507,7 @@ function Directories({
         ))}
       </ul>
       {listing.parent === null && listing.directories.length === 0 && (
-        <p className="quiet">
-          Nothing below here. Export into this directory, or start VCW with
-          --files pointing somewhere with more in it.
-        </p>
+        <p className="quiet">{text("export.browse.empty")}</p>
       )}
     </div>
   );

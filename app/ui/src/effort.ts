@@ -22,34 +22,43 @@
 // is a list that will be added to in one of them.
 //
 // WAV gets `null`. It is not that the field is hidden; there is no setting.
+//
+// The caption and the labels are catalog keys, because this is data and the
+// two panels that render it only know how to call `t`. The six bare numerals
+// are not: a numeral is the same numeral in every language, and nine catalog
+// entries of which six read "3" would be six entries a translator has to look
+// at to find they have nothing to do. `t` renders a key it does not know as
+// itself, which is what makes "3" come out as 3.
+
+import { key } from "./i18n";
 
 /** Which of the two export knobs a format has, and how to offer it. */
 export type Effort = {
   /** The settings field and request key this writes to. */
   field: "quality" | "compression";
-  /** What the control is called. */
+  /** The catalog key for what the control is called. */
   caption: string;
-  /** Value then label, in the order they should be offered. */
+  /** Value then label - a catalog key, or a numeral - in offering order. */
   options: readonly (readonly [string, string])[];
 };
 
 /** `flac -0` to `-8`, the scale everybody has already read about. */
 const COMPRESSION: readonly (readonly [string, string])[] = [
-  ["0", "0 - fastest"],
+  ["0", key("export.compression.fastest")],
   ["1", "1"],
   ["2", "2"],
   ["3", "3"],
   ["4", "4"],
-  ["5", "5 - default"],
+  ["5", key("export.compression.default")],
   ["6", "6"],
   ["7", "7"],
-  ["8", "8 - smallest"],
+  ["8", key("export.compression.smallest")],
 ];
 
 const QUALITY: readonly (readonly [string, string])[] = [
-  ["transparent", "Transparent"],
-  ["high", "High"],
-  ["compact", "Compact"],
+  ["transparent", key("export.quality.transparent")],
+  ["high", key("export.quality.high")],
+  ["compact", key("export.quality.compact")],
 ];
 
 /**
@@ -63,14 +72,18 @@ export function effortOf(format: string): Effort | null {
     case "flac":
       return {
         field: "compression",
-        caption: "Compression",
+        caption: key("export.effort.compression"),
         options: COMPRESSION,
       };
     case "mp3":
     case "ogg":
     case "oga":
     case "vorbis":
-      return { field: "quality", caption: "Lossy quality", options: QUALITY };
+      return {
+        field: "quality",
+        caption: key("export.effort.quality"),
+        options: QUALITY,
+      };
     default:
       return null;
   }

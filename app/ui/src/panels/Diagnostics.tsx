@@ -32,6 +32,7 @@ import { Fragment, useState } from "react";
 
 import type { Line } from "../store";
 import { describe } from "../describe";
+import { useText } from "../i18n";
 
 /** How many lines are rendered at once. */
 const PAGE = 120;
@@ -44,6 +45,7 @@ export function Diagnostics({
   log: readonly Line[];
   onClose: () => void;
 }): React.JSX.Element {
+  const text = useText();
   const [filter, setFilter] = useState("");
   /** The row opened in full, by its key, or null when none is. */
   const [opened, setOpened] = useState<string | null>(null);
@@ -58,30 +60,27 @@ export function Diagnostics({
   const shown = [...matching].reverse().slice(0, PAGE);
 
   return (
-    <div className="overlay" role="dialog" aria-label="Diagnostics">
+    <div className="overlay" role="dialog" aria-label={text("log.aria")}>
       <div className="overlay-box wide">
         <header className="panel-head">
-          <h2>Event log</h2>
+          <h2>{text("log.title")}</h2>
           <input
             value={filter}
-            placeholder="filter by event kind"
+            placeholder={text("log.filter")}
             onChange={(event) => setFilter(event.target.value)}
           />
           <span className="dim">
-            {matching.length} of {log.length}
+            {text("log.count", { shown: matching.length, held: log.length })}
           </span>
           <button type="button" onClick={onClose}>
-            Close (Esc)
+            {text("help.close")}
           </button>
         </header>
         {shown.length === 0 ? (
-          <p className="empty">
-            Nothing yet. Meter and position ticks are not kept - see UNLOGGED
-            in the store.
-          </p>
+          <p className="empty">{text("log.empty")}</p>
         ) : (
           <>
-            <p className="hint">Double-click a line to read it in full.</p>
+            <p className="hint">{text("log.hint")}</p>
             <table className="rows log">
               <tbody>
                 {shown.map((line, index) => {
@@ -91,7 +90,7 @@ export function Diagnostics({
                     <Fragment key={key}>
                       <tr
                         className={opened === key ? "current" : ""}
-                        title="Double-click to read in full"
+                        title={text("log.open")}
                         onDoubleClick={() => {
                           setOpened(opened === key ? null : key);
                         }}

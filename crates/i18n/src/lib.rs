@@ -50,6 +50,28 @@
 //! the shell for the active catalog as a map and looks strings up in
 //! JavaScript. Neither side holds a second copy of any English, which is what
 //! keeps the source language from drifting away from itself.
+//!
+//! # What is in here, and what is not
+//!
+//! **The window, and every refusal either end can show a person.** That is the
+//! whole catalog. Three things are deliberately outside it, and the same
+//! reason covers all three: they are text a person copies somewhere else
+//! rather than text they read.
+//!
+//! - **The 122 [`std::error::Error`] variants across the workspace.** A
+//!   `Display` is embedded verbatim in the §42 diagnostic bundle, which is
+//!   built to be safe to send to a stranger, and is what somebody pastes into
+//!   a bug report. A refusal a person is meant to act on is already a separate
+//!   catalog entry resolved at the surface - see `export.flac.float` and its
+//!   siblings, which the window and the CLI both show through [`t`].
+//! - **The CLI's reports.** `vcw devices`, `vcw tracks`, `vcw doctor` and the
+//!   rest print column-aligned key-and-value tables that get piped, grepped
+//!   and pasted. Translating them would translate the thing being quoted, and
+//!   clap's own `--help` is generated from doc comments this catalog cannot
+//!   reach anyway. The CLI still loads the active language, because the
+//!   refusals it shows are catalog entries.
+//! - **The event log lines in the window.** Same argument, in the window:
+//!   `app/ui/src/describe.ts` says so at its head.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -469,6 +491,29 @@ pub fn t(key: &str) -> String {
     Catalog::source().get(key).unwrap_or(key).to_owned()
 }
 
+/// Every string VCW can say, already resolved into the active language.
+///
+/// One map, keyed exactly as [`t`] is keyed, with [`t`]'s fallback already
+/// applied per key: a half-finished translation comes back half English rather
+/// than half missing. The window gets this once at startup and again whenever
+/// the language changes, which is why it is the whole catalog and not a
+/// subscription - a few hundred short strings is smaller than the waveform of
+/// a single second, and a per-key round trip across the boundary would be one
+/// IPC call per label on screen.
+///
+/// The key set is the *source* language's. A locale file holding a key
+/// `en-US.toml` does not have is an orphan, reported by
+/// [`Catalog::orphans_against`] and not served here: a string nothing asks for
+/// cannot be shown, and shipping it would only make the map disagree with the
+/// drift tests about what the catalog contains.
+#[must_use]
+pub fn strings() -> BTreeMap<String, String> {
+    Catalog::source()
+        .keys()
+        .map(|key| (key.to_owned(), t(key)))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -616,7 +661,7 @@ mod tests {
             t("export.aiff.channels"),
             "AIFF carries at least one channel."
         );
-        assert_eq!(t("nobody.wrote.this"), "nobody.wrote.this");
+        assert_eq!(t("nobody.wrote.this"), "nobody.wrote.this"); // i18n-exempt
         assert_eq!(locale(), SOURCE_LOCALE);
     }
 

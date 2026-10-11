@@ -14,6 +14,12 @@
 // because two panels want it: §42's log and the status line that shows the last
 // thing that happened.
 //
+// English, and deliberately not translated. This is what a person copies into
+// a bug report, and the same argument that keeps `Display` English on the Rust
+// side applies here: a diagnostic line is read by whoever is being asked for
+// help, who is usually not the person who wrote it. The panel around it - its
+// title, its filter, its buttons - is translated; the lines are not.
+//
 // §2 holds: nothing here decides anything, and nothing is computed that Rust
 // did not already say. `toFixed` is formatting, not policy - the number is the
 // number the event carried, and a reader who wants the full precision has the

@@ -208,6 +208,7 @@ fn main() {
             commands::settings,
             commands::save_settings,
             commands::languages,
+            commands::strings,
             commands::credentials,
             commands::projects,
             commands::new_project,

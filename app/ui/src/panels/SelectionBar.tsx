@@ -27,6 +27,7 @@
 
 import type { Meter } from "../bindings/vcw";
 import { clock } from "../format";
+import { useText } from "../i18n";
 import { position } from "./Meters";
 import type { Region } from "./Waveform";
 
@@ -47,6 +48,7 @@ export function SelectionBar({
   selection: Region | null;
   meter: Meter | null;
 }): React.JSX.Element {
+  const text = useText();
   // Zeros and not blanks when nothing is selected. The fields keep their width
   // either way, so the strip does not change shape as a drag starts, and a
   // person learning the window can see what the three numbers are going to be.
@@ -55,22 +57,22 @@ export function SelectionBar({
 
   return (
     <div className="selbar">
-      <span className="selbar-label">Selection</span>
-      <Time seconds={from} label="Where the selection starts" />
-      <Time seconds={to} label="Where the selection ends" />
-      <span className="selbar-label">Duration</span>
-      <Time seconds={to - from} label="How long the selection is" />
+      <span className="selbar-label">{text("selection.title")}</span>
+      <Time seconds={from} label={text("selection.from")} />
+      <Time seconds={to} label={text("selection.to")} />
+      <span className="selbar-label">{text("selection.duration")}</span>
+      <Time seconds={to - from} label={text("selection.length")} />
 
-      <span className="selbar-label levels">Levels</span>
+      <span className="selbar-label levels">{text("selection.levels")}</span>
       <div className="peaks">
         {meter === null ? (
-          <div className="peak-track" title="No input armed" />
+          <div className="peak-track" title={text("selection.silent")} />
         ) : (
           meter.channels.map((levels, index) => (
             <div
               key={index}
               className={levels.clipped ? "peak-track clipped" : "peak-track"}
-              title={`Channel ${index + 1} peak`}
+              title={text("selection.peak", { channel: index + 1 })}
             >
               <div
                 className="peak-fill"

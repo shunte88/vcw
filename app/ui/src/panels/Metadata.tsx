@@ -34,12 +34,14 @@ import { useCallback, useState } from "react";
 
 import * as api from "../api";
 import type { Accepted, Candidate } from "../bindings/vcw";
+import { type Translate, t, useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
 import type { Store } from "../store";
 
 /** The metadata browser. */
 export function Metadata({ store }: { store: Store }): React.JSX.Element {
+  const text = useText();
   const { project, run } = store;
   const [criteria, setCriteria] = useState({
     artist: "",
@@ -127,12 +129,14 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
   return (
     <section className="panel metadata">
       <header className="panel-head">
-        <h2>Metadata</h2>
+        <h2>{text("metadata.title")}</h2>
         <button type="button" disabled={searching} onClick={search}>
-          {searching ? "Searching..." : "Look up (l)"}
+          {searching
+            ? text("metadata.searching")
+            : text("metadata.lookup", { chord: "l" })}
         </button>
         <button type="button" disabled={chosen === null} onClick={accept}>
-          Accept (Enter)
+          {text("metadata.accept", { chord: "Enter" })}
         </button>
       </header>
 
@@ -144,7 +148,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
         }}
       >
         <label>
-          Artist
+          {text("metadata.artist")}
           <input
             value={criteria.artist}
             onChange={(event) =>
@@ -153,7 +157,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
           />
         </label>
         <label>
-          Album
+          {text("metadata.album")}
           <input
             value={criteria.album}
             onChange={(event) =>
@@ -162,7 +166,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
           />
         </label>
         <label>
-          Catalog number
+          {text("metadata.catalog")}
           <input
             value={criteria.catalog}
             onChange={(event) =>
@@ -171,7 +175,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
           />
         </label>
         <label>
-          Barcode
+          {text("metadata.barcode")}
           <input
             value={criteria.barcode}
             onChange={(event) =>
@@ -180,12 +184,12 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
           />
         </label>
         <label>
-          Provider
+          {text("metadata.provider")}
           <select
             value={provider}
             onChange={(event) => setProvider(event.target.value)}
           >
-            <option value="">Every provider that is turned on</option>
+            <option value="">{text("metadata.provider.any")}</option>
             <option value="musicbrainz">MusicBrainz</option>
             <option value="discogs">Discogs</option>
           </select>
@@ -193,19 +197,19 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
       </form>
 
       {candidates.length === 0 ? (
-        <p className="empty">{nothing(criteria, searching, searched)}</p>
+        <p className="empty">{nothing(criteria, searching, searched, text)}</p>
       ) : (
         <table className="rows">
           <thead>
             <tr>
-              <th>Album</th>
-              <th>Artist</th>
-              <th className="n">Year</th>
-              <th>Label</th>
-              <th>Catalog</th>
-              <th>Format</th>
-              <th className="n">Tracks</th>
-              <th>From</th>
+              <th>{text("metadata.column.album")}</th>
+              <th>{text("metadata.column.artist")}</th>
+              <th className="n">{text("metadata.column.year")}</th>
+              <th>{text("metadata.column.label")}</th>
+              <th>{text("metadata.column.catalog")}</th>
+              <th>{text("metadata.column.format")}</th>
+              <th className="n">{text("metadata.column.tracks")}</th>
+              <th>{text("metadata.column.from")}</th>
             </tr>
           </thead>
           <tbody>
@@ -234,35 +238,41 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
       {accepted !== null && (
         <div className="accepted">
           <p>
-            {accepted.album} by {accepted.albumArtist}: {accepted.named}{" "}
-            track(s) named, {accepted.kept} left as they were.
+            {text("metadata.accepted", {
+              album: accepted.album,
+              artist: accepted.albumArtist,
+              named: accepted.named,
+              kept: accepted.kept,
+            })}
           </p>
           {accepted.unmatched.length > 0 && (
             <p className="hint">
-              The provider listed {accepted.unmatched.length} position(s) this
-              project has no track at: {accepted.unmatched.join(", ")}. Nothing
-              was guessed.
+              {text("metadata.unmatched", {
+                count: accepted.unmatched.length,
+                positions: accepted.unmatched.join(", "),
+              })}
             </p>
           )}
           {accepted.unnamed.length > 0 && (
             <p className="hint">
-              {accepted.unnamed.length} track(s) are not in the provider's
-              tracklist: {accepted.unnamed.join(", ")}. Name them by hand in the
-              track editor.
+              {text("metadata.unnamed", {
+                count: accepted.unnamed.length,
+                positions: accepted.unnamed.join(", "),
+              })}
             </p>
           )}
           {accepted.relaid.length > 0 && (
             <p className="hint">
-              The release is cut over {sides(accepted.relaid)}, so{" "}
-              {accepted.relaid.length} track(s) moved to the side they are
-              actually on. The audio did not move: every boundary is the same
-              frame of the same capture.
+              {text("metadata.relaid", {
+                sides: sides(accepted.relaid, text),
+                count: accepted.relaid.length,
+              })}
             </p>
           )}
           <p className="hint">
             {accepted.artwork > 0
-              ? `Cover art stored with the release, ${kb(accepted.artwork)}.`
-              : "No cover art: the provider named none, or it would not download."}
+              ? text("metadata.artwork", { size: kb(accepted.artwork, text) })
+              : text("metadata.artwork.none")}
           </p>
         </div>
       )}
@@ -277,21 +287,31 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
  * taken from the release, because what matters to a person reading the line is
  * where their tracks went.
  */
-export function sides(positions: readonly string[]): string {
+export function sides(
+  positions: readonly string[],
+  text: Translate = t,
+): string {
   const letters = [...new Set(positions.map((at) => at.slice(0, 1)))].sort();
   if (letters.length === 0) {
-    return "no sides";
+    return text("metadata.sides.none");
   }
   if (letters.length === 1) {
-    return `side ${letters[0]}`;
+    return text("metadata.side", { letters: letters[0] ?? "" });
   }
-  const last = letters[letters.length - 1];
-  return `sides ${letters.slice(0, -1).join(", ")} and ${last}`;
+  // The list and the sentence are separate entries, because "B, C and D" is
+  // not how every language joins a list and "sides {letters}" is not how
+  // every language wraps one.
+  return text("metadata.sides", {
+    letters: text("metadata.sides.last", {
+      rest: letters.slice(0, -1).join(", "),
+      last: letters[letters.length - 1] ?? "",
+    }),
+  });
 }
 
 /** A byte count as kilobytes, for a line about a cover. */
-export function kb(bytes: number): string {
-  return `${Math.round(bytes / 1024)} KB`;
+export function kb(bytes: number, text: Translate = t): string {
+  return text("metadata.kb", { n: Math.round(bytes / 1024) });
 }
 
 /** A candidate's identity, which is the provider *and* the id. */
@@ -312,15 +332,16 @@ export function nothing(
   criteria: { artist: string; album: string; catalog: string; barcode: string },
   searching: boolean,
   searched: boolean,
+  text: Translate = t,
 ): string {
   if (searching) {
-    return "Looking.";
+    return text("metadata.looking");
   }
   if (searched) {
-    return "Nothing matched. Widen the search: fewer fields find more.";
+    return text("metadata.nothing.matched");
   }
   const filled = Object.values(criteria).some((value) => value.trim() !== "");
   return filled
-    ? "Press l to look this up."
-    : "Fill in at least one field and press l.";
+    ? text("metadata.nothing.ready", { chord: "l" })
+    : text("metadata.nothing.blank", { chord: "l" });
 }

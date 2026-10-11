@@ -32,11 +32,27 @@
 import * as api from "../api";
 import type { Audition, Capture, Side } from "../bindings/vcw";
 import { Face } from "../Face";
+import { key, useText } from "../i18n";
 import { inTheShell } from "../host";
 import type { Region } from "./Waveform";
 import { useKeys } from "../keys";
 import type { Store } from "../store";
 import { clock } from "../format";
+
+/**
+ * The catalog key for what each phase is called in front of a person.
+ *
+ * Keyed by the wire word, and falling back to it: the store holds the phase
+ * as a string, so a phase this build does not know shows as the shell named
+ * it rather than as a dotted key.
+ */
+const PHASES: Record<string, string> = {
+  idle: key("transport.phase.idle"),
+  armed: key("transport.phase.armed"),
+  recording: key("transport.phase.recording"),
+  paused: key("transport.phase.paused"),
+  stopped: key("transport.phase.stopped"),
+};
 
 /** The transport strip. */
 export function Transport({
@@ -50,6 +66,7 @@ export function Transport({
   side: Side | null;
   selection: Region | null;
 }): React.JSX.Element {
+  const text = useText();
   const { engine, run } = store;
   const recording = engine.phase === "recording";
   const armed = engine.phase !== "idle";
@@ -103,10 +120,10 @@ export function Transport({
   return (
     <div className="transport">
       <div className="transport-clock">
-        <span className="clock" title="Frames committed to the project">
+        <span className="clock" title={text("transport.committed")}>
           {clock(engine.seconds)}
         </span>
-        <span className="phase">{engine.phase}</span>
+        <span className="phase">{text(PHASES[engine.phase] ?? engine.phase)}</span>
         {/* Not only while playing. The playhead is where Split and Place
             marker will land, and a click on the waveform now puts it there
             without playing anything - so the number those two buttons are
@@ -115,7 +132,7 @@ export function Transport({
         {(engine.playing || engine.playhead > 0) && (
           <span
             className="clock playhead"
-            title="The playhead: where Split and Place marker will land"
+            title={text("transport.playhead")}
           >
             {clock(engine.playhead)}
           </span>
@@ -127,9 +144,9 @@ export function Transport({
           type="button"
           disabled={!armed}
           onClick={() => void run(() => api.transport("record"))}
-          title="Record (r)"
+          title={text("transport.record.title", { chord: "r" })}
         >
-          <Face icon="record">Record</Face>
+          <Face icon="record">{text("transport.record")}</Face>
         </button>
         <button
           type="button"
@@ -137,13 +154,13 @@ export function Transport({
           onClick={() =>
             void run(() => api.transport(recording ? "pause" : "resume"))
           }
-          title="Pause or resume (p)"
+          title={text("transport.pause.title", { chord: "p" })}
         >
           {/* Resume wears the play glyph, because the transport's second
               button is the same control in two states and a paused recorder
               is resumed by the thing that means "go". */}
           <Face icon={recording ? "pause" : "play"}>
-            {recording ? "Pause" : "Resume"}
+            {recording ? text("transport.pause") : text("transport.resume")}
           </Face>
         </button>
         <button
@@ -156,9 +173,9 @@ export function Transport({
                 : api.transport("stop"),
             )
           }
-          title="Stop (s)"
+          title={text("transport.stop.title", { chord: "s" })}
         >
-          <Face icon="stop">Stop</Face>
+          <Face icon="stop">{text("transport.stop")}</Face>
         </button>
         <span className="spacer" />
         <button
@@ -173,12 +190,12 @@ export function Transport({
           }}
           title={
             selection === null
-              ? "Play or pause the audition (space)"
-              : "Play the selection (space)"
+              ? text("transport.play.title", { chord: "space" })
+              : text("transport.play.selection.title", { chord: "space" })
           }
         >
           <Face icon={engine.playing ? "pause" : "play"}>
-            {engine.playing ? "Pause" : "Play"}
+            {engine.playing ? text("transport.pause") : text("transport.play")}
           </Face>
         </button>
         <button
@@ -195,9 +212,9 @@ export function Transport({
               );
             }
           }}
-          title="Place a marker at the playhead (m)"
+          title={text("transport.marker.title", { chord: "m" })}
         >
-          <Face icon="marker">Marker</Face>
+          <Face icon="marker">{text("transport.marker")}</Face>
         </button>
         {/* §52: "Audio auditioned through `serve` is rendered by the host, not
             by the browser, because the host is the machine the audio hardware
@@ -210,8 +227,8 @@ export function Transport({
             what they asked, they decide Play is broken. The meters are the
             same machine's, which is why this says audio and not playback. */}
         {!inTheShell() && (
-          <span className="elsewhere" title="VCW is running on another machine">
-            Audio plays on the VCW host
+          <span className="elsewhere" title={text("transport.remote.title")}>
+            {text("transport.remote")}
           </span>
         )}
       </div>

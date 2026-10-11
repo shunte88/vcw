@@ -35,6 +35,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
 import type { Boundary, Track } from "../bindings/vcw";
+import { key, useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
 import { clock } from "../format";
@@ -46,6 +47,17 @@ export type Chosen = {
   readonly track: number | null;
   /** The selected boundary's row id, or null. */
   readonly boundary: number | null;
+};
+
+/**
+ * The catalog key for what each edge is called.
+ *
+ * Keyed by the wire word and falling back to it, for the same reason the
+ * capture panel keys its states that way.
+ */
+const EDGES: Record<string, string> = {
+  start: key("tracks.edge.start"),
+  end: key("tracks.edge.end"),
 };
 
 /** How far a nudge key moves a boundary, in seconds. */
@@ -67,6 +79,7 @@ export function Tracks({
   chosen: Chosen;
   onChoose: (chosen: Chosen) => void;
 }): React.JSX.Element {
+  const text = useText();
   const { project, engine, run } = store;
   const [editing, setEditing] = useState<number | null>(null);
   // Which face the capture on screen holds. A statement, not a guess: nothing
@@ -192,13 +205,13 @@ export function Tracks({
   return (
     <section className="panel tracks">
       <header className="panel-head">
-        <h2>Tracks</h2>
+        <h2>{text("tracks.title")}</h2>
         <label className="face">
-          Side
+          {text("tracks.side")}
           <select
             value={face}
             onChange={(event) => setFace(event.target.value)}
-            title="Which face of the record this capture holds"
+            title={text("tracks.side.title")}
           >
             {faces(project.release?.discs ?? 1).map((letter) => (
               <option key={letter} value={letter}>
@@ -221,7 +234,7 @@ export function Tracks({
             )
           }
         >
-          Detect (t)
+          {text("tracks.detect", { chord: "t" })}
         </button>
         <button
           type="button"
@@ -234,9 +247,9 @@ export function Tracks({
               ).then(store.reload);
             }
           }}
-          title="Split the selected track at the playhead. Click the waveform to move the playhead; it snaps to a boundary."
+          title={text("tracks.split.title")}
         >
-          Split at playhead
+          {text("tracks.split")}
         </button>
         <button
           type="button"
@@ -250,18 +263,21 @@ export function Tracks({
               ).then(store.reload);
             }
           }}
-          title="Join the selected track to the one after it"
+          title={text("tracks.merge.title")}
         >
-          Merge with next
+          {text("tracks.merge")}
         </button>
       </header>
 
       {engine.detection !== null && (
         <p className="hint">
-          Last pass: {engine.detection.boundaries} boundary(s),{" "}
-          {engine.detection.tracks} track(s), {engine.detection.rejected}{" "}
-          rejected, {engine.detection.alreadySettled} already settled, in{" "}
-          {engine.detection.seconds.toFixed(2)} s.
+          {text("tracks.last.pass", {
+            boundaries: engine.detection.boundaries,
+            tracks: engine.detection.tracks,
+            rejected: engine.detection.rejected,
+            settled: engine.detection.alreadySettled,
+            seconds: engine.detection.seconds.toFixed(2),
+          })}
         </p>
       )}
 
@@ -271,31 +287,21 @@ export function Tracks({
            to a key that is disabled, and tells them nothing about the step
            they actually have to take first. */
         <p className="empty">
-          {project.path === null ? (
-            <>
-              No project open. Open or create one in the Library (
-              <kbd>Ctrl+1</kbd>).
-            </>
-          ) : project.captures.length === 0 ? (
-            <>
-              Nothing captured yet. Record a side in Capture (
-              <kbd>Ctrl+2</kbd>).
-            </>
-          ) : (
-            <>
-              No tracks. Press <kbd>t</kbd> to run detection over the capture.
-            </>
-          )}
+          {project.path === null
+            ? text("tracks.no.project", { chord: "Ctrl+1" })
+            : project.captures.length === 0
+              ? text("tracks.no.capture", { chord: "Ctrl+2" })
+              : text("tracks.none", { chord: "t" })}
         </p>
       ) : (
         <table className="rows">
           <thead>
             <tr>
-              <th>Pos</th>
-              <th>Title</th>
-              <th>Artist</th>
-              <th className="n">Start</th>
-              <th className="n">Length</th>
+              <th>{text("tracks.column.position")}</th>
+              <th>{text("tracks.column.title")}</th>
+              <th>{text("tracks.column.artist")}</th>
+              <th className="n">{text("tracks.column.start")}</th>
+              <th className="n">{text("tracks.column.length")}</th>
               <th></th>
             </tr>
           </thead>
@@ -315,7 +321,7 @@ export function Tracks({
                 <td className="n">{clock(row.seconds)}</td>
                 <td>
                   {row.confirmed && (
-                    <span className="ok" title="Confirmed by a person or a provider">
+                    <span className="ok" title={text("tracks.confirmed")}>
                       &#10003;
                     </span>
                   )}
@@ -335,7 +341,7 @@ export function Tracks({
           }}
         >
           <label>
-            Title
+            {text("tracks.edit.title")}
             <input
               autoFocus
               value={draft.title}
@@ -345,7 +351,7 @@ export function Tracks({
             />
           </label>
           <label>
-            Artist
+            {text("tracks.edit.artist")}
             <input
               value={draft.artist}
               onChange={(event) =>
@@ -354,7 +360,7 @@ export function Tracks({
             />
           </label>
           <label>
-            Composer
+            {text("tracks.edit.composer")}
             <input
               value={draft.composer}
               onChange={(event) =>
@@ -363,7 +369,7 @@ export function Tracks({
             />
           </label>
           <label>
-            Comments
+            {text("tracks.edit.comments")}
             <textarea
               value={draft.comments}
               onChange={(event) =>
@@ -372,26 +378,28 @@ export function Tracks({
             />
           </label>
           <div className="row">
-            <button type="submit">Save (Ctrl+S)</button>
+            <button type="submit">
+              {text("tracks.edit.save", { chord: "Ctrl+S" })}
+            </button>
             <button type="button" onClick={() => setEditing(null)}>
-              Cancel
+              {text("tracks.edit.cancel")}
             </button>
           </div>
         </form>
       )}
 
-      <h3>Boundaries</h3>
+      <h3>{text("tracks.boundaries")}</h3>
       {project.boundaries.length === 0 ? (
-        <p className="empty">No boundaries.</p>
+        <p className="empty">{text("tracks.boundaries.none")}</p>
       ) : (
         <table className="rows">
           <thead>
             <tr>
-              <th>Side</th>
-              <th>Edge</th>
-              <th className="n">At</th>
-              <th className="n">Confidence</th>
-              <th>Agreed</th>
+              <th>{text("tracks.column.side")}</th>
+              <th>{text("tracks.column.edge")}</th>
+              <th className="n">{text("tracks.column.at")}</th>
+              <th className="n">{text("tracks.column.confidence")}</th>
+              <th>{text("tracks.column.agreed")}</th>
               <th></th>
               <th></th>
             </tr>
@@ -410,11 +418,14 @@ export function Tracks({
                 onClick={() => onChoose({ ...chosen, boundary: row.id })}
               >
                 <td>{row.side}</td>
-                <td>{row.edge}</td>
+                <td>{text(EDGES[row.edge] ?? row.edge)}</td>
                 <td className="n">{clock(row.seconds)}</td>
                 <td className="n">{(row.confidence * 100).toFixed(0)}%</td>
                 <td title={row.sources.join(", ")}>
-                  {row.agreement} of {row.sources.length}
+                  {text("tracks.agreement", {
+                    agreed: row.agreement,
+                    of: row.sources.length,
+                  })}
                 </td>
                 <td>
                   <button
@@ -431,14 +442,14 @@ export function Tracks({
                     }}
                     title={
                       row.locked
-                        ? "Locked: re-analysis will leave it alone"
-                        : "Unlocked: re-analysis may move it"
+                        ? text("tracks.locked.title")
+                        : text("tracks.unlocked.title")
                     }
                   >
-                    {row.locked ? "Locked" : "Lock"}
+                    {row.locked ? text("tracks.locked") : text("tracks.lock")}
                   </button>
                 </td>
-                <td>{row.promoted ? "" : "not a track"}</td>
+                <td>{row.promoted ? "" : text("tracks.rejected")}</td>
               </tr>
             ))}
           </tbody>
@@ -452,15 +463,16 @@ export function Tracks({
 
 /** The evidence behind one boundary (§31's audit trail). */
 function Detail({ boundary }: { boundary: Boundary }) {
+  const text = useText();
   return (
     <dl className="evidence">
-      <dt>Decided by</dt>
+      <dt>{text("tracks.evidence.decided")}</dt>
       <dd>{boundary.provenance}</dd>
-      <dt>Detectors that agreed</dt>
+      <dt>{text("tracks.evidence.agreed")}</dt>
       <dd>{boundary.sources.join(", ")}</dd>
       {boundary.evidence.length > 0 && (
         <>
-          <dt>Measurements</dt>
+          <dt>{text("tracks.evidence.measurements")}</dt>
           <dd>
             <ul>
               {boundary.evidence.map((measurement) => (

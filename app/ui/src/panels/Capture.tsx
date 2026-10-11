@@ -35,6 +35,7 @@ import { useEffect, useRef, useState } from "react";
 
 import * as api from "../api";
 import type { Capture as CaptureRow, Device, Settings } from "../bindings/vcw";
+import { key, useText } from "../i18n";
 import { useKeys } from "../keys";
 import { clock } from "../format";
 import type { Store } from "../store";
@@ -49,6 +50,21 @@ function defaultInput(devices: readonly Device[]): string | null {
   return devices.find((row) => row.canCapture && row.isDefaultInput)?.id ?? null;
 }
 
+/**
+ * The catalog key for what each capture state is called.
+ *
+ * Keyed by the wire word rather than by `CaptureStateName`, and falling back
+ * to that word, because the row carries a string: a state this build has
+ * never heard of shows as the shell wrote it rather than as a dotted key.
+ */
+const STATES: Record<string, string> = {
+  recording: key("capture.state.recording"),
+  finalised: key("capture.state.finalised"),
+  interrupted: key("capture.state.interrupted"),
+  recovered: key("capture.state.recovered"),
+  unknown: key("capture.state.unknown"),
+};
+
 /** The capture workspace. */
 export function Capture({
   store,
@@ -59,6 +75,7 @@ export function Capture({
   devices: readonly Device[];
   settings: Settings | null;
 }): React.JSX.Element {
+  const text = useText();
   const { engine, project } = store;
   const [device, setDevice] = useState<string | null>(null);
   const [rate, setRate] = useState<number | null>(null);
@@ -113,16 +130,16 @@ export function Capture({
   return (
     <section className="panel capture">
       <header className="panel-head">
-        <h2>Capture</h2>
+        <h2>{text("capture.title")}</h2>
       </header>
 
       {project.path === null && (
-        <p className="empty">Open a project before arming a device.</p>
+        <p className="empty">{text("capture.no.project")}</p>
       )}
 
       <div className="fields">
         <label>
-          Device (d)
+          {text("capture.device", { chord: "d" })}
           <select
             ref={list}
             value={device ?? ""}
@@ -130,20 +147,20 @@ export function Capture({
               setDevice(event.target.value === "" ? null : event.target.value)
             }
           >
-            <option value="">Simulated source (no device)</option>
+            <option value="">{text("capture.simulated")}</option>
             {devices
               .filter((row) => row.canCapture)
               .map((row) => (
                 <option key={row.id} value={row.id}>
                   {row.name} ({row.host}
-                  {row.isDefaultInput ? ", default" : ""})
+                  {row.isDefaultInput ? text("capture.default.suffix") : ""})
                 </option>
               ))}
           </select>
         </label>
 
         <label>
-          Rate (f)
+          {text("capture.rate", { chord: "f" })}
           <select
             ref={formats}
             value={rate === null ? "" : String(rate)}
@@ -151,7 +168,7 @@ export function Capture({
               setRate(event.target.value === "" ? null : Number(event.target.value))
             }
           >
-            <option value="">Device default</option>
+            <option value="">{text("capture.device.default")}</option>
             {(chosen?.captureRates ?? []).map((hz) => (
               <option key={hz} value={hz}>
                 {hz} Hz
@@ -161,14 +178,14 @@ export function Capture({
         </label>
 
         <label>
-          Format
+          {text("capture.format")}
           <select
             value={format ?? ""}
             onChange={(event) =>
               setFormat(event.target.value === "" ? null : event.target.value)
             }
           >
-            <option value="">Device default</option>
+            <option value="">{text("capture.device.default")}</option>
             {(chosen?.captureFormats ?? []).map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -184,7 +201,7 @@ export function Capture({
             diagonally opposite Record. `.fields` aligns to the bottom of its
             controls, so it lands on the same line as the selects. */}
         <button type="button" disabled={project.path === null} onClick={arm}>
-          Arm (a)
+          {text("capture.arm", { chord: "a" })}
         </button>
       </div>
 
@@ -197,14 +214,16 @@ export function Capture({
       )}
 
       <dl className="negotiated">
-        <dt>Negotiated</dt>
+        <dt>{text("capture.negotiated")}</dt>
         <dd>
-          {engine.negotiated ?? "not armed"}
-          {engine.verified && <span className="ok"> os-confirmed</span>}
+          {engine.negotiated ?? text("capture.not.armed")}
+          {engine.verified && (
+            <span className="ok"> {text("capture.os.confirmed")}</span>
+          )}
         </dd>
         {engine.divergences.length > 0 && (
           <>
-            <dt>Differs from what was asked</dt>
+            <dt>{text("capture.divergences")}</dt>
             <dd>
               <ul>
                 {engine.divergences.map((line) => (
@@ -216,28 +235,30 @@ export function Capture({
         )}
         {engine.diagnostics !== null && (
           <>
-            <dt>Last capture</dt>
+            <dt>{text("capture.last")}</dt>
             <dd>
-              {engine.diagnostics.overruns} overrun(s),{" "}
-              {engine.diagnostics.droppedFrames} dropped frame(s),{" "}
-              {engine.diagnostics.streamErrors} stream error(s)
+              {text("capture.counters", {
+                overruns: engine.diagnostics.overruns,
+                dropped: engine.diagnostics.droppedFrames,
+                errors: engine.diagnostics.streamErrors,
+              })}
             </dd>
           </>
         )}
       </dl>
 
-      <h3>Captures</h3>
+      <h3>{text("capture.list")}</h3>
       {project.captures.length === 0 ? (
-        <p className="empty">Nothing captured in this project yet.</p>
+        <p className="empty">{text("capture.list.empty")}</p>
       ) : (
         <table className="rows">
           <thead>
             <tr>
               <th className="n">#</th>
-              <th>Format</th>
-              <th>Device</th>
-              <th className="n">Length</th>
-              <th>State</th>
+              <th>{text("capture.column.format")}</th>
+              <th>{text("capture.column.device")}</th>
+              <th className="n">{text("capture.column.length")}</th>
+              <th>{text("capture.column.state")}</th>
             </tr>
           </thead>
           <tbody>
@@ -246,11 +267,11 @@ export function Capture({
                 <td className="n">{row.id}</td>
                 <td>
                   {row.rate} Hz {row.format} &times;{row.channels}
-                  {row.osVerified ? "" : " (unverified)"}
+                  {row.osVerified ? "" : ` ${text("capture.unverified")}`}
                 </td>
-                <td>{row.device ?? "unknown"}</td>
+                <td>{row.device ?? text("capture.device.unknown")}</td>
                 <td className="n">{clock(row.seconds)}</td>
-                <td>{row.state}</td>
+                <td>{text(STATES[row.state] ?? row.state)}</td>
               </tr>
             ))}
           </tbody>
@@ -259,9 +280,11 @@ export function Capture({
 
       {project.captures.filter(unfinished).map((row) => (
         <p className="recovered" key={row.id}>
-          Capture {row.id} was not closed cleanly ({row.state}).{" "}
-          {clock(row.seconds)} survived and is playable. Nothing has been
-          resumed or removed: play it, and decide.
+          {text("capture.recovered", {
+            id: row.id,
+            state: text(STATES[row.state] ?? row.state),
+            length: clock(row.seconds),
+          })}
         </p>
       ))}
     </section>

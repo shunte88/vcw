@@ -303,6 +303,18 @@ export function languages(): Promise<string[]> {
   return invoke("languages");
 }
 
+/**
+ * Every string VCW can say, in whatever language the settings ask for.
+ *
+ * The window already holds the English - `bindings/strings.ts` is generated
+ * from `i18n/en-US.toml` and compiled in - so this is an overlay, not a load.
+ * Asked for once at startup and again when the language changes; see
+ * `./i18n`, the only caller.
+ */
+export function strings(): Promise<Record<string, string>> {
+  return invoke("strings");
+}
+
 /** Where the library is, or null if nobody has chosen one. */
 export function libraryRoot(): Promise<string | null> {
   return invoke("library_root");

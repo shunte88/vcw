@@ -66,6 +66,7 @@ import type {
 } from "./bindings/vcw";
 import { Face } from "./Face";
 import { describe } from "./describe";
+import * as i18n from "./i18n";
 import { useKeys } from "./keys";
 import type { Scope } from "./keymap";
 import { Mark } from "./Mark";
@@ -96,16 +97,47 @@ import { STEP, type Span, fit, toRange, toSelection, zoom } from "./zoom";
  */
 const PANELS: readonly {
   scope: Scope;
+  /** The catalog key for the tab's word, not the word. */
   label: string;
   chord: string;
   icon: string;
 }[] = [
-  { scope: "browser", label: "Library", chord: "Ctrl+1", icon: "library" },
-  { scope: "capture", label: "Capture", chord: "Ctrl+2", icon: "capture" },
-  { scope: "tracks", label: "Tracks", chord: "Ctrl+3", icon: "tracks" },
-  { scope: "metadata", label: "Metadata", chord: "Ctrl+4", icon: "metadata" },
-  { scope: "export", label: "Export", chord: "Ctrl+5", icon: "export" },
-  { scope: "settings", label: "Settings", chord: "Ctrl+6", icon: "settings" },
+  {
+    scope: "browser",
+    label: i18n.key("app.tab.browser"),
+    chord: "Ctrl+1",
+    icon: "library",
+  },
+  {
+    scope: "capture",
+    label: i18n.key("app.tab.capture"),
+    chord: "Ctrl+2",
+    icon: "capture",
+  },
+  {
+    scope: "tracks",
+    label: i18n.key("app.tab.tracks"),
+    chord: "Ctrl+3",
+    icon: "tracks",
+  },
+  {
+    scope: "metadata",
+    label: i18n.key("app.tab.metadata"),
+    chord: "Ctrl+4",
+    icon: "metadata",
+  },
+  {
+    scope: "export",
+    label: i18n.key("app.tab.export"),
+    chord: "Ctrl+5",
+    icon: "export",
+  },
+  {
+    scope: "settings",
+    label: i18n.key("app.tab.settings"),
+    chord: "Ctrl+6",
+    icon: "settings",
+  },
 ];
 
 /**
@@ -135,14 +167,19 @@ const STAGE: readonly Scope[] = ["capture", "tracks", "export"];
  * same record are two files in one directory, and the name alone would not say
  * which was open.
  */
-export function titled(project: ProjectState): string {
+export function titled(
+  project: ProjectState,
+  text: i18n.Translate = i18n.t,
+): string {
   if (project.release === null) {
-    return project.path ?? "no project open";
+    return project.path ?? text("app.no.project");
   }
   const parts = [project.release.albumArtist, project.release.album].filter(
     (part) => part !== "",
   );
-  return parts.length === 0 ? (project.path ?? "untitled") : parts.join(" - ");
+  return parts.length === 0
+    ? (project.path ?? text("app.untitled"))
+    : parts.join(" - ");
 }
 
 /**
@@ -161,6 +198,7 @@ export function next(
   project: ProjectState,
   phase: string,
   library: string | null = null,
+  text: i18n.Translate = i18n.t,
 ): string {
   if (project.path === null) {
     // With no library the first line sent a person to an empty panel. Found
@@ -168,24 +206,25 @@ export function next(
     // redirect above put them on the right settings group and the status bar
     // underneath it still pointed at Ctrl+1.
     if (library === null) {
-      return "No library yet. Settings > Library says where projects are kept. n for a new one, ? for the keyboard map.";
+      return text("app.next.no.library");
     }
-    return "No project open. Ctrl+1 for the library, n for a new one, ? for the keyboard map.";
+    return text("app.next.no.project");
   }
   if (phase === "armed") {
-    return "Armed. Press r to record, or ? for the keyboard map.";
+    return text("app.next.armed");
   }
   if (project.captures.length === 0) {
-    return "Nothing captured yet. Ctrl+2 to pick a device, a to arm it, ? for the keyboard map.";
+    return text("app.next.no.capture");
   }
   if (project.tracks.length === 0) {
-    return "Captured. Ctrl+3 and t to find the track boundaries, ? for the keyboard map.";
+    return text("app.next.no.tracks");
   }
-  return "Ready. Ctrl+4 to identify the record, Ctrl+5 to export, ? for the keyboard map.";
+  return text("app.next.ready");
 }
 
 /** The window. */
 export function App(): React.JSX.Element {
+  const text = i18n.useText();
   const store = useEngine();
   const { engine, project } = store;
 
@@ -221,10 +260,19 @@ export function App(): React.JSX.Element {
         api.settings(),
         api.credentials(),
         api.projects(),
+        // Last, and its result discarded, because it does not go into state:
+        // `i18n` holds the catalog itself and re-renders whoever asked for a
+        // string. Here because this effect already re-runs when the settings
+        // change, and the language is a setting.
+        i18n.load(),
       ]);
       if (!canceled) {
         setDevices(found);
         setSettings(values);
+        // The one thing outside React that the language changes. A screen
+        // reader picks its voice from this and a browser hyphenates by it,
+        // and `index.html` can only ever say the language VCW was built in.
+        document.documentElement.lang = values.language ?? "en-US";
         setCredentials(secrets);
         setLibrary(projects);
         // A fresh install opens on the browser, which is empty, because no
@@ -423,7 +471,7 @@ export function App(): React.JSX.Element {
           <Mark />
           VCW
         </h1>
-        <span className="project">{titled(project)}</span>
+        <span className="project">{titled(project, text)}</span>
         <nav className="tabs">
           {PANELS.map((tab) => (
             <button
@@ -431,24 +479,44 @@ export function App(): React.JSX.Element {
               type="button"
               className={tab.scope === panel ? "current" : ""}
               onClick={() => setPanel(tab.scope)}
-              title={`${tab.label} (${tab.chord})`}
+              title={text("app.tab.title", {
+                panel: text(tab.label),
+                chord: tab.chord,
+              })}
             >
-              <Face icon={tab.icon}>{tab.label}</Face>
+              <Face icon={tab.icon}>{text(tab.label)}</Face>
             </button>
           ))}
         </nav>
-        <button type="button" onClick={() => setLog(true)} title="Log (Ctrl+D)">
-          <Face icon="log">Log</Face>
+        <button
+          type="button"
+          onClick={() => setLog(true)}
+          title={text("app.tab.title", {
+            panel: text("app.log"),
+            chord: "Ctrl+D",
+          })}
+        >
+          <Face icon="log">{text("app.log")}</Face>
         </button>
-        <button type="button" onClick={() => setHelp(true)} title="Keys (?)">
-          <Face icon="keys">Keys</Face>
+        <button
+          type="button"
+          onClick={() => setHelp(true)}
+          title={text("app.tab.title", {
+            panel: text("app.keys"),
+            chord: "?",
+          })}
+        >
+          <Face icon="keys">{text("app.keys")}</Face>
         </button>
         <button
           type="button"
           onClick={() => setAbout(true)}
-          title="About (Ctrl+I)"
+          title={text("app.tab.title", {
+            panel: text("app.about"),
+            chord: "Ctrl+I",
+          })}
         >
-          <Face icon="scales">About</Face>
+          <Face icon="scales">{text("app.about")}</Face>
         </button>
       </header>
 
@@ -564,13 +632,18 @@ export function App(): React.JSX.Element {
                 every argument name twice. */}
             <span className="reason">{engine.refusal.message}</span>
             <button type="button" onClick={store.dismiss}>
-              Dismiss (Esc)
+              {text("app.dismiss", { chord: "Esc" })}
             </button>
           </span>
         ) : (
           <span className="dim">
             {last === undefined
-              ? next(project, engine.phase, settings?.recording.library ?? null)
+              ? next(
+                  project,
+                  engine.phase,
+                  settings?.recording.library ?? null,
+                  text,
+                )
               : `${last.event.kind}: ${describe(last.event)}`}
           </span>
         )}

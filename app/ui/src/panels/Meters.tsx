@@ -31,6 +31,7 @@ import { useSyncExternalStore } from "react";
 
 import type { Levels, Meter } from "../bindings/vcw";
 import { db } from "../format";
+import { count, useText } from "../i18n";
 import { type MeterStyle, meterStyleOf, onMeterStyle } from "../scale";
 import { Vu } from "./Vu";
 
@@ -55,6 +56,7 @@ export function position(dbfs: number): number {
 
 /** One channel's row. */
 function Bar({ levels, name }: { levels: Levels; name: string }) {
+  const text = useText();
   return (
     <div className="meter-row">
       <span className="meter-name">{name}</span>
@@ -72,18 +74,18 @@ function Bar({ levels, name }: { levels: Levels; name: string }) {
           style={{ left: `${position(levels.holdDb)}%` }}
         />
       </div>
-      <span className="meter-db" title="Peak since the last snapshot">
+      <span className="meter-db" title={text("meters.peak")}>
         {db(levels.peakDb)}
       </span>
-      <span className="meter-db dim" title="RMS over the meter window">
+      <span className="meter-db dim" title={text("meters.rms")}>
         {db(levels.rmsDb)}
       </span>
       {levels.clipped && (
         <span
           className="clip"
-          title={`${levels.clippedSamples} sample(s) at or beyond full scale`}
+          title={count(levels.clippedSamples, "meters.clipped.samples")}
         >
-          CLIP
+          {text("meters.clip")}
         </span>
       )}
     </div>
@@ -115,28 +117,33 @@ const SILENT: Levels = {
  */
 function Bridge({
   name,
+  title,
   meter,
   live,
   style,
 }: {
+  /** What the group is called, already in the reader's language. */
   name: string;
+  /** What hovering it says, which differs by whether it is running. */
+  title: (running: boolean) => string;
   meter: Meter | null;
   live: boolean;
   style: MeterStyle;
 }) {
+  const text = useText();
   const running = live && meter !== null;
   const channels = running && meter !== null ? meter.channels : [SILENT, SILENT];
   const names =
     channels.length === 2
       ? style === "vu"
-        ? ["Left", "Right"]
-        : ["L", "R"]
+        ? [text("meters.left"), text("meters.right")]
+        : [text("meters.left.short"), text("meters.right.short")]
       : channels.map((_, i) => `${i + 1}`);
   return (
     <div
       className={running ? "bridge" : "bridge off"}
       aria-disabled={!running}
-      title={running ? `${name} levels` : `No ${name.toLowerCase()} signal`}
+      title={title(running)}
     >
       <span className="bridge-name">{name}</span>
       <div className={style === "vu" ? "bridge-dials" : "bridge-bars"}>
@@ -150,8 +157,10 @@ function Bridge({
       </div>
       {running && meter !== null && (
         <div className="meter-foot">
-          <span>{meter.frames} frame(s) in this window</span>
-          {meter.clipped && <span className="clip">clipped</span>}
+          <span>{count(meter.frames, "meters.window")}</span>
+          {meter.clipped && (
+            <span className="clip">{text("meters.clipped")}</span>
+          )}
         </div>
       )}
     </div>
@@ -175,10 +184,27 @@ export function Meters({
   // the tree - here and the settings panel - and threading a prop through
   // both would be more wiring than the thing being wired.
   const style = useSyncExternalStore(onMeterStyle, meterStyleOf);
+  const text = useText();
   return (
     <section className={style === "vu" ? "meters dials" : "meters"}>
-      <Bridge name="Input" meter={meter} live={capturing} style={style} />
-      <Bridge name="Output" meter={output} live={playing} style={style} />
+      <Bridge
+        name={text("meters.input")}
+        title={(running) =>
+          running ? text("meters.input.live") : text("meters.input.idle")
+        }
+        meter={meter}
+        live={capturing}
+        style={style}
+      />
+      <Bridge
+        name={text("meters.output")}
+        title={(running) =>
+          running ? text("meters.output.live") : text("meters.output.idle")
+        }
+        meter={output}
+        live={playing}
+        style={style}
+      />
     </section>
   );
 }

@@ -51,6 +51,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
 import type { About, Project } from "../bindings/vcw";
+import { useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
 import { Switch } from "./Switch";
@@ -262,6 +263,7 @@ function marks(
  * a splash there is no layout to hold open.
  */
 function Stamp(): React.JSX.Element | null {
+  const text = useText();
   const [build, setBuild] = useState<About | null>(null);
 
   useEffect(() => {
@@ -283,7 +285,7 @@ function Stamp(): React.JSX.Element | null {
     <p className="stamp">
       {build.product} <span>v{build.version}</span>
       <br />
-      <span>Built {build.built}</span>
+      <span>{text("library.built", { date: build.built })}</span>
     </p>
   );
 }
@@ -314,6 +316,7 @@ export function Browser({
   /** A project was opened, so the window should move on from the library. */
   onOpened: () => void;
 }): React.JSX.Element {
+  const text = useText();
   const [creating, setCreating] = useState(false);
   const [tiles, setTiles] = useState(
     () => localStorage.getItem(VIEW) === "tiles",
@@ -419,15 +422,15 @@ export function Browser({
   return (
     <section className="panel browser">
       <header className="panel-head">
-        <h2>Library</h2>
-        <div className="view-toggle" role="group" aria-label="Library view">
+        <h2>{text("library.title")}</h2>
+        <div className="view-toggle" role="group" aria-label={text("library.view")}>
           {[false, true].map((wanted) => (
             <button
               key={String(wanted)}
               type="button"
               className={tiles === wanted ? "on" : ""}
               aria-pressed={tiles === wanted}
-              title={wanted ? "Tiles" : "List"}
+              title={wanted ? text("library.tiles") : text("library.list")}
               onClick={() => {
                 localStorage.setItem(VIEW, wanted ? "tiles" : "list");
                 setTiles(wanted);
@@ -438,10 +441,10 @@ export function Browser({
           ))}
         </div>
         <button type="button" onClick={() => setCreating(true)}>
-          New project (n)
+          {text("library.new", { chord: "n" })}
         </button>
         <button type="button" disabled={selected === null} onClick={open}>
-          Open (Enter)
+          {text("library.open", { chord: "Enter" })}
         </button>
       </header>
 
@@ -463,7 +466,7 @@ export function Browser({
         <div
           className="overlay"
           role="dialog"
-          aria-label="New project"
+          aria-label={text("library.new.title")}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.stopPropagation();
@@ -479,17 +482,14 @@ export function Browser({
           }}
         >
           <header className="panel-head">
-            <h2>New project</h2>
+            <h2>{text("library.new.title")}</h2>
             <button type="button" onClick={() => setCreating(false)}>
-              Cancel (Esc)
+              {text("library.new.cancel", { chord: "Esc" })}
             </button>
           </header>
-          <p className="hint">
-            A helper, not a requirement. Leave a field blank and identification
-            will fill it in.
-          </p>
+          <p className="hint">{text("library.new.hint")}</p>
           <label>
-            Artist
+            {text("library.new.artist")}
             <input
               autoFocus
               value={seed.artist}
@@ -499,7 +499,7 @@ export function Browser({
             />
           </label>
           <label>
-            Recording title
+            {text("library.new.album")}
             <input
               value={seed.album}
               onChange={(event) =>
@@ -508,7 +508,7 @@ export function Browser({
             />
           </label>
           <label>
-            Catalog number
+            {text("library.new.catalog")}
             <input
               value={seed.catalog}
               onChange={(event) =>
@@ -525,30 +525,26 @@ export function Browser({
             one, not after.
           */}
           <fieldset className="seed-group">
-            <legend>Post-Processing</legend>
-            <p className="hint">
-              Neither of these two touches what is recorded, and both can be
-              changed later. Mono folds the channels together in the exported
-              files; RIAA applies the curve on audition and on export.
-            </p>
+            <legend>{text("library.new.post")}</legend>
+            <p className="hint">{text("library.new.post.hint")}</p>
             <div className="seed-switch">
-              <span>Pressing</span>
+              <span>{text("library.new.pressing")}</span>
               <Switch
                 checked={!seed.isMono}
                 onChange={(stereo) => setSeed({ ...seed, isMono: !stereo })}
-                off="Mono"
-                on="Stereo"
-                title="Mono folds the channels together in the exported files and leaves the capture stereo"
+                off={text("library.new.mono")}
+                on={text("library.new.stereo")}
+                title={text("library.new.mono.title")}
               />
             </div>
             <div className="seed-switch">
-              <span>Equalization</span>
+              <span>{text("library.new.eq")}</span>
               <Switch
                 checked={seed.riaaEq}
                 onChange={(riaa) => setSeed({ ...seed, riaaEq: riaa })}
-                off="None"
-                on="RIAA"
-                title="Applies the RIAA playback curve on audition and on export"
+                off={text("library.new.eq.none")}
+                on={text("library.new.eq.riaa")}
+                title={text("library.new.eq.title")}
               />
             </div>
             {seed.riaaEq && (
@@ -560,16 +556,10 @@ export function Browser({
                 record equalized twice sounds wrong in a way that is hard to
                 name and impossible to undo after the fact.
               */
-              <p className="hint warn">
-                Most phono stages and head amps apply the RIAA curve themselves.
-                If yours did, applying it again here equalizes the record twice.
-                Nothing in the signal reaching VCW says which happened, so this
-                one is your call: switch it on only if the capture arrives flat,
-                and leave it off if anything upstream has already curved it.
-              </p>
+              <p className="hint warn">{text("library.new.eq.warn")}</p>
             )}
           </fieldset>
-          <button type="submit">Create</button>
+          <button type="submit">{text("library.new.create")}</button>
         </form>
         </div>
       )}
@@ -583,7 +573,7 @@ export function Browser({
         <div className="empty start">
           <img className="logo" src="/vcw-logo.webp" alt="" width={260} />
           <Stamp />
-          <p>No projects. Set a library directory in Settings, or create one.</p>
+          <p>{text("library.empty")}</p>
         </div>
       ) : tiles ? (
         <div className="tiles">
@@ -602,7 +592,7 @@ export function Browser({
             <span className="tile-art" aria-hidden="true">
               +
             </span>
-            <span className="tile-name">New project</span>
+            <span className="tile-name">{text("library.new.title")}</span>
           </button>
           {projects.map((project) => (
             <button
@@ -634,14 +624,14 @@ export function Browser({
           <thead>
             <tr>
               <th className="art" />
-              <th>Album</th>
-              <th>Artist</th>
-              <th>Catalog</th>
-              <th className="n">Sides</th>
-              <th className="n">Tracks</th>
-              <th className="n">Length</th>
-              <th className="n">Size</th>
-              <th className="n">Modified</th>
+              <th>{text("library.column.album")}</th>
+              <th>{text("library.column.artist")}</th>
+              <th>{text("library.column.catalog")}</th>
+              <th className="n">{text("library.column.sides")}</th>
+              <th className="n">{text("library.column.tracks")}</th>
+              <th className="n">{text("library.column.length")}</th>
+              <th className="n">{text("library.column.size")}</th>
+              <th className="n">{text("library.column.modified")}</th>
             </tr>
           </thead>
           <tbody>

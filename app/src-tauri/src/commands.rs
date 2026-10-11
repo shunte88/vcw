@@ -143,6 +143,18 @@ pub(crate) fn languages() -> Vec<String> {
     vcw_shell::config::languages()
 }
 
+/// Every string the window draws, in whatever language the settings ask for.
+///
+/// The window is built with the English already in it, so this is only ever an
+/// overlay - see `app/ui/src/i18n.ts`. It is one call rather than one per key
+/// because the whole catalog is a few hundred short strings, smaller than a
+/// second of waveform, and a round trip per label would be hundreds of them
+/// before the first paint.
+#[tauri::command]
+pub(crate) fn strings() -> std::collections::BTreeMap<String, String> {
+    vcw_i18n::strings()
+}
+
 #[tauri::command]
 pub(crate) fn credentials() -> Vec<Credential> {
     vcw_shell::config::credentials()

@@ -22,19 +22,20 @@
 // §43's suggested defaults are marked, because they are the chords a person
 // arrives already knowing.
 
+import { key, useText } from "../i18n";
 import { grouped } from "../keys";
 import { spellings } from "../keymap";
 import type { Scope } from "../keymap";
 
-/** What each scope is called in front of a person. */
+/** The catalog key for what each scope is called in front of a person. */
 const NAMES: Record<Scope, string> = {
-  global: "Everywhere",
-  browser: "Library",
-  capture: "Capture",
-  tracks: "Tracks",
-  metadata: "Metadata",
-  export: "Export",
-  settings: "Settings",
+  global: key("help.scope.global"),
+  browser: key("help.scope.browser"),
+  capture: key("help.scope.capture"),
+  tracks: key("help.scope.tracks"),
+  metadata: key("help.scope.metadata"),
+  export: key("help.scope.export"),
+  settings: key("help.scope.settings"),
 };
 
 /** The keyboard map overlay. */
@@ -45,21 +46,22 @@ export function Help({
   scope: Scope;
   onClose: () => void;
 }): React.JSX.Element {
+  const text = useText();
   return (
-    <div className="overlay" role="dialog" aria-label="Keyboard map">
+    <div className="overlay" role="dialog" aria-label={text("help.aria")}>
       <div className="overlay-box">
         <header className="panel-head">
-          <h2>Keyboard</h2>
+          <h2>{text("help.title")}</h2>
           <button type="button" onClick={onClose}>
-            Close (Esc)
+            {text("help.close")}
           </button>
         </header>
         {grouped().map(([group, bindings]) => (
           <section key={group} className="help-group">
             <h3>
-              {NAMES[group]}
+              {text(NAMES[group])}
               {group !== "global" && group !== scope && (
-                <span className="dim"> (not this panel)</span>
+                <span className="dim"> {text("help.elsewhere")}</span>
               )}
             </h3>
             <table className="rows">
@@ -71,7 +73,7 @@ export function Help({
                         <kbd key={chord}>{chord}</kbd>
                       ))}
                     </td>
-                    <td>{binding.label}</td>
+                    <td>{text(binding.label)}</td>
                     <td className="dim">
                       {binding.suggested === true ? "§43" : ""}
                     </td>
