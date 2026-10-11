@@ -71,6 +71,31 @@ export function Transport({
   const recording = engine.phase === "recording";
   const armed = engine.phase !== "idle";
 
+  /**
+   * Put a boundary at the playhead.
+   *
+   * One function and not two call sites, and the reload is why. The key and
+   * the button each issued the command and neither re-read the project, so a
+   * marker was written to the file and then not drawn, not listed, and not
+   * deletable: pressing `m` looked like pressing nothing. The shell publishes
+   * no event for an edit - every other verb in the window reloads for itself
+   * - and these two were the pair that forgot.
+   *
+   * `edge: "start"` from both, which is honest rather than arbitrary: a lone
+   * boundary bounds nothing until something adopts it, and the window has no
+   * question to ask about an edge that describes no track yet. Making a track
+   * out of a stretch is `Add track from selection` in the Tracks panel, and
+   * that places both edges correctly without anyone choosing.
+   */
+  const mark = () => {
+    if (side === null) {
+      return;
+    }
+    void run(() =>
+      api.placeMarker({ sideId: side.id, at: engine.playhead, edge: "start" }),
+    ).then(store.reload);
+  };
+
   /** Start the audition, on whatever [`scopeOf`] says Play means now. */
   const audition = () => {
     if (capture !== undefined) {
@@ -107,14 +132,7 @@ export function Transport({
       void run(() => api.playback({ verb: "seek", to: forward })),
     skipBack: () => void run(() => api.playback({ verb: "skip-back" })),
     skipForward: () => void run(() => api.playback({ verb: "skip-forward" })),
-    marker: () => {
-      if (side === null) {
-        return;
-      }
-      void run(() =>
-        api.placeMarker({ sideId: side.id, at: engine.playhead, edge: "start" }),
-      );
-    },
+    marker: mark,
   });
 
   return (
@@ -201,17 +219,7 @@ export function Transport({
         <button
           type="button"
           disabled={side === null}
-          onClick={() => {
-            if (side !== null) {
-              void run(() =>
-                api.placeMarker({
-                  sideId: side.id,
-                  at: engine.playhead,
-                  edge: "start",
-                }),
-              );
-            }
-          }}
+          onClick={mark}
           title={text("transport.marker.title", { chord: "m" })}
         >
           <Face icon="marker">{text("transport.marker")}</Face>

@@ -59,7 +59,7 @@
 //! frontend saying the person meant it, and the refusal without it comes from
 //! the project crate.
 
-use vcw_contract::command::{Lock, Marker, Merge, Placement, Removal, Split, TrackEdit};
+use vcw_contract::command::{Lock, Marker, Merge, NewTrack, Placement, Removal, Split, TrackEdit};
 use vcw_project::track::NewBoundary;
 use vcw_project::{Connection, Project, session, side, track};
 use vcw_types::SampleRate;
@@ -146,7 +146,11 @@ pub fn delete_marker(shell: &Shell, removal: Removal) -> Result<(), Error> {
     let mut project = Project::open(&path)?;
     // No seconds, so no rate, so no side lookup: this is the one boundary
     // command that needs nothing but the id.
-    track::delete_boundary(&mut project, removal.boundary_id)?;
+    if removal.force {
+        track::delete_boundary_forced(&mut project, removal.boundary_id)?;
+    } else {
+        track::delete_boundary(&mut project, removal.boundary_id)?;
+    }
     project.close()?;
     Ok(())
 }
@@ -181,6 +185,36 @@ pub fn edit_track(shell: &Shell, edit: TrackEdit) -> Result<(), Error> {
     track::update(&mut project, edit.track_id, &(&edit).into())?;
     project.close()?;
     Ok(())
+}
+
+/// Makes a track out of a stretch a person chose. §31's "add".
+///
+/// Two boundaries and a track, and then the whole side renumbered in timeline
+/// order - so a track added in front of the others becomes the first and the
+/// rest move down. That is the behavior a first user asked for in the same
+/// breath as the verb itself: "how do I say that this highlighted area should
+/// be A1 and all of the later ones should be renamed".
+///
+/// # Errors
+///
+/// [`Error::NoProject`] with nothing open, [`Error::Invalid`] if the side is
+/// not in the project or has no capture to measure seconds against, and
+/// [`Error::Project`] if `end` is not after `start`, if the stretch lies over
+/// a track that is already there, or if the write fails.
+pub fn add_track(shell: &Shell, add: NewTrack) -> Result<i64, Error> {
+    let path = shell.project_path()?;
+    let mut project = Project::open(&path)?;
+    let rate = rate_of_side(project.conn(), add.side_id, "sideId")?;
+    // Returns the row id for the reason `place_marker` does: the frontend has
+    // to select what it just made.
+    let id = track::add_track_to(
+        &mut project,
+        add.side_id,
+        frames(add.start, rate),
+        frames(add.end, rate),
+    )?;
+    project.close()?;
+    Ok(id)
 }
 
 /// Cuts a track in two. §31's "split".

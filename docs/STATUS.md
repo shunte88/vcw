@@ -7347,3 +7347,85 @@ transport saying *Audio plays on the VCW host*, and Settings rendering the Appea
 group with its code spans and italics. The packaged `vcw-app` was launched from the
 same unpacked deb and drew its window too, so the desktop path did not pay for the
 served one.
+
+## 2026-10-11, the first hour of the browser build: three things a user found
+
+The piCorePlayer user who had been driving 0.2.2 on Windows unpacked 0.3.0 on the Pi,
+served it to a browser in another room, recorded a side and then tried to correct the
+track list. Three reports came back, and all three were real.
+
+**Settings fought the hand typing into them.** `Settings.tsx` had one unconditional
+`useEffect(() => setDraft(settings), [settings])`, and settings save themselves: a
+write refetches, the refetch lands in that effect, and the draft is replaced by
+whatever the server last stored. A word typed while the round trip was in the air came
+back truncated. On the desktop shell the trip is a millisecond and nothing is visible;
+over HTTP to a Pi it eats keystrokes. The 600 ms debounce behind it made it worse by
+writing once a word.
+
+The fix is two parts. The adopt effect now returns early when the draft is dirty -
+`dirty()` compares the draft against a `stored` ref holding the JSON of what the shell
+was last told, which answers both "are there unsaved edits" and "is this arriving
+`settings` our own echo" with one string. And the write is no longer on a timer: a
+`flush` counter is bumped on a blur, on Enter, and on a change to a control that is one
+click rather than a sentence, and the write effect depends on `flush` alone. The three
+listeners are delegated on the `prefs-pane` div rather than repeated at forty inputs.
+`typed(target)` is what decides whether a control is one a person types into. An unmount
+cleanup commits a dirty draft, because `focusout` does not fire for an element a panel
+switch removed. `settings.saving` became `settings.unsaved`: the word is now derived
+from the draft rather than set in a `.then`, so a refused write leaves it showing.
+
+**The device picker said almost nothing.** `arecord -L` on his Pi lists ten PCMs whose
+names differ by one word. `Device` on the contract already carried the interface, the
+transport, the identity, the channel counts, the rates and the formats; the picker was
+rendering `name` and `host`. The option label is now `name - interface - transport` and
+a `<dl>` under the picker lists the rest for the chosen one. Two exported helpers with
+tests: `label()`, which drops empty fields *and the literal "Unknown"* - the devices
+layer writes that as the Debug fallback for a host with no interface type, which on
+ALSA is every plug PCM, and it is never translated - and `counts()`, which collapses a
+channel list to `1-64` or `1, 2, 6, 8`.
+
+**A marker a person placed could not be moved or deleted.** This is the one that cost
+him an evening, and the root cause is one line: `NewBoundary::by_user` sets
+`locked: true`, and `move_boundary` and `delete_boundary` both refuse a locked row. So
+every boundary dropped by hand was permanent. §24's lock is a contract with the
+*detector*, not with the hand that placed it - `move_boundary_forced`'s own doc already
+said *"a person moving a boundary is a person placing it"* - so the window now passes
+`force` on both. `Removal` gained a `#[serde(default)] force`, and
+`delete_boundary_forced` sits beside the move twin: the `BoundaryInUse` check stays, so
+a boundary a track is using is still refused with both named.
+
+Three things were missing besides. There was **no verb for "make this selection a
+track"** on the contract at all - `add_track` existed in the project crate and only the
+CLI could reach it - so `NewTrack`/`AddTrack` were added through all six layers, and
+`add_track_to` grew an overlap refusal (`Error::TrackOverlap`, naming both spans) because
+the CLI reaches the same function. There was **no delete button** anywhere, so every
+boundary row has one. And **dragging a boundary** is new: `Waveform.tsx` had a snap for
+clicks and no grab, so the gesture list went from three to four, with a tooltip that
+names which edge of which track is under the pointer.
+
+One defect came out of first light that no test had: `Transport.tsx` was the only
+project-editing call site in the frontend with no `store.reload`, so a marker placed
+with `m` or the button was written to the file and then not drawn, not listed and not
+deletable. Both seams now route through one `mark()`. Every other `api.*` editing call
+site was grepped to confirm it was the only one.
+
+Checked on screen in both places. In the Tauri window on Xvfb: typing a 16-character
+address into the Metadata contact field with 90 ms between keys arrived whole, `Unsaved`
+appeared beside the title while it was in flight and went on blur, and `settings.json`
+held the full string afterwards. Dragging the line at 0:01.761 to 0:01.850 moved it and
+A1's length followed. Deleting a loose marker took the row and the line; deleting one a
+track uses was refused. Dragging 3.022 to 3.120 and pressing *Add track from selection*
+made A4, and the same gesture over an existing track was refused with both spans named.
+Then the whole of it again through `vcw serve` in Chrome: the address typed over HTTP,
+the badge, the saved file, the device panel, and the boundary drag.
+
+**And one regression the same change nearly shipped.** `add_track_to`'s new overlap
+refusal is reached by `adopt_labels` in `vcw-import`, which turns every Audacity label
+into a track - and Audacity stacks region labels freely. One overlapping label would
+have aborted an import that used to work, which matters here because *"fall back to
+using the Audacity UI and pull the track markers"* is exactly what the same user
+suggested. It is now the fourth reported skip beside the point label, the sub-frame
+span and the orphan, so the rest of the project still lands.
+`a_label_lying_over_one_already_taken_is_reported_rather_than_refused` holds it, and
+was falsified by guarding the match arm with `if false`: `frames 2000..6000 lie over
+track 1 (0..4000)`, out of the import rather than out of the report.

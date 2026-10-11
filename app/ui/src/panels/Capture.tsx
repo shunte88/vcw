@@ -151,9 +151,9 @@ export function Capture({
             {devices
               .filter((row) => row.canCapture)
               .map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name} ({row.host}
-                  {row.isDefaultInput ? text("capture.default.suffix") : ""})
+                <option key={row.id} value={row.id} title={row.id}>
+                  {label(row)}
+                  {row.isDefaultInput ? text("capture.default.suffix") : ""}
                 </option>
               ))}
           </select>
@@ -204,6 +204,8 @@ export function Capture({
           {text("capture.arm", { chord: "a" })}
         </button>
       </div>
+
+      {chosen !== undefined && <Detail device={chosen} />}
 
       {chosen !== undefined && chosen.problems.length > 0 && (
         <ul className="problems">
@@ -288,6 +290,99 @@ export function Capture({
         </p>
       ))}
     </section>
+  );
+}
+
+/**
+ * How a device reads in the menu.
+ *
+ * Name, how it is attached, and what sits between it and the converter -
+ * because on ALSA the name alone does not pick anything out. A piCorePlayer
+ * user looking at `arecord -L` sees one USB card behind eight entries, all of
+ * them saying "USB AUDIO CODEC", and only one of them the direct hardware
+ * path a rip wants. The menu has to say which that is.
+ *
+ * Exported for its test. The host is left off: it is the same word on every
+ * row of a list a person is choosing within, and it is in the detail below.
+ */
+export function label(device: Device): string {
+  return [device.name, device.interface, device.transport]
+    .map((part) => part.trim())
+    // "Unknown" as well as empty, and it is not a translated word: the shell
+    // writes the literal when the host offers no interface type at all, which
+    // on ALSA is every plug PCM. A row reading "- Unknown -" in the middle is
+    // a word of noise in the one line a person is scanning, and the detail
+    // below says everything the row left out.
+    .filter((part) => part !== "" && part !== "Unknown")
+    .join(" - ");
+}
+
+/**
+ * A run of channel counts, collapsed.
+ *
+ * An ALSA plug PCM advertises every count from 1 to 64, and sixty-four
+ * numbers across the panel bury the line they are in. The CLI's `devices`
+ * printer collapses the same list for the same reason.
+ */
+export function counts(channels: readonly number[]): string {
+  const runs: string[] = [];
+  for (let at = 0; at < channels.length; at += 1) {
+    const first = channels[at]!;
+    let last = first;
+    while (at + 1 < channels.length && channels[at + 1] === last + 1) {
+      at += 1;
+      last = channels[at]!;
+    }
+    runs.push(
+      first === last
+        ? String(first)
+        : last === first + 1
+          ? `${first}, ${last}`
+          : `${first}-${last}`,
+    );
+  }
+  return runs.join(", ");
+}
+
+/**
+ * Everything the picker could not fit on one line.
+ *
+ * The identity first, because that is the string §39 persists and the string
+ * `vcw devices` prints, and a person comparing the two needs to see the same
+ * characters in both places. `arecord -L` is the standard a Linux user will
+ * hold this against, and it names the PCM; so does this.
+ */
+function Detail({ device }: { device: Device }) {
+  const text = useText();
+  return (
+    <dl className="device">
+      <dt>{text("capture.device.id")}</dt>
+      <dd>
+        <code>{device.id}</code>
+      </dd>
+      <dt>{text("capture.device.host")}</dt>
+      <dd>{device.host}</dd>
+      <dt>{text("capture.device.path")}</dt>
+      <dd>{device.transport}</dd>
+      {device.captureChannels.length > 0 && (
+        <>
+          <dt>{text("capture.device.channels")}</dt>
+          <dd>{counts(device.captureChannels)}</dd>
+        </>
+      )}
+      {device.captureRates.length > 0 && (
+        <>
+          <dt>{text("capture.device.rates")}</dt>
+          <dd>{device.captureRates.join(" ")} Hz</dd>
+        </>
+      )}
+      {device.captureFormats.length > 0 && (
+        <>
+          <dt>{text("capture.device.formats")}</dt>
+          <dd>{device.captureFormats.join(" ")}</dd>
+        </>
+      )}
+    </dl>
   );
 }
 

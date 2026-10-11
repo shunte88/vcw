@@ -179,11 +179,15 @@ serving a blank page.
 
 ### Settings keep themselves
 
-There is no Save button. Change anything in Settings and it is written for you a
-moment after you stop; while that write is outstanding the panel says `Saving`
-beside its title, and if the core refuses the value the word stays and the
-reason appears in the status line. So the panel only ever shows you what is
-actually stored.
+There is no Save button. A field you type into is written when you leave it or
+press Enter; a switch, a menu or a checkbox is written on the spot, because one
+discrete choice is not chatter. While an edit has not been written the panel
+says `Unsaved` beside its title, and if the core refuses the value the word
+stays and the reason appears in the status line.
+
+Written on leaving rather than a moment after you stop typing, which is what it
+used to do: over `vcw serve` to a machine in another room, a write that lands
+mid-word takes the word with it.
 
 Three of its choices are not stored in the settings file at all, because they
 are about this screen rather than about your records, and they live on this
@@ -267,6 +271,14 @@ backend's own *default* configuration is not a recommendation. On this
 development machine the default input is the one configuration guaranteed **not**
 to be bit-perfect, because it routes through the system mixer. Pick a rate and
 format deliberately.
+
+The window says the same thing in the Capture panel. The picker reads
+`name - interface - transport`, and under it is what the host answered about
+the one you chose: its identity string, the host API, the path, the channel
+counts, the rates and the sample formats. An ALSA box offers a long list of
+plug devices whose names differ by one word, and that panel is how to tell
+which of them is the USB codec with the turntable on it without `arecord -L`
+in another window.
 
 ## Recording a side
 
@@ -361,7 +373,12 @@ vcw import ~/rips/geronimo.aup3 --dry-run        # read it and report, write not
 
 The source is opened **read-only** and never touched. Labels become locked track
 boundaries, tags become the release, and every tag is also kept verbatim so
-nothing is lost in translation. What lands is a capture like any other:
+nothing is lost in translation. That is also the answer if you would rather mark
+tracks in Audacity than in VCW: lay a label track over the side there, import
+it, and the labels arrive named and in order. Four kinds of label cannot be a
+track - a point label, one that rounds to no frames, one over audio that is no
+longer in the project, and one lying over a label already taken - and each is
+named in the report rather than dropped quietly. What lands is a capture like any other:
 playback, detection, editing, tagging and export all work on it with no special
 case.
 
@@ -410,15 +427,33 @@ one boundary, so an edge is both at once: the end of the track on its left and
 the start of the track on its right. Moving it moves both. That is why `move`
 takes a boundary and not a side of one.
 
-So the three things you can do are:
+So the four things you can do are:
 
-* **Move an edge.** Select the boundary and nudge it with `Ctrl+Left` and
-  `Ctrl+Right`, or `vcw tracks album.vcw move 7 12345678`. Both neighbors follow.
+* **Move an edge.** Drag it on the waveform: point at the line and the cursor
+  changes, a tooltip names which edge of which track it is, and letting go puts
+  it there. Or select the boundary in the list and nudge it with `Ctrl+Left`
+  and `Ctrl+Right`, or `vcw tracks album.vcw move 7 12345678`. Both neighbors
+  follow.
+* **Make a track out of a stretch.** Drag across the waveform to select it and
+  press **Add track from selection**, or
+  `vcw tracks album.vcw add --side A --start 257.3 --end 478.9`. This is what
+  to use for a track detection missed entirely. The side renumbers itself in
+  timeline order afterwards, so a track added in front of the others becomes
+  the first and the rest move down. A stretch that lies
+  over a track that is already there is refused, with both spans named.
 * **Cut one track into two.** Put the playhead where the cut goes and press
   **Split at playhead**, or `vcw tracks album.vcw split 3 12345678`. This writes
   the pair of boundaries the new edge needs.
 * **Join two into one.** Select the left one and press **Merge with next**, or
   `vcw tracks album.vcw merge 3 4`.
+
+**A marker is not a track.** `m` and the Marker button drop a boundary at the
+playhead and nothing else: it is drawn, it is listed, and until a track uses it
+the list says so. Promoting one is **Add track from selection** or **Split at
+playhead**. To take one away, press **Delete** on its row in the boundary list.
+A boundary a track is using is refused there - merge or delete the track first -
+and the lock every hand-placed boundary carries does not stop you: it is a
+contract with the detector, not with your hand.
 
 **Click the waveform to put the playhead down.** Nothing plays; the number
 appears next to the transport clock, and that is exactly where Split will cut

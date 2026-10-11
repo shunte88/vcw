@@ -546,6 +546,22 @@ export function App(): React.JSX.Element {
                   );
                 }
               }}
+              onMoveBoundary={(boundaryId, to) => {
+                // `force`, and that is the point of this call rather than an
+                // oversight in it. Every boundary a person places is written
+                // locked - `NewBoundary::by_user` sets it - so a drag that
+                // respected the lock would refuse the one marker the person
+                // just put down and is now trying to line up. §24's lock is a
+                // contract with the *detector*: it says re-analysis may not
+                // move this. It was never a contract with the hand that set
+                // it, and `move_boundary_forced` says so in its own doc -
+                // "a person moving a boundary is a person placing it" - and
+                // leaves the row locked and the provenance the operator's
+                // afterwards, so the override costs nothing it was protecting.
+                void store
+                  .run(() => api.moveMarker({ boundaryId, to, force: true }))
+                  .then(store.reload);
+              }}
               onSeek={(seconds) => {
                 if (engine.playing) {
                   void store.run(() =>
@@ -579,7 +595,14 @@ export function App(): React.JSX.Element {
             <Capture store={store} devices={devices} settings={settings} />
           )}
           {panel === "tracks" && (
-            <Tracks store={store} chosen={chosen} onChoose={setChosen} />
+            <Tracks
+              store={store}
+              chosen={chosen}
+              onChoose={setChosen}
+              side={side}
+              selection={selection}
+              onSelect={setSelection}
+            />
           )}
           {panel === "metadata" && <Metadata store={store} />}
           {panel === "export" && <Export store={store} settings={settings} />}

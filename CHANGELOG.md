@@ -14,6 +14,56 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## Unreleased
+
+Three things a piCorePlayer user found in the first hour of the 0.3.0 browser
+build, all in the window.
+
+### Added
+
+* **Make a track out of what you selected.** Drag across the waveform and press
+  *Add track from selection* in the Tracks panel. That is the verb that was
+  missing: a marker on its own does not make a track, and until now there was
+  no way to say "this stretch is a track" without the CLI. The side renumbers
+  itself afterwards in timeline order, so a track added in front of the others
+  becomes the first and the rest move down, and a stretch that lies over a
+  track that is already there is refused with both spans named rather than
+  written.
+* **Drag a boundary to move it.** Point at a marker on the waveform and the
+  cursor says it is grabbable, the tooltip names which edge of which track it
+  is, and dragging it puts it where you let go.
+* **Delete a marker.** Every row in the boundary list has a Delete button. One
+  a track is using is refused - merge or delete the track first - and one that
+  bounds nothing goes away.
+* **What the input device actually is.** The device picker now reads
+  `name - interface - transport`, and under it a panel gives the identity
+  string, the host API, the path, the channel counts, the sample rates and the
+  sample formats the host reports. Picking the right one out of an ALSA list of
+  plug devices no longer takes `arecord -L` in another window.
+
+### Fixed
+
+* **A marker a person placed can now be moved and deleted.** Every hand-placed
+  boundary is locked - that is what makes it survive re-analysis - and the
+  window was then refusing to move or delete it, so a misplaced marker was
+  permanent. A person moving a boundary is a person placing it: the window now
+  says so, and the lock still holds against the detector.
+* **A marker you place appears.** The Place marker button and the `m` key wrote
+  the boundary and did not reload, so nothing was drawn, nothing was listed and
+  nothing could be deleted until the project was reopened.
+* **An Audacity label that overlaps another no longer costs the whole import.**
+  Audacity stacks region labels freely and a VCW side may not; one such label is
+  now named in the import report beside the three other kinds that cannot be a
+  track, and the rest of the project lands. Marking tracks in Audacity and
+  importing the result is a supported route, and the first one to try if you
+  would rather work there.
+* **The settings panel no longer types over you.** Settings save themselves, and
+  the save refetched and adopted the answer while a field was still being
+  typed into - a millisecond round trip on the desktop, a keystroke eater over
+  `vcw serve` to a Pi in another room. A field is written when you leave it or
+  press Enter, never mid-word, and an edit that has not been written yet says
+  *Unsaved* beside the panel title.
+
 ## 0.3.0-alpha
 
 *2026-10-11.*

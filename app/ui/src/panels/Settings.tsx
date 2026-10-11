@@ -169,7 +169,51 @@ export function Settings({
     SOURCE_LOCALE,
   ]);
 
-  useEffect(() => setDraft(settings), [settings]);
+  /**
+   * The JSON of what the shell is holding, as far as this panel knows.
+   *
+   * One string answers two questions that used to be asked of `settings`
+   * directly: whether the draft is dirty, and whether an arriving `settings`
+   * is the echo of this panel's own write or news from somewhere else.
+   */
+  const stored = useRef<string | null>(null);
+
+  /**
+   * The draft as of the last render.
+   *
+   * Both effects below need it and neither may depend on it: one must run
+   * only when the shell's copy changes, and the other only when a person has
+   * finished with a field. The window renders at meter rate, so a dependency
+   * on the draft would be a dependency on nothing in particular.
+   */
+  const latest = useRef<Values | null>(draft);
+  latest.current = draft;
+
+  /** Whether the draft holds edits the shell has not been told about. */
+  const dirty = () =>
+    stored.current !== null &&
+    latest.current !== null &&
+    JSON.stringify(latest.current) !== stored.current;
+
+  // Adopt the shell's copy, *unless* this panel is holding unsaved edits.
+  //
+  // This line used to be `setDraft(settings)` with no condition, and that is
+  // the keystroke eater a piCorePlayer user hit over `vcw serve`: a save
+  // refetches, the refetch lands here, and the draft is replaced by whatever
+  // was last written - so a word typed while the round trip was in the air
+  // came back truncated. Invisible through the Tauri shell, where the trip is
+  // a millisecond; plainly visible over HTTP to a Pi in another room.
+  useEffect(() => {
+    if (settings === null) {
+      return;
+    }
+    if (dirty()) {
+      return;
+    }
+    stored.current = JSON.stringify(settings);
+    setDraft(settings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
 
   // # Where a first run lands
   //
@@ -226,13 +270,40 @@ export function Settings({
         .then(onSaved);
     };
   });
+  // Written when a person has *finished* with a field, not 600 ms after they
+  // last touched one. The timer version wrote once a word and refetched once a
+  // word, which over a local shell is free and over `vcw serve` is a settings
+  // panel fighting the hand that is typing into it.
+  //
+  // `flush` is what "finished" means, and it is bumped in exactly three
+  // places on the pane below: a blur, an Enter, and a change to a control
+  // that is one click rather than a sentence. The effect depends on it alone
+  // so that a render caused by anything else - and the window renders at meter
+  // rate - cannot write.
+  const [flush, setFlush] = useState(0);
   useEffect(() => {
-    if (draft === null || JSON.stringify(draft) === JSON.stringify(settings)) {
+    const held = latest.current;
+    if (held === null || !dirty()) {
       return;
     }
-    const timer = setTimeout(() => commit.current(draft), 600);
-    return () => clearTimeout(timer);
-  }, [draft, settings]);
+    stored.current = JSON.stringify(held);
+    commit.current(held);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flush]);
+
+  // A panel can be left with a field still focused: `Ctrl+1` takes the whole
+  // tree away and `focusout` does not fire for an element that was removed, so
+  // without this the last thing typed before switching panels is the one thing
+  // never written.
+  useEffect(
+    () => () => {
+      if (dirty()) {
+        commit.current(latest.current!);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   if (draft === null) {
     return (
@@ -265,7 +336,7 @@ export function Settings({
     (credential) => credential.variable === "VCW_DISCOGS_TOKEN",
   );
 
-  const unsaved = JSON.stringify(draft) !== JSON.stringify(settings);
+  const unsaved = dirty();
 
   const blank = (value: string) => (value.trim() === "" ? null : value.trim());
   const number = (value: string) =>
@@ -281,7 +352,7 @@ export function Settings({
             "Saved" over a write that was refused. This cannot: the word goes
             when the stored settings catch up with the draft, and if the write
             never lands it stays, beside the reason. */}
-        {unsaved && <span className="dim">{text("settings.saving")}</span>}
+        {unsaved && <span className="dim">{text("settings.unsaved")}</span>}
       </header>
 
       <div className="prefs">
@@ -302,7 +373,30 @@ export function Settings({
           ))}
         </nav>
 
-        <div className="prefs-pane">
+        {/* Where "finished with that field" is decided, once, for every
+            control in the pane. A delegated listener rather than forty
+            handlers: `onBlur` and `onKeyDown` bubble, React's synthetic
+            `onChange` bubbles too, and the alternative is the same three
+            lines repeated at every input in the file with one of them
+            eventually missing.
+
+            A select, a checkbox or a radio writes on the spot, because one
+            discrete choice making one save is not chatter. Anything a person
+            *types* waits for the blur or the Enter. */}
+        <div
+          className="prefs-pane"
+          onBlur={() => setFlush((n) => n + 1)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              setFlush((n) => n + 1);
+            }
+          }}
+          onChange={(event) => {
+            if (!typed(event.target)) {
+              setFlush((n) => n + 1);
+            }
+          }}
+        >
         {section === "Appearance" && (
           <fieldset>
             <legend>{text("settings.section.appearance")}</legend>
@@ -915,6 +1009,30 @@ export function Settings({
       </div>
     </section>
   );
+}
+
+/**
+ * Whether a control is one a person types a sentence into, rather than one
+ * they click once.
+ *
+ * The question the settings pane asks of every change: a select, a checkbox
+ * or a radio is a decision already made, and is written on the spot; a text
+ * box, a number box or a textarea is a half-finished word until the person
+ * leaves it. Exported for its test, because the whole of the auto-save
+ * timing now turns on this one answer.
+ *
+ * Unknown input types read as "typed" on purpose. A control this does not
+ * recognize saving a beat late is a delay; one saving mid-word is the bug
+ * this exists to fix.
+ */
+export function typed(target: EventTarget | null): boolean {
+  if (target instanceof HTMLTextAreaElement) {
+    return true;
+  }
+  if (!(target instanceof HTMLInputElement)) {
+    return false;
+  }
+  return !["checkbox", "radio", "range", "color", "file"].includes(target.type);
 }
 
 /**

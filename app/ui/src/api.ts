@@ -43,6 +43,7 @@ import type {
   Marker,
   Merge,
   NewProject,
+  NewTrack,
   Placement,
   Playback,
   Project,
@@ -151,6 +152,16 @@ export function lockMarker(lock: Lock): Promise<void> {
 /** Edits a track's metadata. Every field is optional; null leaves it alone. */
 export function editTrack(edit: TrackEdit): Promise<void> {
   return invoke("edit_track", { edit });
+}
+
+/**
+ * Makes a track out of a stretch a person chose, and returns its id.
+ *
+ * The side renumbers itself afterwards in timeline order, so a track added in
+ * front of the others becomes the first and the rest move down.
+ */
+export function addTrack(add: NewTrack): Promise<number> {
+  return invoke("add_track", { add });
 }
 
 /** Splits a track in two, and returns the id of the new second half. */

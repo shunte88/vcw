@@ -219,43 +219,63 @@ describe("the export numbering controls", () => {
 });
 
 describe("a settings panel with no Save button", () => {
-  // The two halves of auto-save, and the second is the one that bites. A draft
-  // that saves on every change is easy; a draft that stops is not, because the
-  // write refetches the settings and hands the panel back a brand new object
-  // holding exactly what it just wrote. Compared by reference that is a change,
-  // and the panel writes for as long as it is open.
+  // Three rules, and the second is the one a piCorePlayer user found. A write
+  // refetches, and the refetch hands the panel a brand new object holding
+  // exactly what was just written - so a panel that adopts whatever arrives
+  // replaces what is being typed with the last thing saved. Through the Tauri
+  // shell that trip is a millisecond and nothing shows; over `vcw serve` to a
+  // Pi in another room it eats words.
+  //
+  // So: one click writes at once, a typed field waits for the blur, and an
+  // echo never overwrites an edit in progress.
 
-  it("writes a change once, after the typing stops", async () => {
-    const save = vi.mocked(api.saveSettings);
-    save.mockClear();
-    // Re-rendered under the change, because that is what the window does: it
-    // redraws at meter rate, and the first version of the debounce watched the
-    // whole store object - which `useStore` rebuilds every render - so its own
-    // cleanup cancelled the timer sixty times a second and nothing was ever
-    // written. The panel said "Saving..." the whole time, which is why only the
-    // window caught it. A fresh store object each pass reproduces that here.
+  /**
+   * Type into a controlled input the way a person does.
+   *
+   * Not `node.value = word`: React keeps its own record of what it last
+   * rendered into the box, and a direct assignment updates that record on
+   * the way past - so the change event arrives and React decides nothing
+   * changed. Going through the prototype's setter leaves the record alone,
+   * which is what a keystroke does.
+   */
+  function type(node: HTMLInputElement, word: string): void {
+    Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )!.set!.call(node, word);
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  /** A panel that can be redrawn with different settings. */
+  function panel(stored: Values) {
     localStorage.setItem("vcw.settings.section", "Metadata");
     const { root, container } = mount();
-    // The same settings object every pass. A fresh one would be a real change
-    // and would reset the draft, which is the other effect's job and not what
-    // this test is about.
-    const stored = values();
     // A fresh store object every pass holding the same `run`, which is what
     // `useStore` hands the window: the wrapper is an object literal rebuilt on
     // every render, and `run` inside it is a `useCallback` that holds still.
     const run = async (what: () => Promise<unknown>) => what();
-    const redraw = async () =>
+    let showing = stored;
+    const redraw = async (settings: Values = showing) => {
+      showing = settings;
       await act(async () => {
         root.render(
           <Settings
             store={{ run } as unknown as Store}
-            settings={stored}
+            settings={settings}
             credentials={[token(true)]}
             devices={[]}
             onSaved={() => {}}
           />,
         );
       });
+    };
+    return { root, container, redraw };
+  }
+
+  it("writes a switch as soon as it is clicked", async () => {
+    const save = vi.mocked(api.saveSettings);
+    save.mockClear();
+    const { container, redraw } = panel(values());
     await redraw();
     const toggle = container.querySelector<HTMLInputElement>(
       ".setting-switch input",
@@ -265,49 +285,78 @@ describe("a settings panel with no Save button", () => {
     await act(async () => {
       toggle.click();
     });
-    // Not yet: the debounce is what keeps a text field from writing once a
-    // keystroke, and it has to be visible from here or it is not really there.
-    expect(save).not.toHaveBeenCalled();
-    expect(container.querySelector(".panel-head")?.textContent).toContain(
-      "Saving",
-    );
-
-    // Kept redrawing right through the debounce, which is the part that
-    // matters: a quiet window would let even a timer that restarts on every
-    // render eventually fire, and the window never goes quiet.
-    const until = Date.now() + 1200;
-    while (Date.now() < until) {
-      await redraw();
-      await new Promise((done) => setTimeout(done, 50));
-    }
+    // One discrete choice making one save is not chatter, and waiting on it
+    // would mean a switch a person flicked and walked away from was never
+    // written.
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0]![0]!.metadata.online).toBe(false);
+
+    // Kept redrawing, which is the part that bites: the window redraws at
+    // meter rate, and an effect that watched the whole store would write on
+    // every pass.
+    for (let pass = 0; pass < 10; pass += 1) {
+      await redraw();
+    }
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds a typed field until the person leaves it", async () => {
+    const save = vi.mocked(api.saveSettings);
+    save.mockClear();
+    const { container, redraw } = panel(values());
+    await redraw();
+    const contact = [...container.querySelectorAll("label")]
+      .find((label) => label.textContent?.startsWith("Contact"))!
+      .querySelector("input")!;
+
+    // One keystroke at a time, redrawing between them the way the window
+    // does. Nothing goes out: this is the whole of the complaint.
+    for (const word of ["a", "ab", "abc"]) {
+      await act(async () => {
+        type(contact, word);
+      });
+      await redraw();
+    }
+    expect(save).not.toHaveBeenCalled();
+    expect(container.querySelector(".panel-head")?.textContent).toContain(
+      "Unsaved",
+    );
+
+    await act(async () => {
+      contact.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]![0]!.metadata.contact).toBe("abc");
+  });
+
+  it("does not replace what is being typed with the echo of a save", async () => {
+    const save = vi.mocked(api.saveSettings);
+    save.mockClear();
+    const { container, redraw } = panel(values());
+    await redraw();
+    const contact = [...container.querySelectorAll("label")]
+      .find((label) => label.textContent?.startsWith("Contact"))!
+      .querySelector("input")!;
+    await act(async () => {
+      type(contact, "half a wo");
+    });
+
+    // What a refetch after somebody else's write looks like: a new object,
+    // the same words, arriving mid-sentence.
+    await redraw(values());
+    expect(contact.value).toBe("half a wo");
   });
 
   it("does not write back the settings it was just given", async () => {
     const save = vi.mocked(api.saveSettings);
     save.mockClear();
-    const store = { run: async (what: () => Promise<unknown>) => what() };
-    const { root, container } = mount();
-    const panel = (settings: Values) => (
-      <Settings
-        store={store as unknown as Store}
-        settings={settings}
-        credentials={[token(true)]}
-        devices={[]}
-        onSaved={() => {}}
-      />
-    );
-    await act(async () => {
-      root.render(panel(values()));
-    });
+    const { container, redraw } = panel(values());
+    await redraw();
     // The same values in a different object, which is what a refetch returns
     // and what an identity test would read as a change.
-    await act(async () => {
-      root.render(panel(values()));
-    });
+    await redraw(values());
     expect(container.querySelector(".panel-head")?.textContent).not.toContain(
-      "Saving",
+      "Unsaved",
     );
     await new Promise((done) => setTimeout(done, 900));
     expect(save).not.toHaveBeenCalled();

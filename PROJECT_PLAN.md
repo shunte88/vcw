@@ -954,6 +954,27 @@ Windows, `../Resources` on macOS, `../lib/VCW` on Linux - with two tests holding
 spelling to `tauri.conf.json`. Verified from an unpacked deb and from the AppImage
 `AppDir`, each serving with no `--root` stated.
 
+### What the first hour of the browser build found, 2026-10-11
+
+Three reports from the piCorePlayer user, all real, all in the window.
+
+The settings panel was adopting the server's echo while a field was still being typed
+into, which over HTTP to a Pi eats keystrokes - a write now happens on blur or Enter,
+never on a timer, and an unwritten edit says so. The device picker was showing a name
+and a host API out of a `Device` that already carried eight more fields, on a box where
+`arecord -L` lists ten PCMs whose names differ by one word.
+
+And the marker work of §31 had a hole nobody had walked into: `NewBoundary::by_user`
+locks every hand-placed boundary, and `move_boundary` and `delete_boundary` both refuse
+a locked row, so a marker a person put down was permanent. §24's lock is a contract with
+the detector, not with the hand. Fixing it needed three things the contract did not
+have: `force` on `Removal` with a `delete_boundary_forced` behind it, a `NewTrack`/
+`AddTrack` pair so the window can say *this selection is a track* (the only verb that
+answers "detection missed this one" - it existed in `vcw-project` and only the CLI could
+reach it), and an overlap refusal in `add_track_to`, which both callers get. The
+waveform gained a fourth gesture, dragging a boundary, with a tooltip naming which edge
+of which track is under the pointer. `docs/STATUS.md` carries the detail.
+
 ---
 
 ## 8. Quality strategy

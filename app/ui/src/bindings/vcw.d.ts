@@ -349,7 +349,7 @@ export type Request = { "command": "arm" } & Arm | { "command": "transport",
 /**
  * Which verb.
  */
-verb: Transport, } | { "command": "play" } & Audition | { "command": "seek" } & Seek | { "command": "move_marker" } & Marker | { "command": "place_marker" } & Placement | { "command": "delete_marker" } & Removal | { "command": "lock_marker" } & Lock | { "command": "edit_track" } & TrackEdit | { "command": "split_track" } & Split | { "command": "merge_tracks" } & Merge | { "command": "detect_tracks" } & Detect | { "command": "search_metadata" } & Search | { "command": "select_release" } & Selection | { "command": "export" } & Export | { "command": "new_project" } & NewProject | { "command": "save_settings" } & Settings;
+verb: Transport, } | { "command": "play" } & Audition | { "command": "seek" } & Seek | { "command": "move_marker" } & Marker | { "command": "place_marker" } & Placement | { "command": "delete_marker" } & Removal | { "command": "lock_marker" } & Lock | { "command": "edit_track" } & TrackEdit | { "command": "add_track" } & NewTrack | { "command": "split_track" } & Split | { "command": "merge_tracks" } & Merge | { "command": "detect_tracks" } & Detect | { "command": "search_metadata" } & Search | { "command": "select_release" } & Selection | { "command": "export" } & Export | { "command": "new_project" } & NewProject | { "command": "save_settings" } & Settings;
 
 export type Failure = {
 /**
@@ -467,7 +467,18 @@ export type Removal = {
 /**
  * Which boundary.
  */
-boundaryId: number, };
+boundaryId: number,
+/**
+ * Whether to override §24's lock.
+ *
+ * Defaults to false, and a locked boundary is refused rather than
+ * deleted. The same override [`Marker::force`] is, and needed for the
+ * same reason: a boundary a person places is written locked, so the
+ * marker somebody has just put in the wrong place is a marker the plain
+ * delete will not take away. A boundary a track is using is refused
+ * either way - that one is a `merge`, not a delete.
+ */
+force: boolean, };
 
 export type Lock = {
 /**
@@ -508,6 +519,20 @@ musicbrainzId: string | null,
  * Whether a person has accepted this metadata (§26).
  */
 confirmed: boolean | null, };
+
+export type NewTrack = {
+/**
+ * Which side it belongs to, as [`crate::view::Side::id`] gave it.
+ */
+sideId: number,
+/**
+ * Where it starts, in seconds.
+ */
+start: number,
+/**
+ * Where it ends, in seconds.
+ */
+end: number, };
 
 export type Split = {
 /**

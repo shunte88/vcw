@@ -386,7 +386,7 @@ fn provenance(project: &mut Destination, source: &Source<'_>, document: &Project
 
 /// Turns each label into a track, and reports the ones that could not be.
 ///
-/// A label is skipped rather than fixed up in three cases, all of which a person
+/// A label is skipped rather than fixed up in four cases, all of which a person
 /// can produce in Audacity by accident. A **point label**, where `t1 == t`,
 /// marks a position rather than a span. One whose span **rounds to no frames**
 /// is not a track either. And one that starts **at or past the end of the
@@ -394,7 +394,9 @@ fn provenance(project: &mut Destination, source: &Source<'_>, document: &Project
 /// Audacity does not delete the labels over it, so this is the ordinary shape of
 /// a project someone has edited, not a corruption. A label that merely *runs
 /// past* the end is kept and clipped to it, because that is a track whose tail
-/// was trimmed rather than a track that is not there.
+/// was trimmed rather than a track that is not there. And one that **lies over**
+/// a label already taken is skipped: Audacity stacks region labels freely and a
+/// VCW side may not, and one such label should not cost the whole import.
 ///
 /// Each is reported rather than logged: `vcw import` prints them, because a
 /// silently dropped track title is exactly the kind of loss an import is
@@ -435,7 +437,23 @@ fn adopt_labels(
             ));
             continue;
         }
-        let id = track::add_track(project, side, start, end)?;
+        let id = match track::add_track(project, side, start, end) {
+            Ok(id) => id,
+            // Audacity lets region labels sit on top of each other and VCW's
+            // sides may not, so the fourth way a label is not a track is that
+            // an earlier one already took the frames. Reported like the other
+            // three rather than refused: one overlapping label would otherwise
+            // throw away an import of a project that is perfectly good apart
+            // from it.
+            Err(vcw_project::Error::TrackOverlap { .. }) => {
+                skipped.push((
+                    label.title.clone(),
+                    "it lies over a label already taken as a track",
+                ));
+                continue;
+            }
+            Err(other) => return Err(other.into()),
+        };
         if !label.title.is_empty() {
             track::update(project, id, &track::Update::title(label.title.clone()))?;
         }

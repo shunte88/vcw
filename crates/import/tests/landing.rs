@@ -632,6 +632,65 @@ fn labels_become_titled_tracks_and_the_unusable_ones_are_reported() {
 }
 
 #[test]
+fn a_label_lying_over_one_already_taken_is_reported_rather_than_refused() {
+    // Audacity stacks region labels freely and a VCW side may not, so one
+    // overlapping label used to throw away the whole import: `add_track`
+    // refuses an overlap, and the refusal came back through `?`.
+    let source = synthetic();
+    let document = {
+        let mut document = project(vec![track(
+            0,
+            vec![clip("A.1", 0.0, &[(0, source.ramp(0, 8_000))], 8_000)],
+        )]);
+        document.label_tracks.push(LabelTrack {
+            name: "Labels 1".to_owned(),
+            labels: vec![
+                Label {
+                    t: 0.0,
+                    t1: 0.5,
+                    title: "first".to_owned(),
+                },
+                // Starts inside the one before it.
+                Label {
+                    t: 0.25,
+                    t1: 0.75,
+                    title: "stacked".to_owned(),
+                },
+                // Clear of both, so the import carries on past the refusal.
+                Label {
+                    t: 0.5,
+                    t1: 0.9,
+                    title: "third".to_owned(),
+                },
+            ],
+        });
+        document
+    };
+
+    let (landed, path) = source.land(&document);
+
+    assert_eq!(landed.tracks, 2);
+    let skipped: Vec<(&str, &str)> = landed
+        .labels_skipped
+        .iter()
+        .map(|(title, why)| (title.as_str(), *why))
+        .collect();
+    assert_eq!(
+        skipped,
+        [("stacked", "it lies over a label already taken as a track")],
+        "the one that overlapped, named, with the reason"
+    );
+
+    let project = vcw_project::Project::open_read_only(&path).expect("open");
+    let tracks = vcw_project::track::tracks(project.conn(), Side::A).expect("tracks");
+    let named: Vec<(u32, &str)> = tracks
+        .iter()
+        .map(|record| (record.number, record.title.as_str()))
+        .collect();
+    assert_eq!(named, [(1, "first"), (2, "third")]);
+}
+
+#[test]
 fn tags_become_release_metadata_and_every_tag_is_kept_verbatim() {
     let source = synthetic();
     let document = {

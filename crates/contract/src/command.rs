@@ -765,6 +765,16 @@ pub struct Placement {
 pub struct Removal {
     /// Which boundary.
     pub boundary_id: i64,
+    /// Whether to override §24's lock.
+    ///
+    /// Defaults to false, and a locked boundary is refused rather than
+    /// deleted. The same override [`Marker::force`] is, and needed for the
+    /// same reason: a boundary a person places is written locked, so the
+    /// marker somebody has just put in the wrong place is a marker the plain
+    /// delete will not take away. A boundary a track is using is refused
+    /// either way - that one is a `merge`, not a delete.
+    #[serde(default)]
+    pub force: bool,
 }
 
 /// Lock or unlock a boundary against analysis (§24, §31).
@@ -823,6 +833,35 @@ impl From<&TrackEdit> for vcw_project::track::Update {
             confirmed: edit.confirmed,
         }
     }
+}
+
+/// Make a track out of a stretch a person chose (§31).
+///
+/// The verb that was missing. Every other command here adjusts something a
+/// detector already found: split one, merge two, move a boundary, delete a
+/// boundary. None of them makes a track where there is not one, so a side with
+/// a quiet opening - or a track a detector simply did not see - could be
+/// corrected from `vcw tracks add` on a terminal and from nowhere in the
+/// window at all. A first user reported it as "I can drag across a track to
+/// select it, but how do I then say that this highlighted area should be A1".
+///
+/// Seconds, like [`Placement`] and for the same reason: this is where a person
+/// dragged. The side is named rather than inferred from the time, because two
+/// faces can share one capture.
+///
+/// Both boundaries are placed as [`vcw_types::Provenance::User`] and locked,
+/// and the side is renumbered afterwards in timeline order - so a track added
+/// in front of the others becomes the first and the rest move down, which is
+/// the second half of what that user asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct NewTrack {
+    /// Which side it belongs to, as [`crate::view::Side::id`] gave it.
+    pub side_id: i64,
+    /// Where it starts, in seconds.
+    pub start: f64,
+    /// Where it ends, in seconds.
+    pub end: f64,
 }
 
 /// Split one track in two (§31).
@@ -935,6 +974,8 @@ pub enum Request {
     LockMarker(Lock),
     /// Retitle or annotate a track (§31, §32).
     EditTrack(TrackEdit),
+    /// Make a track out of a stretch a person chose (§31).
+    AddTrack(NewTrack),
     /// Cut one track in two (§31).
     SplitTrack(Split),
     /// Join two adjacent tracks (§31).

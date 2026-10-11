@@ -69,7 +69,7 @@
 //
 // The arithmetic for it is in `zoom.ts`, where a window cannot leave the
 // capture or close past a sample and every one of those rules is asserted. What
-// is left here is three gestures and the one thing each has to get right:
+// is left here is four gestures and the one thing each has to get right:
 //
 //  - the wheel zooms about the pointer, so the peak under the cursor stays
 //    under the cursor. Shift, or a sideways wheel, pans instead;
@@ -87,6 +87,13 @@
 //    a map does. A ruler is the one strip with no audio drawn on it, so it is
 //    the one place a drag can mean "move the paper" without taking a gesture
 //    away from the waveform;
+//
+//  - dragging a boundary moves it, and the tooltip under the pointer says
+//    which boundary that is before the press lands. A drag within [`SNAP`] of
+//    a line takes hold of the line instead of selecting across it, which is
+//    the whole of what "adjust the markers" meant to the first person who
+//    asked for it. It overrides §24's lock, and that is deliberate rather
+//    than careless - see `onMoveBoundary` in the caller.
 //
 //    The first draft made a release zoom to the band instead, and the band
 //    went away with it. That is one gesture doing two jobs - choosing a
@@ -333,6 +340,7 @@ export function Waveform({
   playing,
   onSeek,
   onCue,
+  onMoveBoundary,
   selection,
   onSelect,
   generation,
@@ -346,6 +354,7 @@ export function Waveform({
   playing: boolean;
   onSeek: (seconds: number) => void;
   onCue: (seconds: number) => void;
+  onMoveBoundary: (boundaryId: number, seconds: number) => void;
   selection: Region | null;
   onSelect: (selection: Region | null) => void;
   generation: number;
@@ -379,6 +388,22 @@ export function Waveform({
    * a drag out to the end of the capture and back would not come home.
    */
   const scrolling = useRef<{ x: number; start: number } | null>(null);
+  /**
+   * Which boundary a drag has hold of, and the client x it took hold at.
+   *
+   * The id and not the row, because the row is refetched while the drag is in
+   * flight and a held copy would be the position it had when the press landed.
+   */
+  const moving = useRef<{ id: number; x: number } | null>(null);
+  /**
+   * Where the boundary being dragged is now, in seconds, or null when none is.
+   *
+   * Drawn as a line over the picture rather than into it, for the reason the
+   * selection band is: the canvas is redrawn from a fetch of peaks, and a
+   * pointer-rate repaint on the same path as a shell round trip would be a
+   * drag that lags the hand by a request.
+   */
+  const [nudged, setNudged] = useState<number | null>(null);
   /**
    * Whether the press in progress has traveled far enough to be a drag.
    *
@@ -869,7 +894,7 @@ export function Waveform({
    * the element's box, the frames at its two ends, and the conversion back to
    * the seconds the callbacks speak.
    */
-  const boundaryNear = (clientX: number, element: HTMLElement): number | null => {
+  const nearBoundary = (clientX: number, element: HTMLElement): Boundary | null => {
     if (peaks === null) {
       return null;
     }
@@ -882,14 +907,50 @@ export function Waveform({
       peaks.endFrame,
       SNAP,
     );
-    if (at === null) {
-      return null;
-    }
-    const across = peaks.endFrame - peaks.startFrame;
-    return (
-      peaks.startSeconds +
-      ((at - peaks.startFrame) / across) * (peaks.endSeconds - peaks.startSeconds)
+    return at === null
+      ? null
+      : (boundaries.find((boundary) => boundary.atFrame === at) ?? null);
+  };
+
+  /**
+   * The same boundary as a position, which is what a cue and a snap want.
+   *
+   * `seconds` off the row rather than the frame converted back through the
+   * window: the row carries both, divided by the capture's own rate, and a
+   * second arithmetic path to the same number is a second answer to round.
+   */
+  const boundaryNear = (clientX: number, element: HTMLElement): number | null =>
+    nearBoundary(clientX, element)?.seconds ?? null;
+
+  /**
+   * What the picture says about the boundary under the pointer.
+   *
+   * Paul Webster, trying to correct a detection: "I can see from the docs that
+   * I need to do the equivalent of `vcw tracks side-a.vcw split 3 12345678`."
+   * The window drew every boundary the same color and said nothing about any
+   * of them, so which track a line belonged to - and which end of it - was a
+   * thing to work out rather than a thing to read. VRipr labeled the boundary
+   * under the pointer and this is that, as the element's own tooltip: a title
+   * costs no React pass, and `dress` is already writing to the element on
+   * every pointer report.
+   */
+  const says = (boundary: Boundary): string => {
+    const owner = tracks.find(
+      (row) =>
+        row.startBoundary === boundary.id || row.endBoundary === boundary.id,
     );
+    const at = clock(boundary.seconds);
+    return owner === undefined
+      ? text("waveform.boundary.loose", { at })
+      : text("waveform.boundary.of", {
+          position: owner.position,
+          edge: text(
+            owner.startBoundary === boundary.id
+              ? "tracks.edge.start"
+              : "tracks.edge.end",
+          ),
+          at,
+        });
   };
 
   /**
@@ -985,14 +1046,16 @@ export function Waveform({
     if (element === null || at === null) {
       return;
     }
+    const near = nearBoundary(at.x, element);
     element.dataset.gesture =
-      scrubbing.current || scrolling.current !== null
+      scrubbing.current || scrolling.current !== null || moving.current !== null
         ? "dragging"
         : (shift && playing) || onHandle(at.x, at.y, element) || onRuler(at.y, element)
           ? "grab"
-          : boundaryNear(at.x, element) !== null
+          : near !== null
             ? "snap"
             : "select";
+    element.title = near === null ? "" : says(near);
   };
 
   // Through a ref so the listener below can be attached once. An effect that
@@ -1058,6 +1121,15 @@ export function Waveform({
       ? null
       : toBand(chosen.from, chosen.to, peaks.startSeconds, peaks.endSeconds);
 
+  // Where the boundary being dragged is, as a percentage of the picture, or
+  // null when nothing is being dragged or it has been pulled out of the
+  // window. Against the peaks for the reason the band is, just above.
+  const across = peaks === null ? 0 : peaks.endSeconds - peaks.startSeconds;
+  const mark =
+    nudged === null || peaks === null || across <= 0
+      ? null
+      : ((nudged - peaks.startSeconds) / across) * 100;
+
   // No early return for "nothing captured yet", and that is not tidiness. The
   // size of the picture is measured by a `ResizeObserver` set up once on mount,
   // so a render that leaves the box out of the tree gives that effect nothing
@@ -1107,6 +1179,19 @@ export function Waveform({
               dress(event.shiftKey);
               return;
             }
+            // A boundary in reach is taken hold of rather than selected
+            // across. Checked before the selection and not after, because the
+            // selection is what a press anywhere means and a boundary is the
+            // smaller, more specific target sitting inside it - the same
+            // order the handle and the ruler are in above.
+            const near = nearBoundary(event.clientX, event.currentTarget);
+            if (near !== null) {
+              moving.current = { id: near.id, x: event.clientX };
+              setNudged(near.seconds);
+              event.currentTarget.setPointerCapture(event.pointerId);
+              dress(event.shiftKey);
+              return;
+            }
             const from = secondsAt(event.clientX, event.currentTarget);
             if (from === null) {
               return;
@@ -1140,6 +1225,21 @@ export function Waveform({
               scroll(event.clientX, event.currentTarget);
               return;
             }
+            const grabbedMark = moving.current;
+            if (grabbedMark !== null) {
+              if (
+                !dragged.current &&
+                Math.abs(event.clientX - grabbedMark.x) < SLOP
+              ) {
+                return;
+              }
+              dragged.current = true;
+              const to = secondsAt(event.clientX, event.currentTarget);
+              if (to !== null) {
+                soon(() => setNudged(Math.max(0, to)));
+              }
+              return;
+            }
             const held = selecting.current;
             if (held === null) {
               return;
@@ -1159,10 +1259,24 @@ export function Waveform({
           onPointerUp={(event) => {
             scrubbing.current = false;
             scrolling.current = null;
+            const mark = moving.current;
+            moving.current = null;
             const held = selecting.current;
             selecting.current = null;
             setDrafting(null);
+            setNudged(null);
             dress(event.shiftKey);
+            // A press on a boundary that never traveled is a click, and a
+            // click on a boundary already cues to it. Only a drag moves one.
+            if (mark !== null) {
+              const to = dragged.current
+                ? secondsAt(event.clientX, event.currentTarget)
+                : null;
+              if (to !== null) {
+                onMoveBoundary(mark.id, Math.max(0, to));
+              }
+              return;
+            }
             if (held === null || !dragged.current) {
               return;
             }
@@ -1183,8 +1297,10 @@ export function Waveform({
             scrubbing.current = false;
             scrolling.current = null;
             selecting.current = null;
+            moving.current = null;
             dragged.current = false;
             setDrafting(null);
+            setNudged(null);
           }}
           onPointerLeave={() => {
             hover.current = null;
@@ -1224,6 +1340,9 @@ export function Waveform({
             }
           }}
         />
+        {mark !== null && mark >= 0 && mark <= 100 && (
+          <div className="waveform-mark" style={{ left: `${mark}%` }} />
+        )}
         {band !== null && (
           // A div over the canvas, not a rectangle drawn into it. The canvas
           // is redrawn from a fetch of peaks, so painting the band there would

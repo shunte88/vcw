@@ -55,8 +55,8 @@
 //! §24 says a boundary a person placed is never moved by analysis. That is
 //! enforced here rather than in each caller: [`move_boundary`] and
 //! [`delete_boundary`] refuse a locked row with [`Error::BoundaryLocked`], and
-//! [`move_boundary_forced`] is the deliberately awkward name for the operator's
-//! own override. The `locked` column exists as well as the provenance so a person
+//! [`move_boundary_forced`] and [`delete_boundary_forced`] are the deliberately
+//! awkward names for the operator's own override. The `locked` column exists as well as the provenance so a person
 //! can pin a boundary a *detector* found - "that one is right, stop reconsidering
 //! it" - without claiming to have placed it.
 
@@ -421,6 +421,40 @@ pub fn delete_boundary(project: &mut Project, boundary_id: i64) -> Result<()> {
             track_id,
         });
     }
+    delete_row(project, boundary_id)
+}
+
+/// Deletes a boundary whether or not it is locked.
+///
+/// The operator's own override, and the sibling of [`move_boundary_forced`].
+/// Every boundary a person places is locked the moment it is written - see
+/// [`NewBoundary::by_user`] - so a delete that honored the lock refused the one
+/// marker a person is most likely to want gone: the one they have just put in
+/// the wrong place. §24's lock says *analysis* may not move a boundary, and
+/// nothing in analysis deletes one, so there was never a thing on the other
+/// side of this check.
+///
+/// The in-use check is not overridden and must not be: deleting one end of a
+/// track would leave a track with one end, which is a broken row rather than an
+/// override. The edit the caller wants there is [`merge`] or [`remove`].
+///
+/// # Errors
+///
+/// [`Error::NoSuchBoundary`] if it is absent, [`Error::BoundaryInUse`] if a
+/// track is bounded by it.
+pub fn delete_boundary_forced(project: &mut Project, boundary_id: i64) -> Result<()> {
+    require_boundary(project.conn(), boundary_id)?;
+    if let Some(track_id) = bounded_track(project.conn(), boundary_id)? {
+        return Err(Error::BoundaryInUse {
+            boundary_id,
+            track_id,
+        });
+    }
+    delete_row(project, boundary_id)
+}
+
+/// The one statement both deletes end in.
+fn delete_row(project: &mut Project, boundary_id: i64) -> Result<()> {
     project.conn_mut().execute(
         "DELETE FROM track_boundaries WHERE boundary_id = ?1",
         params![boundary_id],
@@ -489,6 +523,21 @@ pub fn boundary(conn: &Connection, boundary_id: i64) -> Result<Option<Boundary>>
 /// frames swapped if `end` is not after `start`, or if a write fails.
 pub fn add_track(project: &mut Project, side: Side, start: u64, end: u64) -> Result<i64> {
     let record = side::require(project.conn(), side)?;
+    add_track_to(project, record.id, start, end)
+}
+
+/// Adds a track spanning two frames on a side already looked up.
+///
+/// The half of [`add_track`] that the shell reaches: a command from the window
+/// names the side by row id, because two faces can share one capture and the
+/// letter is a fact about the release rather than about the audio.
+///
+/// # Errors
+///
+/// [`Error::OutsideTrack`] with the frames swapped if `end` is not after
+/// `start`, [`Error::TrackOverlap`] if the span lies over a track the side
+/// already has, or if a write fails.
+pub fn add_track_to(project: &mut Project, side_id: i64, start: u64, end: u64) -> Result<i64> {
     if end <= start {
         // The one degenerate case: an empty or backwards track. Reported against
         // the side rather than a track, since there is no track yet.
@@ -499,14 +548,29 @@ pub fn add_track(project: &mut Project, side: Side, start: u64, end: u64) -> Res
             end,
         });
     }
-    let start_id = add_boundary_to(
-        project,
-        record.id,
-        &NewBoundary::by_user(start, Edge::Start),
-    )?;
-    let end_id = add_boundary_to(project, record.id, &NewBoundary::by_user(end, Edge::End))?;
-    let id = insert_track(project, record.id, start_id, end_id)?;
-    renumber_side(project, record.id)?;
+    // Checked here and not in the window, because the CLI reaches this too and
+    // a rule enforced in one of two callers is a rule the other one breaks. A
+    // stretch dragged across the picture is drawn over whatever is already
+    // there, so overlapping is the easiest mistake to make in the gesture this
+    // serves: a person meaning to extend a track selects across it and adds a
+    // second one on top. Touching at a frame is not overlapping - a side's
+    // tracks run end to end, and `split` leaves them exactly so.
+    if let Some(over) = tracks_of(project.conn(), side_id)?
+        .into_iter()
+        .find(|row| row.start < end && start < row.end)
+    {
+        return Err(Error::TrackOverlap {
+            track_id: over.id,
+            start,
+            end,
+            over_start: over.start,
+            over_end: over.end,
+        });
+    }
+    let start_id = add_boundary_to(project, side_id, &NewBoundary::by_user(start, Edge::Start))?;
+    let end_id = add_boundary_to(project, side_id, &NewBoundary::by_user(end, Edge::End))?;
+    let id = insert_track(project, side_id, start_id, end_id)?;
+    renumber_side(project, side_id)?;
     Ok(id)
 }
 
@@ -1204,6 +1268,51 @@ mod tests {
     }
 
     #[test]
+    fn a_track_with_no_length_is_refused_rather_than_inserted() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir, "empty.vcw");
+        side::ensure(&mut p, Side::A).expect("side");
+        let side_id = side::require(p.conn(), Side::A).expect("side").id;
+        for (start, end) in [(0_u64, 0_u64), (50, 40)] {
+            assert!(
+                matches!(
+                    add_track_to(&mut p, side_id, start, end),
+                    Err(Error::OutsideTrack { .. })
+                ),
+                "{start}..{end} should be refused"
+            );
+        }
+        assert_eq!(extents(&p), vec![], "and nothing was written on the way");
+    }
+
+    #[test]
+    fn adding_a_track_before_the_others_renumbers_the_side() {
+        // The whole of what a first user asked for: "how do I say that this
+        // highlighted area should be A1 and all of the later ones should be
+        // renamed". The renumber is not a nicety - a detector that missed the
+        // opening track leaves every number on the side one too low, and the
+        // numbers are what the export writes into file names and tags.
+        //
+        // By row id, which is the half the window reaches: a command from the
+        // waveform names the side the capture is attached to, not a letter.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir, "renumber.vcw");
+        side::ensure(&mut p, Side::A).expect("side");
+        let side_id = side::require(p.conn(), Side::A).expect("side").id;
+        for (start, end) in [(20_u64, 30_u64), (40, 50)] {
+            add_track_to(&mut p, side_id, start, end).expect("add");
+        }
+        assert_eq!(extents(&p), vec![(1, 20, 30), (2, 40, 50)]);
+
+        add_track_to(&mut p, side_id, 0, 10).expect("the opener");
+        assert_eq!(
+            extents(&p),
+            vec![(1, 0, 10), (2, 20, 30), (3, 40, 50)],
+            "the new track is A1 and the rest moved down"
+        );
+    }
+
+    #[test]
     fn a_track_takes_its_extent_from_its_boundaries() {
         let dir = tempfile::tempdir().expect("tempdir");
         let mut p = project(&dir, "extent.vcw");
@@ -1254,6 +1363,35 @@ mod tests {
     }
 
     #[test]
+    fn a_track_added_over_another_is_refused() {
+        // The gesture this serves draws a band over the picture, so selecting
+        // across a track that is already there is the easiest mistake in it.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir, "over.vcw");
+        side::ensure(&mut p, Side::A).expect("side");
+        add_track(&mut p, Side::A, 1_000, 2_000).expect("first");
+
+        for (start, end) in [(1_500, 2_500), (500, 1_500), (1_200, 1_800), (500, 2_500)] {
+            assert!(
+                matches!(
+                    add_track(&mut p, Side::A, start, end),
+                    Err(Error::TrackOverlap { .. })
+                ),
+                "{start}..{end} overlaps and was allowed"
+            );
+        }
+
+        // Touching at a frame is not overlapping: a side's tracks run end to
+        // end, which is exactly what `split` leaves behind.
+        add_track(&mut p, Side::A, 2_000, 3_000).expect("abuts");
+        add_track(&mut p, Side::A, 0, 1_000).expect("abuts");
+        assert_eq!(
+            extents(&p),
+            vec![(1, 0, 1_000), (2, 1_000, 2_000), (3, 2_000, 3_000)]
+        );
+    }
+
+    #[test]
     fn a_locked_boundary_refuses_to_move_or_be_deleted() {
         // §24, and the second half of WP-13's exit criterion in miniature.
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1279,6 +1417,18 @@ mod tests {
         assert_eq!(after.at_frame, 600);
         assert!(after.locked);
         assert_eq!(after.provenance, Provenance::User);
+
+        // And the operator's own delete takes it away, which the plain one
+        // still refuses. A marker a person placed in the wrong spot is the one
+        // they are most likely to want gone, and it is locked by definition.
+        let spare =
+            add_boundary(&mut p, Side::A, &NewBoundary::by_user(900, Edge::Start)).expect("add");
+        assert!(matches!(
+            delete_boundary(&mut p, spare).expect_err("locked"),
+            Error::BoundaryLocked { .. }
+        ));
+        delete_boundary_forced(&mut p, spare).expect("forced");
+        assert!(boundary(p.conn(), spare).expect("read").is_none());
 
         // Unlocking hands it back to analysis.
         set_lock(&mut p, id, false).expect("unlock");

@@ -51,8 +51,8 @@
 
 use tauri::{AppHandle, Manager, State};
 use vcw_contract::command::{
-    Arm, Audition, Detect, Export, Lock, Marker, Merge, NewProject, Placement, Playback, Removal,
-    Search, Selection, Split, TrackEdit, Transport, Zoom,
+    Arm, Audition, Detect, Export, Lock, Marker, Merge, NewProject, NewTrack, Placement, Playback,
+    Removal, Search, Selection, Split, TrackEdit, Transport, Zoom,
 };
 use vcw_contract::settings::{Credential, Settings};
 use vcw_contract::view::{
@@ -213,6 +213,11 @@ pub(crate) fn lock_marker(shell: State<'_, Shell>, lock: Lock) -> Result<(), Err
 #[tauri::command]
 pub(crate) fn edit_track(shell: State<'_, Shell>, edit: TrackEdit) -> Result<(), Error> {
     vcw_shell::edit::edit_track(&shell, edit)
+}
+
+#[tauri::command]
+pub(crate) fn add_track(shell: State<'_, Shell>, add: NewTrack) -> Result<i64, Error> {
+    vcw_shell::edit::add_track(&shell, add)
 }
 
 #[tauri::command]

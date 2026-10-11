@@ -32,23 +32,31 @@ import * as api from "../api";
 
 import type { Device, Settings } from "../bindings/vcw";
 import type { Store } from "../store";
-import { Capture } from "./Capture";
+import { Capture, counts, label } from "./Capture";
 
 vi.mock("../api", () => ({
   arm: vi.fn(async () => undefined),
 }));
 
-function device(id: string, isDefaultInput: boolean): Device {
+function device(
+  id: string,
+  isDefaultInput: boolean,
+  extra: Partial<Device> = {},
+): Device {
   return {
     id,
     name: id,
     host: "alsa",
+    interface: "USB",
+    transport: "direct hardware",
     canCapture: true,
     isDefaultInput,
     isDefaultOutput: false,
     captureRates: [48000, 96000],
     captureFormats: ["s32"],
+    captureChannels: [1, 2],
     problems: [],
+    ...extra,
   } as unknown as Device;
 }
 
@@ -143,5 +151,73 @@ describe("the capture panel", () => {
     const container = await render([]);
     const select = container.querySelector("select");
     expect(select?.value).toBe("");
+  });
+});
+
+describe("what the device picker says about a device", () => {
+  // A piCorePlayer user reading `arecord -L` sees one USB card behind eight
+  // PCM names, every one of them "USB AUDIO CODEC", and only one of them the
+  // direct hardware path a rip wants. A menu row reading just the name picks
+  // nothing out, and the identity - the string §39 persists and `vcw devices`
+  // prints - was on screen nowhere at all.
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  it("names the attachment and the path, not just the device", () => {
+    expect(
+      label(device("alsa:hw:CARD=CODEC,DEV=0", false, {
+        name: "USB AUDIO CODEC, USB Audio",
+      })),
+    ).toBe("USB AUDIO CODEC, USB Audio - USB - direct hardware");
+  });
+
+  it("leaves out what the host did not say", () => {
+    expect(
+      label(device("alsa:default", false, {
+        name: "pCP_Mixer",
+        interface: "",
+        transport: "",
+      })),
+    ).toBe("pCP_Mixer");
+    // And "Unknown", which is what the shell writes for a host that reports
+    // no interface type - every ALSA plug PCM on the machine this was found
+    // on. It reads as a word in the row and carries nothing.
+    expect(
+      label(device("alsa:default", false, {
+        name: "Default ALSA Output",
+        interface: "Unknown",
+        transport: "virtual",
+      })),
+    ).toBe("Default ALSA Output - virtual");
+  });
+
+  it("collapses a run of channel counts", () => {
+    // An ALSA plug PCM advertises every count from 1 to 64.
+    expect(counts([1, 2])).toBe("1, 2");
+    expect(counts([2])).toBe("2");
+    expect(counts(Array.from({ length: 64 }, (_, at) => at + 1))).toBe("1-64");
+    expect(counts([1, 2, 6, 8])).toBe("1, 2, 6, 8");
+  });
+
+  it("puts the identity on screen for whichever device is chosen", async () => {
+    const container = await render([
+      device("alsa:hw:CARD=CODEC,DEV=0", true, {
+        name: "USB AUDIO CODEC, USB Audio",
+      }),
+    ]);
+    const detail = container.querySelector("dl.device");
+    expect(detail?.querySelector("code")?.textContent).toBe(
+      "alsa:hw:CARD=CODEC,DEV=0",
+    );
+    const text = detail?.textContent ?? "";
+    expect(text).toContain("direct hardware");
+    expect(text).toContain("48000 96000 Hz");
+    expect(text).toContain("s32");
+  });
+
+  it("says nothing about a device when the simulated source is chosen", async () => {
+    expect((await render([])).querySelector("dl.device")).toBeNull();
   });
 });

@@ -1135,6 +1135,7 @@ code {
 }
 
 .negotiated,
+.device,
 .evidence {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -1143,11 +1144,13 @@ code {
 }
 
 .negotiated dt,
+.device dt,
 .evidence dt {
   color: var(--dim);
 }
 
 .negotiated dd,
+.device dd,
 .evidence dd {
   margin: 0;
 }
@@ -1156,6 +1159,18 @@ code {
 .evidence ul {
   margin: 0;
   padding-left: 1.2rem;
+}
+
+/* What the device picker could not fit on one line. Smaller than the
+   negotiated block above it: that one reports what a capture *did*, this one
+   describes a choice still being made, and the two are stacked. */
+.device {
+  font-size: 0.85em;
+  margin: 0.15rem 0 0.4rem;
+}
+
+.device code {
+  color: var(--text);
 }
 
 .accepted {
@@ -1197,6 +1212,19 @@ code {
    of audio is to look at the audio: a band you cannot see the peaks through is
    a band that hides the thing it is asking about. The two edges are solid so
    that where the window will land is readable to the pixel. */
+/* Where a boundary being dragged currently is. A line and not a band, and
+   over the canvas for the same reason the selection is: the picture under it
+   is refetched from the shell and a pointer-rate repaint on that path would
+   lag the hand by a round trip. */
+.waveform-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--accent);
+  pointer-events: none;
+}
+
 .waveform-selection {
   position: absolute;
   top: 0;

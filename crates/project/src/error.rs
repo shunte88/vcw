@@ -280,6 +280,27 @@ pub enum Error {
         right: i64,
     },
 
+    /// A new track that would lie over one already on the side.
+    ///
+    /// Two tracks over the same audio is not an edit anybody means: the export
+    /// would write the same seconds into two files, and §29's numbering sorts
+    /// by start, so which of them came first would depend on a rounding. The
+    /// edits that *do* overlap - split and merge - name the track they act on
+    /// and keep the side's spans end to end.
+    #[error("frames {start}..{end} lie over track {track_id} ({over_start}..{over_end})")]
+    TrackOverlap {
+        /// The track that is in the way.
+        track_id: i64,
+        /// Where the new track would start.
+        start: u64,
+        /// Where it would end.
+        end: u64,
+        /// Where the track in the way starts.
+        over_start: u64,
+        /// Where it ends.
+        over_end: u64,
+    },
+
     /// A split point that is not inside the track being split.
     #[error("frame {at} is not inside track {track_id} ({start}..{end})")]
     OutsideTrack {

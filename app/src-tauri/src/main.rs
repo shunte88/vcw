@@ -90,7 +90,7 @@ use vcw_shell::state::Shell;
 /// this list is the assertion about it. A copy compiled into the binary would
 /// be a second answer to the same question.
 #[cfg(test)]
-pub(crate) const WIRED: [&str; 17] = [
+pub(crate) const WIRED: [&str; 18] = [
     "arm",
     "transport",
     "play",
@@ -100,6 +100,7 @@ pub(crate) const WIRED: [&str; 17] = [
     "delete_marker",
     "lock_marker",
     "edit_track",
+    "add_track",
     "split_track",
     "merge_tracks",
     "detect_tracks",
@@ -221,6 +222,7 @@ fn main() {
             commands::delete_marker,
             commands::lock_marker,
             commands::edit_track,
+            commands::add_track,
             commands::split_track,
             commands::merge_tracks,
             commands::detect_tracks,

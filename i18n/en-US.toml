@@ -484,7 +484,7 @@ text = "Frames committed to the project"
 text = "Marker"
 
 ["transport.marker.title"]
-text = "Place a marker at the playhead ({chord})"
+text = "Place a marker at the playhead ({chord}). A marker on its own does not make a track: drag across the waveform and use Add track from selection for that. Drag a marker to move it, and Delete in the marker list to take it away."
 
 ["transport.pause"]
 text = "Pause"
@@ -567,8 +567,26 @@ text = ", default"
 ["capture.device"]
 text = "Device ({chord})"
 
+["capture.device.channels"]
+text = "Channels"
+
 ["capture.device.default"]
 text = "Device default"
+
+["capture.device.formats"]
+text = "Formats"
+
+["capture.device.host"]
+text = "Host API"
+
+["capture.device.id"]
+text = "Identity"
+
+["capture.device.path"]
+text = "Path"
+
+["capture.device.rates"]
+text = "Rates"
 
 ["capture.device.unknown"]
 text = "unknown"
@@ -816,6 +834,15 @@ text = "{count} track(s) are not in the provider's tracklist: {positions}. Name 
 
 # The track editor.
 
+["tracks.add"]
+text = "Add track from selection"
+
+["tracks.add.needs.selection"]
+text = "Drag across the waveform to choose where the track starts and ends, then this makes a track of it."
+
+["tracks.add.title"]
+text = "Make a track of the stretch selected on the waveform. Drag across the picture to choose it. The side renumbers itself afterwards, so a track added in front of the others becomes the first and the rest move down."
+
 ["tracks.agreement"]
 text = "{agreed} of {of}"
 
@@ -857,6 +884,12 @@ text = "Title"
 
 ["tracks.confirmed"]
 text = "Confirmed by a person or a provider"
+
+["tracks.delete"]
+text = "Delete"
+
+["tracks.delete.title"]
+text = "Remove this boundary ({chord}). A boundary a track is using is refused - merge or delete the track first."
 
 ["tracks.detect"]
 text = "Detect ({chord})"
@@ -1106,6 +1139,12 @@ text = "Library"
 text = "Library view"
 
 # The waveform.
+
+["waveform.boundary.loose"]
+text = "A boundary at {at}. No track uses it - drag to move it."
+
+["waveform.boundary.of"]
+text = "{position} {edge}, at {at} - drag to move it."
 
 ["waveform.channel"]
 text = "Channel"
@@ -1511,8 +1550,6 @@ text = "Recover it"
 ["settings.ring"]
 text = "Ring (milliseconds)"
 
-["settings.saving"]
-text = "Saving..."
 
 ["settings.scale"]
 text = "Interface scale"
@@ -1575,6 +1612,9 @@ text = "set, {n} characters"
 
 ["settings.token.unset"]
 text = "not set in this process"
+
+["settings.unsaved"]
+text = "Unsaved"
 
 ["settings.unset.builtin"]
 text = "unset - built-in"

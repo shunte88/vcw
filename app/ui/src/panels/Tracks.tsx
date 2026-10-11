@@ -34,12 +34,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
-import type { Boundary, Track } from "../bindings/vcw";
+import type { Boundary, Side, Track } from "../bindings/vcw";
 import { key, useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
 import { clock } from "../format";
 import type { Store } from "../store";
+import type { Region } from "./Waveform";
 
 /** What the editor has selected. Ephemeral view state, so it lives here. */
 export type Chosen = {
@@ -74,10 +75,19 @@ export function Tracks({
   store,
   chosen,
   onChoose,
+  side,
+  selection,
+  onSelect,
 }: {
   store: Store;
   chosen: Chosen;
   onChoose: (chosen: Chosen) => void;
+  /** The side the capture on screen belongs to, where there is one. */
+  side: Side | null;
+  /** The stretch chosen on the waveform, in seconds. */
+  selection: Region | null;
+  /** Put the selection away, which adding a track from it does. */
+  onSelect: (selection: Region | null) => void;
 }): React.JSX.Element {
   const text = useText();
   const { project, engine, run } = store;
@@ -119,13 +129,73 @@ export function Tracks({
       api.moveMarker({
         boundaryId: boundary.id,
         to: Math.max(0, boundary.seconds + by),
-        // A nudge does not break a lock. §24 refuses the move and the refusal
-        // says why, which is better than a key that silently does the one
-        // thing the lock exists to prevent - and the lock button beside it is
-        // how a person who meant it says so.
-        force: false,
+        // A nudge breaks the lock, and must: `NewBoundary::by_user` writes
+        // every hand-placed boundary locked, so a nudge that respected the
+        // lock refused the marker a person had just put down and was lining
+        // up - which is the whole of what the first outside report meant by
+        // the markers being problematic. §24's lock is a contract with the
+        // detector, not with the hand that set it, and the forced move leaves
+        // the row locked and the provenance the operator's afterwards.
+        force: true,
       }),
     ).then(store.reload);
+  };
+
+  /**
+   * Make a track of the stretch chosen on the waveform.
+   *
+   * The verb that was missing. Everything else in this header adjusts
+   * something a detector already found - split one, merge two, nudge a
+   * boundary - and none of them makes a track where there is not one. A first
+   * user with a quiet opening on side B could correct it from `vcw tracks
+   * add` on a terminal and from nowhere in the window: "I can drag across a
+   * track to select it, but how do I then say that this highlighted area
+   * should be A1 and all of the later ones should be renamed".
+   *
+   * Both halves of that sentence are the shell's: it places the two
+   * boundaries and renumbers the side in timeline order. This clears the band
+   * afterwards and selects what it made, because leaving a selection over a
+   * track that now exists invites the same drag twice.
+   */
+  const add = () => {
+    if (side === null || selection === null) {
+      return;
+    }
+    const { from, to } = selection;
+    void run(
+      () =>
+        api.addTrack({
+          sideId: side.id,
+          start: Math.min(from, to),
+          end: Math.max(from, to),
+        }),
+      "add track",
+    ).then((id) => {
+      onSelect(null);
+      if (typeof id === "number") {
+        onChoose({ track: id, boundary: null });
+      }
+      store.reload();
+    });
+  };
+
+  /**
+   * Take a boundary away.
+   *
+   * `force`, for the reason the nudge above overrides the lock and in the
+   * same place: every boundary a person places is written locked, so a delete
+   * that honored the lock refused the marker somebody has just put down in
+   * the wrong spot - which is exactly the marker they are asking to remove.
+   * A boundary a track is using is still refused, and that refusal is the one
+   * worth keeping: it means merge the tracks, not delete half of one.
+   */
+  const remove = (id: number) => {
+    void run(() => api.deleteMarker({ boundaryId: id, force: true })).then(() => {
+      if (chosen.boundary === id) {
+        onChoose({ ...chosen, boundary: null });
+      }
+      store.reload();
+    });
   };
 
   // Keeps whichever row the arrows just selected on screen. One callback for
@@ -168,8 +238,7 @@ export function Tracks({
             ),
     deleteMarker: () => {
       if (boundary !== undefined) {
-        void run(() => api.deleteMarker({ boundaryId: boundary.id }));
-        onChoose({ ...chosen, boundary: null });
+        remove(boundary.id);
       }
     },
     nudgeBack: () => nudge(-NUDGE),
@@ -235,6 +304,18 @@ export function Tracks({
           }
         >
           {text("tracks.detect", { chord: "t" })}
+        </button>
+        <button
+          type="button"
+          disabled={side === null || selection === null}
+          onClick={add}
+          title={
+            selection === null
+              ? text("tracks.add.needs.selection")
+              : text("tracks.add.title")
+          }
+        >
+          {text("tracks.add")}
         </button>
         <button
           type="button"
@@ -402,6 +483,7 @@ export function Tracks({
               <th>{text("tracks.column.agreed")}</th>
               <th></th>
               <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -447,6 +529,24 @@ export function Tracks({
                     }
                   >
                     {row.locked ? text("tracks.locked") : text("tracks.lock")}
+                  </button>
+                </td>
+                <td>
+                  {/* The recovery path that was complete and unclickable.
+                      `delete_marker` has been on the contract since WP-11 and
+                      reachable only from the `Delete` key, acting on a row
+                      that first had to be selected - so a first user who put
+                      a marker in the wrong place reported, correctly, that
+                      there was no way to take it out again. */}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      remove(row.id);
+                    }}
+                    title={text("tracks.delete.title", { chord: "Delete" })}
+                  >
+                    {text("tracks.delete")}
                   </button>
                 </td>
                 <td>{row.promoted ? "" : text("tracks.rejected")}</td>
