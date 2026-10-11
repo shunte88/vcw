@@ -14,7 +14,9 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
-## Unreleased
+## 0.3.1-alpha
+
+*2026-10-11.*
 
 Three things a piCorePlayer user found in the first hour of the 0.3.0 browser
 build, all in the window.

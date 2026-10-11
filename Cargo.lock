@@ -1709,7 +1709,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "vcw-alac"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "symphonia-codec-alac",
  "symphonia-core",
@@ -1717,7 +1717,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-audio"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cpal",
  "rtrb",
@@ -1731,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1755,7 +1755,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-contract"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "rusqlite",
  "serde",
@@ -1774,7 +1774,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "rusqlite",
  "tempfile",
@@ -1791,7 +1791,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-export"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "flac-codec",
  "lofty",
@@ -1811,7 +1811,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-fingerprint"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chromaprint-next",
  "thiserror 2.0.20",
@@ -1820,7 +1820,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-i18n"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1831,7 +1831,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-identify"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "vcw-fingerprint",
  "vcw-metadata",
@@ -1840,7 +1840,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-import"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crc32fast",
  "rusqlite",
@@ -1855,7 +1855,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-metadata"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crc32fast",
  "serde",
@@ -1869,7 +1869,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-project"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crc32fast",
  "rusqlite",
@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-serve"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "getrandom 0.4.3",
  "serde",
@@ -1898,7 +1898,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-shell"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "base64 0.23.1",
  "serde",
@@ -1919,7 +1919,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-signal"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "rustfft",
  "serde_json",
@@ -1928,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "vcw-types"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
