@@ -185,21 +185,31 @@ pub fn new_project(host: &Hosted, seed: NewProject) -> Result<ProjectRow, Error>
         // `read::release` answer with a release rather than `null` - which is
         // the difference a metadata panel uses to decide whether to offer a
         // lookup or show what is already known.
-        // The two flags count as "something given": a person who ticked mono and
+        // The two intents count as "something given": a person who ticked mono and
         // typed nothing else has still told the project the one thing nothing
         // can work out later, and leaving them out of this test would drop it.
+        //
+        // Naming the usual curve is not one of them. `vcw_eq::in_force` answers
+        // RIAA for a project that states nothing, so storing `riaa` stores
+        // nothing - and a row written to say "the usual" would make
+        // `read::release` claim a blank project already has metadata.
+        let curve = seed
+            .playback_eq
+            .as_deref()
+            .filter(|id| *id != vcw_eq::RIAA)
+            .map(str::to_owned);
         if seed.artist.is_some()
             || seed.album.is_some()
             || seed.catalog.is_some()
             || seed.is_mono
-            || seed.riaa_eq
+            || curve.is_some()
         {
             let mut release = release::ensure(&mut project)?;
             release.album = seed.album.clone().unwrap_or_default();
             release.album_artist = seed.artist.clone().unwrap_or_default();
             release.catalog = seed.catalog.clone().unwrap_or_default();
             release.is_mono = seed.is_mono;
-            release.riaa_eq = seed.riaa_eq;
+            release.playback_eq = curve;
             release::store(&mut project, &release)?;
         }
         project.close()?;
@@ -511,7 +521,7 @@ mod tests {
             album: None,
             catalog: None,
             is_mono: false,
-            riaa_eq: false,
+            playback_eq: None,
         }
     }
 

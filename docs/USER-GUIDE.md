@@ -370,9 +370,41 @@ vcw eq list --curves my-curves.toml
 A citation is required on every curve, including yours. "Measured on my bench,
 March 2026" is a perfectly good one.
 
-**Nothing selects a curve yet.** This release makes the catalog readable and its
-conformance checkable; choosing a curve for a side, and hearing it on playback
-and in an export, is the next piece of work.
+### Say what the record was cut with
+
+That is a different question from what your preamp did, and it is easy to run
+the two together. The preamp's answer is a property of your chain, recorded per
+capture, and unrecoverable once the audio is on disk. This one is a property of
+the pressing, revisable forever, and it is the one you choose.
+
+The new-project sheet in the window asks for it, under **Equalization**, with
+RIAA preselected - which is right for all but a handful of records in most
+collections. From the command line:
+
+```text
+vcw release album.vcw set --playback-eq columbia_lp   # the whole release
+vcw tracks album.vcw side-eq --side A --curve decca_lp  # one side
+vcw tracks album.vcw set 3 --playback-eq emi            # one track
+```
+
+Each level overrides the one above it. A side that names no curve takes the
+release's, a track that names none takes its side's, and a release that names
+none is RIAA. Clear an override by passing nothing: `side-eq --side A` on its
+own, or `--playback-eq ""` on a track.
+
+`vcw tracks album.vcw list` prints the characteristic **in force** rather than
+the one stated, because that is the question a person checking a project is
+actually asking. Each side says its own, and a track says one only where it
+differs from its side's. `--json` gives every level, resolved the same way.
+
+A curve VCW does not ship is refused at the command, naming the ones it does:
+a name that only resolves on the machine that typed it would be a dangling
+reference in a file meant to outlive the application.
+
+**VCW does not apply the curve yet.** This release makes the catalog readable,
+its conformance checkable, and the choice storable at all three levels. Hearing
+it on playback, and having it come out in an export and in the exported tags, is
+the next piece of work.
 
 ## When something goes wrong mid-capture
 

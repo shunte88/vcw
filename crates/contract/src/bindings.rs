@@ -221,6 +221,7 @@ pub fn typescript() -> String {
             decl::<crate::view::Levels>(),
             decl::<crate::view::Diagnostics>(),
             decl::<crate::view::Device>(),
+            decl::<crate::view::Curve>(),
             decl::<crate::view::Capture>(),
             decl::<crate::view::Side>(),
             decl::<crate::view::Track>(),

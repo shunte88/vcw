@@ -56,7 +56,7 @@ use vcw_contract::command::{
 };
 use vcw_contract::settings::{Credential, Settings};
 use vcw_contract::view::{
-    About, Accepted, Boundary, Candidate, Capture, Device, ExportPlan, Listing,
+    About, Accepted, Boundary, Candidate, Capture, Curve, Device, ExportPlan, Listing,
     Project as ProjectRow, Release, Side, Track, Waveform,
 };
 use vcw_shell::state::{Error, Shell};
@@ -96,6 +96,11 @@ pub(crate) fn support(page: String) -> Result<(), Error> {
 #[tauri::command]
 pub(crate) fn devices() -> Vec<Device> {
     vcw_shell::library::devices()
+}
+
+#[tauri::command]
+pub(crate) fn curves() -> Vec<Curve> {
+    vcw_shell::library::curves()
 }
 
 #[tauri::command]

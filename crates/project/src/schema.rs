@@ -66,12 +66,15 @@ pub const APPLICATION_ID: u32 = 0x5643_5700;
 ///
 /// v1 is capture; v2 adds the §29 vinyl data model; v3 adds `captures.capture_eq`
 /// (§51); v4 adds the two release-level intents the new-project prompt asks for,
-/// `releases.is_mono` and `releases.riaa_eq`. [`FORMAT_VERSION`] has not moved with
-/// any of them, because nothing an older version wrote means anything different
-/// now: a v1 or v2 capture has an unrecorded equalization provenance, and
-/// `'unknown'` is what that is, not a changed meaning for a column that already
-/// existed; a pre-v4 release has no stated intent, and `0` is what that is.
-pub const SCHEMA_VERSION: u32 = 4;
+/// `releases.is_mono` and `releases.riaa_eq`; v5 replaces that second one with a
+/// named curve, `playback_eq`, on releases, sides and tracks. [`FORMAT_VERSION`]
+/// has not moved with any of them, because nothing an older version wrote means
+/// anything different now: a v1 or v2 capture has an unrecorded equalization
+/// provenance, and `'unknown'` is what that is, not a changed meaning for a column
+/// that already existed; a pre-v4 release has no stated intent, and `0` is what
+/// that is; and v4's `riaa_eq = 1` means exactly `playback_eq = 'riaa'`, which is
+/// why v5 can carry it across rather than asking again.
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// The project-format version: the *meaning* of the schema, as opposed to its shape.
 ///
@@ -556,6 +559,53 @@ ALTER TABLE releases ADD COLUMN is_mono INTEGER NOT NULL DEFAULT 0;
 -- to this decision rather than the decision. 0 on every project written before v4,
 -- which is the truth about them: nobody was asked.
 ALTER TABLE releases ADD COLUMN riaa_eq INTEGER NOT NULL DEFAULT 0;
+"#;
+
+/// Schema v5: the cutting characteristic, named rather than implied (§51).
+///
+/// v4's `riaa_eq` was a boolean, and its own note said what was wrong with it: one
+/// bit can say "RIAA or nothing" and cannot name any of the fifteen characteristics
+/// that came before RIAA or ran alongside it. §51 asks for nine by name, a
+/// user-defined one, and a selection that is "selectable per side, overridable per
+/// track". So the boolean becomes a curve id - the `id` of a row in the catalog
+/// `vcw eq list` prints - on all three levels.
+///
+/// **`riaa_eq` is dropped rather than kept.** It would otherwise be a second place
+/// the same decision could be written, and the two could disagree; `riaa_eq = 1`
+/// migrates to `playback_eq = 'riaa'`, which is all the information it held.
+/// Dropping a column is forward-only, which these migrations already are.
+///
+/// **NULL means nobody has said**, at every level, and that is why the column is
+/// nullable rather than `NOT NULL DEFAULT 'riaa'`. A track inherits its side, a side
+/// inherits the release, and a release with nothing stated gets the application's
+/// default - see `vcw_eq::in_force`. Writing `'riaa'` into every existing row would
+/// put a statement in the file that nobody made, which is the mistake
+/// [`SCHEMA_V3`] deliberately avoided for `capture_eq`.
+///
+/// **It is not `captures.capture_eq` and the two are easy to confuse.** This names
+/// the characteristic the *record was cut with*, which is a property of the pressing
+/// and revisable forever. `capture_eq` records what the *signal already carried* when
+/// it reached the sound card, which is a property of the chain, unrecoverable after
+/// the fact, and the input to this decision. The filter needs both: a flat capture of
+/// an RIAA pressing has the curve applied, an RIAA capture of the same pressing needs
+/// nothing done, and an RIAA capture of a Columbia LP has RIAA divided out first.
+pub const SCHEMA_V5: &str = r#"
+-- The characteristic this release was cut with (§51), as a curve id from the
+-- catalog `vcw eq list` prints: 'riaa', 'columbia_lp', 'decca_ffrr_78' and so on.
+-- NULL means nobody has said, and playback falls back to the application default.
+-- Not what the capture arrived with - that is captures.capture_eq, which is the
+-- input to this decision rather than the decision.
+ALTER TABLE releases ADD COLUMN playback_eq TEXT;
+-- v4's boolean carried one bit of that: RIAA, or nothing said.
+UPDATE releases SET playback_eq = 'riaa' WHERE riaa_eq = 1;
+ALTER TABLE releases DROP COLUMN riaa_eq;
+-- The characteristic for one side, where it differs from the release's. NULL
+-- inherits the release. Two faces of a reissue are sometimes cut from masters of
+-- different ages, and one capture can hold a face of each of two pressings.
+ALTER TABLE sides ADD COLUMN playback_eq TEXT;
+-- The characteristic for one track, which §51 asks for by name: a compilation can
+-- carry transfers made from pressings cut years apart. NULL inherits the side.
+ALTER TABLE tracks ADD COLUMN playback_eq TEXT;
 "#;
 
 /// Tables the current schema must contain. Checked on open, so a truncated or

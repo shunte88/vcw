@@ -223,6 +223,9 @@ pub struct Record {
     pub musicbrainz_id: Option<String>,
     /// Whether a person has confirmed the metadata.
     pub confirmed: bool,
+    /// The characteristic this track was cut with (§51), where it differs from its
+    /// side's. `None` inherits the side; see `vcw_eq::in_force`.
+    pub playback_eq: Option<String>,
     /// Unix seconds at the last change.
     pub updated_at: i64,
 }
@@ -861,6 +864,9 @@ pub struct Update {
     pub musicbrainz_id: Option<String>,
     /// Whether the metadata is confirmed.
     pub confirmed: Option<bool>,
+    /// The characteristic this track was cut with (§51). `Some("")` clears it back
+    /// to the side's, like every other nullable field here.
+    pub playback_eq: Option<String>,
 }
 
 impl Update {
@@ -889,7 +895,8 @@ pub fn update(project: &mut Project, track_id: i64, change: &Update) -> Result<(
     let existing = require_track(project.conn(), track_id)?;
     project.conn_mut().execute(
         "UPDATE tracks SET title = ?2, artist = ?3, composer = ?4, comments = ?5,
-                           musicbrainz_id = ?6, confirmed = ?7, updated_at = ?8
+                           musicbrainz_id = ?6, confirmed = ?7, updated_at = ?8,
+                           playback_eq = ?9
            WHERE track_id = ?1",
         params![
             track_id,
@@ -900,6 +907,7 @@ pub fn update(project: &mut Project, track_id: i64, change: &Update) -> Result<(
             settle(change.musicbrainz_id.as_deref(), existing.musicbrainz_id),
             i64::from(change.confirmed.unwrap_or(existing.confirmed)),
             crate::now(),
+            settle(change.playback_eq.as_deref(), existing.playback_eq),
         ],
     )?;
     Ok(())
@@ -1005,7 +1013,7 @@ macro_rules! track_query {
         concat!(
             "SELECT t.track_id, t.side_id, t.number, t.start_boundary, t.end_boundary,
                     s.at_frame, e.at_frame, t.title, t.artist, t.composer, t.comments,
-                    t.musicbrainz_id, t.confirmed, t.updated_at
+                    t.musicbrainz_id, t.confirmed, t.updated_at, t.playback_eq
                FROM tracks t
                JOIN track_boundaries s ON s.boundary_id = t.start_boundary
                JOIN track_boundaries e ON e.boundary_id = t.end_boundary ",
@@ -1131,6 +1139,7 @@ fn read_track(row: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
         musicbrainz_id: row.get(11)?,
         confirmed: confirmed != 0,
         updated_at: row.get(13)?,
+        playback_eq: row.get(14)?,
     })
 }
 

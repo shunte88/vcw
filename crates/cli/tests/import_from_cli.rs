@@ -255,17 +255,24 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
     let printed = vcw(&["release", &path, "--json", "show"]);
     let release: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
     assert_eq!(release["album"], "Stardonas (Transverse)");
-    // An import states neither intent, so both read false before anyone is asked.
+    // An import states neither intent, so neither reads as stated before anyone
+    // is asked.
     assert_eq!(release["mono"], false);
-    assert_eq!(release["riaa_eq"], false);
+    assert_eq!(release["playback_eq"], serde_json::Value::Null);
 
-    // And they are settable, separately: a stereo pressing that still wants the
-    // curve is the ordinary case, so one flag must not carry the other.
-    vcw(&["release", &path, "set", "--riaa", "true"]);
+    // And they are settable, separately: a stereo pressing cut to something other
+    // than RIAA is an ordinary record, so one field must not carry the other.
+    vcw(&["release", &path, "set", "--playback-eq", "columbia_lp"]);
     let printed = vcw(&["release", &path, "--json", "show"]);
     let release: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
     assert_eq!(release["mono"], false);
-    assert_eq!(release["riaa_eq"], true);
+    assert_eq!(release["playback_eq"], "columbia_lp");
+
+    // A curve nobody ships is refused at the command rather than written into the
+    // project and discovered at playback.
+    let refusal = refused(&["release", &path, "set", "--playback-eq", "rraa"]);
+    assert!(refusal.contains("rraa"), "got {refusal}");
+    assert!(refusal.contains("columbia_lp"), "got {refusal}");
 
     // A track, added by the same verb a recorded capture uses. 240 frames of
     // the 256 that landed, so the export has to resolve a span and not just
@@ -274,6 +281,56 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
         "tracks", &path, "add", "--side", "A", "--start", "0", "--end", "0.005",
     ]);
     vcw(&["tracks", &path, "set", "1", "--title", "Transverse"]);
+
+    // §51's three levels, outermost first. Each one overrides the one above it,
+    // and a listing says which is in force rather than which was stated - a
+    // track that names no curve is not played back through nothing.
+    let topology = |expected_side: &str, expected_track: &str| {
+        let printed = vcw(&["tracks", &path, "--json", "list"]);
+        let seen: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+        assert_eq!(seen["sides"][0]["playback_eq"], expected_side);
+        assert_eq!(seen["sides"][0]["tracks"][0]["playback_eq"], expected_track);
+
+        // And the same two facts where a person reads them. The side always
+        // says its curve; a track says one only when it differs from the
+        // side's, so the one row saying something is the one that stands out.
+        let read = vcw(&["tracks", &path, "list"]);
+        assert!(
+            read.contains(&format!("cut to {expected_side}")),
+            "got {read}"
+        );
+        let said = read.matches("cut to ").count();
+        if expected_track == expected_side {
+            assert_eq!(said, 1, "a track repeated its side's curve: {read}");
+        } else {
+            assert_eq!(said, 2, "a track hid its own curve: {read}");
+            assert!(
+                read.contains(&format!("cut to {expected_track}")),
+                "got {read}"
+            );
+        }
+    };
+    // The release's reaches both, because neither names its own.
+    topology("columbia_lp", "columbia_lp");
+
+    vcw(&[
+        "tracks", &path, "side-eq", "--side", "A", "--curve", "decca_lp",
+    ]);
+    topology("decca_lp", "decca_lp");
+
+    vcw(&["tracks", &path, "set", "1", "--playback-eq", "emi"]);
+    topology("decca_lp", "emi");
+
+    // And back out again, by the same route every other nullable field here
+    // takes: an empty value clears a track's override, and omitting the curve
+    // clears a side's.
+    vcw(&["tracks", &path, "set", "1", "--playback-eq", ""]);
+    topology("decca_lp", "decca_lp");
+    vcw(&["tracks", &path, "side-eq", "--side", "A"]);
+    topology("columbia_lp", "columbia_lp");
+
+    let refusal = refused(&["tracks", &path, "side-eq", "--side", "A", "--curve", "deca"]);
+    assert!(refusal.contains("deca"), "got {refusal}");
 
     let out = dir.path().join("out");
     let printed = vcw(&[

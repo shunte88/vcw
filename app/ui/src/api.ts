@@ -33,6 +33,7 @@ import type {
   Candidate,
   Capture,
   Credential,
+  Curve,
   Detect,
   Device,
   Export,
@@ -250,6 +251,15 @@ export function support(page: string): Promise<void> {
 /** Every audio device the host offers. */
 export function devices(): Promise<Device[]> {
   return invoke("devices");
+}
+
+/**
+ * Every playback characteristic a record can be stated as cut to (§51).
+ *
+ * Compiled in, so this is a startup fetch and not a per-panel one.
+ */
+export function curves(): Promise<Curve[]> {
+  return invoke("curves");
 }
 
 /** The release, or null in a project that has not had one filled in. */

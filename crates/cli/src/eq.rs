@@ -62,6 +62,21 @@ fn catalog(overrides: Option<&str>) -> Result<Catalog> {
     Ok(builtin.with_overrides(user))
 }
 
+/// Checks a curve id before it is written into a project, and hands it back.
+///
+/// Against the shipped catalog rather than one a `--curves` file extends: a curve
+/// stored in a project has to resolve on whatever machine opens it next, and a name
+/// that only this invocation knows would be a dangling reference in the file. A
+/// user-defined curve becomes storable when the catalog has a settled home rather
+/// than a per-command flag.
+///
+/// Absence is not an error anywhere this is called - a release that names no curve
+/// is the usual case - but a typo is, which is the whole point of asking.
+pub(crate) fn require(id: &str) -> Result<String> {
+    Catalog::builtin().require(id)?;
+    Ok(id.to_owned())
+}
+
 /// One line per curve: what it is, and the three numbers that define it.
 pub(crate) fn list(overrides: Option<&str>, json: bool) -> Result<()> {
     let catalog = catalog(overrides)?;

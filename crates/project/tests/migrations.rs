@@ -339,9 +339,9 @@ fn an_older_release_gains_the_setup_intents_as_unstated() {
     migrate::apply(&mut conn, vcw_project::MIGRATIONS).unwrap();
     assert_eq!(version(&conn), vcw_project::SCHEMA_VERSION);
 
-    let (album, mono, riaa): (String, i64, i64) = conn
+    let (album, mono, eq): (String, i64, Option<String>) = conn
         .query_row(
-            "SELECT album, is_mono, riaa_eq FROM releases WHERE release_id = 1",
+            "SELECT album, is_mono, playback_eq FROM releases WHERE release_id = 1",
             [],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
@@ -351,5 +351,51 @@ fn an_older_release_gains_the_setup_intents_as_unstated() {
         "the migration rewrote a row it should not have"
     );
     assert_eq!(mono, 0, "nobody was asked, so nothing was stated");
-    assert_eq!(riaa, 0);
+    assert_eq!(eq, None, "and no curve was named either");
+}
+
+/// v4's boolean becomes v5's curve id, and v4's `0` becomes nothing stated.
+///
+/// The one statement in the migration set that moves data rather than defining it,
+/// so it is the one that can lose something. `riaa_eq = 1` said exactly one thing
+/// and `playback_eq = 'riaa'` says the same thing; `0` meant v4 could not tell a
+/// declined box from an unasked question, and `NULL` is that.
+#[test]
+fn a_v4_riaa_box_becomes_the_riaa_curve() {
+    let mut conn = db();
+    let upto_v4 = &vcw_project::MIGRATIONS
+        .iter()
+        .filter(|m| m.version <= 4)
+        .copied()
+        .collect::<Vec<_>>()[..];
+    migrate::apply(&mut conn, upto_v4).unwrap();
+
+    conn.execute(
+        "INSERT INTO releases (release_id, album, updated_at, riaa_eq)
+         VALUES (1, 'Vienna', 1700000000, 1)",
+        [],
+    )
+    .unwrap();
+
+    migrate::apply(&mut conn, vcw_project::MIGRATIONS).unwrap();
+    assert_eq!(version(&conn), vcw_project::SCHEMA_VERSION);
+    assert!(
+        conn.prepare("SELECT riaa_eq FROM releases").is_err(),
+        "the boolean is gone, so it cannot disagree with the curve"
+    );
+
+    let eq: Option<String> = conn
+        .query_row("SELECT playback_eq FROM releases", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(eq.as_deref(), Some("riaa"));
+
+    // Sides and tracks gained the column too, and theirs start unstated: a release
+    // decision that silently became a per-track one would be a decision nobody made.
+    for table in ["sides", "tracks"] {
+        assert!(
+            conn.prepare(&format!("SELECT playback_eq FROM {table} LIMIT 0"))
+                .is_ok(),
+            "{table} can override the release"
+        );
+    }
 }

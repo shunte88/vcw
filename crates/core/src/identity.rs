@@ -169,7 +169,7 @@ pub fn accept(project: &mut Project, found: &Release) -> Result<Applied> {
         // same reason as composer and comments, and §26's reason besides -
         // identification does not get to silently undo what a person stated.
         is_mono: existing.is_mono,
-        riaa_eq: existing.riaa_eq,
+        playback_eq: existing.playback_eq,
         updated_at: existing.updated_at,
     };
     release::store(project, &record)?;

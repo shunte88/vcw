@@ -400,24 +400,65 @@ input.wide {
 .seed-group {
   flex-direction: column;
   align-items: stretch;
+  /* `nowrap` for the reason `.seed` says above it, and it matters more here.
+     A wrapping column sizes each line to its own widest item rather than to
+     the container, so one wide child does not get narrowed - it widens the
+     line, and the fieldset's contents spill out past its own border. The
+     picker below is that wide child. `min-inline-size` is the fieldset's UA
+     rule, which is `min-content` and holds the same width open. */
+  flex-wrap: nowrap;
+  min-inline-size: 0;
 }
 
 .seed-group .hint {
   order: 0;
 }
 
-/* A switch with its name to its left, filling the row. `.seed-switch` is the
-   setup sheet's; `.setting-switch` is Settings', and they want the same shape -
-   a label a reader's eye finds at the margin and the control at the other end,
-   lined up down the column. */
+/* A control with its name to its left, filling the row. `.seed-switch` and
+   `.seed-field` are the setup sheet's, a switch and a picker; `.setting-switch`
+   is Settings', and they want the same shape - a label a reader's eye finds at
+   the margin and the control at the other end, lined up down the column. */
+.seed-field,
 .seed-switch,
 .setting-switch {
   display: flex;
+  /* Said out loud, because the bare `label` rule further down is a column and
+     it comes later in the file - specificity decides a property one of them
+     declares, and declares nothing about a property this rule leaves unsaid.
+     Without this the name sat on top of its control rather than beside it, and
+     a `select` in a centered column takes its widest option's width and pushes
+     the dialog out from the inside. */
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   color: var(--dim);
   font-size: 0.9em;
+}
+
+/* The wrapper the curve picker needs, and the only place a clip takes.
+   WebKitGTK lays each `<option>` out in the box tree at its full text width
+   where Chrome gives it no box at all, so the longest curve name - "RIAA
+   (August 1952 onward, universal from the late 1950s)" - counted towards the
+   dialog's scrollable width and left a horizontal scrollbar under a form whose
+   contents all fitted. `overflow` on the `select` itself does not contain it;
+   on an ordinary element it does. Measured in the real window: the identical
+   page served to Chrome reports no overflow anywhere, which is why this took a
+   probe inside WebKit to find. */
+.seed-field .picker {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* A select's min-content width is its widest option rather than anything that
+   wraps, and `label select` sets an 18ch floor while saying nothing about a
+   ceiling - so left alone the picker took its full natural width. `min-width:
+   0` lets a flex item go under its own content; `flex` gives it the rest. */
+.seed-field select {
+  flex: 1;
+  min-width: 0;
 }
 
 /* --- The switch ---------------------------------------------------------- */

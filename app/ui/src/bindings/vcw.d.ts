@@ -518,7 +518,12 @@ musicbrainzId: string | null,
 /**
  * Whether a person has accepted this metadata (§26).
  */
-confirmed: boolean | null, };
+confirmed: boolean | null,
+/**
+ * The characteristic this track was cut with (§51), where it differs from its
+ * side's. `""` clears it back to the side's, like every other field here.
+ */
+playbackEq: string | null, };
 
 export type NewTrack = {
 /**
@@ -715,9 +720,12 @@ catalog: string | null,
  */
 isMono: boolean,
 /**
- * Whether the RIAA curve is applied on playback and on export (§51).
+ * The characteristic the record was cut with (§51), as a curve id from the
+ * catalog, or `null` for the usual one. Not an instruction to apply RIAA:
+ * what the capture already carried is its own `captureEq`, and the two
+ * together decide what playback has to undo.
  */
-riaaEq: boolean, };
+playbackEq: string | null, };
 
 // ----------------------------------------------------------------------
 // View models (§35)
@@ -837,6 +845,24 @@ captureChannels: Array<number>,
  * Whatever went wrong while interrogating it.
  */
 problems: Array<string>, };
+
+export type Curve = {
+/**
+ * The id stored in the project and taken by every command that sets one.
+ */
+id: string,
+/**
+ * Display name.
+ */
+name: string,
+/**
+ * When the characteristic was in use.
+ */
+era: string | null,
+/**
+ * Which labels cut to it.
+ */
+labels: string | null, };
 
 export type Capture = {
 /**

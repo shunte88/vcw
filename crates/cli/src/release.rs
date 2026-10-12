@@ -40,12 +40,12 @@
 //!
 //! `set` is also what the new-project prompt writes. Artist, title and catalog
 //! number are the three fields worth asking for up front, because they are what a
-//! search needs and what automation cannot guess; `--mono` and `--riaa` are the
-//! other two, and they are asked for a stronger reason - no search and no analysis
-//! can answer them at all. A mono pressing transferred with a stereo cartridge
-//! gives two channels that are nearly identical and never exactly so, and the
-//! equalization a record was cut with leaves no trace in the audio it was applied
-//! to. Both are stated or they are nothing.
+//! search needs and what automation cannot guess; `--mono` and `--playback-eq` are
+//! the other two, and they are asked for a stronger reason - no search and no
+//! analysis can answer them at all. A mono pressing transferred with a stereo
+//! cartridge gives two channels that are nearly identical and never exactly so, and
+//! the equalization a record was cut with leaves no trace in the audio it was
+//! applied to. Both are stated or they are nothing.
 
 use std::path::PathBuf;
 
@@ -103,8 +103,8 @@ pub(crate) struct Change {
     pub(crate) confirm: bool,
     /// Whether this is a mono pressing.
     pub(crate) mono: Option<bool>,
-    /// Whether the RIAA curve is to be applied on playback and export.
-    pub(crate) riaa: Option<bool>,
+    /// The characteristic the record was cut with, as a curve id. Empty clears it.
+    pub(crate) playback_eq: Option<String>,
 }
 
 /// What `vcw release` was asked to do, and to which project.
@@ -168,7 +168,7 @@ fn show(project: &mut Project, json: bool) -> Result<()> {
             "{{\"album\":{},\"artist\":{},\"year\":{},\"genres\":{},\"label\":{},\
              \"catalog\":{},\"country\":{},\"barcode\":{},\"composer\":{},\
              \"discs\":{},\"discs_recorded\":{},\"numbering\":\"{}\",\
-             \"sides\":{},\"confirmed\":{},\"mono\":{},\"riaa_eq\":{},\"empty\":{}}}",
+             \"sides\":{},\"confirmed\":{},\"mono\":{},\"playback_eq\":{},\"empty\":{}}}",
             quote(&record.album),
             quote(&record.album_artist),
             record
@@ -189,7 +189,10 @@ fn show(project: &mut Project, json: bool) -> Result<()> {
             sides.len(),
             record.confirmed,
             record.is_mono,
-            record.riaa_eq,
+            record
+                .playback_eq
+                .as_deref()
+                .map_or_else(|| "null".to_string(), quote),
             record.is_empty()
         );
         return Ok(());
@@ -226,7 +229,17 @@ fn show(project: &mut Project, json: bool) -> Result<()> {
     );
     field("numbering", record.numbering.name());
     field("mono", if record.is_mono { "yes" } else { "no" });
-    field("riaa eq", if record.riaa_eq { "yes" } else { "no" });
+    // Said as the curve plus where it came from, because "riaa (the usual one)"
+    // and "riaa" are different states of the project and only one of them was
+    // stated by anybody. §51 asks for the curve in force to be visible, and the
+    // curve in force is the one on the right either way.
+    field(
+        "playback eq",
+        &match &record.playback_eq {
+            Some(curve) => curve.clone(),
+            None => format!("{} (nothing stated)", vcw_eq::RIAA),
+        },
+    );
     field("confirmed", if record.confirmed { "yes" } else { "no" });
     if !missing.is_empty() {
         let letters: String = missing.iter().map(|s| s.letter()).collect();
@@ -329,8 +342,8 @@ fn apply(record: &mut release::Record, change: &Change) -> Result<()> {
     if let Some(mono) = change.mono {
         record.is_mono = mono;
     }
-    if let Some(riaa) = change.riaa {
-        record.riaa_eq = riaa;
+    if let Some(curve) = &change.playback_eq {
+        record.playback_eq = (!curve.is_empty()).then(|| curve.clone());
     }
     if let Some(numbering) = &change.numbering {
         record.numbering = Numbering::parse(numbering).ok_or_else(|| {

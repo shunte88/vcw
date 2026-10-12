@@ -264,6 +264,10 @@ export function Tracks({
         comments: blank(draft.comments),
         musicbrainzId: null,
         confirmed: true,
+        // Null leaves it alone. This form edits what is printed on the label;
+        // the characteristic a track was cut to is set per side or per track
+        // from `vcw tracks`, and nothing here should quietly clear it.
+        playbackEq: null,
       }),
     ).then(() => {
       setEditing(null);

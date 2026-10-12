@@ -339,24 +339,57 @@ runs sine waves through `process` and measures what comes out, because every oth
 reads coefficients and only this one proves the running filter is the filter that was
 designed.
 
-## 7. Not done, and in what order
+## 7. Selecting a curve, as built
 
-1. **The schema cannot store a curve.** `releases.riaa_eq` is a `bool`
-   (`crates/project/src/release.rs:103`) where §51 needs a curve id, selectable per side
-   and overridable per track. A migration to v5, and per the five-places rule a new
-   column touches the DDL parser, the generated `SCHEMA.md`, the Python reader's
-   allowlist and the shell's wind-back fixture as well as the table.
-2. **Nothing selects a curve.** The contract, the window and `vcw` all need the verb.
-3. **Setup should ask for two facts, not one, and they are different kinds of fact.**
-   `capture_eq` - what the signal chain did - must be stated at capture because it can
-   never be recovered afterwards, which is why its default is `Unknown` and why a
-   plausible guess there is dangerous. The playback curve is the opposite: it can be
-   changed at any time, on an existing project, with no loss, because it is applied on
-   the way out. So it can and should have a default, and the default is RIAA. Prompting
-   for it at setup is right, but as a revisable decision shown next to the irrevocable
-   one, not as a second irrevocable question.
-4. **Render and export have to apply it**, and the curve in force has to reach exported
-   metadata (§51).
+**Schema v5, and the boolean is dropped rather than kept.** `releases.riaa_eq` becomes
+`releases.playback_eq TEXT`, and `sides` and `tracks` gain the same column. Keeping the
+boolean beside the curve id would have been two places the same decision could be
+written and a chance for them to disagree; `riaa_eq = 1` carries across to
+`playback_eq = 'riaa'` in the migration, which is all the information the bit held.
+`0` becomes NULL, which is honest - v4 could not tell a declined box from an unasked
+question.
+
+**NULL means nobody has said**, at all three levels, rather than `NOT NULL DEFAULT
+'riaa'`. Writing `'riaa'` into every existing row would put a statement in the file
+that nobody made, which is the mistake `SCHEMA_V3` deliberately avoided for
+`capture_eq`. `vcw_eq::in_force(track, side, release)` resolves the three and answers
+RIAA when none of them speaks. It lives in `vcw-eq` because the default is a fact about
+curves, and a project crate that knew which curve was usual would be a second home for
+that fact.
+
+**The five-places rule cost two parser changes.** `crates/project/src/doc.rs` only knew
+`CREATE` and `ALTER ... ADD COLUMN`, and this is the first migration to drop a column
+and the first to carry data. `DROPPED_COLUMN` folds onto the table by removing the
+column - the document describes the schema a reader meets, not the one it passed
+through - and `DATA` is parsed and discarded. The wind-back fixtures needed nothing:
+both drop the whole table.
+
+**Semantics changed, not just the type.** v4's boolean meant *apply RIAA*, and the
+window had to warn that a phono stage may already have done it. `playback_eq` names
+what the record was **cut** with, and `capture_eq` already records what the signal
+arrived with, so VCW works the difference out instead of asking a person to. The
+"equalized twice" warning is gone; what replaced it is advice shown only when the
+chosen curve is not RIAA, which is the case where undoing RIAA first lifts the noise.
+
+**Three levels on the command line, and one in the window.** `vcw release set
+--playback-eq`, `vcw tracks side-eq --side A --curve`, `vcw tracks set N --playback-eq`.
+`vcw tracks list` prints the curve **in force** at each level rather than the one
+stated there. The window asks at setup, as a picker filled from `library::curves()` and
+preselected to RIAA - a revisable decision next to the irrevocable `capture_eq`, which
+is what item 3 above asked for. A curve the shipped catalog does not know is refused at
+the command: a `--curves` file extends what `vcw eq` prints, but a name that resolves
+only on the machine that typed it would be a dangling reference in a file meant to
+outlive the application.
+
+## 8. Not done, and in what order
+
+1. **Render and export have to apply it**, and the curve in force has to reach exported
+   metadata (§51). Playback too - `Filter::playback` exists and nothing calls it.
+2. **The window can only set it at setup.** Per-side and per-track pickers, and showing
+   the curve in force beside the audio, need a release-edit command the contract does
+   not have - the same gap that leaves `is_mono` unchangeable after setup.
+3. **A user-defined curve cannot be stored in a project.** `--curves` is per
+   invocation; storing one needs the catalog to have a settled home on disk.
 
 ## What this does not build
 

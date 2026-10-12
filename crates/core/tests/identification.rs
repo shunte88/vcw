@@ -300,7 +300,7 @@ fn what_no_provider_reports_is_left_alone() {
             // which §26 puts further out of identification's reach: a person
             // stated them about the copy on the platter.
             is_mono: true,
-            riaa_eq: true,
+            playback_eq: Some("columbia_lp".to_owned()),
             ..existing
         },
     )
@@ -313,7 +313,7 @@ fn what_no_provider_reports_is_left_alone() {
     assert_eq!(record.composer, "Booth / Brown");
     assert_eq!(record.comments, "warped near the label");
     assert!(record.is_mono);
-    assert!(record.riaa_eq);
+    assert_eq!(record.playback_eq.as_deref(), Some("columbia_lp"));
     assert_eq!(record.album, "Amber", "the provider's fields did land");
 }
 

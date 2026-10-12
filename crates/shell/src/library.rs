@@ -52,7 +52,7 @@ use std::process::Command;
 
 use vcw_contract::command::Zoom;
 use vcw_contract::read;
-use vcw_contract::view::{About, Boundary, Capture, Device, Release, Side, Track, Waveform};
+use vcw_contract::view::{About, Boundary, Capture, Curve, Device, Release, Side, Track, Waveform};
 use vcw_project::{Project, session};
 
 use crate::state::{Error, Shell};
@@ -75,6 +75,24 @@ pub fn devices() -> Vec<Device> {
         .devices
         .iter()
         .map(Device::from)
+        .collect()
+}
+
+/// Every characteristic a record can be stated as cut to (§51).
+///
+/// No project and no shell, like [`devices`] and [`about`]: the catalog is
+/// compiled in. The shipped set only - a user file extends what `vcw eq` prints,
+/// and giving a picker a name that will not resolve on the next machine to open
+/// the project is worse than not offering it.
+pub fn curves() -> Vec<Curve> {
+    vcw_eq::Catalog::builtin()
+        .iter()
+        .map(|c| Curve {
+            id: c.id.clone(),
+            name: c.name.clone(),
+            era: c.era.clone(),
+            labels: c.labels.clone(),
+        })
         .collect()
 }
 

@@ -709,13 +709,15 @@ impl Export {
 /// The last two are a different kind of field, and the only reason they are on
 /// a prompt advertised as optional. The three above are a head start on a
 /// lookup: skip them and identification finds them anyway. `isMono` and
-/// `riaaEq` are not findable by anything. A mono groove transferred with a
+/// `playbackEq` are not findable by anything. A mono groove transferred with a
 /// stereo cartridge gives two channels that are nearly identical and never
 /// exactly so, and no equalization curve is recoverable from the audio it was
 /// applied to - which is why §51 requires the capture's own provenance to be
-/// recorded from the first release that can capture at all. They are `bool`
-/// rather than `Option<bool>` because the prompt is a pair of boxes and an
-/// unticked box is an answer: not mono, no curve.
+/// recorded from the first release that can capture at all.
+///
+/// `isMono` is `bool` because the prompt is a box and an unticked box is an
+/// answer: not mono. `playbackEq` is not, because a picker's answer is a name
+/// and the question it answers has sixteen answers rather than two.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct NewProject {
@@ -729,8 +731,11 @@ pub struct NewProject {
     pub catalog: Option<String>,
     /// Whether this is a mono pressing. Folded to one channel on export only.
     pub is_mono: bool,
-    /// Whether the RIAA curve is applied on playback and on export (§51).
-    pub riaa_eq: bool,
+    /// The characteristic the record was cut with (§51), as a curve id from the
+    /// catalog, or `null` for the usual one. Not an instruction to apply RIAA:
+    /// what the capture already carried is its own `captureEq`, and the two
+    /// together decide what playback has to undo.
+    pub playback_eq: Option<String>,
 }
 
 /// Place a new boundary (§31).
@@ -820,6 +825,9 @@ pub struct TrackEdit {
     pub musicbrainz_id: Option<String>,
     /// Whether a person has accepted this metadata (§26).
     pub confirmed: Option<bool>,
+    /// The characteristic this track was cut with (§51), where it differs from its
+    /// side's. `""` clears it back to the side's, like every other field here.
+    pub playback_eq: Option<String>,
 }
 
 impl From<&TrackEdit> for vcw_project::track::Update {
@@ -831,6 +839,7 @@ impl From<&TrackEdit> for vcw_project::track::Update {
             comments: edit.comments.clone(),
             musicbrainz_id: edit.musicbrainz_id.clone(),
             confirmed: edit.confirmed,
+            playback_eq: edit.playback_eq.clone(),
         }
     }
 }

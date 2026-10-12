@@ -73,6 +73,9 @@ pub struct Record {
     pub capture: Option<i64>,
     /// A title, where the label prints one for the side.
     pub title: Option<String>,
+    /// The characteristic this side was cut with (§51), where it differs from the
+    /// release's. `None` inherits the release; see `vcw_eq::in_force`.
+    pub playback_eq: Option<String>,
     /// Unix seconds at creation.
     pub created_at: i64,
 }
@@ -130,7 +133,7 @@ pub fn ensure(project: &mut Project, side: Side) -> Result<Record> {
 pub fn load(conn: &Connection, side: Side) -> Result<Option<Record>> {
     let found = conn
         .query_row(
-            "SELECT side_id, side_index, capture_id, title, created_at
+            "SELECT side_id, side_index, capture_id, title, created_at, playback_eq
                FROM sides WHERE release_id = ?1 AND side_index = ?2",
             params![release::RELEASE_ID, i64::from(side.index())],
             read_row,
@@ -147,7 +150,7 @@ pub fn load(conn: &Connection, side: Side) -> Result<Option<Record>> {
 pub fn by_id(conn: &Connection, side_id: i64) -> Result<Option<Record>> {
     let found = conn
         .query_row(
-            "SELECT side_id, side_index, capture_id, title, created_at
+            "SELECT side_id, side_index, capture_id, title, created_at, playback_eq
                FROM sides WHERE side_id = ?1",
             params![side_id],
             read_row,
@@ -163,7 +166,7 @@ pub fn by_id(conn: &Connection, side_id: i64) -> Result<Option<Record>> {
 /// If the query fails.
 pub fn list(conn: &Connection) -> Result<Vec<Record>> {
     let mut stmt = conn.prepare(
-        "SELECT side_id, side_index, capture_id, title, created_at
+        "SELECT side_id, side_index, capture_id, title, created_at, playback_eq
            FROM sides WHERE release_id = ?1 ORDER BY side_index",
     )?;
     let rows = stmt
@@ -181,7 +184,7 @@ pub fn list(conn: &Connection) -> Result<Vec<Record>> {
 /// If the query fails.
 pub fn for_capture(conn: &Connection, capture_id: i64) -> Result<Vec<Record>> {
     let mut stmt = conn.prepare(
-        "SELECT side_id, side_index, capture_id, title, created_at
+        "SELECT side_id, side_index, capture_id, title, created_at, playback_eq
            FROM sides WHERE capture_id = ?1 ORDER BY side_index",
     )?;
     let rows = stmt
@@ -240,6 +243,20 @@ pub fn set_title(project: &mut Project, side: Side, title: Option<&str>) -> Resu
     project.conn_mut().execute(
         "UPDATE sides SET title = ?2 WHERE side_id = ?1",
         params![record.id, title],
+    )?;
+    Ok(())
+}
+
+/// Sets or clears a side's characteristic (§51), overriding the release's.
+///
+/// # Errors
+///
+/// [`Error::NoSuchSide`] if the side is not in the project.
+pub fn set_playback_eq(project: &mut Project, side: Side, curve: Option<&str>) -> Result<()> {
+    let record = require(project.conn(), side)?;
+    project.conn_mut().execute(
+        "UPDATE sides SET playback_eq = ?2 WHERE side_id = ?1",
+        params![record.id, curve],
     )?;
     Ok(())
 }
@@ -317,6 +334,7 @@ fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
         capture: row.get(2)?,
         title: row.get(3)?,
         created_at: row.get(4)?,
+        playback_eq: row.get(5)?,
     })
 }
 

@@ -1090,17 +1090,11 @@ text = "Create"
 ["library.new.eq"]
 text = "Equalization"
 
-["library.new.eq.none"]
-text = "None"
-
-["library.new.eq.riaa"]
-text = "RIAA"
-
 ["library.new.eq.title"]
-text = "Applies the RIAA playback curve on audition and on export"
+text = "The characteristic the record was cut with. Not what your preamp did about it - that is in Settings, under Audio."
 
 ["library.new.eq.warn"]
-text = "Most phono stages and head amps apply the RIAA curve themselves. If yours did, applying it again here equalizes the record twice. Nothing in the signal reaching VCW says which happened, so this one is your call: switch it on only if the capture arrives flat, and leave it off if anything upstream has already curved it."
+text = "An ordinary phono stage undoes RIAA whatever the record was cut with, so a pressing from before 1954 comes out of it with the wrong correction already applied. VCW can put that right, by undoing RIAA before applying this curve - but undoing a curve lifts the noise with it. Where your chain can capture flat, say so in Settings and this stays exact."
 
 ["library.new.hint"]
 text = "A helper, not a requirement. Leave a field blank and identification will fill it in."
@@ -1115,7 +1109,7 @@ text = "Mono folds the channels together in the exported files and leaves the ca
 text = "Post-Processing"
 
 ["library.new.post.hint"]
-text = "Neither of these two touches what is recorded, and both can be changed later. Mono folds the channels together in the exported files; RIAA applies the curve on audition and on export."
+text = "Neither of these two touches what is recorded, and both can be changed later. Mono folds the channels together in the exported files; the characteristic is what the record was cut with, and is undone on audition and on export."
 
 ["library.new.pressing"]
 text = "Pressing"

@@ -200,6 +200,7 @@ fn main() {
             commands::about,
             commands::support,
             commands::devices,
+            commands::curves,
             commands::release,
             commands::sides,
             commands::tracks,

@@ -11,6 +11,7 @@ authors.workspace = true
 [dependencies]
 vcw-audio = { workspace = true }
 vcw-core = { workspace = true }
+vcw-eq = { workspace = true }
 vcw-export = { workspace = true }
 vcw-metadata = { workspace = true }
 vcw-project = { workspace = true }

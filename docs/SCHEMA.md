@@ -16,7 +16,7 @@ no rewriting, and everything else is what Audacity has nowhere to put. See
 |---|---|
 | extension | `.vcw` |
 | `application_id` | `0x56435700` (ASCII `VCW\0`) - Audacity's is `0x41554459`, `AUDY`, for *both* AUP3 and AUP4 |
-| `user_version` | 4 - the schema version, a plain ascending integer |
+| `user_version` | 5 - the schema version, a plain ascending integer |
 | format version | 1 - the *meaning* of the schema, in `meta` |
 | page size | 65536 bytes, set at creation |
 | journal mode | WAL, `synchronous=FULL` (D3) |
@@ -195,7 +195,7 @@ The release being captured (§29, §32). One per project: §29's topology is Pro
 | `confirmed` | `INTEGER NOT NULL DEFAULT 0` | §26: automatic identification shall never silently replace what a person confirmed. 1 once a person has accepted this metadata. |
 | `updated_at` | `INTEGER NOT NULL` | Unix seconds of the last change to this row. |
 | `is_mono` | `INTEGER NOT NULL DEFAULT 0` | Whether this pressing is mono, as the operator stated it at setup. Export sums the captured channels to one; capture and the project stay stereo, because the two channels of a stereo cartridge in a mono groove are not identical and discarding one on the way in cannot be undone. |
-| `riaa_eq` | `INTEGER NOT NULL DEFAULT 0` | Whether the RIAA curve is to be applied on playback and on export (§51). Not what the capture arrived with - that is captures.capture_eq, and it is the input to this decision rather than the decision. 0 on every project written before v4, which is the truth about them: nobody was asked. |
+| `playback_eq` | `TEXT` | The characteristic this release was cut with (§51), as a curve id from the catalog `vcw eq list` prints: 'riaa', 'columbia_lp', 'decca_ffrr_78' and so on. NULL means nobody has said, and playback falls back to the application default. Not what the capture arrived with - that is captures.capture_eq, which is the input to this decision rather than the decision. |
 
 ### `release_artwork`
 
@@ -225,6 +225,7 @@ One side of one disc (§29), and the capture that produced it. A side is the nat
 | `capture_id` | `INTEGER REFERENCES captures(capture_id)` | The capture holding this side's audio, or NULL for a side not yet recorded. Two sides may share one capture: recording both faces in a single take is a real thing people do, and then the frames tell them apart. |
 | `title` | `TEXT` | A side title where the label prints one. Rare, and not the same as a track. |
 | `created_at` | `INTEGER NOT NULL` | Unix seconds at creation. |
+| `playback_eq` | `TEXT` | The characteristic for one side, where it differs from the release's. NULL inherits the release. Two faces of a reissue are sometimes cut from masters of different ages, and one capture can hold a face of each of two pressings. |
 
 ### `track_boundaries`
 
@@ -262,6 +263,7 @@ A track: two boundaries, and the metadata naming what is between them (§29, §3
 | `musicbrainz_id` | `TEXT` | MusicBrainz recording id, where identification found one (§32). |
 | `confirmed` | `INTEGER NOT NULL DEFAULT 0` | 1 once a person has accepted this track's metadata (§26). |
 | `updated_at` | `INTEGER NOT NULL` | Unix seconds of the last change to this row. |
+| `playback_eq` | `TEXT` | The characteristic for one track, which §51 asks for by name: a compilation can carry transfers made from pressings cut years apart. NULL inherits the side. |
 
 ## Indices
 

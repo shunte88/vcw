@@ -67,7 +67,7 @@ pub mod catalog;
 pub mod curve;
 pub mod filter;
 
-pub use catalog::{BUILTIN_TOML, Catalog, FLAT, RIAA};
+pub use catalog::{BUILTIN_TOML, Catalog, FLAT, RIAA, in_force};
 pub use curve::{Curve, DEFAULT_REPLAY_SHELF_DB, REFERENCE_HZ};
 pub use filter::{BAND_HZ, Filter, TOLERANCE_DB, worst_error_db};
 

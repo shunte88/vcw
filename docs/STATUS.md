@@ -7546,12 +7546,10 @@ and `crates/signal` is analysis - so a processing chain there would make export 
 the analyzer. Hence `crates/eq`, with no new external dependency: serde, thiserror, toml,
 vcw-types, all already in the tree.
 
-**Nothing selects a curve yet, and the next step is not more DSP.** `releases.riaa_eq` is
-a `bool` where §51 needs a curve id selectable per side and overridable per track, so a
-**v5 migration comes first** - and by the five-places rule that touches the DDL parser,
-the generated `SCHEMA.md`, the Python reader's allowlist and the shell's wind-back
-fixture as well as the table. Then the verb across contract, window and CLI. Then render
-and export applying it and writing it into exported metadata.
+**At this point nothing selected a curve, and the next step was not more DSP.**
+`releases.riaa_eq` was a `bool` where §51 needs a curve id selectable per side and
+overridable per track, so a v5 migration came first; the section below is what that
+turned into.
 
 On what setup should ask: **two facts, not one, and they are different kinds of fact.**
 `capture_eq` must be stated at capture because it can never be recovered afterwards,
@@ -7560,3 +7558,119 @@ the opposite - applied on the way out, changeable forever, lossless to change - 
 have a default and the default is RIAA. Prompting for it at setup is right, but as a
 **revisable decision shown beside the irrevocable one**, not as a second irrevocable
 question.
+
+## Phase 3 - WP-29 part two, choosing a curve
+
+Schema v5, the three levels §51 asks for, and the verbs that set them. The arithmetic
+was done in 0.3.2-alpha; this is the part a person can reach.
+
+### The boolean is dropped, not kept
+
+`releases.riaa_eq` becomes `releases.playback_eq TEXT`, and `sides` and `tracks` gain the
+same column. Leaving the boolean beside the curve id would have been two places the same
+decision could be written and a chance for them to disagree, so v5 drops it - forward
+only, which these migrations already are. `riaa_eq = 1` carries across as
+`playback_eq = 'riaa'`, which is all the information one bit held. `0` becomes NULL,
+because v4 could not tell a declined box from an unasked question and NULL is that.
+
+**NULL means nobody has said, at every level**, which is why the column is nullable
+rather than `NOT NULL DEFAULT 'riaa'`. Writing `'riaa'` into every existing row would put
+a statement in the file that nobody made - the mistake `SCHEMA_V3` deliberately avoided
+for `capture_eq`. `vcw_eq::in_force(track, side, release)` resolves outward and answers
+RIAA when none of them speaks. It lives in `vcw-eq` because the default is a fact about
+curves; a project crate that knew which curve was usual would be a second home for it.
+
+### What it means changed, not just its type
+
+v4's boolean meant *apply RIAA*, and the window had to warn that a phono stage may
+already have done it - a warning VCW could not resolve because it was asking the person
+to hold two facts at once. `playback_eq` names what the record was **cut** with.
+`captures.capture_eq` already records what the signal **arrived** with. The two together
+decide what playback has to undo, and `Filter::playback` already took both arguments, so
+the "equalized twice" hazard stopped being a thing a person has to reason about. What
+replaced the warning is advice shown only when the chosen curve is not RIAA: an ordinary
+phono stage undoes RIAA whatever the record was cut with, and putting that right means
+undoing RIAA first, which lifts the noise.
+
+### Two new statement shapes in the DDL parser
+
+This is the first migration to drop a column and the first to move data, and
+`crates/project/src/doc.rs` knew neither - `parse_statement` asserts on anything that is
+not `CREATE` or `ALTER` and panicked on the `UPDATE`. `DROPPED_COLUMN` folds onto the
+table by removing the column, because the document describes the schema a reader meets
+and not the one it passed through; `DATA` is parsed so the comment above it is not lost
+to the parser, and discarded by `objects()`. The resulting column order still matches
+`PRAGMA table_info` - ADD then DROP leaves `playback_eq` last - which
+`every_documented_column_exists_with_the_type_it_claims` checks against a real database.
+
+Of the five places a migration touches, the wind-back fixtures needed nothing: both
+`wind_back_to_v1` helpers drop the whole table, so v5's columns go with it.
+
+### Reading a file this build did not write
+
+`open_read_only` deliberately does not migrate, so a v4 project is still one this build
+has to read. `release::load` picks its own SELECT expression:
+`playback_eq` where the column is there, `CASE WHEN riaa_eq = 1 THEN 'riaa' END` where
+only v4's boolean is, and `NULL` for v3 and older. Two tests cover the two vintages,
+and `a_v4_riaa_box_becomes_the_riaa_curve` covers the migration itself.
+
+### Three levels, and what prints
+
+| level | verb |
+|---|---|
+| release | `vcw release <p> set --playback-eq columbia_lp` |
+| side | `vcw tracks <p> side-eq --side A --curve decca_lp` |
+| track | `vcw tracks <p> set 3 --playback-eq emi` |
+
+Clearing follows what each verb already does with a nullable field: `--playback-eq ""`
+on a track, and `side-eq --side A` with no curve.
+
+`vcw tracks list` prints the curve **in force** at each level rather than the one stated
+there, in both the human and the JSON output. §51 asks for the curve in force to be
+visible, and a listing that showed `null` for a track would be answering a question
+nobody asked - a track that states nothing is not played back through nothing.
+
+A curve the shipped catalog does not know is refused at the command, naming the ones it
+does. A `--curves` file extends what `vcw eq` prints, but a name that resolves only on
+the machine that typed it would be a dangling reference in a file meant to outlive the
+application, so a user-defined curve is not storable until the catalog has a home on
+disk.
+
+### The window
+
+The setup sheet's RIAA switch becomes a picker, filled from a new `curves` command -
+compiled-in data, so no shell state and a single fetch, like `devices` and `about`.
+It opens on RIAA, which matters: the Rust side plays an unstated project back through
+RIAA, so a form defaulting elsewhere would disagree with its own default. The test
+asserts that, because the two defaults sit in different languages.
+
+Three CSS rules came out of putting a sixteen-item picker in that sheet, and two of
+them were things the file already knew. The fieldset inherited `flex-wrap: wrap` from
+the generic `fieldset` rule, and a *wrapping* column sizes each line to its own widest
+item rather than to the container - so the picker widened the line and the group's
+contents spilled past their own border. `.seed` carries a paragraph about exactly that
+failure; `.seed-group` now carries the same `nowrap`. The row then stacked, because the
+bare `label` rule further down the file is a column and specificity decides only the
+properties both rules declare, which is the same trap the side picker beside Detect
+fell into. Both now say what they mean out loud.
+
+The third needed a probe inside the real window. WebKitGTK lays each `<option>` out in
+the box tree at its full text width where Chrome gives it no box at all, so the longest
+curve name counted towards the dialog's scrollable width and left a horizontal scrollbar
+under a form whose contents all fitted; `overflow` on the `select` does not contain it,
+and an ordinary wrapping element does. The identical page served to Chrome over
+`vcw serve` measured `scrollWidth == clientWidth` on every element in the dialog, which
+is the finding: **a layout measured in a browser is not a measurement of the window.**
+
+The seam between them is `config::new_project`, which stores the curve only when it is
+*not* RIAA. Storing the default would store nothing - `in_force` answers RIAA either way
+- and a release row written to say "the usual" would make `read::release` claim a blank
+project already has metadata, which is the difference the Metadata panel uses to decide
+whether to offer a lookup.
+
+### What is left
+
+Playback, render and export applying the filter, and the curve in force reaching
+exported tags. The window can only set it at setup; per-side and per-track pickers need
+a release-edit command the contract does not have, which is the same gap that leaves
+`is_mono` unchangeable after setup.

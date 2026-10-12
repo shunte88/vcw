@@ -4504,6 +4504,7 @@ dependencies = [
  "ts-rs",
  "vcw-audio",
  "vcw-core",
+ "vcw-eq",
  "vcw-export",
  "vcw-metadata",
  "vcw-project",
@@ -4523,6 +4524,16 @@ dependencies = [
  "vcw-metadata",
  "vcw-project",
  "vcw-signal",
+ "vcw-types",
+]
+
+[[package]]
+name = "vcw-eq"
+version = "0.3.2"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
+ "toml 1.1.6+spec-1.1.0",
  "vcw-types",
 ]
 
@@ -4606,6 +4617,7 @@ dependencies = [
  "vcw-audio",
  "vcw-contract",
  "vcw-core",
+ "vcw-eq",
  "vcw-export",
  "vcw-i18n",
  "vcw-metadata",

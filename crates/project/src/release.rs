@@ -96,11 +96,16 @@ pub struct Record {
     /// be folded to one on the way out. Not detectable from the audio, which is
     /// why it is asked rather than analyzed.
     pub is_mono: bool,
-    /// Whether the RIAA curve is to be applied on playback and on export (§51).
+    /// The characteristic this release was cut with (§51), as a curve id.
     ///
-    /// The stored decision, not the provenance. What the signal already carried
-    /// when it reached the sound card is `captures.capture_eq`, one per capture.
-    pub riaa_eq: bool,
+    /// `None` means nobody has said, and playback falls back to the application
+    /// default. A side or a track may name a different one; see `vcw_eq::in_force`.
+    ///
+    /// Not the provenance. What the signal already carried when it reached the sound
+    /// card is `captures.capture_eq`, one per capture, and this is the input to the
+    /// decision rather than the decision: a flat capture of an RIAA pressing has the
+    /// curve applied, an RIAA capture of the same pressing needs nothing done.
+    pub playback_eq: Option<String>,
     /// Unix seconds of the last change.
     pub updated_at: i64,
 }
@@ -161,17 +166,18 @@ pub fn ensure(project: &mut Project) -> Result<Record> {
 ///
 /// If the query fails.
 pub fn load(conn: &Connection) -> Result<Option<Record>> {
-    let (mono, riaa) = if has_intents(conn) {
-        ("is_mono", "riaa_eq")
+    let mono = if has_column(conn, "is_mono") {
+        "is_mono"
     } else {
-        ("0", "0")
+        "0"
     };
+    let eq = playback_eq_expr(conn);
     let record = conn
         .query_row(
             &format!(
                 "SELECT album, album_artist, year, genres, label, catalog, country, barcode,
                         composer, comments, discs, numbering, musicbrainz_id, discogs_id,
-                        confirmed, updated_at, {mono}, {riaa}
+                        confirmed, updated_at, {mono}, {eq}
                    FROM releases WHERE release_id = ?1"
             ),
             params![RELEASE_ID],
@@ -199,7 +205,7 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
                     confirmed: r.get::<_, i64>(14)? != 0,
                     updated_at: r.get(15)?,
                     is_mono: r.get::<_, i64>(16)? != 0,
-                    riaa_eq: r.get::<_, i64>(17)? != 0,
+                    playback_eq: r.get(17)?,
                 })
             },
         )
@@ -207,7 +213,7 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
     Ok(record)
 }
 
-/// Whether the `releases` table carries v4's two intent columns.
+/// Whether the `releases` table carries this column.
 ///
 /// The same question [`crate::session`] asks about `captures.capture_eq`, and for
 /// the same reason: `open_read_only` deliberately does not migrate, so a v2 or v3
@@ -216,9 +222,25 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
 /// the export planner, the track numbering, the library listing - rather than to
 /// the one caller that wanted the flag. Asked of the table rather than of
 /// `user_version`, because the column is what the query needs.
-fn has_intents(conn: &Connection) -> bool {
-    conn.prepare("SELECT is_mono, riaa_eq FROM releases LIMIT 0")
+fn has_column(conn: &Connection, column: &str) -> bool {
+    conn.prepare(&format!("SELECT {column} FROM releases LIMIT 0"))
         .is_ok()
+}
+
+/// How to select the stated characteristic from whatever vintage of table is open.
+///
+/// v5 stores a curve id. v4 stored a boolean that could say two things, and both of
+/// them translate exactly: `1` is the RIAA characteristic, and `0` is v4 having no
+/// way to tell "said no" from "never asked" - which is what `NULL` means here. A v3
+/// and older file has neither column and nothing was ever stated.
+fn playback_eq_expr(conn: &Connection) -> &'static str {
+    if has_column(conn, "playback_eq") {
+        "playback_eq"
+    } else if has_column(conn, "riaa_eq") {
+        "CASE WHEN riaa_eq = 1 THEN 'riaa' END"
+    } else {
+        "NULL"
+    }
 }
 
 /// Writes the release, creating the row if it is not there.
@@ -237,7 +259,7 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
         "INSERT INTO releases (release_id, album, album_artist, year, genres, label, catalog,
                                country, barcode, composer, comments, discs, numbering,
                                musicbrainz_id, discogs_id, confirmed, updated_at,
-                               is_mono, riaa_eq)
+                               is_mono, playback_eq)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
                  ?18, ?19)
          ON CONFLICT (release_id) DO UPDATE SET
@@ -249,7 +271,7 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
              numbering = excluded.numbering, musicbrainz_id = excluded.musicbrainz_id,
              discogs_id = excluded.discogs_id, confirmed = excluded.confirmed,
              updated_at = excluded.updated_at, is_mono = excluded.is_mono,
-             riaa_eq = excluded.riaa_eq",
+             playback_eq = excluded.playback_eq",
         params![
             RELEASE_ID,
             record.album,
@@ -269,7 +291,7 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
             i64::from(record.confirmed),
             crate::now(),
             i64::from(record.is_mono),
-            i64::from(record.riaa_eq),
+            record.playback_eq.as_deref(),
         ],
     )?;
     Ok(())
@@ -568,7 +590,7 @@ mod tests {
             // Both non-default, so a column dropped from the write fails here
             // rather than passing on the default it would have had anyway.
             is_mono: true,
-            riaa_eq: true,
+            playback_eq: Some("columbia_lp".into()),
             updated_at: 0,
         };
         store(&mut p, &written).expect("store");
@@ -580,7 +602,7 @@ mod tests {
         assert_eq!(read.numbering, Numbering::Numeric);
         assert!(read.confirmed);
         assert!(read.is_mono);
-        assert!(read.riaa_eq);
+        assert_eq!(read.playback_eq.as_deref(), Some("columbia_lp"));
         assert!(read.updated_at > 0, "updated_at is set by the write");
         assert_eq!(read.sides().len(), 4, "two discs are four sides");
         assert!(!read.is_empty());
@@ -607,23 +629,23 @@ mod tests {
         let mut p = project(&dir);
         let fresh = ensure(&mut p).expect("ensure");
         assert!(!fresh.is_mono, "nobody has been asked yet");
-        assert!(!fresh.riaa_eq);
+        assert_eq!(fresh.playback_eq, None, "and nobody has named a curve");
 
         let mut record = fresh;
         record.is_mono = true;
-        record.riaa_eq = true;
+        record.playback_eq = Some("decca_lp".into());
         store(&mut p, &record).expect("store");
         let read = load(p.conn()).expect("load").expect("row");
         assert!(read.is_mono);
-        assert!(read.riaa_eq);
+        assert_eq!(read.playback_eq.as_deref(), Some("decca_lp"));
 
-        // Both are set independently: the common case is a stereo pressing that
-        // still wants the curve, and a shared column would make that impossible.
+        // Both are set independently: the common case is a stereo pressing cut to
+        // something other than RIAA, and a shared column would make that impossible.
         record.is_mono = false;
         store(&mut p, &record).expect("store again");
         let read = load(p.conn()).expect("load").expect("row");
         assert!(!read.is_mono);
-        assert!(read.riaa_eq);
+        assert_eq!(read.playback_eq.as_deref(), Some("decca_lp"));
     }
 
     #[test]
@@ -640,14 +662,49 @@ mod tests {
         p.conn()
             .execute_batch(
                 "ALTER TABLE releases DROP COLUMN is_mono;
-                 ALTER TABLE releases DROP COLUMN riaa_eq;",
+                 ALTER TABLE releases DROP COLUMN playback_eq;",
             )
             .expect("winding the release row back to v3");
 
         let read = load(p.conn()).expect("load").expect("row");
         assert_eq!(read.album, "Vienna", "the rest of the row still reads");
         assert!(!read.is_mono, "an absent column is an unstated intent");
-        assert!(!read.riaa_eq);
+        assert_eq!(read.playback_eq, None);
+    }
+
+    #[test]
+    fn a_v4_release_reads_its_boolean_as_the_riaa_curve() {
+        // The other vintage `open_read_only` can hand us: v4 wrote a boolean, and
+        // this build has to read it without migrating the file. `1` means the RIAA
+        // characteristic and nothing else does, so it translates exactly; `0` means
+        // v4 could not tell "said no" from "never asked", which is `None`.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir);
+        let record = ensure(&mut p).expect("ensure");
+        store(&mut p, &record).expect("store");
+        p.conn()
+            .execute_batch(
+                "ALTER TABLE releases DROP COLUMN playback_eq;
+                 ALTER TABLE releases ADD COLUMN riaa_eq INTEGER NOT NULL DEFAULT 0;",
+            )
+            .expect("winding the release row back to v4");
+
+        assert_eq!(
+            load(p.conn()).expect("load").expect("row").playback_eq,
+            None,
+            "v4's 0 is not a statement"
+        );
+        p.conn()
+            .execute("UPDATE releases SET riaa_eq = 1", [])
+            .expect("the box was ticked");
+        assert_eq!(
+            load(p.conn())
+                .expect("load")
+                .expect("row")
+                .playback_eq
+                .as_deref(),
+            Some("riaa")
+        );
     }
 
     #[test]

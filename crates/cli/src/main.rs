@@ -912,6 +912,22 @@ enum TracksCommand {
         /// Mark the metadata as accepted (§26).
         #[arg(long)]
         confirm: bool,
+        /// The characteristic this track was cut with (§51), where it differs from its side's.
+        #[arg(long)]
+        playback_eq: Option<String>,
+    },
+    /// Name the characteristic one side was cut with (§51), overriding the release's.
+    ///
+    /// For a reissue whose two faces came from masters of different ages, and for
+    /// the one capture that holds a face of each of two pressings. Omit the curve
+    /// to clear it back to the release's.
+    SideEq {
+        /// The side letter.
+        #[arg(long)]
+        side: char,
+        /// The curve, as `vcw eq list` names them.
+        #[arg(long)]
+        curve: Option<String>,
     },
     /// Move a track to another side of the same capture.
     Reassign {
@@ -1020,9 +1036,9 @@ struct ReleaseFields {
     /// Whether this is a mono pressing: the export folds the channels to one.
     #[arg(long, action = clap::ArgAction::Set)]
     mono: Option<bool>,
-    /// Whether the RIAA curve is applied on playback and on export (§51).
-    #[arg(long, action = clap::ArgAction::Set)]
-    riaa: Option<bool>,
+    /// The characteristic the record was cut with (§51), as `vcw eq list` names them. Empty clears it back to the usual one.
+    #[arg(long)]
+    playback_eq: Option<String>,
 }
 /// Stack for [`run`]. 8 MiB is what Linux and macOS hand a main thread by
 /// default, so this gives every platform the size the two we develop on already
@@ -1057,15 +1073,87 @@ const RUN_STACK_BYTES: usize = 8 * 1024 * 1024;
 /// `tests/startup.rs` keeps it that way. Raising the header with the MSVC
 /// linker's `/STACK:` would have fixed Windows and left nothing that fails here.
 fn main() -> anyhow::Result<()> {
+    hush_the_closed_pipe();
     std::thread::Builder::new()
         .name("vcw".to_owned())
         .stack_size(RUN_STACK_BYTES)
         .spawn(run)
         .context("spawning the main thread")?
         .join()
-        // Re-raised rather than reported, so a panic in `run` still looks
-        // exactly like a panic: same message, same backtrace, same exit code.
-        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        .unwrap_or_else(|panic| {
+            if is_closed_pipe(panic.as_ref()) {
+                // The reader went away, which is what `| head` and quitting
+                // `less` both are. Everything it asked for was delivered, so
+                // this is a success: exiting 141 the way a signalled process
+                // would is correct Unix and wrong here, because it turns an
+                // ordinary `vcw eq list | head` into a failure under
+                // `set -o pipefail`.
+                std::process::exit(0);
+            }
+            // Otherwise re-raised rather than reported, so a panic in `run`
+            // still looks exactly like a panic: same message, same backtrace,
+            // same exit code.
+            std::panic::resume_unwind(panic)
+        })
+}
+
+/// What `std` says when a write to stdout or stderr fails.
+///
+/// `println!` has nowhere to return an error to, so it panics, and the message
+/// is built in `std::io::stdio` as `failed printing to {stdout}: {error}`.
+const PRINT_FAILED: &str = "failed printing to std";
+
+/// Whether a panic payload is the one a closed pipe produces.
+///
+/// ponytail: matched on the panic message, because that is the only thing a
+/// panic carries - the `io::Error` behind it is formatted away before the
+/// payload exists, so there is no `ErrorKind` left to compare. The ceiling is
+/// that a change to either string in `std` silently stops this working, which
+/// is what `a_closed_reader_is_not_an_error` in `tests/pipes.rs` exists to
+/// catch: it closes a real pipe on a real `vcw` and fails if a panic escapes.
+/// The upgrade path, if this ever gets tiresome, is to print through a writer
+/// of our own that returns `io::Result` - roughly four hundred call sites.
+fn is_closed_pipe(panic: &(dyn std::any::Any + Send)) -> bool {
+    let message = panic_message(panic);
+    message.contains(PRINT_FAILED) && closed_pipe_text(message)
+}
+
+/// The text of a panic payload, for the two shapes `panic!` and `std` produce.
+///
+/// `PanicHookInfo::payload_as_str` does this and is stable in 1.91, which is one
+/// past this tree's MSRV. Four lines is a cheaper answer than a toolchain floor.
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> &str {
+    panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .unwrap_or_default()
+}
+
+/// Whether an `io::Error`'s rendering is the platform's broken pipe.
+///
+/// Unix is `EPIPE`. Windows has two, and which one arrives depends on whether
+/// the far end closed before or during the write: `ERROR_BROKEN_PIPE` (109) and
+/// `ERROR_NO_DATA` (232).
+fn closed_pipe_text(message: &str) -> bool {
+    message.contains("Broken pipe")
+        || message.contains("os error 109")
+        || message.contains("os error 232")
+}
+
+/// Stops the default hook printing a panic the user is about to never see.
+///
+/// The hook runs inside the panicking thread, long before `main` can look at
+/// the payload, so suppressing the message and deciding the exit code are two
+/// separate jobs. Any other panic goes to the hook that was there.
+fn hush_the_closed_pipe() {
+    let inherited = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if is_closed_pipe(info.payload()) {
+            return;
+        }
+        inherited(info);
+    }));
 }
 
 fn run() -> anyhow::Result<()> {
@@ -1348,6 +1436,7 @@ fn run() -> anyhow::Result<()> {
                     comments,
                     recording,
                     confirm,
+                    playback_eq,
                 } => tracks::Task::Set {
                     track,
                     update: vcw_project::track::Update {
@@ -1357,7 +1446,12 @@ fn run() -> anyhow::Result<()> {
                         comments,
                         musicbrainz_id: recording,
                         confirmed: confirm.then_some(true),
+                        playback_eq: checked_curve(playback_eq)?,
                     },
+                },
+                TracksCommand::SideEq { side, curve } => tracks::Task::SideEq {
+                    side,
+                    curve: checked_curve(curve)?,
                 },
                 TracksCommand::Reassign { track, to } => tracks::Task::Reassign { track, to },
                 TracksCommand::Adopt {
@@ -1404,7 +1498,7 @@ fn run() -> anyhow::Result<()> {
                     numbering: fields.numbering,
                     confirm: fields.confirm,
                     mono: fields.mono,
-                    riaa: fields.riaa,
+                    playback_eq: checked_curve(fields.playback_eq)?,
                 })),
             },
         }),
@@ -1530,6 +1624,20 @@ fn run() -> anyhow::Result<()> {
 /// broken catalog leaves VCW in English and the command still does its job,
 /// and a translation problem is not a reason to fail an export. `--log info`
 /// says what happened.
+/// Checks a curve the operator named, before anything is written.
+///
+/// `None` passes through, because not naming one is how every verb here says
+/// "leave it alone" or "the usual one". An empty string passes through too: that is
+/// the clear-it sentinel every nullable field on these verbs already uses. Anything
+/// else has to be a curve the catalog knows, so a typo is refused at the command
+/// rather than discovered at playback.
+fn checked_curve(named: Option<String>) -> anyhow::Result<Option<String>> {
+    match named {
+        Some(id) if !id.is_empty() => eq::require(&id).map(Some),
+        other => Ok(other),
+    }
+}
+
 fn speak(chosen: Option<&str>) {
     let Some(dir) = vcw_i18n::user_dir() else {
         return;

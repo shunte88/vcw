@@ -39,6 +39,12 @@ vi.mock("../api", () => ({
   // The splash asks who it is as soon as it draws, so the mock has to answer
   // even in the tests that are about the table.
   about: vi.fn(async () => ({ product: "VCW", version: "0.1.0", built: "2026-10-05" })),
+  // So does the create form, for the curve picker. Two entries is enough to
+  // prove the default lands on RIAA rather than on whatever came back first.
+  curves: vi.fn(async () => [
+    { id: "columbia_lp", name: "Columbia LP", era: "1948-1955", labels: "Columbia" },
+    { id: "riaa", name: "RIAA", era: "1954-", labels: null },
+  ]),
 }));
 
 /** A library row, with only the fields the table draws filled in. */
@@ -128,17 +134,25 @@ describe("the project browser", () => {
     const form = container.querySelector("form");
     expect(form, "the create helper should be showing").not.toBeNull();
 
-    // Mono and the curve are the two answers nothing downstream can work out,
-    // so the one check worth having here is that a tick reaches the command.
-    // The text fields are optional and go as null; these go as booleans, and
-    // an unticked box is "no" rather than "not asked".
+    // Mono and the characteristic are the two answers nothing downstream can
+    // work out, so the one check worth having here is that both reach the
+    // command. The text fields are optional and go as null; these two do not.
     const ticks = container.querySelectorAll<HTMLInputElement>(
       "input[type=checkbox]",
     );
-    expect(ticks).toHaveLength(2);
+    expect(ticks, "mono is the only switch left on this form").toHaveLength(1);
     await act(async () => {
       ticks[0]?.click();
     });
+
+    // The picker is filled from the catalog the shell holds, and it has to
+    // open on RIAA rather than on whichever curve the list happened to start
+    // with: the Rust side plays an unstated project back through RIAA, so a
+    // form that defaulted elsewhere would disagree with its own default.
+    const picker = container.querySelector<HTMLSelectElement>("select");
+    expect(picker, "the curve picker should be showing").not.toBeNull();
+    expect(picker?.options).toHaveLength(2);
+    expect(picker?.value).toBe("riaa");
 
     await act(async () => {
       form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -146,7 +160,7 @@ describe("the project browser", () => {
 
     expect(api.newProject).toHaveBeenCalledTimes(1);
     expect(api.newProject).toHaveBeenCalledWith(
-      expect.objectContaining({ isMono: true, riaaEq: false }),
+      expect.objectContaining({ isMono: true, playbackEq: "riaa" }),
     );
     expect(api.openProject).toHaveBeenCalledWith("/library/new.vcw");
     // The open project, and the directory it lives in. A created project

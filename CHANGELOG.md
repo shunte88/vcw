@@ -14,6 +14,51 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## Unreleased
+
+### Added
+
+* **Say what the record was cut with.** The sixteen curves 0.3.2-alpha made
+  readable can now be chosen, and the choice is kept in the project. Set it for
+  the whole release with `vcw release album.vcw set --playback-eq columbia_lp`,
+  for one side with `vcw tracks album.vcw side-eq --side A --curve decca_lp`, or
+  for a single track with `vcw tracks album.vcw set 3 --playback-eq emi` - a
+  compilation cut from several sources needs all three. A level that says
+  nothing inherits from the one above it, and a project that says nothing
+  anywhere is RIAA, which is what almost every record after 1954 is.
+  `vcw tracks list` prints the curve in force at each level, not the one written
+  there, so a track that inherits still shows what it will be played back
+  through. Clearing is `--playback-eq ""` on a track and `side-eq --side A` with
+  no curve. A name no curve goes by is refused, and the refusal lists the ones
+  that exist.
+* **The new-project sheet asks.** The RIAA checkbox is now a picker listing
+  every curve with the era it belongs to. It opens on RIAA.
+
+### Changed
+
+* **The RIAA box became a question with sixteen answers, and a clearer one.**
+  It used to ask whether to apply RIAA, which meant holding two facts at once:
+  what the record was cut with, and what your phono stage had already done
+  about it. The app had to warn you about getting it wrong and could not help
+  further. It now asks only the first - what the record was cut with - because
+  VCW already records what your signal chain did, and works the rest out. The
+  advice that remains appears only when the curve is not RIAA, and says the one
+  thing worth knowing: an ordinary phono stage undoes RIAA whatever the record
+  was cut with, so putting a different characteristic right means undoing RIAA
+  first, and that lifts the noise along with it.
+* **Projects are upgraded on open, as always.** A project written by 0.3.2 or
+  earlier gains the new field; a box you had ticked becomes RIAA, and one you
+  had not becomes unstated rather than a decision you never made. The new field
+  is only a record of the decision so far - **VCW does not apply the curve
+  yet**, which is the next piece of work.
+
+### Fixed
+
+* **`vcw eq list | head` no longer panics.** Closing a pipe early - `head`,
+  `less` and a quit, a script that stops reading - printed a Rust panic and a
+  failure exit code from any VCW command. It now ends quietly and successfully,
+  the way every other command-line tool does.
+
 ## 0.3.2-alpha
 
 *2026-10-12.*

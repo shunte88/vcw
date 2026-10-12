@@ -190,6 +190,7 @@ impl Backend for Served {
             "about" => ok(&vcw_shell::library::about()),
             "support" => done(vcw_shell::library::support(args.get("page")?)),
             "devices" => ok(&vcw_shell::library::devices()),
+            "curves" => ok(&vcw_shell::library::curves()),
             "release" => done(vcw_shell::library::release(shell)),
             "sides" => done(vcw_shell::library::sides(shell)),
             "tracks" => done(vcw_shell::library::tracks(shell)),

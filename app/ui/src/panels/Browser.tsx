@@ -39,18 +39,17 @@
 // in, and asking would be asking a person to guess at the answer the
 // application is about to find.
 //
-// The two boxes below them are there on the opposite argument. Mono and the
-// RIAA curve are the only things on this form that nothing downstream can work
-// out: a mono groove played with a stereo cartridge is two nearly-identical
-// channels and never exactly identical ones, and a cutting curve leaves no
-// trace in the audio it was applied to. Unticked is an answer rather than a
-// gap, which is why they are checkboxes and not a third state, and both are
-// changeable afterwards - neither touches what is captured.
+// The two controls below them are there on the opposite argument. Whether the
+// pressing is mono, and what characteristic it was cut with, are the only things
+// on this form that nothing downstream can work out: a mono groove played with a
+// stereo cartridge is two nearly-identical channels and never exactly identical
+// ones, and a cutting curve leaves no trace in the audio it was applied to. Both
+// are changeable afterwards - neither touches what is captured (§9).
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
-import type { About, Project } from "../bindings/vcw";
+import type { About, Curve, Project } from "../bindings/vcw";
 import { useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
@@ -194,6 +193,16 @@ function Preview({ peaks }: { peaks: readonly number[] }): React.JSX.Element {
  */
 const VIEW = "vcw.library.view";
 
+/**
+ * The characteristic all but a handful of records were cut to.
+ *
+ * `vcw_eq::RIAA`, and the one curve id this file has to name: it is both the
+ * preselected answer and what the Rust side falls back to for a project that
+ * states nothing, so the form must not offer a different default from the one
+ * playback would use.
+ */
+const RIAA = "riaa";
+
 /** The two icons on the toggle, drawn rather than named so they do not need a font. */
 function ViewIcon({ tiles }: { tiles: boolean }): React.JSX.Element {
   return (
@@ -326,8 +335,23 @@ export function Browser({
     album: "",
     catalog: "",
     isMono: false,
-    riaaEq: false,
+    playbackEq: RIAA,
   });
+  const [curves, setCurves] = useState<Curve[]>([]);
+
+  // Fetched once rather than per open of the form: the catalog is compiled into
+  // the build, so it cannot change while the window is up.
+  useEffect(() => {
+    let live = true;
+    void api.curves().then((answer) => {
+      if (live) {
+        setCurves(answer);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Every way into a project goes through here, so the panel change that
   // follows one cannot be wired to two of the three. Opening lands on Tracks
@@ -395,7 +419,7 @@ export function Browser({
           album: blank(seed.album),
           catalog: blank(seed.catalog),
           isMono: seed.isMono,
-          riaaEq: seed.riaaEq,
+          playbackEq: seed.playbackEq,
         });
         onSelect(made.path);
         await api.openProject(made.path);
@@ -407,7 +431,7 @@ export function Browser({
           album: "",
           catalog: "",
           isMono: false,
-          riaaEq: false,
+          playbackEq: RIAA,
         });
         // Both, and they are not the same thing: `reload` re-reads the project
         // the shell has open, `onLibraryChanged` re-reads the directory it came
@@ -537,24 +561,51 @@ export function Browser({
                 title={text("library.new.mono.title")}
               />
             </div>
-            <div className="seed-switch">
-              <span>{text("library.new.eq")}</span>
-              <Switch
-                checked={seed.riaaEq}
-                onChange={(riaa) => setSeed({ ...seed, riaaEq: riaa })}
-                off={text("library.new.eq.none")}
-                on={text("library.new.eq.riaa")}
-                title={text("library.new.eq.title")}
-              />
-            </div>
-            {seed.riaaEq && (
+            {/*
+              A picker and not a switch, because the question has sixteen
+              answers. It is also no longer a question about what to *do*: what
+              the capture already carried is a settings-level fact about the
+              chain, and naming what the record was cut with is what lets VCW
+              work out the difference. RIAA is preselected because all but a
+              handful of records in anybody's collection were cut to it, and
+              because a project that states nothing is played back that way
+              anyway - so the default selection and the default behavior agree.
+            */}
+            <label className="seed-field">
+              {text("library.new.eq")}
+              {/*
+                The span is load-bearing. WebKitGTK lays an `<option>` out in
+                the box tree at its full text width and `overflow` on the
+                `select` itself does not contain it, so the longest curve name
+                counted towards the dialog's scrollable width and put a
+                scrollbar under a form whose contents all fitted. An ordinary
+                element clips where a form control would not.
+              */}
+              <span className="picker">
+                <select
+                  value={seed.playbackEq}
+                  title={text("library.new.eq.title")}
+                  onChange={(event) =>
+                    setSeed({ ...seed, playbackEq: event.target.value })
+                  }
+                >
+                  {curves.map((curve) => (
+                    <option key={curve.id} value={curve.id}>
+                      {curve.name}
+                      {curve.era === null ? "" : ` (${curve.era})`}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </label>
+            {seed.playbackEq !== RIAA && (
               /*
-                Shown only when it is switched on, because it is advice about a
-                decision just taken and not a standing caveat. There is no safe
-                default here and VCW cannot work the answer out: a phono stage
-                and a head amp both normally apply the curve themselves, and a
-                record equalized twice sounds wrong in a way that is hard to
-                name and impossible to undo after the fact.
+                Shown only when the answer is unusual, because it is advice
+                about a decision just taken and not a standing caveat. A record
+                cut to anything but RIAA and played through an ordinary phono
+                stage has already had the wrong curve undone, and §51's answer
+                is to undo RIAA first - which amplifies noise, and is worth
+                saying before the capture rather than after it.
               */
               <p className="hint warn">{text("library.new.eq.warn")}</p>
             )}

@@ -806,10 +806,17 @@ misreading a graph. **And a textbook biquad misses the tolerance by a factor of
 twenty-seven** at 44.1 kHz, where 20 kHz sits at 0.907 of Nyquist; what meets it is
 matched-z plus one pole/zero pair fitted in two parameters.
 
-Not wired to anything yet, and the next step is not more DSP. `releases.riaa_eq` is a
-`bool` where §51 needs a curve id selectable per side and overridable per track, so a
-v5 migration comes first, then the verb to choose one, then render and export applying
-it. **The IEC rumble filter is parked by decision, 2026-10-12**: it is used
+**A curve can now be chosen, 2026-10-12.** Schema v5 replaces `releases.riaa_eq` with
+`playback_eq` on releases, sides and tracks - the boolean is dropped rather than left
+beside the curve id, because two places to write one decision is two places for it to
+disagree, and `riaa_eq = 1` carries across as `'riaa'`. The three levels resolve
+outward through `vcw_eq::in_force`, and nothing stated anywhere is RIAA. The command
+line sets all three; the window asks at setup, as a picker rather than the old switch,
+because `capture_eq` already records what the preamp did and VCW can work the
+difference out instead of warning about it. **What remains is playback, render and
+export applying the filter, and the curve in force reaching exported tags.** The
+window can still only set it at setup, which is the same gap that leaves `is_mono`
+unchangeable afterwards. **The IEC rumble filter is parked by decision, 2026-10-12**: it is used
 independently of any cutting characteristic, so it belongs with noise reduction and
 click removal rather than here. Parking it is what made the replay bass shelf mandatory
 for shelfless curves, which the note explains.

@@ -51,6 +51,32 @@ pub const RIAA: &str = "riaa";
 /// The id of the entry that applies no equalization.
 pub const FLAT: &str = "flat";
 
+/// The characteristic in force, from the three levels §51 allows it to be stated at.
+///
+/// "Selectable per side, overridable per track", plus the release underneath both.
+/// `None` at a level means nobody said anything there, so the question passes
+/// outward; nothing stated anywhere is [`RIAA`], which is what all but a handful of
+/// records in anybody's collection were cut to.
+///
+/// Here rather than in `vcw-project` because the default is a fact about curves, and
+/// a project crate that knew which curve was usual would be the second place that
+/// fact lived.
+///
+/// ```
+/// # use vcw_eq::{in_force, RIAA};
+/// assert_eq!(in_force(None, None, None), RIAA);
+/// assert_eq!(in_force(None, None, Some("columbia_lp")), "columbia_lp");
+/// assert_eq!(in_force(Some("aes"), Some("emi"), Some("riaa")), "aes");
+/// ```
+#[must_use]
+pub fn in_force<'a>(
+    track: Option<&'a str>,
+    side: Option<&'a str>,
+    release: Option<&'a str>,
+) -> &'a str {
+    track.or(side).or(release).unwrap_or(RIAA)
+}
+
 #[derive(Deserialize)]
 struct File {
     #[serde(default)]

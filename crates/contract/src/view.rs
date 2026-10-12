@@ -138,6 +138,24 @@ pub struct Device {
     pub problems: Vec<String>,
 }
 
+/// One playback equalization characteristic, as a picker needs it (§51).
+///
+/// A projection of [`vcw_eq::Curve`], which carries three time constants and a
+/// citation. A picker wants a name and enough context to choose between sixteen of
+/// them; the numbers are what the filter reads and `vcw eq show` prints.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Curve {
+    /// The id stored in the project and taken by every command that sets one.
+    pub id: String,
+    /// Display name.
+    pub name: String,
+    /// When the characteristic was in use.
+    pub era: Option<String>,
+    /// Which labels cut to it.
+    pub labels: Option<String>,
+}
+
 /// A capture, as a list of takes needs it.
 ///
 /// A projection of [`vcw_project::session::Record`]: the row plus the two

@@ -69,7 +69,8 @@ pub struct Column {
 /// A parsed schema object.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Object {
-    /// `TABLE` or `INDEX`, or [`ADDED_COLUMN`] for an `ALTER TABLE ... ADD COLUMN`.
+    /// `TABLE` or `INDEX`, or [`ADDED_COLUMN`], [`DROPPED_COLUMN`] or [`DATA`] for
+    /// the three statement shapes a migration uses that create no object.
     pub kind: String,
     /// Object name.
     pub name: String,
@@ -86,6 +87,21 @@ pub struct Object {
 /// It is not an object of its own - [`objects`] folds it into the table that was
 /// created earlier, and nothing with this kind survives that call.
 pub const ADDED_COLUMN: &str = "ADD COLUMN";
+
+/// The kind [`parse`] gives an `ALTER TABLE ... DROP COLUMN`.
+///
+/// Folded like [`ADDED_COLUMN`], by removing the column instead of appending it.
+/// The document describes the schema a reader will meet, not the one it passed
+/// through: a column dropped in v5 is not in the file and must not be in the table.
+pub const DROPPED_COLUMN: &str = "DROP COLUMN";
+
+/// The kind [`parse`] gives a statement that moves data rather than defining it.
+///
+/// A migration that widens a column usually has to carry the old column's value
+/// into the new one, and that `UPDATE` is part of the migration but no part of the
+/// schema. [`objects`] discards it; the comment above it still belongs in the
+/// migration source, where somebody reading the SQL will find it.
+pub const DATA: &str = "DATA";
 
 /// Every object the current schema has, in the order the migrations create them.
 ///
@@ -106,17 +122,34 @@ pub fn objects() -> Vec<Object> {
     let mut objects: Vec<Object> = Vec::new();
     for migration in MIGRATIONS {
         for object in parse(migration.sql) {
-            if object.kind == ADDED_COLUMN {
+            if object.kind == DATA {
+                continue;
+            }
+            if object.kind == ADDED_COLUMN || object.kind == DROPPED_COLUMN {
                 let table = objects
                     .iter_mut()
                     .find(|t| t.kind == "TABLE" && t.name == object.name)
                     .unwrap_or_else(|| {
                         panic!(
-                            "migration {} adds a column to `{}`, which nothing creates",
+                            "migration {} alters `{}`, which nothing creates",
                             migration.version, object.name
                         )
                     });
-                table.columns.extend(object.columns);
+                if object.kind == DROPPED_COLUMN {
+                    for gone in &object.columns {
+                        let before = table.columns.len();
+                        table.columns.retain(|c| c.name != gone.name);
+                        assert!(
+                            table.columns.len() < before,
+                            "migration {} drops `{}.{}`, which nothing adds",
+                            migration.version,
+                            object.name,
+                            gone.name
+                        );
+                    }
+                } else {
+                    table.columns.extend(object.columns);
+                }
                 continue;
             }
             objects.push(object);
@@ -165,25 +198,38 @@ pub fn parse(ddl: &str) -> Vec<Object> {
 }
 
 fn parse_statement(sql: &str, comment: &str) -> Object {
-    let head = sql.split_whitespace().take(3).collect::<Vec<_>>();
+    let head = sql.split_whitespace().take(5).collect::<Vec<_>>();
     assert!(
-        matches!(head.first(), Some(&"CREATE" | &"ALTER")),
+        matches!(head.first(), Some(&"CREATE" | &"ALTER" | &"UPDATE")),
         "unexpected statement: {sql}"
     );
+    if head[0] == "UPDATE" {
+        return Object {
+            kind: DATA.to_owned(),
+            name: head[1].to_owned(),
+            comment: comment.to_owned(),
+            columns: Vec::new(),
+            sql: sql.to_owned(),
+        };
+    }
     // Both shapes name the kind second and the object third: `CREATE TABLE captures`
     // and `ALTER TABLE captures` agree as far as the name.
     let kind = if head[0] == "ALTER" {
-        ADDED_COLUMN.to_owned()
+        if head[3] == "DROP" {
+            DROPPED_COLUMN.to_owned()
+        } else {
+            ADDED_COLUMN.to_owned()
+        }
     } else {
         head[1].to_owned()
     };
     let name = head[2].trim_end_matches('(').to_owned();
 
     let mut columns = Vec::new();
-    if kind == ADDED_COLUMN {
+    if kind == ADDED_COLUMN || kind == DROPPED_COLUMN {
         let added = sql
-            .split_once("ADD COLUMN")
-            .expect("ALTER TABLE adds a column")
+            .split_once(kind.as_str())
+            .expect("ALTER TABLE names the column it alters")
             .1
             .trim()
             .trim_end_matches(';')

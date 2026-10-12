@@ -120,6 +120,13 @@ pub(crate) enum Task {
         /// The change to apply.
         update: Update,
     },
+    /// Name the characteristic one side was cut with, overriding the release's.
+    SideEq {
+        /// The side letter.
+        side: char,
+        /// The curve, or `None` to clear it back to the release's.
+        curve: Option<String>,
+    },
     /// Move a track to another side of the same capture.
     Reassign {
         /// The track.
@@ -232,6 +239,13 @@ pub(crate) fn run(args: &Args) -> Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("track {id} is not in this project"))?;
             println!("track {id} is now {}", describe(&record));
         }
+        Task::SideEq { side, curve } => {
+            side::set_playback_eq(&mut project, letter(*side)?, curve.as_deref())?;
+            match curve {
+                Some(curve) => println!("side {side} is cut to {curve}"),
+                None => println!("side {side} takes the release's characteristic"),
+            }
+        }
         Task::Reassign { track: id, to } => {
             track::move_to_side(&mut project, *id, letter(*to)?)?;
             println!("track {id} moved to side {to}");
@@ -244,7 +258,13 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 
 /// Prints the project's topology.
 fn list(project: &Project, only: Option<char>, boundaries: bool, json: bool) -> Result<()> {
-    let numbering = release::load(project.conn())?.map_or(Numbering::Alpha, |r| r.numbering);
+    let record = release::load(project.conn())?;
+    let numbering = record.as_ref().map_or(Numbering::Alpha, |r| r.numbering);
+    // §51 asks for the characteristic in force to be visible wherever the audio
+    // is. A listing is where a person checks what a project is going to do, so it
+    // is said here, resolved - a track that states nothing is not played back
+    // through nothing.
+    let album_eq = record.as_ref().and_then(|r| r.playback_eq.clone());
     // Rendered over the whole project even when one side was asked for, because
     // `sequence` counts across a disc's sides: side B's numbers depend on how
     // many tracks side A holds, so `--side B` alone cannot render them.
@@ -259,7 +279,7 @@ fn list(project: &Project, only: Option<char>, boundaries: bool, json: bool) -> 
     };
 
     if json {
-        print_json(project, &sides, boundaries, &rendered)?;
+        print_json(project, &sides, boundaries, &rendered, album_eq.as_deref())?;
         return Ok(());
     }
 
@@ -300,19 +320,34 @@ fn list(project: &Project, only: Option<char>, boundaries: bool, json: bool) -> 
         if let Some(title) = &record.title {
             println!("    titled {title}");
         }
+        let side_eq = vcw_eq::in_force(None, record.playback_eq.as_deref(), album_eq.as_deref());
+        println!("    cut to {side_eq}");
 
         let tracks = track::tracks_of(project.conn(), record.id)?;
         if tracks.is_empty() {
             println!("    no tracks yet");
         }
         for one in &tracks {
+            // Only when it differs from the side's. §51 wants the curve in force visible,
+            // and a column repeating the line above it on every track hides the one row
+            // that is actually saying something.
+            let track_eq = vcw_eq::in_force(
+                one.playback_eq.as_deref(),
+                record.playback_eq.as_deref(),
+                album_eq.as_deref(),
+            );
             println!(
-                "    {:<5} {:>9.3} - {:>9.3} s  ({:>7.3} s)  {}",
+                "    {:<5} {:>9.3} - {:>9.3} s  ({:>7.3} s)  {}{}",
                 rendered.get(&one.id).map_or("", String::as_str),
                 one.start as f64 / rate,
                 one.end as f64 / rate,
                 one.frames() as f64 / rate,
-                describe(one)
+                describe(one),
+                if track_eq == side_eq {
+                    String::new()
+                } else {
+                    format!("  cut to {track_eq}")
+                }
             );
         }
         if boundaries {
@@ -459,6 +494,7 @@ fn print_json(
     sides: &[side::Record],
     boundaries: bool,
     rendered: &std::collections::HashMap<i64, String>,
+    album_eq: Option<&str>,
 ) -> Result<()> {
     let mut out = String::from("{\"sides\":[");
     for (index, record) in sides.iter().enumerate() {
@@ -466,12 +502,17 @@ fn print_json(
             out.push(',');
         }
         out.push_str(&format!(
-            "{{\"side\":\"{}\",\"disc\":{},\"capture\":{},\"tracks\":[",
+            "{{\"side\":\"{}\",\"disc\":{},\"capture\":{},\"playback_eq\":{},\"tracks\":[",
             record.letter(),
             record.disc(),
             record
                 .capture
-                .map_or_else(|| "null".to_string(), |id| id.to_string())
+                .map_or_else(|| "null".to_string(), |id| id.to_string()),
+            quote(vcw_eq::in_force(
+                None,
+                record.playback_eq.as_deref(),
+                album_eq
+            ))
         ));
         for (n, one) in track::tracks_of(project.conn(), record.id)?
             .iter()
@@ -481,12 +522,18 @@ fn print_json(
                 out.push(',');
             }
             out.push_str(&format!(
-                "{{\"id\":{},\"position\":\"{}\",\"start\":{},\"end\":{},\"title\":{}}}",
+                "{{\"id\":{},\"position\":\"{}\",\"start\":{},\"end\":{},\"title\":{},\
+                 \"playback_eq\":{}}}",
                 one.id,
                 rendered.get(&one.id).map_or("", String::as_str),
                 one.start,
                 one.end,
-                quote(&one.title)
+                quote(&one.title),
+                quote(vcw_eq::in_force(
+                    one.playback_eq.as_deref(),
+                    record.playback_eq.as_deref(),
+                    album_eq
+                ))
             ));
         }
         out.push(']');
