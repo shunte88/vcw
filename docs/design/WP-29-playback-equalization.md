@@ -24,6 +24,19 @@ Three questions follow. What are the curves, in numbers we can implement? How ar
 stated on disk, given §51 also wants "a user-defined curve stated in the same terms"?
 And what filter meets +/-0.5 dB at 44.1 kHz, which is the rate that hurts?
 
+### Who the catalog is for
+
+RIAA alone serves anyone transferring a record pressed since the late 1950s, and that
+is most people. The other fifteen curves serve a different reader: somebody working
+through a collection that predates the standard, where the characteristic varies by
+label and by year and getting it wrong is a transfer that cannot be corrected later
+without the original disc. That is archival work, and it is an audience VCW can claim
+rather than merely accommodate. An audiophile wants one curve to be exact. An archivist
+wants sixteen curves, each with a citation they can check, and the curve in force
+recorded in the file and carried into the exported metadata so that a transfer made
+today is still legible to somebody who opens it without us. §51 already asks for all
+three of those; they are what makes the catalog an archival tool and not a preference.
+
 ## 1. What a curve is
 
 Every curve in the literature, including all nine §51 names, is three numbers: a bass
