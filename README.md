@@ -113,7 +113,7 @@ vcw export album.vcw --into ./exports --format wav --dry-run
 vcw export album.vcw --into ./exports --format wav
 ```
 
-Use `vcw --help` and each command's `--help` for options. Supported commands offer `--json` for integration. `vcw doctor` checks the environment; `vcw devices` and `vcw formats` inspect recording devices and configurations.
+Use `vcw --help` and each command's `--help` for options. Supported commands offer `--json` for integration. `vcw doctor` checks the environment; `vcw devices` and `vcw formats` inspect recording devices and configurations; `vcw eq list` and `vcw eq show` print the sixteen historic playback equalization curves with the published source each one's numbers came from.
 
 For custom tools and interfaces, start with the [Rust API](docs/PROJECT-API.md), [project schema](docs/SCHEMA.md), and [command/event contract](crates/contract/). The [user guide](docs/USER-GUIDE.md) contains fuller CLI examples.
 

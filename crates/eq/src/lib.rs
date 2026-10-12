@@ -75,7 +75,7 @@ pub use filter::{BAND_HZ, Filter, TOLERANCE_DB, worst_error_db};
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The catalog text is not the TOML this crate expects.
-    #[error("the curve catalog is malformed: {source}")]
+    #[error("the curve catalog is malformed")]
     Malformed {
         /// The parse failure. Boxed because it is much larger than every other variant.
         source: Box<toml::de::Error>,

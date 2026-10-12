@@ -331,6 +331,49 @@ plays back exactly as it did before - but a curve cannot be applied to it
 without a guess, so VCW will refuse rather than guess. If you know what your
 chain does, state it now; it costs a flag and cannot be reconstructed later.
 
+### The curves themselves
+
+VCW ships sixteen cutting characteristics: RIAA, and the fifteen label and
+standards-body curves that came before it or alongside it. You can read them,
+with the published source each one's numbers came from.
+
+```text
+vcw eq list                 # every curve and the time constants that define it
+vcw eq show columbia_lp     # one in full: source, response, measured error
+vcw eq show riaa --json     # the same, for a script
+```
+
+`show` prints three things worth having. The **source** is a citation to the
+published document the parameters were taken from, because a curve nobody can
+trace is a curve nobody can check. The **response** is the curve's own
+definition, computed from its time constants - not a figure copied off a chart,
+because in most published sources "dB at 10 kHz" describes the treble section
+alone and not the finished curve, which is how an apparently careful reader ends
+up 1.5 dB out. And the **measured error** is how far the filter VCW actually
+builds departs from that definition, at every sample rate VCW records at.
+§51 allows 0.5 dB; the worst curve at the worst rate is 0.078.
+
+Where sources disagree, the entry says so. Columbia LP's bass shelf is published
+as both 1590 and 1950 microseconds, a difference of 1.675 dB at 20 Hz, and
+`vcw eq show columbia_lp` prints the number VCW uses, the number you will find
+elsewhere, and why.
+
+You can add your own in the same terms - a bass turnover, a treble rolloff, and
+where it has one a bass shelf - in a TOML file of the same shape, and merge it
+over the built-in set. An id that already exists replaces that curve; a new id
+is added.
+
+```text
+vcw eq list --curves my-curves.toml
+```
+
+A citation is required on every curve, including yours. "Measured on my bench,
+March 2026" is a perfectly good one.
+
+**Nothing selects a curve yet.** This release makes the catalog readable and its
+conformance checkable; choosing a curve for a side, and hearing it on playback
+and in an export, is the next piece of work.
+
 ## When something goes wrong mid-capture
 
 If the process died, the machine lost power, or the device vanished, the project

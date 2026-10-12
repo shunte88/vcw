@@ -14,6 +14,42 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## 0.3.2-alpha
+
+*2026-10-12.*
+
+The equalization curves a record was actually cut with. Sixteen of them, with
+the published source each one's numbers came from. Nothing selects a curve yet
+- that is the next piece of work - but the catalog is here, it is readable, and
+its accuracy can be checked by the person relying on it rather than only by the
+test suite.
+
+### Added
+
+* **`vcw eq list` and `vcw eq show <id>`.** RIAA, and the fifteen label and
+  standards-body characteristics that came before it or alongside it: Columbia
+  LP, Decca FFRR, EMI/HMV, NAB, AES, Teldec, CCIR, London, the 78 curves and the
+  flat-treble ones. `show` prints three things worth having for each. The
+  **source** is a citation to the published document the parameters came from,
+  because a curve nobody can trace is a curve nobody can check. The **response**
+  is computed from the curve's own time constants rather than copied off a
+  chart, which matters more than it sounds: in most published sources a figure
+  given as "dB at 10 kHz" describes the treble section alone and not the
+  finished curve, and a careful reader who takes it at face value ends up 1.5 dB
+  out. And the **measured error** is how far the filter VCW really builds
+  departs from that definition, at every sample rate VCW records at. The budget
+  is 0.5 dB from 20 Hz to 20 kHz; the worst curve at the worst rate is 0.078.
+* **Your own curve, in the same terms.** A bass turnover, a treble rolloff, and
+  where it has one a bass shelf, in a TOML file merged over the built-in set
+  with `vcw eq list --curves my-curves.toml`. An id that already exists replaces
+  that curve, a new one is added, and a citation is required on yours as much as
+  on ours - "measured on my own bench, March 2026" is a perfectly good one.
+* **Where the sources disagree, the entry says so.** Columbia LP's bass shelf is
+  published as both 1590 and 1950 microseconds, which is 1.675 dB apart at 20 Hz
+  and more than three times the tolerance. `vcw eq show columbia_lp` prints the
+  number VCW uses, the number you will find elsewhere, and the evidence that
+  decided between them.
+
 ## 0.3.1-alpha
 
 *2026-10-11.*

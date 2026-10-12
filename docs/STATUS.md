@@ -7429,3 +7429,134 @@ span and the orphan, so the rest of the project still lands.
 `a_label_lying_over_one_already_taken_is_reported_rather_than_refused` holds it, and
 was falsified by guarding the match arm with `if false`: `frames 2000..6000 lie over
 track 1 (0..4000)`, out of the import rather than out of the report.
+
+## Phase 3 - WP-29, the playback equalization curves
+
+§51 asks for nine named characteristics, a user-defined one in the same terms, a
+citation on every curve, and the implemented response measured against that citation to
+within **0.5 dB from 20 Hz to 20 kHz at every rate §8 allows**. `crates/eq` is that, and
+`vcw eq list` / `vcw eq show <id>` is what makes it checkable from outside the test
+suite. Sixteen curves, worst error **0.078 dB** at 44.1 kHz, a 6.4x margin, and the
+conformance test asserts half the budget as well so eating the headroom is caught before
+eating the budget. The research is in
+[docs/design/WP-29-playback-equalization.md](design/WP-29-playback-equalization.md) and
+is worth reading before the next piece, because it changed the shape of the work three
+times.
+
+### The published decibel figures cannot be the test
+
+This is the finding everything else follows from. In most sources a figure given as
+"dB at 10 kHz" describes the **treble section alone** and not the finished curve - Galo
+says so outright - so Columbia LP's complete curve reads **-15.54 dB** where it is
+published as "-16", and NAB reads -15.58. NAB also puts 0 dB at **700 Hz** rather than
+1 kHz, which shifts every value in an NAB table by 1.488 dB. A trailing `-0` in a code
+means there is **no treble network at all**, not 0 dB at 10 kHz, which is why the three
+flat-treble curves read -0.26, -0.37 and -0.96 as complete curves. And one row of the
+best secondary table is simply wrong: RCA 45 restates its treble section's -13.7 where
+the complete curve is **-14.89**, while the neighboring 800 Hz row on the same page is
+computed correctly.
+
+So the **time constants are the definition**, the citation sits in the entry beside
+them, and the conformance test measures against their analytic response - never against
+a chart's decibel column. Validated against 19 published rows at 50 Hz and 10 kHz: 15
+agree within 0.15 dB, three are explained by the `-0` trap, one is the RCA 45 error.
+
+### §51's list of nine curves is not nine rows
+
+**EMI and HMV are one characteristic**, Blumlein 300-0 (531 µs, no shelf, no treble),
+which resolves the entry every chart scatters between 200 and 500 Hz. Pspatial Audio
+matched Langford-Smith's EMI curve against Moir's tabulated HMV 78 data; Copeland extends
+it to EMI LPs and 45s. But **HMV then splits at July 1953**, after which English HMV 33s
+were cut to Columbia LP.
+
+**Decca FFRR is two curves plus a third the literature invented.** The 78 is 636/25 µs
+(`250N-5.5`, and 25 µs gives -5.55 dB at 10 kHz, matching its own name to 0.05 dB); the
+LP from June 1950 is 1590/318/60 µs. The widely cited **"640 µs / 53 µs with a 3 dB per
+octave slope" Decca curve does not exist** - it is a misreading of where a published
+graph departs from flat, and those numbers are not time constants at all.
+
+**Columbia LP's shelf was disputed and the code letter settled it.** Galo says 1590 µs,
+Pspatial Audio says 1950, and they differ by **1.675 dB at 20 Hz** - more than three
+times the tolerance. The letter in a code states the player's maximum bass boost, which
+is the shelf-to-turnover ratio, so `500C-16`'s C = +14 dB predicts 318 x 10^(14/20) =
+**1593.8 µs**. Galo's 1590 is that to 0.02 dB; 1950 would be +15.75 dB, which is no
+letter at all. The same check passes exactly on RIAA (3180/318 = +20.00), Teldec, Decca
+LP and London LP, so it is a check and not a coincidence, and
+`the_code_letter_predicts_the_published_shelf` holds it. Pspatial's figure is recorded in
+the entry's `disputed` field rather than discarded, and `vcw eq show columbia_lp` prints
+it.
+
+### A textbook biquad misses by a factor of twenty-seven
+
+At 44.1 kHz, 20 kHz sits at **0.907 of Nyquist**, where the bilinear transform maps the
+top of the band onto the analog prototype's 95.6 kHz and forces a spurious zero at
+Nyquist. One RIAA table, same conditions throughout:
+
+| method | 44.1 k | 48 k | 88.2 k | 96 k | 176.4 k | 192 k |
+|---|---|---|---|---|---|---|
+| bilinear, per-section prewarped | **13.471** | 9.010 | 1.644 | 1.357 | 0.371 | 0.312 |
+| matched-z | **3.142** | 2.621 | 0.745 | 0.627 | 0.184 | 0.155 |
+| matched-z + one fitted pole/zero pair | **0.078** | 0.037 | 0.001 | 0.000 | 0.000 | 0.000 |
+
+Fitting *all* the root positions instead of just the free pair buys 0.001 dB, so the
+optimizer is two-dimensional - Nelder-Mead, because a worst-case objective is not
+smooth. **FIR was tried and rejected**: resolving a 20 Hz feature needs about 50,000 taps
+at 44.1 kHz. Every pole and zero is real, so the filter is a cascade of first-order
+sections and there is no complex arithmetic anywhere in it.
+
+### Parking the rumble filter made the replay shelf mandatory
+
+The IEC amendment's 20 Hz rumble filter is **parked by decision, 2026-10-12**: it is
+selected independently of any cutting characteristic, so it belongs with noise reduction
+and click removal rather than here. That had a consequence. A characteristic cut with no
+bass shelf - the `N` of the code letters - has a pole at s = 0, so its replay response
+rises 20 dB per decade without limit: EMI is +49 dB at 1 Hz and +69 dB at 0.1 Hz, still
+climbing. Against a real capture, which always carries some DC offset, that filter is an
+integrator that walks to the clipping point. The rumble filter would have cancelled that
+pole exactly, both sitting at z = 1; without it, **replay needs a shelf of its own**.
+
+So the catalog carries `replay_shelf_db`, defaulting to +20 dB and stated as the
+shelf-to-turnover ratio `20*log10(t1/t2)` - which is exactly what the code letters mean,
+RIAA being 3180/318 = +20.00. The realized boost sits a few tenths under the stated
+figure (EMI at +20 settles at 19.63 dB) because 1 kHz is not quite on the turnover's
+asymptote. The test asserting 20.00 failed first and the **assertion** was wrong, not the
+code.
+
+### Inverse RIAA is not a special case
+
+Dividing by RIAA makes RIAA's poles the filter's zeros and vice versa, so a Teldec curve
+over an `Riaa` capture is one design pass like any other. `Filter::inverts_riaa` exists
+only so the caller can say out loud that it amplifies the noise floor, which is
+**+2.83 dB at 10 kHz** for that pair. `CaptureEq::Unknown` is refused as §51 requires,
+with a message naming both ways out.
+
+### TOML and not Audacity's XML
+
+Audacity's `EQCurves.xml` stores a sampled point list, `<point f="..." d="..."/>`. It has
+to be fitted, its accuracy is bounded by its sample density, and it cannot be checked
+against a citation. **We take Audacity's data and not Audacity's file format.** The
+catalog is an array of tables keyed by time constant, file order is the curated display
+order, and a user file merges over the built-in one - which is §51's user-defined curve
+without a curve editor, and the user's own instruction was that the editor is not wanted.
+
+### Its own crate, and what is not done
+
+`vcw-export` does not depend on `vcw-signal`, `vcw-audio` depends only on `vcw-types`,
+and `crates/signal` is analysis - so a processing chain there would make export depend on
+the analyzer. Hence `crates/eq`, with no new external dependency: serde, thiserror, toml,
+vcw-types, all already in the tree.
+
+**Nothing selects a curve yet, and the next step is not more DSP.** `releases.riaa_eq` is
+a `bool` where §51 needs a curve id selectable per side and overridable per track, so a
+**v5 migration comes first** - and by the five-places rule that touches the DDL parser,
+the generated `SCHEMA.md`, the Python reader's allowlist and the shell's wind-back
+fixture as well as the table. Then the verb across contract, window and CLI. Then render
+and export applying it and writing it into exported metadata.
+
+On what setup should ask: **two facts, not one, and they are different kinds of fact.**
+`capture_eq` must be stated at capture because it can never be recovered afterwards,
+which is why it defaults to `Unknown` and why guessing is dangerous. The playback curve is
+the opposite - applied on the way out, changeable forever, lossless to change - so it can
+have a default and the default is RIAA. Prompting for it at setup is right, but as a
+**revisable decision shown beside the irrevocable one**, not as a second irrevocable
+question.

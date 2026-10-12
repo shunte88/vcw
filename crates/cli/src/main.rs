@@ -52,6 +52,7 @@ mod capture;
 mod contend;
 mod detect;
 mod devices;
+mod eq;
 mod export;
 mod fingerprint;
 mod import;
@@ -207,6 +208,15 @@ enum Command {
         /// Machine-readable output.
         #[arg(long)]
         json: bool,
+    },
+
+    /// Show the §51 playback equalization curves and what defines them.
+    ///
+    /// Read only. Nothing selects a curve yet - this is the catalog, its
+    /// citations, and the measured conformance of the filter built from it.
+    Eq {
+        #[command(subcommand)]
+        what: EqCommand,
     },
 
     /// Record from a device and report what was really negotiated (§9).
@@ -695,6 +705,34 @@ enum Command {
     },
 }
 
+/// What `vcw eq` was asked to do.
+#[derive(Subcommand)]
+enum EqCommand {
+    /// Every curve, with the time constants that define it.
+    List {
+        /// A TOML file of your own curves, merged over the built-in catalog:
+        /// an id that already exists replaces it, a new one is added. §51's
+        /// user-defined curve, stated in the same terms as the rest.
+        #[arg(long)]
+        curves: Option<String>,
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// One curve in full: its source, its response, and its measured error.
+    Show {
+        /// Curve id, as printed by `vcw eq list`.
+        id: String,
+        /// A TOML file of your own curves, merged over the built-in catalog.
+        #[arg(long)]
+        curves: Option<String>,
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 /// What `vcw metadata` was asked to do.
 #[derive(Subcommand)]
 enum MetadataCommand {
@@ -1074,6 +1112,10 @@ fn run() -> anyhow::Result<()> {
             max_channels,
             json,
         } => devices::formats(&device, which, confirm, max_channels, json),
+        Command::Eq { what } => match what {
+            EqCommand::List { curves, json } => eq::list(curves.as_deref(), json),
+            EqCommand::Show { id, curves, json } => eq::show(&id, curves.as_deref(), json),
+        },
         Command::Capture {
             device,
             rate,

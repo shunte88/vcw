@@ -36,7 +36,7 @@
 //! rolloff - and the published source they were taken from. Everything else here is
 //! derived from those three numbers.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Microseconds, as the literature states time constants.
 const US: f64 = 1e-6;
@@ -56,7 +56,7 @@ pub const DEFAULT_REPLAY_SHELF_DB: f64 = 20.0;
 ///
 /// Fields are optional because the networks are: a curve with no treble rolloff omits
 /// `treble_us`, and a curve with none of the three is flat.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Curve {
     /// Stable identifier, used in projects and on the command line. Lower snake case.
     pub id: String,
