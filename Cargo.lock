@@ -1790,6 +1790,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vcw-eq"
+version = "0.3.1"
+dependencies = [
+ "serde",
+ "thiserror 2.0.20",
+ "toml",
+ "vcw-types",
+]
+
+[[package]]
 name = "vcw-export"
 version = "0.3.1"
 dependencies = [

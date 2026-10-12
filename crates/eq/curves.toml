@@ -1,0 +1,252 @@
+# VCW playback equalization curves (§51).
+#
+# MIT License - see the header in any Rust source file for the full text.
+#
+# WHAT A CURVE IS. Three time constants, in microseconds, naming the corners of the
+# replay network: t1 the bass shelf, t2 the bass turnover, t3 the treble rolloff. The
+# replay response is
+#
+#     H(s) = (1 + s*t2) / ((1 + s*t1) * (1 + s*t3))      0 dB at 1 kHz
+#
+# Omit a field and that network is absent. Omit all three and the curve is flat.
+#
+# WHY TIME CONSTANTS AND NOT DECIBELS. Every secondary chart also publishes a "dB at
+# 10 kHz" figure, and in most of them that figure describes the treble section alone
+# rather than the finished curve: Columbia LP is published as "-16" and measures
+# -15.54 dB against 1 kHz. NAB additionally puts its 0 dB reference at 700 Hz, which
+# shifts every value in a NAB table by 1.49 dB. And a trailing "-0" in a code means
+# there is no treble network at all, not 0 dB at 10 kHz. The time constants are the
+# definition; the conformance test measures against them and against nothing else.
+# docs/design/WP-29-playback-equalization.md has the working.
+#
+# THE CODE, e.g. 500R-13.7. Bass turnover in Hz, then a letter giving the *player's*
+# maximum bass boost, then the treble section's dB at 10 kHz. The letters are
+# N = no shelf, X = +12 dB, C = +14, A = +16, B = +18, R = +20. Kept here because it
+# cross-checks t1: the letter predicts t1 = t2 * 10^(dB/20), and it agrees with the
+# published shelf to 0.02 dB on every curve that has one.
+#
+# A CURVE WITH NO SHELF STILL NEEDS ONE ON REPLAY. An N type record was cut with no
+# bass limit, so its replay curve has a pole at DC and rises without bound: +69 dB at
+# 0.1 Hz and climbing, which turns any DC offset in a capture into an integrator that
+# runs to the clipping point. Period players solved this with a shelf, which is what
+# the letters are describing. `replay_shelf_db` is that limit, default +20 dB, and it
+# is a property of the player and not of the record.
+#
+# ADDING YOUR OWN. Copy an entry, change the numbers, drop the file in the VCW
+# configuration directory as `curves.toml`. An id already used here replaces the
+# built-in one. `citation` is required: a curve nobody can trace is a curve nobody
+# can check.
+
+# ---------------------------------------------------------------------------
+# No equalization.
+# ---------------------------------------------------------------------------
+[[curve]]
+id       = "flat"
+name     = "Flat (no curve)"
+citation = "not a characteristic: the audio is passed through unchanged"
+
+# ---------------------------------------------------------------------------
+# The standard, and the two it was assembled from.
+# ---------------------------------------------------------------------------
+[[curve]]
+id          = "riaa"
+name        = "RIAA"
+code        = "500R-13.7"
+shelf_us    = 3180
+turnover_us = 318
+treble_us   = 75
+citation    = "IEC 98 (1964); BS 1928:1955; adopted by the RIAA in 1952 from RCA's New Orthophonic characteristic"
+era         = "August 1952 onward, universal from the late 1960s"
+labels      = "effectively every label after the mid-1950s"
+# The only curve whose published -13.7 dB at 10 kHz is a whole-curve figure. The
+# implementation measures -13.73 dB and +19.27 dB at 20 Hz, against a published
+# +19.274. It is the one curve where a secondary table can be used as a check.
+
+[[curve]]
+id          = "nab"
+name        = "NAB / NARTB"
+code        = "500B-16"
+shelf_us    = 3180
+turnover_us = 318
+treble_us   = 100
+citation    = "Galo, 'The Columbia Lp Equalization Curve', ARSC Journal, Spring 2009, p. 9; identical to the Quad 22 controller's B curve"
+era         = "April 1949 to 1958"
+labels      = "most American labels before RIAA"
+# The B here is Quad's curve label, not the +18 dB shelf letter: the shelf is 3180 us,
+# which is +20 dB. NAB referenced its published graph to 700 Hz rather than 1 kHz, so
+# every figure in an NAB table reads 1.49 dB away from a 1 kHz one. Pspatial Audio:
+# "NAB's decision to put the 0dB reference at 700Hz rather than 1kHz confuses everyone".
+
+[[curve]]
+id          = "columbia_lp"
+name        = "Columbia LP"
+code        = "500C-16"
+shelf_us    = 1590
+turnover_us = 318
+treble_us   = 100
+citation    = "Galo, 'The Columbia Lp Equalization Curve', ARSC Journal, Spring 2009 - circuit simulation of candidate time constants against the published Snepvangers graph, sub-0.3 dB fit"
+era         = "June 1948 to 1956"
+labels      = "Columbia; also HMV 33s cut in England after July 1953, Vanguard, Bach Guild, Cetra, Vox"
+disputed    = "shelf_us: Pspatial Audio gives 1950 us, which differs by 1.68 dB at 20 Hz"
+# The most contested curve in the literature, and the code settles it. 500C-16 means a
+# +14 dB player shelf, which predicts t1 = 318 * 10^(14/20) = 1593.8 us. Galo's 1590
+# is that to 0.02 dB. Pspatial's 1950 would be +15.75 dB, which is not a letter in the
+# table. Columbia is the NAB curve with the shelf moved, which is the origin of the
+# term "500 modified" or 500M in older equalization guides.
+
+# ---------------------------------------------------------------------------
+# The other characteristics §51 names.
+# ---------------------------------------------------------------------------
+[[curve]]
+id          = "aes"
+name        = "AES"
+code        = "400N-12.3"
+turnover_us = 398
+treble_us   = 63.7
+citation    = "Audio Engineering Society curve, 1951; Audacity published table, 'Playback equalization for 78 rpm shellacs and early 33 1/3 LPs'"
+era         = "January 1951 to 1958"
+labels      = "American independents"
+
+[[curve]]
+id          = "teldec"
+name        = "Teldec"
+code        = "500R-11"
+shelf_us    = 3180
+turnover_us = 318
+treble_us   = 50
+citation    = "CCIR Recommendation 208 (1956), which replaced Rec. 134 of 1953; DIN 45533, 45536 and 45537 (1959)"
+era         = "proposed 1957, in use to about 1962"
+labels      = "Telefunken; German and European labels that did not take RIAA immediately"
+# RIAA with the third constant changed from 75 us to 50 us, and nothing else. Sources
+# disagree on how widely it was cut: Pspatial Audio has Telefunken using the CCIR
+# characteristic until 1962, while a Vinyl Engine thread holds the DIN standard was a
+# proposal never put into practice and that Teldec itself cut RIAA.
+
+[[curve]]
+id               = "emi"
+name             = "EMI / HMV (Blumlein 300-0)"
+code             = "300N-0"
+turnover_us      = 531
+replay_shelf_db  = 20.0
+citation         = "Langford-Smith, Radiotron Designer's Handbook, 4th ed. 1952, compared against Moir, High Quality Sound Reproduction, 1958, Table 7.4; Copeland, Manual of Analogue Sound Restoration Techniques, British Library 2008"
+era              = "1931 to July 1953, and on EMI 78s in Britain until the 1960s"
+labels           = "EMI, His Master's Voice, British Columbia, Parlophone, MGM"
+# EMI and HMV are one curve, which is the finding that resolves the entry secondary
+# charts scatter between 200, 250, 300 and 500 Hz. Blumlein's original constant-
+# amplitude-below-300-Hz characteristic, with no treble pre-emphasis at all: Pspatial
+# Audio matched Langford-Smith's EMI curve against Moir's tabulated HMV 78 data, and
+# Copeland extends it to EMI LPs and 45s up to mid-July 1953. After that date HMV 33s
+# cut in England used `columbia_lp`, so HMV is two curves separated by a date.
+
+[[curve]]
+id              = "decca_ffrr_78"
+name            = "Decca FFRR (78)"
+code            = "250N-5.5"
+turnover_us     = 636
+treble_us       = 25
+replay_shelf_db = 20.0
+citation        = "Moir, High Quality Sound Reproduction, 1958, Table 7.4 and its de-emphasis circuit, SPICE-verified by Pspatial Audio"
+era             = "1944 to 1956"
+labels          = "Decca ffrr, London ffrr"
+# Decca is the other §51 entry that is not one curve: this is the 78, and `decca_lp`
+# is the microgroove. The widely cited third Decca curve, "640 us / 53 us with a 3 dB
+# per octave slope", is a misreading - those frequencies are where the published graph
+# departs from flat, not time constants. Pspatial Audio: "the indicated frequencies
+# are not related to the time constants". 25 us gives -5.55 dB at 10 kHz, which is the
+# 5.5 in the curve's own name to within 0.05 dB.
+
+[[curve]]
+id          = "decca_lp"
+name        = "Decca LP"
+code        = "500C-11.5"
+shelf_us    = 1590
+turnover_us = 318
+treble_us   = 60
+citation    = "Moir, High Quality Sound Reproduction, 1958, Table 7.4; time constants determined by Pspatial Audio"
+era         = "June 1950 to 1955"
+labels      = "Decca UK"
+# Decca LPs pressed before June 1950 used `decca_ffrr_78`.
+
+# ---------------------------------------------------------------------------
+# Well-evidenced characteristics beyond §51's list.
+# ---------------------------------------------------------------------------
+[[curve]]
+id          = "ccir_134"
+name        = "CCIR / BS coarse groove"
+code        = "350A-10.5"
+shelf_us    = 3180
+turnover_us = 450
+treble_us   = 50
+citation    = "CCIR Recommendation 134, drafted Geneva June 1951, agreed London 1953; identical to the coarse-groove characteristic of BS 1928:1955"
+era         = "1952 to 1955"
+labels      = "Deutsche Grammophon before 1955, British Philips, Caedmon"
+
+[[curve]]
+id          = "london_lp"
+name        = "London LP"
+code        = "500C-10.5"
+shelf_us    = 1590
+turnover_us = 318
+treble_us   = 50
+citation    = "Leister, ARSC Journal 2017; FUNKSCHAU vol. 15 and 16, 1958"
+era         = "1949 to 1956"
+labels      = "London"
+disputed    = "treble_us: Pspatial Audio reads this curve as 500C-12 rather than 500C-10.5"
+
+[[curve]]
+id              = "columbia_78"
+name            = "Columbia 78"
+code            = "300N-16"
+turnover_us     = 530
+treble_us       = 100
+replay_shelf_db = 20.0
+citation        = "Graumann, 'Schallplatten-Schneidkennlinien und ihre Entzerrung', FUNKSCHAU 1958, Tab. 2a"
+era             = "1938 to 1948"
+labels          = "CBS"
+
+[[curve]]
+id              = "old_rca"
+name            = "Old RCA"
+code            = "800N-8"
+turnover_us     = 199
+treble_us       = 36.7
+replay_shelf_db = 20.0
+citation        = "Graumann, FUNKSCHAU 1958, Tab. 2a"
+era             = "1941 to 1947"
+labels          = "RCA Victor"
+
+[[curve]]
+id              = "rca_45"
+name            = "RCA 45 / Old Orthophonic"
+code            = "800N-13.7"
+turnover_us     = 200
+treble_us       = 75
+replay_shelf_db = 20.0
+citation        = "Moyer, 'The RCA Victor record characteristic', Audio Engineering, 1953"
+era             = "1947 to August 1952"
+labels          = "RCA Victor 45s"
+# The Audacity table publishes -13.7 dB at 10 kHz for this curve, which is the 75 us
+# treble section's own figure restated from the code rather than computed: the complete
+# curve is -14.89 dB. The same page computes the neighboring 800 Hz row correctly -
+# Old RCA is coded 800N-8 and its gain column reads -9.9 - so this is one inconsistent
+# row, not a different convention. The time constants are not in doubt.
+
+[[curve]]
+id              = "european_78"
+name            = "European 78"
+code            = "250N-0"
+turnover_us     = 636
+replay_shelf_db = 20.0
+citation        = "Graumann, FUNKSCHAU 1958, Tab. 2a; test disc HMV DB4037"
+era             = "1926 to 1946"
+labels          = "European and British 78s before the Blumlein characteristic settled"
+
+[[curve]]
+id              = "five_hundred_flat"
+name            = "500-FLAT"
+code            = "500N-0"
+turnover_us     = 318
+replay_shelf_db = 20.0
+citation        = "Graumann, FUNKSCHAU 1958, Tab. 2a"
+era             = "1926 to 1950"
+labels          = "British and American 78s"

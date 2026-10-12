@@ -785,6 +785,35 @@ advanced archival metadata · improved multi-disc workflow · plugin/provider ar
 Android (AAudio, the largest single unknown - needs its own feasibility spike). Not
 estimated; re-plan at G3.
 
+**The equalization curves are built, 2026-10-12: `crates/eq` (WP-29).** Sixteen
+characteristics as time constants with a citation each, the filter that applies them,
+and §51's tolerance proved on all of them at all six rates §8 requires - worst case
+**0.078 dB against a budget of 0.5**. The design note is
+[docs/design/WP-29-playback-equalization.md](docs/design/WP-29-playback-equalization.md)
+and it is worth reading before the next piece, because the research changed the shape of
+the work three times.
+
+What it found. **The published decibel figures cannot be used as the test.** In most
+sources "dB at 10 kHz" describes the treble section alone and not the finished curve;
+NAB references its graph to 700 Hz, which shifts every value in an NAB table by 1.49 dB;
+a trailing `-0` means there is no treble network rather than 0 dB; and one row of the
+best secondary table is simply wrong. So the time constants are the definition and the
+conformance test measures against their analytic response. **§51's list of nine curves
+cannot be one row each** - EMI and HMV turn out to be a single characteristic, which
+resolves the entry every chart scatters between 200 and 500 Hz, but HMV then splits at
+July 1953, and Decca FFRR is two real curves plus a third the literature invented by
+misreading a graph. **And a textbook biquad misses the tolerance by a factor of
+twenty-seven** at 44.1 kHz, where 20 kHz sits at 0.907 of Nyquist; what meets it is
+matched-z plus one pole/zero pair fitted in two parameters.
+
+Not wired to anything yet, and the next step is not more DSP. `releases.riaa_eq` is a
+`bool` where §51 needs a curve id selectable per side and overridable per track, so a
+v5 migration comes first, then the verb to choose one, then render and export applying
+it. **The IEC rumble filter is parked by decision, 2026-10-12**: it is used
+independently of any cutting characteristic, so it belongs with noise reduction and
+click removal rather than here. Parking it is what made the replay bass shelf mandatory
+for shelfless curves, which the note explains.
+
 **ALAC replaces AAC, 2026-10-10. It shipped 2026-10-11.** §33 carries the reasoning;
 this is what the work turned out to be. It was two pieces, and only one of them was a
 codec.

@@ -1,0 +1,26 @@
+# The playback equalization curves of §51, and the filter that applies them.
+#
+# Its own crate rather than a module of `vcw-signal` because the three consumers
+# §51 names - playback, render and export - do not share one today: `vcw-export`
+# does not depend on `vcw-signal`, and `vcw-audio`, which owns `playback.rs`,
+# depends only on `vcw-types`. `vcw-signal` is analysis (metering, waveform,
+# detection); putting a processing chain in it would make export depend on the
+# analyzer. See docs/design/WP-29-playback-equalization.md.
+[package]
+name = "vcw-eq"
+description = "Playback equalization curves - RIAA and the label characteristics that came before it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+vcw-types = { workspace = true }
+
+[lints]
+workspace = true
