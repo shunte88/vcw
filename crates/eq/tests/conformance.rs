@@ -340,3 +340,103 @@ fn two_curves_with_one_id_are_refused() {
     .expect_err("a duplicate id");
     assert!(error.to_string().contains("both called"), "{error}");
 }
+
+/// §51's rule for an unstated curve over an unknown capture, which is every
+/// project made before the catalog existed. Nothing is claimed, so nothing is
+/// done - and the moment somebody does claim a curve, the unknown provenance is
+/// refused rather than guessed at.
+#[test]
+fn a_decision_nobody_made_changes_nothing() {
+    let catalog = Catalog::builtin();
+    let wanted = |stated, capture| Filter::wanted(&catalog, stated, capture, 48_000, 2);
+
+    assert!(
+        wanted(None, CaptureEq::Unknown)
+            .expect("silence is not an error")
+            .is_none(),
+        "an untouched project must play exactly as it did before"
+    );
+    assert!(
+        wanted(None, CaptureEq::Riaa)
+            .expect("the common case")
+            .is_none(),
+        "RIAA cut, RIAA phono stage: already flat"
+    );
+    assert!(
+        wanted(Some("flat"), CaptureEq::Flat)
+            .expect("nothing either way")
+            .is_none(),
+        "no curve cut, no curve applied"
+    );
+    assert!(
+        wanted(None, CaptureEq::Flat).expect("a real job").is_some(),
+        "a flat capture of an ordinary record still needs RIAA playing back"
+    );
+    assert!(
+        wanted(Some("columbia_lp"), CaptureEq::Riaa)
+            .expect("a real job")
+            .is_some(),
+        "a pre-RIAA record through a RIAA phono stage needs both"
+    );
+
+    let error = wanted(Some("columbia_lp"), CaptureEq::Unknown)
+        .expect_err("a stated curve over an unstated chain");
+    // The refusal has to tell an operator what to do about it, not just that it
+    // happened: the two answers it wants are the whole fix.
+    let text = error.to_string();
+    assert!(text.contains("never recorded"), "{text}");
+    assert!(text.contains("flat") && text.contains("RIAA"), "{text}");
+}
+
+/// The two entry points are the same filter. A curve applied to stored bytes has
+/// to land where the same curve applied to floats lands, or the audio that is
+/// exported is not the audio that was auditioned.
+#[test]
+fn stored_bytes_and_floats_take_the_same_curve() {
+    let catalog = Catalog::builtin();
+    // Int32 so the comparison is about the filter and not about quantizing: one
+    // LSB here is -186 dBFS, far below anything the arithmetic does.
+    let format = vcw_types::format::StorageFormat::Int32;
+    let samples: Vec<f32> = (0..2_000)
+        .map(|i| (f64::from(i) * 0.05).sin() as f32 * 0.4)
+        .collect();
+
+    let mut floats = samples.clone();
+    Filter::playback(&catalog, "riaa", CaptureEq::Flat, 48_000, 2)
+        .expect("design")
+        .process(&mut floats);
+
+    let mut bytes = vec![0u8; samples.len() * format.bytes_per_sample()];
+    for (sample, slot) in samples
+        .iter()
+        .zip(bytes.chunks_exact_mut(format.bytes_per_sample()))
+    {
+        assert!(format.encode_sample(*sample, slot));
+    }
+    Filter::playback(&catalog, "riaa", CaptureEq::Flat, 48_000, 2)
+        .expect("design")
+        .process_stored(&mut bytes, format);
+
+    for (i, want) in floats.iter().enumerate() {
+        let got = format.decode_sample(&bytes, i).expect("written above");
+        assert!(
+            (got - want).abs() < 1e-5,
+            "sample {i}: stored path gave {got}, float path gave {want}"
+        );
+    }
+}
+
+/// A filter that does nothing must cost nothing, including not quantizing. A
+/// `flat` curve over a `Flat` capture has no sections, and `process_stored` has
+/// to return the bytes it was handed rather than a requantized copy of them.
+#[test]
+fn an_empty_filter_leaves_the_bytes_alone() {
+    let catalog = Catalog::builtin();
+    let format = vcw_types::format::StorageFormat::Int16;
+    let original: Vec<u8> = (0..64u8).collect();
+    let mut bytes = original.clone();
+    Filter::playback(&catalog, "flat", CaptureEq::Flat, 48_000, 2)
+        .expect("design")
+        .process_stored(&mut bytes, format);
+    assert_eq!(bytes, original, "a flat curve rewrote the audio");
+}

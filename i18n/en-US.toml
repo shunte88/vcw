@@ -480,6 +480,12 @@ text = "{n} frames in this window"
 ["transport.committed"]
 text = "Frames committed to the project"
 
+["transport.eq"]
+text = "{curve} EQ"
+
+["transport.eq.title"]
+text = "The playback equalization being applied to what you are hearing (§51). It is undone on the way out of the project, never written into it."
+
 ["transport.marker"]
 text = "Marker"
 
@@ -549,6 +555,9 @@ text = "Arm ({chord})"
 ["capture.column.device"]
 text = "Device"
 
+["capture.column.eq"]
+text = "Chain"
+
 ["capture.column.format"]
 text = "Format"
 
@@ -593,6 +602,18 @@ text = "unknown"
 
 ["capture.divergences"]
 text = "Differs from what was asked"
+
+["capture.eq.flat"]
+text = "Flat"
+
+["capture.eq.riaa"]
+text = "RIAA"
+
+["capture.eq.title"]
+text = "What the signal chain had already applied when this audio reached the sound card (§51). Nothing can read it out of the samples, so a playback curve cannot be applied until it is stated. An imported project has it for no capture."
+
+["capture.eq.unknown"]
+text = "Not stated"
 
 ["capture.format"]
 text = "Format"

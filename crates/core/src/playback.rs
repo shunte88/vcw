@@ -89,6 +89,7 @@ use vcw_audio::devices::{self, Direction};
 use vcw_audio::playback::{
     Counters, Cursor, Fidelity, Health, Material, Opened, Playback, Request, Source,
 };
+use vcw_eq::{Catalog, Filter};
 use vcw_project::pcm::{Layout, Reader};
 use vcw_project::{Connection, Project};
 use vcw_signal::meter::{Config, Meter};
@@ -181,6 +182,20 @@ pub enum Error {
         capture_id: i64,
         /// The scope that resolved to nothing.
         scope: String,
+    },
+    /// A curve is in force but cannot be applied to this capture.
+    ///
+    /// In practice one thing: the curve was stated and the capture's provenance
+    /// was not, which §51 requires be refused rather than assumed. The remedy is
+    /// a sentence of the operator's, not a retry, so the source carries it.
+    // Not a `source`: the refusal already reads as a whole sentence, and
+    // chaining it makes anyhow print it twice.
+    #[error("capture {capture_id}: {refusal}")]
+    Equalization {
+        /// The capture whose provenance is in question.
+        capture_id: i64,
+        /// What [`vcw_eq::Filter::wanted`] refused, and why.
+        refusal: Box<vcw_eq::Error>,
     },
     /// The feeder thread ended without reporting an outcome.
     #[error("the playback feeder ended without reporting")]
@@ -363,6 +378,85 @@ pub struct Cue {
     pub verb: Verb,
 }
 
+/// The §51 filter an audition of this capture needs, or `None` for none.
+///
+/// Reads the curve in force and the capture's provenance out of the project and
+/// hands both to [`Filter::wanted`], which owns the decision about whether there
+/// is anything to do. The common case - a project nobody has stated a curve for -
+/// returns `None` and costs one query.
+///
+/// ponytail: resolves at release and side level, not per track. §51 allows a
+/// per-track override and export honors it, because an export item names its
+/// track; an audition names a span, and a capture can carry two faces with no
+/// recorded extent (see `side::for_capture`), so asking which track a span falls
+/// in is a question the schema cannot answer today. Resolve per track here once a
+/// side knows where it ends.
+fn filter_for(conn: &Connection, capture_id: i64, layout: &Layout) -> Result<Option<Filter>> {
+    let capture = vcw_project::session::load(conn, capture_id)?;
+    let Some(capture) = capture else {
+        return Ok(None);
+    };
+    let release = vcw_project::release::load(conn)?;
+    let sides = vcw_project::side::for_capture(conn, capture_id)?;
+    // `in_force` is not used here because it resolves an unstated curve to RIAA,
+    // and `Filter::wanted` has to be able to tell "nobody said" from "somebody
+    // said RIAA" - those two take different branches when the provenance is also
+    // unstated, which is every project made before schema v5.
+    let stated = sides
+        .iter()
+        .find_map(|side| side.playback_eq.as_deref())
+        .or(release.as_ref().and_then(|r| r.playback_eq.as_deref()));
+    Filter::wanted(
+        &Catalog::builtin(),
+        stated,
+        capture.info.eq,
+        layout.rate.hz(),
+        layout.channels as usize,
+    )
+    .map_err(|refusal| Error::Equalization {
+        capture_id,
+        refusal: Box::new(refusal),
+    })
+}
+
+/// What to call a curve on screen.
+///
+/// The catalog id is what the project stores and what the CLI takes; the name
+/// is what a person reads. Anything a person reads goes through here, so a
+/// badge and the sentence that refutes bit-perfect agree on the words.
+fn named(id: &str) -> String {
+    Catalog::builtin()
+        .get(id)
+        .map_or_else(|| id.to_owned(), |curve| curve.name.clone())
+}
+
+/// Rules out a bit-perfect claim while a §51 curve is in force.
+///
+/// The curve is sample arithmetic applied after the blocks are read, so the
+/// bytes that reach the converter are not the bytes in the project - which is
+/// precisely what [`Fidelity::Confirmed`] asserts. `vcw_audio::fidelity` cannot
+/// see it: it weighs the device, the conversion and the counters, and the
+/// filter is none of those. So the verdict is amended here, where the curve is
+/// known.
+fn equalized(verdict: Fidelity, curve: Option<&str>) -> Fidelity {
+    let Some(curve) = curve else {
+        return verdict;
+    };
+    let why = format!(
+        "the {} playback curve is applied to the samples (\u{a7}51)",
+        named(curve)
+    );
+    match verdict {
+        Fidelity::Refuted { mut reasons } => {
+            reasons.push(why);
+            Fidelity::Refuted { reasons }
+        }
+        Fidelity::Confirmed | Fidelity::Unconfirmed { .. } => {
+            Fidelity::Refuted { reasons: vec![why] }
+        }
+    }
+}
+
 /// Reads a span, converts it, and hands over device-format bytes.
 ///
 /// The one piece both drivers share. It holds no queue and no thread, so the
@@ -378,6 +472,12 @@ pub struct Pump<'a> {
     /// How much of `staging` the last [`Pump::fill`] read, so the feeder can
     /// meter what it just sent without reading the blocks a second time.
     staged: usize,
+    /// §51's playback equalization, or `None` when no curve is in force.
+    ///
+    /// Carries its own channel state across fills, so it must not be rebuilt
+    /// per chunk and must be [`Filter::reset`] on a seek - the sections are
+    /// recursive and a discontinuity rings through them.
+    filter: Option<Filter>,
 }
 
 impl<'a> Pump<'a> {
@@ -385,6 +485,10 @@ impl<'a> Pump<'a> {
     ///
     /// `chunk_bytes` is the largest output buffer it will be asked to fill; the
     /// staging buffer is sized from it once and never grows.
+    ///
+    /// `filter` is §51's curve, already resolved by `filter_for`. Resolved by
+    /// the caller rather than here because the caller has to name it anyway -
+    /// a curve that is applied silently is the one thing §51 forbids.
     ///
     /// # Errors
     ///
@@ -395,6 +499,7 @@ impl<'a> Pump<'a> {
         span: Span,
         conversion: Conversion,
         chunk_bytes: usize,
+        filter: Option<Filter>,
     ) -> Result<Self> {
         let reader = Reader::open(conn, capture_id, span)?;
         let frames = chunk_bytes / conversion.to_frame_bytes().max(1);
@@ -404,7 +509,14 @@ impl<'a> Pump<'a> {
             conversion,
             staging,
             staged: 0,
+            filter,
         })
+    }
+
+    /// Whether a curve is being applied to what this pump returns.
+    #[must_use]
+    pub const fn equalizing(&self) -> bool {
+        self.filter.is_some()
     }
 
     /// The frame the next [`Pump::fill`] will start at.
@@ -420,8 +532,15 @@ impl<'a> Pump<'a> {
     }
 
     /// Moves the read position. Clamped into the span.
+    ///
+    /// Clears the filter's memory with it: the sections are recursive, so the
+    /// samples either side of a seek are not continuous and carrying state
+    /// across one rings a transient into the first few milliseconds after it.
     pub fn seek(&mut self, frame: u64) {
         self.reader.seek(frame);
+        if let Some(filter) = self.filter.as_mut() {
+            filter.reset();
+        }
     }
 
     /// The stored-format bytes the last [`Pump::fill`] read.
@@ -455,6 +574,14 @@ impl<'a> Pump<'a> {
         self.staged = read;
         if read == 0 {
             return Ok(0);
+        }
+        // §51, before anything else touches the samples and before `staged()`
+        // hands them to the meter: the needle should read what is heard, and
+        // what is heard is the equalized audio. In the stored format rather
+        // than `f32` because that is what the buffer already holds; see
+        // `Filter::process_stored`.
+        if let Some(filter) = self.filter.as_mut() {
+            filter.process_stored(&mut self.staging[..read], self.reader.layout().format);
         }
         // The units change here and it matters: `Reader::fill` counts bytes in
         // the stored format, `Conversion::apply` counts frames, and a chunk is
@@ -521,6 +648,9 @@ struct Job {
     /// How to meter what is played: the capture's own rate, channels and
     /// format, which is what the feeder reads before the conversion.
     metering: Config,
+    /// §51's curve, resolved before the thread started so a refusal reaches the
+    /// caller of [`Player::open`] instead of only the bus.
+    filter: Option<Filter>,
 }
 
 /// Keeps the queue full until the stop flag is set or the stream goes away.
@@ -546,7 +676,7 @@ fn idle(cursor: &Cursor, epoch: u64, how_long: Duration) {
 }
 
 fn feeding(
-    job: &Job,
+    job: Job,
     mut feeder: Feeder,
     cursor: &Cursor,
     stop: &AtomicBool,
@@ -559,6 +689,7 @@ fn feeding(
         job.span,
         job.conversion.clone(),
         feeder.chunk_bytes(),
+        job.filter,
     )?;
     let mut epoch = cursor.epoch();
     pump.seek(cursor.frame());
@@ -724,6 +855,8 @@ pub struct Played {
     /// Whether the audio that reached the converter was the audio in the
     /// project, and on what evidence.
     pub fidelity: Fidelity,
+    /// §51's curve in force, or `None` when the samples went out as stored.
+    pub playback_eq: Option<String>,
 }
 
 impl Played {
@@ -772,6 +905,8 @@ pub struct Player {
     published: Cell<u64>,
     /// Whether the end has already been announced.
     announced: Cell<bool>,
+    /// §51's curve in force, or `None` when the samples go out as stored.
+    curve: Option<String>,
 }
 
 impl std::fmt::Debug for Player {
@@ -799,10 +934,13 @@ impl Player {
     /// last one is a refusal rather than a resampling: see
     /// [`vcw_audio::Error::RateUnavailable`].
     pub fn open(audition: &Audition, bus: &Bus) -> Result<Self> {
-        let layout = {
+        let (layout, filter) = {
             let project = Project::open_read_only(&audition.project)?;
-            Layout::of(project.conn(), audition.capture_id)?
+            let layout = Layout::of(project.conn(), audition.capture_id)?;
+            let filter = filter_for(project.conn(), audition.capture_id, &layout)?;
+            (layout, filter)
         };
+        let curve = filter.as_ref().map(|f| f.curve().to_owned());
         let span = audition.scope.span(&layout);
         let described = audition.scope.describe(&layout);
         if span.is_empty() {
@@ -844,13 +982,14 @@ impl Player {
                 span,
                 conversion,
                 metering: Config::new(layout.channels as usize, layout.rate.0, layout.format),
+                filter,
             };
             let cursor = Arc::clone(&cursor);
             let stop = Arc::clone(&stop);
             let bus = bus.clone();
             thread::Builder::new()
                 .name("vcw-playback-feeder".into())
-                .spawn(move || feeding(&job, feeder, &cursor, &stop, &bus))
+                .spawn(move || feeding(job, feeder, &cursor, &stop, &bus))
                 .map_err(Error::Io)?
         };
 
@@ -867,6 +1006,7 @@ impl Player {
             published: Cell::new(u64::MAX),
             announced: Cell::new(false),
             playback,
+            curve,
         };
         player.announce(&described);
         Ok(player)
@@ -888,6 +1028,10 @@ impl Player {
                 opened.buffer
             ),
             conversion: self.playback.conversion().to_string(),
+            // The name rather than the id, because this event exists to be
+            // read: `columbia_lp` is what the project stores and "Columbia LP"
+            // is what a badge over a playing transport should say.
+            playback_eq: self.curve.as_deref().map(named),
             divergences: opened.divergences.iter().map(ToString::to_string).collect(),
         });
     }
@@ -1066,8 +1210,9 @@ impl Player {
             capture_id: self.capture_id,
             span: self.span,
             opened: self.playback.opened().clone(),
-            fidelity: self.playback.fidelity(),
+            fidelity: equalized(self.playback.fidelity(), self.curve.as_deref()),
             health: self.playback.health(),
+            playback_eq: self.curve.clone(),
         };
         self.bus.publish(&Event::Ended {
             capture_id: played.capture_id,
@@ -1111,6 +1256,8 @@ pub struct Rendered {
     pub health: Health,
     /// Every transport move that was carried out, and where it landed.
     pub applied: Vec<Applied>,
+    /// §51's curve in force, or `None` when the frames went out as stored.
+    pub playback_eq: Option<String>,
 }
 
 /// A transport move a render actually made.
@@ -1190,12 +1337,15 @@ pub fn render(audition: &Audition, cues: &[Cue], out: &mut dyn Write) -> Result<
         Arc::clone(&counters),
         frame_bytes,
     );
+    let filter = filter_for(project.conn(), audition.capture_id, &layout)?;
+    let curve = filter.as_ref().map(|f| f.curve().to_owned());
     let mut pump = Pump::open(
         project.conn(),
         audition.capture_id,
         span,
         conversion.clone(),
         chunk_bytes,
+        filter,
     )?;
     pump.seek(span.start);
 
@@ -1237,6 +1387,7 @@ pub fn render(audition: &Audition, cues: &[Cue], out: &mut dyn Write) -> Result<
                     bytes,
                     &counters,
                     applied,
+                    curve,
                 );
             }
             let landed = match cue.verb {
@@ -1315,6 +1466,7 @@ pub fn render(audition: &Audition, cues: &[Cue], out: &mut dyn Write) -> Result<
         bytes,
         &counters,
         applied,
+        curve,
     )
 }
 
@@ -1331,6 +1483,7 @@ fn finish(
     bytes: u64,
     counters: &Counters,
     applied: Vec<Applied>,
+    curve: Option<String>,
 ) -> Result<Rendered> {
     Ok(Rendered {
         capture_id: audition.capture_id,
@@ -1343,6 +1496,7 @@ fn finish(
         bytes,
         health: counters.snapshot(),
         applied,
+        playback_eq: curve,
     })
 }
 

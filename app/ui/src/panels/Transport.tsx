@@ -155,6 +155,15 @@ export function Transport({
             {clock(engine.playhead)}
           </span>
         )}
+        {/* §51: the curve in force is visible wherever audio is auditioned.
+            Only while something is playing, because that is the only time
+            there is a "in force" to speak of - the stored decision itself
+            lives in the project panel. */}
+        {engine.playbackEq !== null && (
+          <span className="curve" title={text("transport.eq.title")}>
+            {text("transport.eq", { curve: engine.playbackEq })}
+          </span>
+        )}
       </div>
 
       <div className="transport-buttons">

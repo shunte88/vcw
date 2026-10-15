@@ -59,7 +59,9 @@
 //! frontend saying the person meant it, and the refusal without it comes from
 //! the project crate.
 
-use vcw_contract::command::{Lock, Marker, Merge, NewTrack, Placement, Removal, Split, TrackEdit};
+use vcw_contract::command::{
+    CaptureProvenance, Lock, Marker, Merge, NewTrack, Placement, Removal, Split, TrackEdit,
+};
 use vcw_project::track::NewBoundary;
 use vcw_project::{Connection, Project, session, side, track};
 use vcw_types::SampleRate;
@@ -184,6 +186,37 @@ pub fn edit_track(shell: &Shell, edit: TrackEdit) -> Result<(), Error> {
     // for something that is not wrong with it.
     track::update(&mut project, edit.track_id, &(&edit).into())?;
     project.close()?;
+    Ok(())
+}
+
+/// States what the signal chain had already applied to a capture (§51).
+///
+/// Separate from [`edit_track`] and from the release because it belongs to
+/// neither: `captureEq` is a fact about the hardware a recording came through,
+/// where `playbackEq` is a fact about the disc. A window that could only set
+/// the second one could name a curve on an imported project and never be
+/// allowed to hear it.
+///
+/// # Errors
+///
+/// [`Error::NoProject`] with nothing open, [`Error::Invalid`] if `eq` is not
+/// one of the three answers or no capture has that id, and [`Error::Project`]
+/// if the write fails.
+pub fn set_provenance(shell: &Shell, stated: CaptureProvenance) -> Result<(), Error> {
+    let eq = vcw_types::CaptureEq::parse(&stated.eq).ok_or_else(|| Error::Invalid {
+        field: "eq".to_owned(),
+        why: "state flat, riaa or unknown".to_owned(),
+    })?;
+    let path = shell.project_path()?;
+    let mut project = Project::open(&path)?;
+    let changed = session::set_capture_eq(&mut project, Some(stated.capture_id), eq)?;
+    project.close()?;
+    if changed == 0 {
+        return Err(Error::Invalid {
+            field: "captureId".to_owned(),
+            why: format!("there is no capture {} in this project", stated.capture_id),
+        });
+    }
     Ok(())
 }
 

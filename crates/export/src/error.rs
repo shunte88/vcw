@@ -67,6 +67,23 @@ pub enum Error {
         side: char,
     },
 
+    /// A curve is in force but cannot be applied to the audio behind a track.
+    ///
+    /// In practice one thing: a curve was stated and the capture's provenance
+    /// was not. Raised at plan time, where it costs nothing, rather than part
+    /// way through writing the files.
+    // Not a `source`: the refusal is already a whole sentence, and chaining it
+    // makes anyhow print it twice.
+    #[error("side {side} track {number}: {refusal}")]
+    Equalization {
+        /// The side the track is on.
+        side: char,
+        /// Its number within that side.
+        number: u32,
+        /// What `vcw_eq::Filter::wanted` refused, and why.
+        refusal: Box<vcw_eq::Error>,
+    },
+
     /// The stored format cannot be written in the requested container.
     ///
     /// FLAC is an integer codec. A float capture is real - §8 allows it and

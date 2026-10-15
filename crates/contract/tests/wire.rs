@@ -97,6 +97,7 @@ fn every_event() -> Vec<Event> {
             scope: "whole".to_owned(),
             opened: "44100 Hz, 2 ch, s16".to_owned(),
             conversion: "none".to_owned(),
+            playback_eq: Some("Columbia LP".to_owned()),
             divergences: Vec::new(),
         },
         Event::Playhead {

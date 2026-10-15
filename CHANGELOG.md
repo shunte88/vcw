@@ -33,6 +33,27 @@ loud if it cannot.
   that exist.
 * **The new-project sheet asks.** The RIAA checkbox is now a picker listing
   every curve with the era it belongs to. It opens on RIAA.
+* **The curve is applied.** What the last release could only record, this one
+  plays: the characteristic in force is undone on the way out of the project
+  every time you audition a side, render it to a file, or export it, and never
+  on the way in - the capture keeps the samples the stylus made. The curve on
+  screen beside the playhead is the one you are hearing, the event log says
+  which it was, and a side playing through one is reported as not bit-perfect,
+  because it is not. Response is within 0.08 dB of the published characteristic
+  from 20 Hz to 20 kHz at every rate VCW records at.
+* **Exported files say what was done to them.** A file written with a curve
+  applied carries `VCW_PLAYBACK_EQ` - the curve's name and its code letter, as
+  `Columbia LP (500C-16)` - and `VCW_PLAYBACK_EQ_APPLIED`, which is `yes` or
+  `no`. A corrected transfer and one still needing correction are otherwise
+  identical files, and in an archive that difference has to survive the
+  catalog. A project that states no curve carries neither tag.
+* **State what your own signal chain did, after the fact.** `vcw eq provenance
+  album.vcw flat` says the chain was flat, `riaa` says it applied RIAA, and
+  `unknown` takes it back; `--capture N` names one capture rather than all of
+  them. The capture panel grew a **Chain** column that does the same per row.
+  Without this an imported project could never be played through a curve: VCW
+  refuses to correct audio nobody has described, and Audacity does not record
+  what the preamp did.
 
 ### Changed
 
@@ -49,11 +70,16 @@ loud if it cannot.
 * **Projects are upgraded on open, as always.** A project written by 0.3.2 or
   earlier gains the new field; a box you had ticked becomes RIAA, and one you
   had not becomes unstated rather than a decision you never made. The new field
-  is only a record of the decision so far - **VCW does not apply the curve
-  yet**, which is the next piece of work.
+  is a decision, not an edit: it is applied on the way out and the stored
+  audio is never touched, so changing your mind costs nothing.
 
 ### Fixed
 
+* **A session script refuses an option typed onto a verb.** `--script 'arm
+  --capture-eq flat,record'` armed, ignored the option, and left the capture
+  with nothing stated - which only showed up much later, as a refusal to apply
+  a curve. The verb now fails on the line that has the typo in it and says
+  where the option belongs.
 * **`vcw eq list | head` no longer panics.** Closing a pipe early - `head`,
   `less` and a quit, a script that stops reading - printed a Rust panic and a
   failure exit code from any VCW command. It now ends quietly and successfully,

@@ -333,6 +333,25 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
     assert!(refusal.contains("deca"), "got {refusal}");
 
     let out = dir.path().join("out");
+    // §51's refusal, where it bites hardest: an import carries no provenance,
+    // because Audacity does not record one, so the curve this project now names
+    // cannot be applied to it. The refusal has to arrive before a file is
+    // written, for the same reason the FLAC one does.
+    let refusal = refused(&[
+        "export",
+        &path,
+        "--into",
+        &out.display().to_string(),
+        "--format",
+        "wav",
+    ]);
+    assert!(refusal.contains("never recorded"), "got {refusal}");
+    assert!(!out.exists(), "a refused export wrote a directory anyway");
+
+    // And the way out of it, which is the only one an imported project has.
+    let said = vcw(&["eq", "provenance", &path, "flat"]);
+    assert!(said.contains("1 capture"), "got {said}");
+
     let printed = vcw(&[
         "export",
         &path,

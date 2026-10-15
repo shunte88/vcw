@@ -844,6 +844,22 @@ impl From<&TrackEdit> for vcw_project::track::Update {
     }
 }
 
+/// State what the signal chain had already applied to a capture (§51).
+///
+/// The one fact about a capture that cannot be recovered from it. A recorded
+/// capture takes it from the arm request, which takes it from settings; an
+/// imported one has no arm request, Audacity does not store the answer, and
+/// §51 refuses a curve over a capture that cannot say. This is how an operator
+/// says.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureProvenance {
+    /// Which capture, as [`crate::view::Capture::id`] gave it.
+    pub capture_id: i64,
+    /// `flat`, `riaa` or `unknown`.
+    pub eq: String,
+}
+
 /// Make a track out of a stretch a person chose (§31).
 ///
 /// The verb that was missing. Every other command here adjusts something a
@@ -981,6 +997,13 @@ pub enum Request {
     DeleteMarker(Removal),
     /// Pin a boundary against analysis, or release it (§24, §31).
     LockMarker(Lock),
+    /// State what the signal chain had already applied to a capture (§51).
+    ///
+    /// The one fact about a capture that cannot be read back out of its
+    /// samples. An import never has it, and a curve over a capture that does
+    /// not state one is refused, so without this a project opened in a window
+    /// could name a characteristic and never be allowed to hear it.
+    SetProvenance(CaptureProvenance),
     /// Retitle or annotate a track (§31, §32).
     EditTrack(TrackEdit),
     /// Make a track out of a stretch a person chose (§31).

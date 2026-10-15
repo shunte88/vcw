@@ -64,7 +64,13 @@ export function describe(event: Wire): string {
         event.bitPerfect ? ", bit-perfect" : ""
       }`;
     case "auditioning":
-      return `${event.scope} on ${event.opened} (${event.conversion})`;
+      // §51's curve belongs in the log as well as on the badge: the badge goes
+      // out when the audition ends, and the log is the only record of what a
+      // person was actually listening to.
+      return (
+        `${event.scope} on ${event.opened} (${event.conversion})` +
+        (event.playbackEq === null ? "" : `, ${event.playbackEq} playback EQ`)
+      );
     case "playback-position":
       return `${event.seconds.toFixed(2)} s`;
     case "playback-refused":

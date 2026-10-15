@@ -30,12 +30,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
 
-import type { Device, Settings } from "../bindings/vcw";
+import type { Capture as Row, Device, Settings } from "../bindings/vcw";
 import type { Store } from "../store";
 import { Capture, counts, label } from "./Capture";
 
 vi.mock("../api", () => ({
   arm: vi.fn(async () => undefined),
+  setProvenance: vi.fn(async () => undefined),
 }));
 
 function device(
@@ -75,10 +76,24 @@ function settings(audio: Record<string, unknown> = {}): Settings {
   } as unknown as Settings;
 }
 
-function store(path: string | null = null): Store {
+function capture(eq: string): Row {
+  return {
+    id: 7,
+    rate: 96000,
+    format: "s32",
+    channels: 2,
+    seconds: 1200,
+    device: "alsa:default",
+    state: "finished",
+    osVerified: true,
+    captureEq: eq,
+  } as unknown as Row;
+}
+
+function store(path: string | null = null, captures: readonly Row[] = []): Store {
   return {
     engine: { negotiated: null, verified: false, divergences: [], diagnostics: null },
-    project: { path, captures: [] },
+    project: { path, captures },
     run: async (what: () => Promise<unknown>) => {
       await what();
     },
@@ -91,12 +106,15 @@ async function render(
   devices: readonly Device[],
   held: Settings = settings(),
   path: string | null = null,
+  captures: readonly Row[] = [],
 ): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(<Capture store={store(path)} devices={devices} settings={held} />);
+    root.render(
+      <Capture store={store(path, captures)} devices={devices} settings={held} />,
+    );
   });
   return container;
 }
@@ -219,5 +237,51 @@ describe("what the device picker says about a device", () => {
 
   it("says nothing about a device when the simulated source is chosen", async () => {
     expect((await render([])).querySelector("dl.device")).toBeNull();
+  });
+});
+
+describe("the chain a capture was taken through", () => {
+  // §51 refuses a curve over an `unknown` capture, and every imported project
+  // is unknown. Without a control here the window can state a characteristic
+  // in the project panel and then never be allowed to hear it - the CLI's
+  // `vcw eq provenance` would be the only way out of a project the window
+  // opened. The verb exists; this asserts there is a noun to reach it with.
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    vi.mocked(api.setProvenance).mockClear();
+  });
+
+  it("shows what each capture states, per row", async () => {
+    const container = await render([], settings(), "/data2/rips/side-a.vcw", [
+      capture("unknown"),
+    ]);
+    const select = container.querySelector("table.rows select") as HTMLSelectElement | null;
+    expect(select, "the capture row has a chain picker").toBeTruthy();
+    expect(select?.value).toBe("unknown");
+    // All three of §51's answers are reachable, including the one that says
+    // nobody knows - a person who guessed wrong has to be able to take it back.
+    expect([...(select?.options ?? [])].map((o) => o.value).sort()).toEqual([
+      "flat",
+      "riaa",
+      "unknown",
+    ]);
+  });
+
+  it("states it against the capture it belongs to", async () => {
+    const container = await render([], settings(), "/data2/rips/side-a.vcw", [
+      capture("unknown"),
+    ]);
+    const select = container.querySelector("table.rows select") as HTMLSelectElement;
+    await act(async () => {
+      select.value = "flat";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    // The capture's own id, not the first row's: a project holds a capture per
+    // side and the two can have been taken through different preamps.
+    expect(vi.mocked(api.setProvenance)).toHaveBeenCalledWith({
+      captureId: 7,
+      eq: "flat",
+    });
   });
 });

@@ -32,6 +32,7 @@ import type {
   Boundary,
   Candidate,
   Capture,
+  CaptureProvenance,
   Credential,
   Curve,
   Detect,
@@ -148,6 +149,17 @@ export function deleteMarker(removal: Removal): Promise<void> {
  */
 export function lockMarker(lock: Lock): Promise<void> {
   return invoke("lock_marker", { lock });
+}
+
+/**
+ * States what the signal chain had already applied to a capture (§51).
+ *
+ * The one fact about a capture nothing can read back out of the samples, and
+ * the one an imported project never has: a curve cannot be applied over it
+ * until somebody says.
+ */
+export function setProvenance(stated: CaptureProvenance): Promise<void> {
+  return invoke("set_provenance", { stated });
 }
 
 /** Edits a track's metadata. Every field is optional; null leaves it alone. */

@@ -137,6 +137,14 @@ export type Engine = {
   readonly playhead: number;
   /** The capture the audition is reading, if one is playing. */
   readonly auditioning: number | null;
+  /**
+   * The curve being applied to what is playing, by name, or null for none.
+   *
+   * §51 asks for the characteristic in force to be visible wherever audio is
+   * auditioned. Null is not "flat": it means no decision was made, and a badge
+   * that read "Flat" over a project nobody stated would be claiming one.
+   */
+  readonly playbackEq: string | null;
   /** Export progress as `[done, total]`, or null when nothing is exporting. */
   readonly exporting: readonly [number, number] | null;
   /**
@@ -176,6 +184,7 @@ export const NOTHING: Engine = {
   playing: false,
   playhead: 0,
   auditioning: null,
+  playbackEq: null,
   exporting: null,
   exported: null,
   detection: null,
@@ -231,13 +240,20 @@ export function fold(state: Engine, event: Wire): Engine {
         ...state,
         playing: true,
         auditioning: event.captureId,
+        playbackEq: event.playbackEq,
         playhead: 0,
         output: null,
       };
     case "playback-position":
       return { ...state, playhead: event.seconds };
     case "playback-finished":
-      return { ...state, playing: false, auditioning: null, output: null };
+      return {
+        ...state,
+        playing: false,
+        auditioning: null,
+        playbackEq: null,
+        output: null,
+      };
     case "playback-refused":
       // Both halves matter. The transport goes back to not playing, because
       // this event is the only thing that will ever say so - there is no
@@ -247,6 +263,7 @@ export function fold(state: Engine, event: Wire): Engine {
         ...state,
         playing: false,
         auditioning: null,
+        playbackEq: null,
         playhead: 0,
         output: null,
         refusal: {

@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 vcw-alac = { workspace = true }
+vcw-eq = { workspace = true }
 vcw-i18n = { workspace = true }
 vcw-types = { workspace = true }
 vcw-project = { workspace = true }

@@ -203,6 +203,12 @@ pub enum Event {
         /// What has to happen to the stored samples on the way out, or
         /// `"straight through"` when the answer is nothing.
         conversion: String,
+        /// §51's curve in force, or `None` when the samples go out as stored.
+        ///
+        /// Carried separately from `conversion` because it is the one thing in
+        /// this event a listener can act on: a badge saying which curve is being
+        /// heard is what §51 means by visible wherever audio is auditioned.
+        playback_eq: Option<String>,
         /// Every field that was asked for and not granted.
         divergences: Vec<String>,
     },
@@ -414,12 +420,16 @@ impl fmt::Display for Event {
                 scope,
                 opened,
                 conversion,
+                playback_eq,
                 divergences,
             } => {
                 write!(
                     f,
                     "auditioning {scope} of capture {capture_id} on {opened}, {conversion}"
                 )?;
+                if let Some(curve) = playback_eq {
+                    write!(f, ", {curve} playback equalization")?;
+                }
                 for divergence in divergences {
                     write!(f, "; {divergence}")?;
                 }

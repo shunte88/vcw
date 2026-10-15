@@ -257,6 +257,19 @@ fn feed(
 
     echo(line, started, json);
 
+    // Only `sleep` takes an argument. Everything else is a bare verb, and a
+    // word behind one is almost always a session-wide option that belongs on
+    // the command line: `arm --capture-eq flat` reads exactly as though it
+    // worked, arms, and leaves the capture saying `unknown` - which §51 then
+    // refuses to put a curve over, three commands later and nowhere near the
+    // typo.
+    if !rest.is_empty() && !matches!(verb.as_str(), "sleep" | "wait") {
+        anyhow::bail!(
+            "{verb} takes no arguments, got {rest:?} - options like --capture-eq \
+             go on `vcw session` itself, not on a verb"
+        );
+    }
+
     match verb.as_str() {
         // The driver's own two verbs. `sleep` is what makes a script a
         // *session* rather than a list: recording for eight seconds is a wait,
@@ -269,9 +282,9 @@ fn feed(
                 thread::sleep(Duration::from_secs_f64(seconds));
             }
         }
-        // `arm` is the one command that carries a description of a device, and
-        // this verb's arguments are where that description comes from.
-        // The one verb this driver waits on - see the module docs. Cleared
+        // `arm` carries a description of a device, and it comes from `vcw
+        // session`'s own options rather than from this line - the verb is
+        // bare. The one verb this driver waits on - see the module docs. Cleared
         // before the command, so a second `arm` in one script waits for its own
         // answer rather than returning on the first one's.
         "arm" => {
@@ -424,12 +437,14 @@ pub(crate) fn detail(event: &Event) -> serde_json::Value {
             scope,
             opened,
             conversion,
+            playback_eq,
             divergences,
         } => serde_json::json!({
             "capture_id": capture_id,
             "scope": scope,
             "opened": opened,
             "conversion": conversion,
+            "playback_eq": playback_eq,
             "divergences": divergences,
         }),
         Event::Playhead { frame, seconds } => serde_json::json!({

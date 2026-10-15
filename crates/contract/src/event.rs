@@ -353,6 +353,8 @@ pub enum Wire {
         /// What happens to the stored samples on the way out, or
         /// `"straight through"`.
         conversion: String,
+        /// §51's curve in force, or `null` when the samples go out as stored.
+        playback_eq: Option<String>,
         /// Every field asked for and not granted.
         divergences: Vec<String>,
     },
@@ -656,12 +658,14 @@ impl From<&Event> for Wire {
                 scope,
                 opened,
                 conversion,
+                playback_eq,
                 divergences,
             } => Self::Auditioning {
                 capture_id: *capture_id,
                 scope: scope.clone(),
                 opened: opened.clone(),
                 conversion: conversion.clone(),
+                playback_eq: playback_eq.clone(),
                 divergences: divergences.clone(),
             },
             Event::Playhead { frame, seconds } => Self::PlaybackPosition {

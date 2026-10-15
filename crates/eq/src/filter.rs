@@ -47,9 +47,9 @@
 //! filter is a cascade of first-order sections rather than biquads.
 
 use crate::Error;
-use crate::catalog::{Catalog, RIAA};
+use crate::catalog::{Catalog, FLAT, RIAA};
 use crate::curve::{Curve, REFERENCE_HZ, magnitude};
-use vcw_types::format::CaptureEq;
+use vcw_types::format::{CaptureEq, StorageFormat};
 
 /// The band §51 states the tolerance over.
 pub const BAND_HZ: (f64, f64) = (20.0, 20_000.0);
@@ -58,7 +58,7 @@ pub const BAND_HZ: (f64, f64) = (20.0, 20_000.0);
 pub const TOLERANCE_DB: f64 = 0.5;
 
 /// One first-order section: `y[n] = x[n] + b1*x[n-1] + a1*y[n-1]`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Section {
     b1: f64,
     a1: f64,
@@ -68,7 +68,7 @@ struct Section {
 ///
 /// Build one with [`Filter::playback`]. It is specific to a curve, a capture
 /// provenance and a sample rate; none of the three can change without redesigning.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Filter {
     sections: Vec<Section>,
     gain: f64,
@@ -77,6 +77,10 @@ pub struct Filter {
     channels: usize,
     rate: u32,
     inverts_riaa: bool,
+    /// The catalog id this was designed from, so §51's "visible wherever audio
+    /// is auditioned" can be satisfied from the filter itself rather than from
+    /// a second lookup that could disagree with it.
+    curve: String,
 }
 
 impl Filter {
@@ -110,7 +114,57 @@ impl Filter {
         };
         let mut filter = Self::design(&zeros, &poles, rate, channels)?;
         filter.inverts_riaa = inverts_riaa;
+        filter.curve = curve.id.clone();
         Ok(filter)
+    }
+
+    /// The filter this material actually needs, or `None` when it needs none.
+    ///
+    /// `stated` is the curve in force after inheritance - see [`crate::in_force`] -
+    /// but **unresolved**: `None` means nobody at any level said anything, which is
+    /// a different fact from somebody choosing RIAA, and the difference decides
+    /// three of the five rows below.
+    ///
+    /// | stated | capture | outcome |
+    /// |---|---|---|
+    /// | nothing | `Unknown` | `None`. No decision exists; VCW changes nothing. |
+    /// | nothing | `Riaa` | `None`. Cut to RIAA by default, undone by the phono stage. |
+    /// | nothing | `Flat` | RIAA playback. The capture never had it undone. |
+    /// | a curve | `Unknown` | [`Error::ProvenanceUnknown`]. |
+    /// | a curve | either | that curve, over an inverse RIAA where one was applied. |
+    ///
+    /// **Why an unstated curve over an unknown capture does nothing rather than
+    /// refusing.** `capture_eq` defaults to `unknown` and every imported project
+    /// has it (§12), so refusing here would make every project that predates the
+    /// curve catalog fail to play. Nothing has been claimed about that audio by
+    /// anybody, and the honest response to a question nobody asked is silence.
+    /// The moment an operator does state a curve, §51's rule applies in full and
+    /// the unknown provenance is refused rather than guessed at.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ProvenanceUnknown`] as above, [`Error::UnknownCurve`] if `stated`
+    /// names no curve in the catalog, and whatever [`Filter::design`] refuses.
+    pub fn wanted(
+        catalog: &Catalog,
+        stated: Option<&str>,
+        capture: CaptureEq,
+        rate: u32,
+        channels: usize,
+    ) -> Result<Option<Self>, Error> {
+        let id = stated.unwrap_or(RIAA);
+        match capture {
+            CaptureEq::Unknown if stated.is_none() => return Ok(None),
+            CaptureEq::Unknown => return Err(Error::ProvenanceUnknown),
+            // The two no-ops, named rather than left to cancel numerically: a
+            // RIAA record through a RIAA phono stage is already flat, and a flat
+            // record through a flat chain was never touched. Designing either
+            // would multiply a pole by its own zero and trust the arithmetic.
+            CaptureEq::Riaa if id == RIAA => return Ok(None),
+            CaptureEq::Flat if id == FLAT => return Ok(None),
+            CaptureEq::Riaa | CaptureEq::Flat => {}
+        }
+        Self::playback(catalog, id, capture, rate, channels).map(Some)
     }
 
     /// Design a filter for an arbitrary set of real s-plane roots, in rad/s.
@@ -145,7 +199,18 @@ impl Filter {
             channels,
             rate,
             inverts_riaa: false,
+            curve: String::new(),
         })
+    }
+
+    /// The catalog id of the curve in force, empty for a filter from
+    /// [`Filter::design`] which was never given one.
+    ///
+    /// §51 requires the curve in force be visible wherever audio is auditioned,
+    /// and the filter carrying its own name is what keeps the badge and the
+    /// arithmetic from being two answers to the same question.
+    pub fn curve(&self) -> &str {
+        &self.curve
     }
 
     /// Whether this filter undoes an RIAA phono stage on its way to another curve.
@@ -194,18 +259,56 @@ impl Filter {
         if self.sections.is_empty() {
             return;
         }
-        let n = self.sections.len();
         for (i, sample) in samples.iter_mut().enumerate() {
             let channel = i % self.channels;
-            let mut value = f64::from(*sample);
-            for (s, section) in self.sections.iter().enumerate() {
-                let slot = &mut self.state[channel * n + s];
-                let out = value + section.b1 * slot.0 + section.a1 * slot.1;
-                *slot = (value, out);
-                value = out;
-            }
-            *sample = (value * self.gain) as f32;
+            *sample = self.step(channel, f64::from(*sample)) as f32;
         }
+    }
+
+    /// Apply the filter in place to interleaved samples in their *stored* format.
+    ///
+    /// This is what playback, render and export all actually hold: §51's three
+    /// consumers each have a buffer of `.vcw` block bytes, and converting the whole
+    /// buffer to `f32` and back to hand it to [`Filter::process`] would allocate on
+    /// every chunk to reach the same samples.
+    ///
+    /// The result is quantized back to `format`, which costs one requantization at
+    /// the width the audio was already stored at - about -144 dBFS on a 24-bit
+    /// capture, against a vinyl noise floor near -70 dB. On `Float32` it costs
+    /// nothing at all. A sample the curve pushes past full scale saturates rather
+    /// than wrapping; see [`vcw_types::StorageFormat::encode_sample`].
+    ///
+    /// A trailing partial sample is left untouched rather than guessed at. Callers
+    /// hand over whole frames - `Reader::fill` returns nothing else - so this is a
+    /// guard, not a path.
+    pub fn process_stored(&mut self, bytes: &mut [u8], format: StorageFormat) {
+        if self.sections.is_empty() {
+            return;
+        }
+        let width = format.bytes_per_sample();
+        for (i, sample) in bytes.chunks_exact_mut(width).enumerate() {
+            let Some(value) = format.decode_sample(sample, 0) else {
+                continue;
+            };
+            let out = self.step(i % self.channels, f64::from(value));
+            format.encode_sample(out as f32, sample);
+        }
+    }
+
+    /// One sample through every section, in `f64`, advancing this channel's state.
+    ///
+    /// The gain is folded in here so that both entry points normalize to 0 dB at
+    /// 1 kHz identically; a curve applied through one and measured through the
+    /// other would otherwise differ by whatever `design` computed.
+    fn step(&mut self, channel: usize, mut value: f64) -> f64 {
+        let n = self.sections.len();
+        for (s, section) in self.sections.iter().enumerate() {
+            let slot = &mut self.state[channel * n + s];
+            let out = value + section.b1 * slot.0 + section.a1 * slot.1;
+            *slot = (value, out);
+            value = out;
+        }
+        value * self.gain
     }
 }
 

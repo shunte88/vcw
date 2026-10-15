@@ -113,7 +113,7 @@ vcw export album.vcw --into ./exports --format wav --dry-run
 vcw export album.vcw --into ./exports --format wav
 ```
 
-Use `vcw --help` and each command's `--help` for options. Supported commands offer `--json` for integration. `vcw doctor` checks the environment; `vcw devices` and `vcw formats` inspect recording devices and configurations; `vcw eq list` and `vcw eq show` print the sixteen historic playback equalization curves with the published source each one's numbers came from, and `vcw release <project> set --playback-eq <id>` records which one a record was cut with - per side with `vcw tracks <project> side-eq`, per track with `vcw tracks <project> set <n> --playback-eq`.
+Use `vcw --help` and each command's `--help` for options. Supported commands offer `--json` for integration. `vcw doctor` checks the environment; `vcw devices` and `vcw formats` inspect recording devices and configurations; `vcw eq list` and `vcw eq show` print the sixteen historic playback equalization curves with the published source each one's numbers came from, and `vcw release <project> set --playback-eq <id>` records which one a record was cut with - per side with `vcw tracks <project> side-eq`, per track with `vcw tracks <project> set <n> --playback-eq`. The curve is applied on playback, render and export, never to the stored capture, and `vcw eq provenance <project> <flat|riaa|unknown>` states what your own preamp had already done.
 
 For custom tools and interfaces, start with the [Rust API](docs/PROJECT-API.md), [project schema](docs/SCHEMA.md), and [command/event contract](crates/contract/). The [user guide](docs/USER-GUIDE.md) contains fuller CLI examples.
 

@@ -720,6 +720,25 @@ enum EqCommand {
         json: bool,
     },
 
+    /// State what the signal chain had already applied to a capture (§51).
+    ///
+    /// An imported project has this for no capture: Audacity does not record
+    /// it. Without it a curve cannot be applied, because undoing the wrong one
+    /// cannot be heard as wrong.
+    Provenance {
+        /// The project to write it into.
+        project: std::path::PathBuf,
+        /// What the hardware upstream had already done to the signal.
+        #[arg(value_enum)]
+        eq: capture::Eq,
+        /// One capture, by id. Omit for every capture in the project.
+        #[arg(long)]
+        capture: Option<i64>,
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// One curve in full: its source, its response, and its measured error.
     Show {
         /// Curve id, as printed by `vcw eq list`.
@@ -1203,6 +1222,12 @@ fn run() -> anyhow::Result<()> {
         Command::Eq { what } => match what {
             EqCommand::List { curves, json } => eq::list(curves.as_deref(), json),
             EqCommand::Show { id, curves, json } => eq::show(&id, curves.as_deref(), json),
+            EqCommand::Provenance {
+                project,
+                eq,
+                capture,
+                json,
+            } => eq::provenance(&project, eq.into(), capture, json),
         },
         Command::Capture {
             device,

@@ -1663,6 +1663,14 @@ code {
   color: var(--warn);
 }
 
+/* §51's curve badge, beside the playhead and in the same quiet register as
+   the phase: a standing fact about what is being heard, not an alert. */
+.transport-clock .curve {
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+}
+
 .phase {
   color: var(--dim);
   text-transform: uppercase;

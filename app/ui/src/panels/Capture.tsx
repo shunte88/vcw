@@ -57,6 +57,18 @@ function defaultInput(devices: readonly Device[]): string | null {
  * to that word, because the row carries a string: a state this build has
  * never heard of shows as the shell wrote it rather than as a dotted key.
  */
+/**
+ * What each §51 provenance reads as.
+ *
+ * Keyed and defaulted like `STATES`, and for the same reason: the row carries
+ * a string, and a value this build has not heard of shows as it was written.
+ */
+const PROVENANCE: Record<string, string> = {
+  flat: key("capture.eq.flat"),
+  riaa: key("capture.eq.riaa"),
+  unknown: key("capture.eq.unknown"),
+};
+
 const STATES: Record<string, string> = {
   recording: key("capture.state.recording"),
   finalised: key("capture.state.finalised"),
@@ -261,6 +273,7 @@ export function Capture({
               <th>{text("capture.column.device")}</th>
               <th className="n">{text("capture.column.length")}</th>
               <th>{text("capture.column.state")}</th>
+              <th>{text("capture.column.eq")}</th>
             </tr>
           </thead>
           <tbody>
@@ -274,6 +287,40 @@ export function Capture({
                 <td>{row.device ?? text("capture.device.unknown")}</td>
                 <td className="n">{clock(row.seconds)}</td>
                 <td>{text(STATES[row.state] ?? row.state)}</td>
+                {/* §51: the one fact about a capture that cannot be read back
+                    out of its samples, and the one an import never has -
+                    Audacity does not store it. A curve over an `unknown`
+                    capture is refused, so without this the window could name a
+                    characteristic in the project panel and never be allowed to
+                    hear it. */}
+                <td>
+                  <span className="picker">
+                    <select
+                      value={row.captureEq}
+                      title={text("capture.eq.title")}
+                      onChange={(event) =>
+                        void store
+                          .run(() =>
+                            api.setProvenance({
+                              captureId: row.id,
+                              eq: event.target.value,
+                            }),
+                          )
+                          // Nothing publishes an event for this, so the row is
+                          // re-read rather than left showing what it said
+                          // before - a picker that snaps back to "Not stated"
+                          // after a successful write reads as a refusal.
+                          .then(store.reload)
+                      }
+                    >
+                      {Object.entries(PROVENANCE).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {text(label)}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

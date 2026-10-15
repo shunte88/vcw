@@ -73,6 +73,7 @@ use std::path::PathBuf;
 // The connection type through `vcw-project`'s re-export rather than through a
 // direct `rusqlite` dependency: ADR-0003 puts the database behind that crate,
 // and an exporter that named the driver itself would be a second door to it.
+use vcw_eq::{Catalog, Filter};
 use vcw_project::{Connection, pcm, release, side, track};
 use vcw_types::vinyl::{Numbering, Side};
 use vcw_types::{Span, StorageFormat};
@@ -169,7 +170,10 @@ impl Request {
 }
 
 /// One file to be written.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `PartialEq` and not `Eq`, since a designed [`Filter`] holds floats - the same
+/// reason [`Plan`] gives.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Item {
     /// The track row behind it.
     pub track_id: i64,
@@ -185,6 +189,13 @@ pub struct Item {
     pub path: PathBuf,
     /// What goes in its tags.
     pub tags: Tags,
+    /// §51's playback equalization for this track, resolved at plan time from
+    /// the track, its side and the release in that order, or `None` when the
+    /// samples go out as stored.
+    ///
+    /// Carried rather than looked up again in `cut` so that a refusal lands
+    /// in [`plan`], where no file has been written yet.
+    pub filter: Option<Filter>,
 }
 
 impl Item {
@@ -306,17 +317,24 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
     let mut claimed: HashMap<PathBuf, String> = HashMap::new();
     let mut covers: Vec<PathBuf> = Vec::new();
     let mut narrowed_to = None;
-    let mut captures: HashMap<i64, Option<i64>> = HashMap::new();
+    // side_id -> (the capture behind it, the curve that side states)
+    let mut captures: HashMap<i64, (Option<i64>, Option<String>)> = HashMap::new();
+    // capture_id -> what the signal chain had already applied (§51)
+    let mut provenance: HashMap<i64, vcw_types::CaptureEq> = HashMap::new();
+    let catalog = Catalog::builtin();
 
     for (side, record) in listing {
         if !request.wants(side) {
             continue;
         }
-        let capture = match captures.entry(record.side_id) {
-            std::collections::hash_map::Entry::Occupied(seen) => *seen.get(),
-            std::collections::hash_map::Entry::Vacant(slot) => {
-                *slot.insert(side::by_id(conn, record.side_id)?.and_then(|row| row.capture))
-            }
+        let (capture, side_eq) = match captures.entry(record.side_id) {
+            std::collections::hash_map::Entry::Occupied(seen) => seen.get().clone(),
+            std::collections::hash_map::Entry::Vacant(slot) => slot
+                .insert(
+                    side::by_id(conn, record.side_id)?
+                        .map_or((None, None), |row| (row.capture, row.playback_eq)),
+                )
+                .clone(),
         };
         let Some(capture_id) = capture else {
             return Err(Error::NoAudio {
@@ -388,6 +406,57 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             }
         }
 
+        // §51, in the order the spec states: a track overrides its side, a side
+        // overrides the release. Not `vcw_eq::in_force`, which resolves silence
+        // to RIAA - `Filter::wanted` has to be able to tell the two apart.
+        let capture_eq = match provenance.entry(capture_id) {
+            std::collections::hash_map::Entry::Occupied(seen) => *seen.get(),
+            std::collections::hash_map::Entry::Vacant(slot) => *slot.insert(
+                vcw_project::session::load(conn, capture_id)?
+                    .map_or(vcw_types::CaptureEq::Unknown, |row| row.info.eq),
+            ),
+        };
+        let stated = record
+            .playback_eq
+            .as_deref()
+            .or(side_eq.as_deref())
+            .or(release.playback_eq.as_deref());
+        // Channels before the fold: a fold sums channels and the curve is per
+        // channel, so the filter is designed for what it will actually see.
+        let filter = Filter::wanted(
+            &catalog,
+            stated,
+            capture_eq,
+            layout.rate.hz(),
+            layout.channels as usize,
+        )
+        .map_err(|refusal| Error::Equalization {
+            side: side.letter(),
+            number: record.number,
+            refusal: Box::new(refusal),
+        })?;
+
+        // §51: the curve goes into the exported metadata, which for an archivist
+        // is the point - a file that has been corrected and one that still needs
+        // correcting are otherwise indistinguishable. Written only where somebody
+        // stated a curve or VCW applied one; a project that has said nothing gets
+        // no claim put in its tags on its behalf.
+        let mut tags = tags(&release, &record, side, &numbers, request, cover.as_ref());
+        if let Some(id) = filter.as_ref().map(Filter::curve).or(stated) {
+            let named = catalog.get(id).map_or_else(
+                || id.to_owned(),
+                |curve| match &curve.code {
+                    Some(code) => format!("{} ({code})", curve.name),
+                    None => curve.name.clone(),
+                },
+            );
+            tags.extra.push(("VCW_PLAYBACK_EQ".to_owned(), named));
+            tags.extra.push((
+                "VCW_PLAYBACK_EQ_APPLIED".to_owned(),
+                if filter.is_some() { "yes" } else { "no" }.to_owned(),
+            ));
+        }
+
         items.push(Item {
             track_id: record.id,
             side,
@@ -395,7 +464,8 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             capture_id,
             span,
             path,
-            tags: tags(&release, &record, side, &numbers, request, cover.as_ref()),
+            tags,
+            filter,
         });
     }
 
@@ -542,11 +612,21 @@ fn cut(
     // to be odd and non-zero, and this one is the 64-bit constant the algorithm
     // is usually published with.
     let mut noise = 0x2545_F491_4F6C_DD1Du64;
+    // §51's curve, cloned so each file starts with the filter's state zeroed:
+    // the sections are recursive, and carrying the end of one track into the
+    // start of the next would ring across a boundary nobody crossed.
+    let mut filter = item.filter.clone();
     let mut frames = 0u64;
     loop {
         let read = reader.fill(&mut buffer)?;
         if read == 0 {
             break;
+        }
+        // First, and on the stored bytes: equalization is per channel, so it
+        // has to happen before a fold sums them, and before a narrowing throws
+        // away the bits it would have moved.
+        if let Some(filter) = filter.as_mut() {
+            filter.process_stored(&mut buffer[..read], layout.format);
         }
         let mut chunk: &[u8] = &buffer[..read];
         if folding {

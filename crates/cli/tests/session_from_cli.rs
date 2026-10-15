@@ -279,6 +279,44 @@ fn an_unknown_verb_fails_the_run_without_costing_the_capture() {
     assert!(record.frames > 0, "{transcript}");
 }
 
+/// An option typed onto a verb is refused, not swallowed.
+///
+/// `arm --capture-eq flat` was accepted, armed, and left the capture saying
+/// `unknown` - which §51 then refuses to put a curve over, three commands and
+/// several minutes later. The option belongs on `vcw session` itself; the
+/// failure has to be at the line that has the typo in it.
+#[test]
+fn an_option_on_a_verb_is_refused_where_it_was_typed() {
+    let _alone = alone();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("on-a-verb.vcw");
+
+    // Run directly rather than through `script`, which keeps only stdout: the
+    // refusal is the thing under test and it goes to stderr.
+    let out = Command::new(VCW)
+        .args([
+            "session",
+            &path.display().to_string(),
+            "--script",
+            "arm --capture-eq flat,record,sleep 0.4,stop",
+        ])
+        .output()
+        .expect("run vcw session");
+    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        !out.status.success(),
+        "an option on a verb must not pass silently:\n{said}"
+    );
+    assert!(
+        said.contains("--capture-eq"),
+        "the refusal did not quote what was typed:\n{said}"
+    );
+    assert!(
+        said.contains("vcw session"),
+        "the refusal did not say where the option belongs:\n{said}"
+    );
+}
+
 /// A command that does not apply is reported and changes nothing.
 #[test]
 fn a_command_out_of_turn_is_rejected_rather_than_obeyed() {

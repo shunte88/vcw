@@ -191,6 +191,7 @@ fn rendered(args: &Args, audition: &Audition, rate: SampleRate, path: &PathBuf) 
                 "channels": report.channels,
                 "format": format!("{:?}", report.format),
                 "conversion": report.conversion,
+                "playback_eq": report.playback_eq,
                 "frames": report.frames,
                 "bytes": report.bytes,
                 "seconds": report.seconds(),
@@ -215,6 +216,11 @@ fn rendered(args: &Args, audition: &Audition, rate: SampleRate, path: &PathBuf) 
             report.format
         )?;
         writeln!(out, "samples    {}", report.conversion)?;
+        // §51: the curve in force is visible wherever audio is auditioned,
+        // and a render is an audition somebody keeps.
+        if let Some(curve) = &report.playback_eq {
+            writeln!(out, "curve      {curve} playback equalization applied")?;
+        }
         for made in &report.applied {
             writeln!(
                 out,
@@ -301,6 +307,9 @@ fn played(args: &Args, audition: &Audition, rate: SampleRate, total: u64) -> Res
 
     let mut out = std::io::stdout().lock();
     if !json {
+        if let Some(curve) = &played.playback_eq {
+            writeln!(out, "curve      {curve} playback equalization applied")?;
+        }
         writeln!(out, "fidelity   {}", played.fidelity.summary())?;
     }
     out.flush()?;

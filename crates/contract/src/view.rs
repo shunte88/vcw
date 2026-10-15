@@ -189,6 +189,10 @@ pub struct Capture {
     pub host: Option<String>,
     /// Whether the operating system confirmed the format independently (§9).
     pub os_verified: bool,
+    /// What the signal chain had already applied (§51): `flat`, `riaa` or
+    /// `unknown`. Not a property of the audio - nothing can read it back out of
+    /// the samples - which is why it is shown and editable rather than derived.
+    pub capture_eq: String,
     /// Unix seconds at the start.
     pub started_at: i64,
     /// Unix seconds at finalization, or `null` while it is still running.
@@ -657,6 +661,7 @@ impl From<&vcw_project::session::Record> for Capture {
             device: info.device_name.clone().or_else(|| info.device_id.clone()),
             host: info.host_api.clone(),
             os_verified: info.os_verified,
+            capture_eq: info.eq.as_str().to_owned(),
             started_at: record.started_at,
             finished_at: record.finished_at,
             diagnostics: record.diagnostics.into(),

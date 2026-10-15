@@ -1173,3 +1173,118 @@ fn a_mono_fold_makes_a_four_channel_capture_exportable_as_mp3() {
     let folded = splitter::plan(project.conn(), &request).expect("a mono plan");
     assert!(folded.fold_to_mono);
 }
+
+#[test]
+fn the_curve_is_applied_per_track_tagged_and_refused_without_provenance() {
+    // §51 end to end at the export boundary: a stored decision, applied on the
+    // way out, overridable per track, written into the metadata, and refused
+    // rather than guessed at where nobody said what the chain had done.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, sent, frame_bytes) = recorded(dir.path(), StorageFormat::Int32, 2, 120_000);
+    described(&mut project);
+    titled(
+        &mut project,
+        &[
+            (0, 60_000, "Europe Endless"),
+            (60_000, 120_000, "Franz Schubert"),
+        ],
+    );
+    let mut release = release::ensure(&mut project).expect("release");
+    release.playback_eq = Some("columbia_lp".to_owned());
+    release::store(&mut project, &release).expect("store");
+
+    let out = dir.path().join("out");
+    let request = Request::new(&out, Container::Wav);
+
+    // A capture records no provenance until somebody states one, and an import
+    // never does. Refused at plan time, before a file exists.
+    let refusal = splitter::plan(project.conn(), &request).expect_err("a refusal");
+    assert!(
+        matches!(
+            refusal,
+            Error::Equalization {
+                side: 'A',
+                number: 1,
+                ..
+            }
+        ),
+        "got {refusal:?}"
+    );
+    assert!(!out.exists(), "a refused plan made a directory");
+
+    // Stated, and now the same request resolves.
+    vcw_project::session::set_capture_eq(&mut project, None, vcw_types::CaptureEq::Flat)
+        .expect("state the chain");
+    // Track two was cut to something else, which is an ordinary thing on a
+    // compilation and the reason §51 makes the curve overridable per track.
+    let tracks = track::listing(project.conn()).expect("listing");
+    let second = tracks[1].1.id;
+    track::update(
+        &mut project,
+        second,
+        &track::Update {
+            playback_eq: Some("decca_lp".to_owned()),
+            ..Default::default()
+        },
+    )
+    .expect("override");
+
+    let plan = splitter::plan(project.conn(), &request).expect("plan");
+    assert_eq!(
+        plan.items[0].filter.as_ref().map(|f| f.curve()),
+        Some("columbia_lp"),
+        "track one took the release's curve"
+    );
+    assert_eq!(
+        plan.items[1].filter.as_ref().map(|f| f.curve()),
+        Some("decca_lp"),
+        "track two's own curve did not override it"
+    );
+    // The archival half: the file has to say what was done to it, because a
+    // corrected file and one still needing correction are otherwise identical.
+    let said = |item: &splitter::Item, key: &str| {
+        item.tags
+            .extra
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value.clone())
+    };
+    assert_eq!(
+        said(&plan.items[0], "VCW_PLAYBACK_EQ").as_deref(),
+        Some("Columbia LP (500C-16)")
+    );
+    assert_eq!(
+        said(&plan.items[1], "VCW_PLAYBACK_EQ").as_deref(),
+        Some("Decca LP (500C-11.5)")
+    );
+    assert_eq!(
+        said(&plan.items[0], "VCW_PLAYBACK_EQ_APPLIED").as_deref(),
+        Some("yes")
+    );
+
+    splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+    let equalized = data_chunk(&plan.items[0].path);
+    let stored = &sent[..60_000 * frame_bytes];
+    assert_eq!(equalized.len(), stored.len(), "the frame count moved");
+    assert_ne!(equalized, stored, "the curve was not applied to the audio");
+
+    // And back off again. `flat` over a flat chain is the one curve that is
+    // honestly a no-op, so it has to come out byte for byte.
+    release.playback_eq = Some("flat".to_owned());
+    release::store(&mut project, &release).expect("store");
+    track::update(
+        &mut project,
+        second,
+        &track::Update {
+            playback_eq: Some(String::new()),
+            ..Default::default()
+        },
+    )
+    .expect("clear");
+    let out = dir.path().join("flat");
+    let request = Request::new(&out, Container::Wav);
+    let plan = splitter::plan(project.conn(), &request).expect("plan");
+    assert!(plan.items.iter().all(|item| item.filter.is_none()));
+    splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+    assert_eq!(data_chunk(&plan.items[0].path), stored);
+}

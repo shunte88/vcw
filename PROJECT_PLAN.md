@@ -813,10 +813,21 @@ disagree, and `riaa_eq = 1` carries across as `'riaa'`. The three levels resolve
 outward through `vcw_eq::in_force`, and nothing stated anywhere is RIAA. The command
 line sets all three; the window asks at setup, as a picker rather than the old switch,
 because `capture_eq` already records what the preamp did and VCW can work the
-difference out instead of warning about it. **What remains is playback, render and
-export applying the filter, and the curve in force reaching exported tags.** The
-window can still only set it at setup, which is the same gap that leaves `is_mono`
-unchangeable afterwards. **The IEC rumble filter is parked by decision, 2026-10-12**: it is used
+difference out instead of warning about it.
+
+**The curve is applied, 2026-10-15.** Audition, render and export, never capture, and
+the curve in force reaches the exported tags as `VCW_PLAYBACK_EQ` and
+`VCW_PLAYBACK_EQ_APPLIED`. Two insertion points cover three places, because `Pump` is
+shared by the live feeder and the synchronous render; the third is `splitter::cut`, and
+in both the filter runs before the mono fold because equalization is per channel. The
+rule that made it safe to turn on is that **an unstated curve means silence**: a project
+nobody has stated anything for is left exactly as it was, and only a curve stated over a
+capture whose chain is `unknown` is refused. That refusal needed a verb behind it -
+every import is `unknown` and Audacity records nothing about the preamp - so
+`vcw eq provenance` and the capture panel's **Chain** column exist now. A side played
+through a curve is reported as not bit-perfect, which §9 requires. The window can still
+only set the curve at setup, which is the same gap that leaves `is_mono` unchangeable
+afterwards. **The IEC rumble filter is parked by decision, 2026-10-12**: it is used
 independently of any cutting characteristic, so it belongs with noise reduction and
 click removal rather than here. Parking it is what made the replay bass shelf mandatory
 for shelfless curves, which the note explains.

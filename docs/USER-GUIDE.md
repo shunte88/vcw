@@ -331,6 +331,21 @@ plays back exactly as it did before - but a curve cannot be applied to it
 without a guess, so VCW will refuse rather than guess. If you know what your
 chain does, state it now; it costs a flag and cannot be reconstructed later.
 
+If you did not, or the project came in from Audacity - which records nothing
+about the preamp - you can say so afterwards. It is the same statement, made
+later:
+
+```text
+vcw eq provenance album.vcw flat             # the whole project
+vcw eq provenance album.vcw riaa --capture 2 # one capture
+vcw eq provenance album.vcw unknown          # take it back
+```
+
+In the window it is the **Chain** column in the capture list, one picker per
+capture. Nothing checks it against the audio, because nothing can - it is your
+statement about your own equipment, and the only thing VCW does with it is
+decide what a playback curve has to undo.
+
 ### The curves themselves
 
 VCW ships sixteen cutting characteristics: RIAA, and the fifteen label and
@@ -401,10 +416,36 @@ A curve VCW does not ship is refused at the command, naming the ones it does:
 a name that only resolves on the machine that typed it would be a dangling
 reference in a file meant to outlive the application.
 
-**VCW does not apply the curve yet.** This release makes the catalog readable,
-its conformance checkable, and the choice storable at all three levels. Hearing
-it on playback, and having it come out in an export and in the exported tags, is
-the next piece of work.
+### Hearing it, and exporting it
+
+The curve is applied on the way **out** of the project - when you audition a
+side, render it to a file, or export it - and never on the way in. The capture
+keeps the samples the stylus made, so changing the curve later costs nothing and
+loses nothing.
+
+While a side is playing, the curve in force is on screen beside the playhead,
+and the event log records which one it was. A side played through a curve is
+reported as **not bit-perfect**, because it is not: the samples leaving VCW are
+not the samples it stored. That is a statement about the playback, not a problem
+with the capture.
+
+An exported file says what was done to it. Two tags are written whenever a curve
+was stated:
+
+```text
+VCW_PLAYBACK_EQ=Columbia LP (500C-16)
+VCW_PLAYBACK_EQ_APPLIED=yes
+```
+
+A file corrected for its cutting characteristic and one still needing correction
+are otherwise identical, and in an archive that is a difference worth keeping
+beside the audio rather than in a spreadsheet. A project that states no curve
+carries neither tag.
+
+If the curve is not RIAA and your preamp applied RIAA - the ordinary case - VCW
+undoes RIAA first and then applies the curve you chose. That is correct and it
+lifts the surface noise along with everything else below the turnover; there is
+no way around it short of a flat transfer.
 
 ## When something goes wrong mid-capture
 

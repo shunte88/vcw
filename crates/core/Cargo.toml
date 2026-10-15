@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 vcw-types = { workspace = true }
+vcw-eq = { workspace = true }
 vcw-audio = { workspace = true }
 vcw-signal = { workspace = true }
 vcw-project = { workspace = true }

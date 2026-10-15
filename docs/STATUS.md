@@ -7674,3 +7674,93 @@ Playback, render and export applying the filter, and the curve in force reaching
 exported tags. The window can only set it at setup; per-side and per-track pickers need
 a release-edit command the contract does not have, which is the same gap that leaves
 `is_mono` unchangeable after setup.
+
+## Phase 3 - WP-29 part three, applying the curve
+
+0.3.2-alpha made the sixteen curves readable, part two made them choosable; this is the
+part that changes what comes out of the speaker. §51's three places - audition, render,
+export - all have one now.
+
+### Two insertion points, not three
+
+`Pump` in `crates/core/src/playback.rs` is shared by the live feeder and the synchronous
+render; its own doc says so. So the filter goes in `Pump::fill`, right after
+`reader.fill` and before the conversion, and two of §51's three places are covered by
+one call. Export is the third: `splitter::cut` has the identical shape - stored-format
+bytes in a buffer - and the filter goes first there too, **before** the mono fold,
+because equalization is per channel and a fold sums them.
+
+The place it deliberately does *not* go is `Source::on_data` in `crates/audio`. That is
+the real-time callback, it promises no sample arithmetic, and `tests/rt_safety.rs`
+polices the promise under a counting allocator. §51 says the curve is never in the
+capture path, and the capture path is the one that could not take it anyway.
+
+Applying it to stored bytes rather than to floats needed the inverse of
+`StorageFormat::decode_sample`, which did not exist. `encode_sample` is it - same scale
+factors, integers saturating where a float does not - and the round trip is asserted
+both ways, because a mismatched pair would quietly attenuate every sample.
+
+### The decision table, and why silence is an answer
+
+`capture_eq` defaults to `unknown` and every imported project is unknown, so a filter
+resolved unconditionally would refuse on every project that exists. `Filter::wanted`
+holds the rule:
+
+| stated | capture | outcome |
+|---|---|---|
+| nothing | unknown | nothing. No decision exists, so VCW changes nothing. |
+| nothing | RIAA | nothing. Cut to RIAA by default, undone by the phono stage. |
+| nothing | flat | RIAA playback. |
+| a curve | unknown | refused. |
+| a curve | either | that curve, over an inverse RIAA where one was applied. |
+| flat | flat | nothing. |
+
+The refusal is the row §51 asks for and the first row is why it is bearable: refusing an
+unstated curve over an unknown capture would make every pre-catalog project fail to
+play. The honest response to a question nobody asked is silence.
+
+`in_force` is not used in either resolver, though it looks like the obvious call. It
+resolves an unstated curve to RIAA, and these two have to tell "nobody said" from
+"somebody said RIAA" - the same two inputs, opposite answers.
+
+### The refusal needed a way out, so provenance became settable
+
+The first failing test was an import round trip, and it was right to fail: an imported
+project is `unknown` forever, so the refusal was a dead end with no verb behind it.
+`vcw eq provenance <project> <flat|riaa|unknown> [--capture N]` is the way out, and the
+capture panel's **Chain** column is the same thing per row. It is a contract command
+(`SetProvenance`), so the window and `vcw serve` both reach it.
+
+Nothing publishes an event for the write, so the panel re-reads the project after it.
+Found by looking: the picker snapped back to "Not stated" over a row that had been
+written correctly, which reads as a refusal.
+
+### Bit-perfect is refuted, in core and not in audio
+
+A curve in force is sample arithmetic applied after the blocks are read, so §9's claim
+cannot stand beside it. `vcw_audio::fidelity` cannot see the filter - it reasons about
+the device, the mode and the format - so the verdict is amended in `playback.rs`, where
+the curve is known, and the sentence names the curve.
+
+Everything a person reads goes through `named()`, which turns the catalog id the project
+stores into the name a person recognizes. The badge said "Columbia LP" and the fidelity
+sentence said `columbia_lp` until it did.
+
+### What an exported file carries
+
+`VCW_PLAYBACK_EQ` is the curve's name and its code letter - `Columbia LP (500C-16)` -
+and `VCW_PLAYBACK_EQ_APPLIED` is `yes` or `no`. Both are written whenever a curve was
+stated, applied or not; a project that states nothing carries neither. A corrected
+transfer and one still needing correction are otherwise identical files, and that is the
+difference an archive has to keep.
+
+The filter is resolved per track at plan time and stored on the `Item`, which is why
+`Item` lost `Eq` - a `Filter` holds floats. Resolving per track is what makes the
+per-track override reach export; playback and render still resolve at release and side
+level, because an audition has no track and a side does not know where it ends.
+
+### What is left
+
+Per-side and per-track pickers in the window still need a release-edit command the
+contract does not have - the same gap that leaves `is_mono` unchangeable after setup.
+A user-defined curve is per invocation (`--curves`) and is not stored in a project.

@@ -366,6 +366,67 @@ impl StorageFormat {
         })
     }
 
+    /// Writes one normalized `f32` back out in this format, the exact inverse of
+    /// [`StorageFormat::decode_sample`]. Returns `false` if `into` is too short.
+    ///
+    /// `into` is the one sample's bytes, not a whole blob.
+    ///
+    /// **Why this exists, given what `decode_sample` says above.** A round trip
+    /// through `f32` is the conversion D4 forbids, and nothing in the capture path
+    /// may use this. §51's playback equalization is the deliberate exception: a
+    /// curve is a processing step that changes the samples on purpose, is applied
+    /// only on playback, render and export, is never written back to the project,
+    /// and is only reached at all once an operator has stated a curve. A filter
+    /// that refused to quantize would be a filter that could not run.
+    ///
+    /// Integers **saturate rather than wrap**, and round rather than truncate. A
+    /// playback curve boosts bass by up to 20 dB, so a sample past full scale is
+    /// an ordinary outcome and not a corrupt one; a cast that wrapped it would
+    /// turn the loudest moment of a side into a full-scale inversion. Float
+    /// keeps the value as it is, because nothing clips in floating point and the
+    /// export path's `Narrowing` is where that becomes a considered decision.
+    pub fn encode_sample(self, value: f32, into: &mut [u8]) -> bool {
+        if into.len() < self.bytes_per_sample() {
+            return false;
+        }
+        // The scale factors mirror `decode_sample` exactly - 2^15, 2^23, 2^31,
+        // not those minus one. Encoding against 32767 where the decoder divides
+        // by 32768 is a 0.003% gain error that compounds every time audio makes
+        // the trip, and it makes the pair fail to round trip at all.
+        //
+        // Rounded rather than cast, because `as` truncates towards zero: without
+        // this every sample is pulled one step closer to silence, and on
+        // asymmetric material the error is a DC offset rather than noise.
+        //
+        // Clamped to the widest value the format can hold, which on the positive
+        // side is one less than the scale. Saturating is what a converter does;
+        // `as` on an out-of-range float saturates too, but only since Rust 1.45
+        // and only by accident of the spec - doing it out loud is one `min`.
+        let scaled = |full: f64, top: f64| (f64::from(value) * full).round().clamp(-full, top);
+        match self {
+            Self::Int16 => {
+                let v = scaled(32_768.0, 32_767.0) as i16;
+                into[..2].copy_from_slice(&v.to_le_bytes());
+            }
+            Self::Int24Packed => {
+                let v = scaled(8_388_608.0, 8_388_607.0) as i32;
+                into[..3].copy_from_slice(&v.to_le_bytes()[..3]);
+            }
+            Self::Int24Padded => {
+                let v = scaled(8_388_608.0, 8_388_607.0) as i32;
+                into[..4].copy_from_slice(&v.to_le_bytes());
+            }
+            Self::Int32 => {
+                let v = scaled(2_147_483_648.0, 2_147_483_647.0) as i32;
+                into[..4].copy_from_slice(&v.to_le_bytes());
+            }
+            // Unclamped: a float project may legitimately hold samples past
+            // +/-1.0 and narrowing them here would be a silent edit.
+            Self::Float32 => into[..4].copy_from_slice(&value.to_le_bytes()),
+        }
+        true
+    }
+
     /// How many whole samples a blob of this format holds.
     pub const fn samples_in(self, bytes: usize) -> usize {
         bytes / self.bytes_per_sample()
@@ -384,6 +445,58 @@ impl StorageFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every format survives a decode/encode round trip to within its own last
+    /// bit. This is the check that fails the day somebody scales the encoder by
+    /// 2^15-1 and the decoder by 2^15, which reads as a gain error too small to
+    /// see and too large to ignore once audio makes the trip twice.
+    #[test]
+    fn a_sample_survives_the_trip_out_and_back() {
+        for format in StorageFormat::ALL {
+            let step = 1.0 / f32::from(1u16 << 15);
+            // One LSB of the *narrowest* format, so the same tolerance is fair
+            // to all five. Int16 is the one that has to earn it.
+            for value in [0.0f32, 0.5, -0.5, 0.999, -0.999, step, -step] {
+                let mut bytes = vec![0u8; format.bytes_per_sample()];
+                assert!(
+                    format.encode_sample(value, &mut bytes),
+                    "{format:?} too short"
+                );
+                let back = format.decode_sample(&bytes, 0).expect("just written");
+                assert!(
+                    (back - value).abs() <= step,
+                    "{format:?}: {value} came back as {back}"
+                );
+            }
+        }
+    }
+
+    /// A curve boosts bass, so a sample past full scale is an ordinary outcome.
+    /// Integers must pin to the rail; float must keep the value untouched.
+    #[test]
+    fn an_integer_saturates_where_a_float_does_not() {
+        let mut bytes = [0u8; 4];
+        assert!(StorageFormat::Int16.encode_sample(4.0, &mut bytes));
+        assert_eq!(i16::from_le_bytes([bytes[0], bytes[1]]), i16::MAX);
+        assert!(StorageFormat::Int16.encode_sample(-4.0, &mut bytes));
+        assert_eq!(i16::from_le_bytes([bytes[0], bytes[1]]), i16::MIN);
+
+        assert!(StorageFormat::Int32.encode_sample(4.0, &mut bytes));
+        assert_eq!(i32::from_le_bytes(bytes), i32::MAX);
+
+        assert!(StorageFormat::Float32.encode_sample(4.0, &mut bytes));
+        assert_eq!(f32::from_le_bytes(bytes), 4.0);
+    }
+
+    /// A short buffer is refused rather than panicking on the slice, because the
+    /// caller walking a blob is the one place an off-by-one lands here.
+    #[test]
+    fn a_short_buffer_is_refused() {
+        for format in StorageFormat::ALL {
+            let mut bytes = vec![0u8; format.bytes_per_sample() - 1];
+            assert!(!format.encode_sample(0.5, &mut bytes), "{format:?}");
+        }
+    }
 
     #[test]
     fn audacity_codes_round_trip() {

@@ -291,6 +291,38 @@ pub fn all(conn: &Connection) -> Result<Vec<Record>> {
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// States what the signal chain had already applied to a capture (§51).
+///
+/// `None` for every capture in the project, which is the ordinary case: the
+/// answer is a property of the operator's hifi, not of one recording, and an
+/// imported project has it for no capture at all. Returns how many rows were
+/// written, so a caller can say "no such capture" rather than report a silent
+/// success.
+///
+/// There is no read-side default to undo here: the column is
+/// `NOT NULL DEFAULT 'unknown'`, so this always moves a capture from one stated
+/// answer to another, `unknown` included.
+///
+/// # Errors
+///
+/// If the update fails.
+pub fn set_capture_eq(
+    project: &mut Project,
+    capture_id: Option<i64>,
+    eq: CaptureEq,
+) -> Result<usize> {
+    let changed = match capture_id {
+        Some(id) => project.conn_mut().execute(
+            "UPDATE captures SET capture_eq = ?2 WHERE capture_id = ?1",
+            params![id, eq.as_str()],
+        )?,
+        None => project
+            .conn_mut()
+            .execute("UPDATE captures SET capture_eq = ?1", params![eq.as_str()])?,
+    };
+    Ok(changed)
+}
+
 /// Sessions that never finished: what recovery looks for on the next launch (§15).
 ///
 /// Keyed on `finished_at IS NULL` rather than on the state column, because the

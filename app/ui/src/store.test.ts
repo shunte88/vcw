@@ -34,6 +34,7 @@ const OPENED: Wire = {
   scope: "the whole capture (1200.000 s)",
   opened: "96000 Hz s32 x2",
   conversion: "straight through",
+  playbackEq: "Columbia LP",
   divergences: [],
 };
 
@@ -121,5 +122,34 @@ group("the output meter", () => {
   // ten seconds of audition, which is what UNLOGGED exists to stop.
   it("is not kept in the log", () => {
     expect(logged(OUT)).toBe(false);
+  });
+});
+
+group("the curve in force", () => {
+  // §51 asks for the curve to be "visible wherever audio is auditioned". The
+  // transport badge reads it from here, and the state it has to be right in is
+  // the one *after* an audition: a badge left behind says a curve is being
+  // applied to a device that stopped, and the next thing a person hears is a
+  // different side.
+  it("appears with the audition and goes with it", () => {
+    const playing = fold(NOTHING, OPENED);
+    expect(playing.playbackEq).toBe("Columbia LP");
+
+    expect(fold(playing, FINISHED).playbackEq).toBeNull();
+    // And on the path where nothing opened at all. A refusal publishes no
+    // `playback-finished`, so this is the only event that can clear it.
+    expect(fold(playing, REFUSED).playbackEq).toBeNull();
+  });
+
+  it("is in the log too, because the badge does not keep", () => {
+    expect(describe(OPENED)).toContain("Columbia LP playback EQ");
+    expect(describe({ ...OPENED, playbackEq: null })).not.toContain("EQ");
+  });
+
+  it("is absent when no curve is in force, rather than named flat", () => {
+    // `null` and not "Flat": a project that states nothing has no decision in
+    // it, and a badge reading "Flat EQ" would claim one was made.
+    const state = fold(NOTHING, { ...OPENED, playbackEq: null });
+    expect(state.playbackEq).toBeNull();
   });
 });

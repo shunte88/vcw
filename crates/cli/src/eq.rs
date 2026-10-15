@@ -189,3 +189,44 @@ fn micros(us: Option<f64>) -> String {
         },
     )
 }
+
+/// States what the signal chain had already applied, on a capture that is
+/// already in a project (§51).
+///
+/// The gap this fills. `vcw session --capture-eq` asks at record time and the
+/// window asks once in settings, but an imported project (§12) has no record
+/// time to ask at - Audacity does not store the answer and VCW will not invent
+/// it, so every imported capture is `unknown`. A curve over an unknown capture
+/// is refused, which left an imported project able to name a characteristic and
+/// unable to hear it.
+///
+/// Every capture unless one is named, because the answer is a property of the
+/// hifi the records went through, not of one recording.
+pub(crate) fn provenance(
+    project: &std::path::Path,
+    eq: vcw_types::CaptureEq,
+    capture_id: Option<i64>,
+    json: bool,
+) -> Result<()> {
+    let mut open = vcw_project::Project::open(project)
+        .with_context(|| format!("opening {}", project.display()))?;
+    let changed = vcw_project::session::set_capture_eq(&mut open, capture_id, eq)?;
+    if changed == 0 {
+        anyhow::bail!(match capture_id {
+            Some(id) => format!("there is no capture {id} in this project"),
+            None => "this project has no captures yet".to_owned(),
+        });
+    }
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({ "captures": changed, "capture_eq": eq.as_str() })
+        );
+    } else {
+        println!(
+            "{changed} capture(s) now state the signal chain was {}",
+            eq.as_str()
+        );
+    }
+    Ok(())
+}
