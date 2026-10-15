@@ -14,6 +14,16 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## Unreleased
+
+### Fixed
+
+* **`vcw eq list` no longer says nothing selects a curve.** Its closing note,
+  and the command's own help, were written for 0.3.2-alpha when the catalog
+  really was read-only. 0.3.3-alpha shipped them unchanged, telling anybody who
+  ran the command that a feature they had just installed did not exist. Both now
+  point at `vcw release album.vcw set --playback-eq <id>`.
+
 ## 0.3.3-alpha
 
 2026-10-15

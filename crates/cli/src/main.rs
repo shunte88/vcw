@@ -212,8 +212,9 @@ enum Command {
 
     /// Show the §51 playback equalization curves and what defines them.
     ///
-    /// Read only. Nothing selects a curve yet - this is the catalog, its
-    /// citations, and the measured conformance of the filter built from it.
+    /// Read only, apart from `provenance`: this is the catalog, its citations,
+    /// and the measured conformance of the filter built from it. A record is
+    /// stated as cut to one of these with `vcw release set --playback-eq`.
     Eq {
         #[command(subcommand)]
         what: EqCommand,

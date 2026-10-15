@@ -107,7 +107,8 @@ pub(crate) fn list(overrides: Option<&str>, json: bool) -> Result<()> {
     println!(
         "\nTime constants in microseconds; a dash means the characteristic was cut\n\
          without that network. `vcw eq show <id>` prints one in full, with the\n\
-         source it came from. Nothing selects a curve yet."
+         source it came from. `vcw release <project> set --playback-eq <id>`\n\
+         states the one a record was cut with."
     );
     Ok(())
 }
