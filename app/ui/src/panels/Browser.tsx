@@ -49,7 +49,8 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
-import type { About, Curve, Project } from "../bindings/vcw";
+import type { About, Project } from "../bindings/vcw";
+import { label, useCurves } from "../curves";
 import { useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
@@ -337,21 +338,7 @@ export function Browser({
     isMono: false,
     playbackEq: RIAA,
   });
-  const [curves, setCurves] = useState<Curve[]>([]);
-
-  // Fetched once rather than per open of the form: the catalog is compiled into
-  // the build, so it cannot change while the window is up.
-  useEffect(() => {
-    let live = true;
-    void api.curves().then((answer) => {
-      if (live) {
-        setCurves(answer);
-      }
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
+  const curves = useCurves();
 
   // Every way into a project goes through here, so the panel change that
   // follows one cannot be wired to two of the three. Opening lands on Tracks
@@ -591,8 +578,7 @@ export function Browser({
                 >
                   {curves.map((curve) => (
                     <option key={curve.id} value={curve.id}>
-                      {curve.name}
-                      {curve.era === null ? "" : ` (${curve.era})`}
+                      {label(curve)}
                     </option>
                   ))}
                 </select>

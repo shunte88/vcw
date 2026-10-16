@@ -353,7 +353,7 @@ export type Request = { "command": "arm" } & Arm | { "command": "transport",
 /**
  * Which verb.
  */
-verb: Transport, } | { "command": "play" } & Audition | { "command": "seek" } & Seek | { "command": "move_marker" } & Marker | { "command": "place_marker" } & Placement | { "command": "delete_marker" } & Removal | { "command": "lock_marker" } & Lock | { "command": "set_provenance" } & CaptureProvenance | { "command": "edit_track" } & TrackEdit | { "command": "add_track" } & NewTrack | { "command": "split_track" } & Split | { "command": "merge_tracks" } & Merge | { "command": "detect_tracks" } & Detect | { "command": "search_metadata" } & Search | { "command": "select_release" } & Selection | { "command": "export" } & Export | { "command": "new_project" } & NewProject | { "command": "save_settings" } & Settings;
+verb: Transport, } | { "command": "play" } & Audition | { "command": "seek" } & Seek | { "command": "move_marker" } & Marker | { "command": "place_marker" } & Placement | { "command": "delete_marker" } & Removal | { "command": "lock_marker" } & Lock | { "command": "set_provenance" } & CaptureProvenance | { "command": "edit_release" } & ReleaseEdit | { "command": "edit_side" } & SideEdit | { "command": "edit_track" } & TrackEdit | { "command": "add_track" } & NewTrack | { "command": "split_track" } & Split | { "command": "merge_tracks" } & Merge | { "command": "detect_tracks" } & Detect | { "command": "search_metadata" } & Search | { "command": "select_release" } & Selection | { "command": "export" } & Export | { "command": "new_project" } & NewProject | { "command": "save_settings" } & Settings;
 
 export type Failure = {
 /**
@@ -538,6 +538,26 @@ captureId: number,
  * `flat`, `riaa` or `unknown`.
  */
 eq: string, };
+
+export type ReleaseEdit = {
+/**
+ * Whether this is a mono pressing, to be folded to one channel on export.
+ */
+isMono: boolean | null,
+/**
+ * The characteristic the record was cut with. `""` clears it.
+ */
+playbackEq: string | null, };
+
+export type SideEdit = {
+/**
+ * Which side, as [`crate::view::Side::id`] gave it.
+ */
+sideId: number,
+/**
+ * The characteristic. `""` clears it back to the release's.
+ */
+playbackEq: string | null, };
 
 export type NewTrack = {
 /**
@@ -966,7 +986,12 @@ captureId: number | null,
 /**
  * A title, where the label prints one for the side.
  */
-title: string | null, };
+title: string | null,
+/**
+ * The characteristic this side was cut with (§51), where it differs from
+ * the release's. `None` inherits the release's.
+ */
+playbackEq: string | null, };
 
 export type Track = {
 /**
@@ -1294,7 +1319,19 @@ discogsId: string | null,
 /**
  * Whether a person has accepted this metadata (§26).
  */
-confirmed: boolean, };
+confirmed: boolean,
+/**
+ * Whether this is a mono pressing, as stated at setup.
+ */
+isMono: boolean,
+/**
+ * The characteristic this release was cut with (§51), as a curve id.
+ *
+ * `None` means nobody has said. The two facts above a track that no
+ * provider supplies and no analysis recovers, which is why they are here
+ * rather than left to the metadata lookup.
+ */
+playbackEq: string | null, };
 
 export type Candidate = {
 /**

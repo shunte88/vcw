@@ -32,9 +32,14 @@
 
 //! `vcw eq` - the §51 curve catalog, on a terminal.
 //!
-//! Read only, and deliberately so: nothing here selects a curve, because nothing
-//! yet can. What it does is make the catalog checkable. §51 requires that every
-//! curve's parameters carry a citation to the published source they came from and
+//! `list` and `show` read the catalog; `provenance` writes the one §51 fact that
+//! belongs to the signal chain rather than to the record, which is whether the
+//! captured audio had already been equalized. Choosing a curve is a level down, at
+//! `vcw release set --playback-eq`, because the characteristic is a property of the
+//! pressing and the catalog is only where its numbers live.
+//!
+//! What `list` and `show` are for is making the catalog checkable. §51 requires that
+//! every curve's parameters carry a citation to the published source they came from and
 //! that the implemented response be measured against it - and a citation nobody can
 //! read is not a citation. `show` prints the source beside the numbers, the response
 //! at the frequencies the sources publish, and the realized error at every rate §8

@@ -52,7 +52,8 @@
 use tauri::{AppHandle, Manager, State};
 use vcw_contract::command::{
     Arm, Audition, CaptureProvenance, Detect, Export, Lock, Marker, Merge, NewProject, NewTrack,
-    Placement, Playback, Removal, Search, Selection, Split, TrackEdit, Transport, Zoom,
+    Placement, Playback, ReleaseEdit, Removal, Search, Selection, SideEdit, Split, TrackEdit,
+    Transport, Zoom,
 };
 use vcw_contract::settings::{Credential, Settings};
 use vcw_contract::view::{
@@ -226,6 +227,16 @@ pub(crate) fn set_provenance(
     stated: CaptureProvenance,
 ) -> Result<(), Error> {
     vcw_shell::edit::set_provenance(&shell, stated)
+}
+
+#[tauri::command]
+pub(crate) fn edit_release(shell: State<'_, Shell>, edit: ReleaseEdit) -> Result<(), Error> {
+    vcw_shell::edit::edit_release(&shell, edit)
+}
+
+#[tauri::command]
+pub(crate) fn edit_side(shell: State<'_, Shell>, edit: SideEdit) -> Result<(), Error> {
+    vcw_shell::edit::edit_side(&shell, edit)
 }
 
 #[tauri::command]

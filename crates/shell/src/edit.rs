@@ -60,10 +60,11 @@
 //! the project crate.
 
 use vcw_contract::command::{
-    CaptureProvenance, Lock, Marker, Merge, NewTrack, Placement, Removal, Split, TrackEdit,
+    CaptureProvenance, Lock, Marker, Merge, NewTrack, Placement, ReleaseEdit, Removal, SideEdit,
+    Split, TrackEdit,
 };
 use vcw_project::track::NewBoundary;
-use vcw_project::{Connection, Project, session, side, track};
+use vcw_project::{Connection, Project, release, session, side, track};
 use vcw_types::SampleRate;
 
 use crate::state::{Error, Shell};
@@ -189,6 +190,85 @@ pub fn edit_track(shell: &Shell, edit: TrackEdit) -> Result<(), Error> {
     Ok(())
 }
 
+/// Changes the two release facts nobody else can supply (§29, §51).
+///
+/// Neither comes back from a provider and neither can be read out of the audio,
+/// so both are asked at project setup - and until this command, answered once
+/// and never again from a window. A person who ticks the wrong box, or learns
+/// from the deadwax which characteristic a 1956 pressing was cut to, had to
+/// reach for the CLI.
+///
+/// Read-modify-write rather than a narrow UPDATE, because
+/// [`vcw_project::release::store`] replaces every column: that is the one shape
+/// that cannot lose a field by forgetting to mention it, and the price is a
+/// read this command would do anyway to create the row if it is absent.
+///
+/// # Errors
+///
+/// [`Error::NoProject`] with nothing open, [`Error::Invalid`] if the curve is
+/// not one the shipped catalog knows, and [`Error::Project`] if the write
+/// fails.
+pub fn edit_release(shell: &Shell, edit: ReleaseEdit) -> Result<(), Error> {
+    let curve = checked_curve(edit.playback_eq.as_deref())?;
+    let path = shell.project_path()?;
+    let mut project = Project::open(&path)?;
+    let mut record = release::ensure(&mut project)?;
+    if let Some(mono) = edit.is_mono {
+        record.is_mono = mono;
+    }
+    if let Some(id) = curve {
+        record.playback_eq = (!id.is_empty()).then(|| id.to_owned());
+    }
+    release::store(&mut project, &record)?;
+    project.close()?;
+    Ok(())
+}
+
+/// Gives one side its own characteristic, or clears it back to the release's (§51).
+///
+/// # Errors
+///
+/// [`Error::NoProject`] with nothing open, [`Error::Invalid`] if the curve is
+/// unknown or no side has that id, and [`Error::Project`] if the write fails.
+pub fn edit_side(shell: &Shell, edit: SideEdit) -> Result<(), Error> {
+    let curve = checked_curve(edit.playback_eq.as_deref())?;
+    let path = shell.project_path()?;
+    let mut project = Project::open(&path)?;
+    let record = side::by_id(project.conn(), edit.side_id)?.ok_or_else(|| Error::Invalid {
+        field: "sideId".to_owned(),
+        why: format!("there is no side {} in this project", edit.side_id),
+    })?;
+    if let Some(id) = curve {
+        side::set_playback_eq(&mut project, record.side, (!id.is_empty()).then_some(id))?;
+    }
+    project.close()?;
+    Ok(())
+}
+
+/// Checks a curve id against the shipped catalog before it is stored.
+///
+/// The shipped catalog only, which is the rule `vcw eq` follows too: a curve
+/// id written into a project has to resolve on whatever machine opens the
+/// project next, so a name that only one `--curves` file knows would be a
+/// dangling reference in the file. `None` and `""` pass through - the first is
+/// "leave it alone" and the second "nobody has said" - and a typo does not.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] naming `playbackEq`, listing what the catalog knows.
+pub(crate) fn checked_curve(id: Option<&str>) -> Result<Option<&str>, Error> {
+    match id {
+        Some(named) if !named.is_empty() => match vcw_eq::Catalog::builtin().require(named) {
+            Ok(_) => Ok(Some(named)),
+            Err(refusal) => Err(Error::Invalid {
+                field: "playbackEq".to_owned(),
+                why: refusal.to_string(),
+            }),
+        },
+        other => Ok(other),
+    }
+}
+
 /// States what the signal chain had already applied to a capture (§51).
 ///
 /// Separate from [`edit_track`] and from the release because it belongs to
@@ -311,4 +391,126 @@ fn rate_of_side(conn: &Connection, side_id: i64, field: &str) -> Result<SampleRa
         why: format!("capture {capture} is attached to side {side_id} but is not in the project"),
     })?;
     Ok(session.info.rate)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// A shell holding an empty project, which is what both commands need.
+    fn opened(dir: &std::path::Path) -> Shell {
+        let path = dir.join("record.vcw");
+        Project::create(&path)
+            .expect("create")
+            .close()
+            .expect("close");
+        Shell {
+            project: Mutex::new(Some(path)),
+            ..Shell::default()
+        }
+    }
+
+    fn release_of(shell: &Shell) -> release::Record {
+        let path = shell.project_path().expect("a project");
+        let project = Project::open_read_only(&path).expect("open");
+        release::load(project.conn())
+            .expect("read")
+            .expect("a release row")
+    }
+
+    #[test]
+    fn a_typo_is_refused_rather_than_stored() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let shell = opened(dir.path());
+        let refusal = edit_release(
+            &shell,
+            ReleaseEdit {
+                is_mono: None,
+                playback_eq: Some("riia".to_owned()),
+            },
+        )
+        .expect_err("a curve nobody ships");
+        assert!(
+            matches!(&refusal, Error::Invalid { field, .. } if field == "playbackEq"),
+            "blamed the wrong field: {refusal}"
+        );
+    }
+
+    #[test]
+    fn stating_one_fact_leaves_the_other_alone() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let shell = opened(dir.path());
+        edit_release(
+            &shell,
+            ReleaseEdit {
+                is_mono: Some(true),
+                playback_eq: Some("columbia_lp".to_owned()),
+            },
+        )
+        .expect("both");
+        // The second edit names only the curve. Mono has to survive it, which
+        // is the whole point of the three-state rule: `null` is not `false`.
+        edit_release(
+            &shell,
+            ReleaseEdit {
+                is_mono: None,
+                playback_eq: Some(String::new()),
+            },
+        )
+        .expect("clearing the curve");
+        let record = release_of(&shell);
+        assert!(
+            record.is_mono,
+            "mono was cleared by an edit that said nothing about it"
+        );
+        assert_eq!(
+            record.playback_eq, None,
+            "an empty string did not clear the curve"
+        );
+    }
+
+    #[test]
+    fn a_side_takes_its_own_curve_and_gives_it_back() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let shell = opened(dir.path());
+        let path = shell.project_path().expect("a project");
+        let id = {
+            let mut project = Project::open(&path).expect("open");
+            let record = side::ensure(&mut project, vcw_types::vinyl::Side::A).expect("side A");
+            project.close().expect("close");
+            record.id
+        };
+        edit_side(
+            &shell,
+            SideEdit {
+                side_id: id,
+                playback_eq: Some("decca_lp".to_owned()),
+            },
+        )
+        .expect("a side curve");
+        let project = Project::open_read_only(&path).expect("reopen");
+        let record = side::by_id(project.conn(), id)
+            .expect("read")
+            .expect("side A");
+        assert_eq!(record.playback_eq.as_deref(), Some("decca_lp"));
+    }
+
+    #[test]
+    fn an_absent_side_is_named_in_the_refusal() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let shell = opened(dir.path());
+        let refusal = edit_side(
+            &shell,
+            SideEdit {
+                side_id: 404,
+                playback_eq: Some("riaa".to_owned()),
+            },
+        )
+        .expect_err("no such side");
+        assert!(
+            matches!(&refusal, Error::Invalid { field, .. } if field == "sideId"),
+            "blamed the wrong field: {refusal}"
+        );
+    }
 }

@@ -60,16 +60,32 @@ use std::fmt;
 /// Carried by [`Query`] so that a provider trait implemented for AcoustID needs no
 /// second query type; the two providers built today ignore it. Not a credential,
 /// but derived from a recording, so it does not print itself either.
+///
+/// # `seconds` is the recording's length, not the window's
+///
+/// Undocumented by AcoustID and measured here on 2026-10-04: `duration` is a hard
+/// pre-filter rather than a hint. One track's fingerprint returned zero results
+/// declared at 166 s and at 190 s, matched from 170 s to 183 s, and scored 0.974
+/// declared as the recording's true 371 s - with the same bytes every time. Thirty
+/// seconds of audio is enough to match on, so the window and the duration routinely
+/// disagree, and declaring the window is how a run of 48 lookups found nothing at
+/// all while the code path was working perfectly.
+///
+/// So this is the believed length of the *track*, whatever length of audio the code
+/// was computed over. A caller that cannot say has no business guessing.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Fingerprint {
     /// The compressed fingerprint, in whatever encoding the service expects.
     pub code: String,
-    /// How many seconds of audio it was computed over, which the service needs.
+    /// The believed length of the recording, which the service filters on exactly.
     pub seconds: u32,
 }
 
 impl Fingerprint {
-    /// A fingerprint and the length of audio it was taken over.
+    /// A fingerprint and the believed length of the recording it is of.
+    ///
+    /// Not the length of audio the code was taken over, unless the two are the
+    /// same thing; see the type's own note.
     #[must_use]
     pub fn new(code: impl Into<String>, seconds: u32) -> Self {
         Self {

@@ -844,6 +844,46 @@ impl From<&TrackEdit> for vcw_project::track::Update {
     }
 }
 
+/// Change the two release facts nobody else can supply (§29, §51).
+///
+/// Everything else on a release row comes from a provider or from the four
+/// fields a lookup is built out of. These two do not: whether the pressing is
+/// mono is an export decision that the audio cannot be asked about, and which
+/// characteristic the lacquer was cut with is a fact about 1954 that Discogs
+/// does not carry. Both are asked at project setup and, before this command,
+/// could be answered exactly once.
+///
+/// Three-state like [`TrackEdit`]: `null` leaves the column alone, and for
+/// `playbackEq` an empty string clears it back to "nobody has said", which is
+/// not the same as naming `riaa`. The first means the application default
+/// applies; the second is an operator stating the usual curve on purpose.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseEdit {
+    /// Whether this is a mono pressing, to be folded to one channel on export.
+    pub is_mono: Option<bool>,
+    /// The characteristic the record was cut with. `""` clears it.
+    pub playback_eq: Option<String>,
+}
+
+/// Give one side its own characteristic (§51).
+///
+/// A compilation can carry a side cut to a different curve from the rest of
+/// the release - an anthology with one face dubbed from a 78 is the ordinary
+/// case - so §51 resolves release, then side, then track. The CLI has had
+/// `vcw tracks <project> side --playback-eq` since the curves shipped; this is
+/// the same write from a window.
+///
+/// `null` leaves the side alone and `""` clears it back to the release's.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SideEdit {
+    /// Which side, as [`crate::view::Side::id`] gave it.
+    pub side_id: i64,
+    /// The characteristic. `""` clears it back to the release's.
+    pub playback_eq: Option<String>,
+}
+
 /// State what the signal chain had already applied to a capture (§51).
 ///
 /// The one fact about a capture that cannot be recovered from it. A recorded
@@ -1004,6 +1044,10 @@ pub enum Request {
     /// not state one is refused, so without this a project opened in a window
     /// could name a characteristic and never be allowed to hear it.
     SetProvenance(CaptureProvenance),
+    /// Change the two release facts nobody else can supply (§29, §51).
+    EditRelease(ReleaseEdit),
+    /// Give one side its own characteristic (§51).
+    EditSide(SideEdit),
     /// Retitle or annotate a track (§31, §32).
     EditTrack(TrackEdit),
     /// Make a track out of a stretch a person chose (§31).

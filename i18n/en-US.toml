@@ -802,6 +802,15 @@ text = "Tracks"
 ["metadata.column.year"]
 text = "Year"
 
+["metadata.eq"]
+text = "Cut with"
+
+["metadata.eq.title"]
+text = "The characteristic the lacquer was cut with. No provider carries this and no analysis recovers it, so it is stated or it is nothing."
+
+["metadata.eq.unstated"]
+text = "Not stated (RIAA applies)"
+
 ["metadata.kb"]
 text = "{n} KB"
 
@@ -811,6 +820,12 @@ text = "Looking."
 ["metadata.lookup"]
 text = "Look up ({chord})"
 
+["metadata.mono"]
+text = "Mono"
+
+["metadata.mono.title"]
+text = "A mono pressing is captured in two channels like any other. This says the two are to be folded to one on the way out."
+
 ["metadata.nothing.blank"]
 text = "Fill in at least one field and press {chord}."
 
@@ -819,6 +834,12 @@ text = "Nothing matched. Widen the search: fewer fields find more."
 
 ["metadata.nothing.ready"]
 text = "Press {chord} to look this up."
+
+["metadata.pressing"]
+text = "The pressing"
+
+["metadata.pressing.channels"]
+text = "Channels"
 
 ["metadata.provider"]
 text = "Provider"
@@ -843,6 +864,9 @@ text = "{rest} and {last}"
 
 ["metadata.sides.none"]
 text = "no sides"
+
+["metadata.stereo"]
+text = "Stereo"
 
 ["metadata.title"]
 text = "Metadata"
@@ -980,6 +1004,15 @@ text = "not a track"
 
 ["tracks.side"]
 text = "Side"
+
+["tracks.side.eq"]
+text = "Cut with"
+
+["tracks.side.eq.release"]
+text = "Same as the release"
+
+["tracks.side.eq.title"]
+text = "A characteristic for this side alone, where it differs from the release's. An anthology with one face dubbed from a 78 is the usual reason."
 
 ["tracks.side.title"]
 text = "Which face of the record this capture holds"

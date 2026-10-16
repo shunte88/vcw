@@ -830,7 +830,24 @@ only set the curve at setup, which is the same gap that leaves `is_mono` unchang
 afterwards. **The IEC rumble filter is parked by decision, 2026-10-12**: it is used
 independently of any cutting characteristic, so it belongs with noise reduction and
 click removal rather than here. Parking it is what made the replay bass shelf mandatory
-for shelfless curves, which the note explains.
+for shelfless curves, which the note explains. The window can set the release's and
+each side's curve after setup since 2026-10-16, which closes that gap and the `is_mono`
+one with it.
+
+**The processing chain has a design and no code, 2026-10-16 (WP-30).**
+[docs/design/WP-30-non-destructive-processing.md](docs/design/WP-30-non-destructive-processing.md)
+is the precursor the click/pop work needs, written before the first repair algorithm so
+that the algorithm lands somewhere that already exists. Its one argument is that a
+processing stage comes in two shapes and they must not be built as one: a **parametric**
+stage is its parameters, streamable and re-derivable from a row, which is what §51's
+curve is; a **repair** stage is a stored list of defects plus a cheap deterministic
+repair, because detection is expensive, heuristic and wrong sometimes, and a person has
+to be able to see it and veto one click without vetoing the rest. That makes a click the
+same kind of object as a track boundary - a position in a capture with a confidence, a
+provenance, evidence and a lock - and the proposed `defects` table is `track_boundaries`
+with two frame columns instead of one. The chain runs at §51's two insertion points and
+no new ones, repairs before anything VCW applies, and `Option<Filter>` becomes `Chain`
+only when there is a second stage to put in it.
 
 **ALAC replaces AAC, 2026-10-10. It shipped 2026-10-11.** §33 carries the reasoning;
 this is what the work turned out to be. It was two pieces, and only one of them was a

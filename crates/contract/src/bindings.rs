@@ -197,6 +197,8 @@ pub fn typescript() -> String {
             decl::<crate::command::Lock>(),
             decl::<crate::command::TrackEdit>(),
             decl::<crate::command::CaptureProvenance>(),
+            decl::<crate::command::ReleaseEdit>(),
+            decl::<crate::command::SideEdit>(),
             decl::<crate::command::NewTrack>(),
             decl::<crate::command::Split>(),
             decl::<crate::command::Merge>(),

@@ -221,6 +221,9 @@ pub struct Side {
     pub capture_id: Option<i64>,
     /// A title, where the label prints one for the side.
     pub title: Option<String>,
+    /// The characteristic this side was cut with (§51), where it differs from
+    /// the release's. `None` inherits the release's.
+    pub playback_eq: Option<String>,
 }
 
 /// A track, as an editor needs it.
@@ -316,6 +319,14 @@ pub struct Release {
     pub discogs_id: Option<String>,
     /// Whether a person has accepted this metadata (§26).
     pub confirmed: bool,
+    /// Whether this is a mono pressing, as stated at setup.
+    pub is_mono: bool,
+    /// The characteristic this release was cut with (§51), as a curve id.
+    ///
+    /// `None` means nobody has said. The two facts above a track that no
+    /// provider supplies and no analysis recovers, which is why they are here
+    /// rather than left to the metadata lookup.
+    pub playback_eq: Option<String>,
 }
 
 /// One candidate release from a provider (§28).
@@ -455,6 +466,7 @@ impl From<&vcw_project::side::Record> for Side {
             },
             capture_id: record.capture,
             title: record.title.clone(),
+            playback_eq: record.playback_eq.clone(),
         }
     }
 }
@@ -477,6 +489,8 @@ impl From<&vcw_project::release::Record> for Release {
             musicbrainz_id: record.musicbrainz_id.clone(),
             discogs_id: record.discogs_id.clone(),
             confirmed: record.confirmed,
+            is_mono: record.is_mono,
+            playback_eq: record.playback_eq.clone(),
         }
     }
 }

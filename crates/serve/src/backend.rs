@@ -219,6 +219,8 @@ impl Backend for Served {
             "lock_marker" => done(vcw_shell::edit::lock_marker(shell, args.get("lock")?)),
             "edit_track" => done(vcw_shell::edit::edit_track(shell, args.get("edit")?)),
             "set_provenance" => done(vcw_shell::edit::set_provenance(shell, args.get("stated")?)),
+            "edit_release" => done(vcw_shell::edit::edit_release(shell, args.get("edit")?)),
+            "edit_side" => done(vcw_shell::edit::edit_side(shell, args.get("edit")?)),
             "add_track" => done(vcw_shell::edit::add_track(shell, args.get("add")?)),
             "split_track" => done(vcw_shell::edit::split_track(shell, args.get("split")?)),
             "merge_tracks" => done(vcw_shell::edit::merge_tracks(shell, args.get("merge")?)),

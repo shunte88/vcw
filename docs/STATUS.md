@@ -6208,19 +6208,16 @@ record can be identified. It deliberately persists nothing and publishes no §35
 `fingerprint-match`, because both need decisions WP-23 owns.
 
 **WP-23's evidence model, weights and resolver exist, and schema v4 has landed the two
-setup facts.** What is left on the package is a single item: **the three provider lookups
-behind `Lookup`**. It says what to ask, in what order, and nothing asks it yet;
-`vcw-metadata` already holds all three providers, so this is a walk of `Lookup::ORDER`
-through `next_lookup`, folding each answer into `Observed` and each candidate into a
-`Claim`, stopping when `resolve` returns `Outcome::Resolved`. The setup prompt itself is
-done in the window, minus the fields that do not exist yet.
+setup facts.** The last item on the package, the three provider lookups behind `Lookup`,
+was built 2026-10-16 as `vcw_identify::walk`; see the 2026-10-16 section at the foot of
+this file. The setup prompt itself is done in the window, minus the fields that do not
+exist yet.
 
-**Two known defects, neither fixed, both deliberate.** `seconds_of` in
-`crates/cli/src/fingerprint.rs` declares each region's own length as the AcoustID
-duration, which is the wrong number for any region that is not a whole track, so
-`--identify` on a `--tracks` run mostly asks questions that cannot be answered. And
-`releases.is_mono` is recorded and read by nothing: the export does not fold to mono yet,
-which is the piece of the processing chain the flag is waiting on.
+**Two known defects, both since fixed.** `seconds_of` in
+`crates/cli/src/fingerprint.rs` declared each region's own length as the AcoustID
+duration, which is the wrong number for any region that is not a whole track;
+`--duration` replaced it 2026-10-16. And `releases.is_mono` was recorded and read by
+nothing until the export learned to fold.
 
 **The gate now runs in two places, and WP-21's final run was split across both.**
 media2026 takes thirteen of the sixteen legs, including the `toolchain` check this box
@@ -7764,3 +7761,125 @@ level, because an audition has no track and a side does not know where it ends.
 Per-side and per-track pickers in the window still need a release-edit command the
 contract does not have - the same gap that leaves `is_mono` unchangeable after setup.
 A user-defined curve is per invocation (`--curves`) and is not stored in a project.
+
+## 2026-10-16, the last item on WP-23, and a shape for the one after it
+
+Four pieces, three of them closing something that had been open for a while.
+
+### The pressing, after setup
+
+`is_mono` and the §51 curve were asked for once, at new-project, and then could only be
+changed from the command line. The window had `edit_track` and nothing above it, so the
+one place a person is most likely to notice a mistake - the Metadata panel, with the
+provider's answer in front of them - could not correct either fact.
+
+Two contract commands rather than one, `EditRelease` and `EditSide`. A single
+`SetPlaybackEq { scope }` was the obvious shortcut and was not taken: it is an
+abstraction over two call sites, and the release command has to carry `is_mono` anyway,
+which a scoped command cannot. `ReleaseEdit` deliberately carries only the two facts a
+provider cannot supply and not the album or artist text, so the window still cannot fix
+a typo in a title; the type is named so it can grow when that is the work.
+
+Both fields are `Option` and an absent one is left alone, which is the behavior the
+three-state rule needs: setting the curve must not clear the mono flag. Verified in the
+window rather than only in a test, because that is where the two writes actually race -
+clicking the switch wrote `is_mono = 1`, and the curve picker then wrote
+`playback_eq = 'flat'` with the flag still set.
+
+`checked_curve` validates the id against the **shipped** catalog and not against one a
+`--curves` file extends, and `new_project` now routes through it too. A curve id that
+only this invocation knows would be a dangling reference in a project file somebody else
+opens. That was a hole at a trust boundary: the frontend could previously seed any
+string into `releases.playback_eq`.
+
+The frontend grew `app/ui/src/curves.ts` - one `useCurves()` hook and one `label()` -
+because three panels now draw the same list, and Browser's inline fetch and inline
+option text went away with it.
+
+### The duration AcoustID actually filters on
+
+`vcw fingerprint --from X --length 30 --identify` declared the window's length as the
+recording's duration and was therefore guaranteed to match nothing. AcoustID filters on
+that number **exactly**: the measurement behind WP-22 has one track scoring zero when
+declared at 166 s and at 190 s, matching between 170 and 183 s, and scoring 0.974 when
+declared as its true 371 s. Thirty seconds of audio is enough to identify a track, so
+the window and the duration routinely disagree, and the old code made them agree by
+construction.
+
+`--duration <SECONDS>` says what the excerpt is an excerpt *of*. Without it, an
+`--identify` over a `--length` window prints a note to **stderr** saying so, which keeps
+`--json` on stdout clean. A bare run or a `--tracks` run is unaffected: there the span
+is a whole track and declaring its own length was always right. Confirmed by grep that
+the CLI was the only caller constructing a `query::Fingerprint`, and the type's doc now
+states the rule so the second caller does not have to rediscover it.
+
+### WP-23's last item: something asks the questions
+
+`Lookup` has said what to ask, in what order, since the resolver landed, and nothing
+asked. `vcw_identify::walk` is the loop: it takes the providers it is handed, asks
+`next_lookup` what is worth asking, makes that lookup, folds the answer in, re-resolves
+the whole candidate list, and stops the moment one release is well enough supported to
+state. A record whose catalog number is on the sleeve costs one request.
+
+Three things in it are not obvious.
+
+**A provider that is not there is not a failure.** Lookups find their service by
+`ProviderId` in the slice they were given. No Discogs token means the two Discogs
+lookups are not made and no `Step` is recorded for them, because a step is a request
+that happened. That is also how a caller asks for a subset: hand over fewer providers,
+not more flags.
+
+**The fingerprint is a closure, not a value.** `Audio` carries `&AcoustId` and a
+`&dyn Fn() -> Option<Fingerprint>`, so a caller passes the means to fingerprint rather
+than the fingerprint. The whole point of the escalation order is that the audio lookup
+is never reached by a record that was found by name, and passing a computed fingerprint
+in would have paid for it every time. There is a test that asserts the closure is not
+called.
+
+**AcoustID answers with recordings and the resolver ranks releases.** The gap is closed
+by fetching the `RecordingRelease`s through MusicBrainz, vinyl appearances first and CDs
+after, capped at eight. Including the CDs is deliberate: AcoustID's release lists come
+from digital submissions and routinely omit the pressing entirely, and a CD release of
+the same album still names the artist and the title, which is more than this lookup
+otherwise has to offer the records it exists for. The recordings also land in `Observed`
+as `Fact::Recording`, so they re-rank candidates the text searches already found, which
+is what makes the last lookup worth making even when it produces no candidate of its
+own.
+
+The dedup is the one defensive bit. The two Discogs lookups routinely return the same
+pressing; held twice it becomes its own runner-up at an identical score, and two
+candidates a hair apart is exactly what `Doubt::TooClose` refuses to choose between. The
+duplicate would have turned an answer into a question. The test for it asserts the
+opposite too, that two genuinely different pressings still tie, so the dedup cannot
+quietly become a "pick one".
+
+WP-23 is now complete. What identification still has no caller: nothing drives `walk`
+yet, from the CLI or from the contract.
+
+### WP-30, a note before the code
+
+The ask was "architecture for non-destructive edits, click/pop precursor", and
+[docs/design/WP-30-non-destructive-processing.md](design/WP-30-non-destructive-processing.md)
+is it. Nothing is built and nothing in it was measured.
+
+Its one argument is that a processing stage comes in two shapes and they must not be
+built as one. A **parametric** stage is its parameters - §51's curve is three time
+constants and a rate, streamable, re-derivable from a sixteen-byte row. A **repair**
+stage is not: detection is expensive, heuristic and wrong sometimes, a snare hit and a
+click look alike to a threshold, and a person has to be able to see the proposal and
+veto one of them without vetoing the rest. So detection is analysis that writes a
+stored list of defects, and the chain only applies them.
+
+Which makes a click the same kind of object as a track boundary - a position in a
+capture with a confidence, a provenance, evidence and a lock - and the proposed
+`defects` table is `track_boundaries` with two frame columns instead of one. It hangs
+off the capture rather than the side, because frames index a capture and a defect has to
+survive the tracks being laid out again.
+
+The rest follows: repairs run upstream of anything VCW applies, and not configurably,
+because a click is damage to the groove and repairing after an IIR has smeared the
+impulse makes the damage longer and lower-contrast than it is. §9's bit-perfect
+refutation moves onto a chain predicate rather than a filter check, so a future stage is
+covered the day it is added. And `Option<Filter>` becomes `Chain` only when there is a
+second stage to put in it, because one stage is not a chain and the playback path is the
+one §4.2 says nothing may compromise.

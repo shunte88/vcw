@@ -80,6 +80,12 @@
 //! it instead of disappearing into one opaque number, which is what §26's
 //! "evidence-based rather than a single-match decision" has to mean in practice.
 //!
+//! [`walk()`] is the loop around all four: it asks the resolver what to look up next,
+//! makes that lookup against the providers it was handed, folds the answer back in
+//! and re-resolves, and stops the moment one release is well enough supported to
+//! state. It is the only part that talks to a network, which is why everything above
+//! it can be tested without one.
+//!
 //! # Deciding, from a sleeve and a search
 //!
 //! ```
@@ -125,8 +131,10 @@ pub mod candidate;
 pub mod confidence;
 pub mod evidence;
 pub mod resolver;
+pub mod walk;
 
 pub use candidate::{Agreement, Assessed, Claim, Verdict, assess};
 pub use confidence::{Confidence, Stance, weigh};
 pub use evidence::{Fact, Item, Kind, Observed, Source};
 pub use resolver::{Doubt, Lookup, Outcome, Ranked, next_lookup, resolve};
+pub use walk::{Audio, Step, Walked, walk};

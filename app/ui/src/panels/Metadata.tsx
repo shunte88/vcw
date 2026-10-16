@@ -29,15 +29,27 @@
 // The panel therefore shows `unmatched` and `unnamed` as a result rather than
 // as an error. The release row is written either way, because the album, the
 // label and the catalog number are right even when the tracklist is not.
+//
+// # The two facts a provider cannot supply
+//
+// Mono and the characteristic the lacquer was cut with. Discogs will not tell
+// you either one, and no analysis recovers them, so both are asked at project
+// setup - and until this panel grew them, that was the only place they could
+// be answered.
+// They sit in this panel rather than in Capture or Export because this is the
+// panel about what the record *is*: the fold to one channel and the curve to
+// undo are consequences of those facts, not separate settings.
 
 import { useCallback, useState } from "react";
 
 import * as api from "../api";
-import type { Accepted, Candidate } from "../bindings/vcw";
+import type { Accepted, Candidate, ReleaseEdit } from "../bindings/vcw";
+import { label, useCurves } from "../curves";
 import { type Translate, t, useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
 import type { Store } from "../store";
+import { Switch } from "./Switch";
 
 /** The metadata browser. */
 export function Metadata({ store }: { store: Store }): React.JSX.Element {
@@ -60,6 +72,17 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
   // for was filled.
   const [searched, setSearched] = useState(false);
   const [accepted, setAccepted] = useState<Accepted | null>(null);
+  const curves = useCurves();
+
+  // A project nobody has identified yet has no release row at all, and both
+  // answers still have a sensible shape: stereo, and nobody has said. The row
+  // is created by the write, not by reading it.
+  const isMono = project.release?.isMono ?? false;
+  const playbackEq = project.release?.playbackEq ?? "";
+
+  const stateRelease = (edit: ReleaseEdit) => {
+    void run(() => api.editRelease(edit)).then(store.reload);
+  };
 
   // Seeded from the release row the first time the panel is opened, which is
   // what the four-field helper on project creation was for: what a person typed
@@ -195,6 +218,54 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
           </select>
         </label>
       </form>
+
+      {/*
+        The two the providers will not answer. Written straight through rather
+        than held and saved: a switch and a sixteen-answer picker are discrete
+        choices, so there is no half-typed state to protect and no debounce to
+        get wrong.
+      */}
+      <fieldset className="pressing stacked">
+        <legend>{text("metadata.pressing")}</legend>
+        <div className="seed-switch">
+          <span>{text("metadata.pressing.channels")}</span>
+          <Switch
+            checked={!isMono}
+            onChange={(stereo) =>
+              stateRelease({ isMono: !stereo, playbackEq: null })
+            }
+            off={text("metadata.mono")}
+            on={text("metadata.stereo")}
+            title={text("metadata.mono.title")}
+          />
+        </div>
+        <label className="seed-field">
+          {text("metadata.eq")}
+          {/* The span clips the option box; see Browser.tsx for why. */}
+          <span className="picker">
+            <select
+              value={playbackEq}
+              title={text("metadata.eq.title")}
+              onChange={(event) =>
+                stateRelease({ isMono: null, playbackEq: event.target.value })
+              }
+            >
+              {/*
+                Empty is a real answer and not a placeholder: a release that
+                states nothing is played back as RIAA by default, which is not
+                the same as an operator saying it was cut to RIAA. Clearing the
+                statement is how somebody takes back a guess.
+              */}
+              <option value="">{text("metadata.eq.unstated")}</option>
+              {curves.map((curve) => (
+                <option key={curve.id} value={curve.id}>
+                  {label(curve)}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
+      </fieldset>
 
       {candidates.length === 0 ? (
         <p className="empty">{nothing(criteria, searching, searched, text)}</p>

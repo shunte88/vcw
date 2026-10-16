@@ -35,6 +35,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
 import type { Boundary, Side, Track } from "../bindings/vcw";
+import { label, useCurves } from "../curves";
 import { key, useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
@@ -98,6 +99,12 @@ export function Tracks({
   // that way gets side B's titles from the release; left on A it gets side
   // A's, which is the wrong words over real audio and nothing flags it.
   const [face, setFace] = useState("A");
+  const curves = useCurves();
+  // The side the letter picker is pointing at, which is not always the `side`
+  // prop: that one is the side the capture on screen belongs to, and it is
+  // null when one capture holds two faces. The override is a fact about the
+  // face a person is looking at the track list of, so it follows the letter.
+  const faced = project.sides.find((row) => row.letter === face) ?? null;
   const [draft, setDraft] = useState({
     title: "",
     artist: "",
@@ -292,6 +299,41 @@ export function Tracks({
               </option>
             ))}
           </select>
+        </label>
+        {/*
+          A side's own characteristic, where it differs from the release's.
+          §51 resolves release, then side, then track, and an anthology with
+          one face dubbed from a 78 is the ordinary reason a side disagrees -
+          so this sits beside the letter it is about rather than in the panel
+          about the record as a whole.
+        */}
+        <label className="face">
+          {text("tracks.side.eq")}
+          {/* The span clips the option box; see Browser.tsx for why. */}
+          <span className="picker">
+            <select
+              value={faced?.playbackEq ?? ""}
+              disabled={faced === null}
+              title={text("tracks.side.eq.title")}
+              onChange={(event) => {
+                if (faced !== null) {
+                  void run(() =>
+                    api.editSide({
+                      sideId: faced.id,
+                      playbackEq: event.target.value,
+                    }),
+                  ).then(store.reload);
+                }
+              }}
+            >
+              <option value="">{text("tracks.side.eq.release")}</option>
+              {curves.map((curve) => (
+                <option key={curve.id} value={curve.id}>
+                  {label(curve)}
+                </option>
+              ))}
+            </select>
+          </span>
         </label>
         <button
           type="button"

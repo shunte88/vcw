@@ -189,6 +189,24 @@ main.project {
   padding-right: 1.5rem;
 }
 
+/* The side's characteristic, beside the letter it is about. A curve name is
+   not a single letter, so the `width: auto` above is wrong for this one: it
+   takes its widest option and pushes the Detect button off the head. The span
+   is the same clip the setup sheet needs - WebKitGTK gives an `<option>` a box
+   at its full text width - and the ceiling here is a toolbar's share of the
+   row rather than a dialog's. */
+.panel-head .face .picker {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.panel-head .face .picker select {
+  width: 100%;
+  min-width: 0;
+  max-width: 14rem;
+}
+
 .panel-head h2 {
   font-size: 0.85rem;
   font-weight: 600;
@@ -684,6 +702,23 @@ fieldset.stacked {
    instead of flinging each switch to the far side of a 4K pane. */
 fieldset.stacked > label,
 fieldset.stacked > .setting-switch {
+  max-width: 62ch;
+}
+
+/* The two release facts on the metadata panel. `.stacked` gives it the column
+   and the reading measure; this adds what the setup sheet's group needed for
+   the same reason - a switch row is a div rather than a label, so it misses
+   the measure rule above, and `nowrap` keeps the curve picker from widening
+   its own line past the fieldset's border. */
+fieldset.pressing {
+  flex-wrap: nowrap;
+  min-inline-size: 0;
+  /* The same reading measure its children take, so the border ends where the
+     controls do rather than running the width of a 4K pane. */
+  max-width: 64ch;
+}
+
+fieldset.pressing > .seed-switch {
   max-width: 62ch;
 }
 

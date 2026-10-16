@@ -33,8 +33,10 @@ import type { Region } from "./Waveform";
 
 vi.mock("../api", () => ({
   addTrack: vi.fn(async () => 7),
+  curves: vi.fn(async () => []),
   deleteMarker: vi.fn(async () => undefined),
   detectTracks: vi.fn(async () => undefined),
+  editSide: vi.fn(async () => undefined),
 }));
 
 function boundary(id: number): Boundary {
@@ -117,7 +119,7 @@ function button(container: HTMLElement, word: RegExp): HTMLButtonElement {
   return found as HTMLButtonElement;
 }
 
-/** The panel's side picker: the only select in its head. */
+/** The panel's side picker: the first select in its head, the curve being second. */
 function picker(container: HTMLElement): HTMLSelectElement {
   const select = container.querySelector<HTMLSelectElement>(".panel-head select");
   expect(select, "the panel offers a side").toBeTruthy();

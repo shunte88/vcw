@@ -50,11 +50,13 @@ import type {
   Playback,
   Project,
   Release,
+  ReleaseEdit,
   Removal,
   Search,
   Selection,
   Settings,
   Side,
+  SideEdit,
   Split,
   Track,
   TrackEdit,
@@ -160,6 +162,21 @@ export function lockMarker(lock: Lock): Promise<void> {
  */
 export function setProvenance(stated: CaptureProvenance): Promise<void> {
   return invoke("set_provenance", { stated });
+}
+
+/**
+ * Changes the two release facts nobody else can supply (§29, §51).
+ *
+ * Mono and the cut characteristic. Both are asked at project setup, and before
+ * this neither could be answered a second time from the window.
+ */
+export function editRelease(edit: ReleaseEdit): Promise<void> {
+  return invoke("edit_release", { edit });
+}
+
+/** Gives one side its own characteristic. `""` clears it back to the release's. */
+export function editSide(edit: SideEdit): Promise<void> {
+  return invoke("edit_side", { edit });
 }
 
 /** Edits a track's metadata. Every field is optional; null leaves it alone. */

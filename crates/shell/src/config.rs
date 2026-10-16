@@ -193,9 +193,11 @@ pub fn new_project(host: &Hosted, seed: NewProject) -> Result<ProjectRow, Error>
         // RIAA for a project that states nothing, so storing `riaa` stores
         // nothing - and a row written to say "the usual" would make
         // `read::release` claim a blank project already has metadata.
-        let curve = seed
-            .playback_eq
-            .as_deref()
+        //
+        // Checked against the catalog like every other write of a curve id: a
+        // seed arrives from a frontend, and an unknown name stored here is a
+        // project that refuses to play on the machine that opens it next.
+        let curve = crate::edit::checked_curve(seed.playback_eq.as_deref())?
             .filter(|id| *id != vcw_eq::RIAA)
             .map(str::to_owned);
         if seed.artist.is_some()

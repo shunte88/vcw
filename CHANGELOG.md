@@ -16,6 +16,21 @@ loud if it cannot.
 
 ## Unreleased
 
+### Added
+
+* **The pressing can be corrected after setup.** Mono and the cutting
+  characteristic were asked for once, at new-project, and could not be changed
+  afterwards from the window - only from the command line. The Metadata panel
+  now carries a **The pressing** box with both, and the Tracks panel's side
+  header carries a per-side **Cut with** picker, so a two-sided capture whose
+  faces came from different pressings can say so.
+
+* **`vcw fingerprint --duration <SECONDS>`.** AcoustID filters on the declared
+  duration exactly, so a 30-second excerpt that declared itself as 30 seconds
+  could never match the four-minute recording it came from. `--identify` over a
+  `--length` window now says what it is an excerpt *of*, and warns when it has
+  not been told.
+
 ### Fixed
 
 * **`vcw eq list` no longer says nothing selects a curve.** Its closing note,

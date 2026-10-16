@@ -78,6 +78,11 @@ pub(crate) struct Args {
     pub(crate) from: Option<f64>,
     /// How much to fingerprint, in seconds. `None` runs to the end.
     pub(crate) length: Option<f64>,
+    /// The believed length of the track, in seconds, for a lookup to declare.
+    ///
+    /// `None` declares the span's own length, which is right when the span is a
+    /// whole track and fatal when it is an excerpt. See [`declared`].
+    pub(crate) duration: Option<f64>,
     /// Fingerprint each track the detectors imply, rather than one span.
     pub(crate) tracks: bool,
     /// In `--tracks`, report only boundaries this many detectors reported.
@@ -202,7 +207,8 @@ pub(crate) fn run(args: &Args) -> Result<()> {
         .collect();
     project.close()?;
     if args.identify {
-        identify(&mut regions);
+        warn_excerpt(args);
+        identify(args, &mut regions);
     }
 
     if args.json {
@@ -223,7 +229,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 /// that would otherwise waste a person's time is a bad key - thirteen identical
 /// refusals a second apart - so a rejected credential stops the loop and the
 /// regions after it say so.
-fn identify(regions: &mut [Region]) {
+fn identify(args: &Args, regions: &mut [Region]) {
     let credentials = Credentials::from_env();
     let provider = Setup::new()
         .online(true)
@@ -239,7 +245,7 @@ fn identify(regions: &mut [Region]) {
             region.found = Some(Err(vcw_metadata::Error::Rejected { provider: *error }));
             continue;
         }
-        let evidence = Evidence::new(&fingerprint.encoded, seconds_of(fingerprint));
+        let evidence = Evidence::new(&fingerprint.encoded, declared(args, fingerprint));
         let answer = provider.lookup(&evidence, &cancel);
         if let Err(vcw_metadata::Error::Rejected { provider }) = &answer {
             refused = Some(*provider);
@@ -248,9 +254,39 @@ fn identify(regions: &mut [Region]) {
     }
 }
 
-/// A fingerprint's length in whole seconds, which is what a lookup sends.
-fn seconds_of(fingerprint: &Fingerprint) -> u32 {
-    fingerprint.seconds().round().max(0.0) as u32
+/// The duration a lookup declares, in whole seconds.
+///
+/// `--duration` where it was given, and the fingerprinted span's own length
+/// otherwise. The distinction is the difference between an answer and silence:
+/// AcoustID filters on `duration` exactly rather than treating it as a hint, so
+/// a 30 s excerpt of a 371 s track declared as 30 s matches nothing, every time,
+/// with a fingerprint that scores 0.974 declared correctly.
+///
+/// The span's length is the right default because the two modes that produce one
+/// without `--duration` both produce whole tracks: `--tracks` fingerprints each
+/// region the detectors imply, and a bare run with no `--length` takes the side.
+/// It is `--length` that makes an excerpt, and that is the case [`warn_excerpt`]
+/// is about.
+fn declared(args: &Args, fingerprint: &Fingerprint) -> u32 {
+    let seconds = args.duration.unwrap_or_else(|| fingerprint.seconds());
+    seconds.round().max(0.0) as u32
+}
+
+/// Says so when a lookup is about to declare an excerpt's length as a track's.
+///
+/// Printed rather than refused: a short `--length` over a short track is a
+/// perfectly good lookup, and only the person running it knows which they have.
+/// What is not acceptable is the silence - 48 lookups in WP-22's first run came
+/// back empty for exactly this reason and nothing in the output said why.
+fn warn_excerpt(args: &Args) {
+    if args.identify && args.duration.is_none() && args.length.is_some() {
+        eprintln!(
+            "  note       this lookup declares the window's own length as the track's.\n\
+             \x20            AcoustID filters on that figure exactly, so an excerpt of a\n\
+             \x20            longer track matches nothing. Pass --duration <seconds> with\n\
+             \x20            the track's believed length."
+        );
+    }
 }
 
 /// How long to wait for one lookup.
@@ -308,11 +344,16 @@ fn print_report(capture_id: i64, layout: &Layout, regions: &[Region]) {
 
 /// What AcoustID said about one region, under the fingerprint it answered.
 ///
-/// A vinyl transfer frequently matches nothing at all - AcoustID's index is
-/// submitted from digital releases, and a record is a different master at a
-/// slightly different speed - so "no match" is printed rather than left blank. A
-/// person reading this needs to be able to tell a question with no answer from a
-/// question that was never asked.
+/// "No match" is printed rather than left blank, because a person reading this
+/// needs to tell a question with no answer from a question that was never asked.
+///
+/// A transfer can miss for three different reasons and the line does not
+/// distinguish them: the parameters were wrong, which is what `--duration` is
+/// for; nobody ever submitted a fingerprint for that recording, which is an
+/// answer about the index rather than about the record; or the pressing really
+/// is too far from every submitted master. Measured against the live service, a
+/// well-aligned vinyl transfer scores 0.64 to 0.88, so the third is the rarest
+/// of the three.
 fn print_matches(region: &Region) {
     let Some(found) = &region.found else {
         return;
@@ -409,4 +450,53 @@ fn print_json(capture_id: i64, layout: &Layout, regions: &[Region]) {
         })).collect::<Vec<_>>(),
     });
     println!("{value:#}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vcw_types::SampleRate;
+
+    fn args() -> Args {
+        Args {
+            project: PathBuf::from("/nowhere.vcw"),
+            capture: None,
+            from: None,
+            length: None,
+            duration: None,
+            tracks: false,
+            min_sources: 1,
+            json: false,
+            identify: false,
+        }
+    }
+
+    /// Thirty seconds of audio, which is all AcoustID needs and nothing like
+    /// the length of the track it was taken from.
+    fn excerpt() -> Fingerprint {
+        Fingerprint {
+            raw: vec![0; 8],
+            encoded: "AQABz0q3".to_owned(),
+            frames: 30 * 44_100,
+            rate: SampleRate(44_100),
+        }
+    }
+
+    #[test]
+    fn a_whole_track_declares_its_own_length() {
+        assert_eq!(declared(&args(), &excerpt()), 30);
+    }
+
+    #[test]
+    fn an_excerpt_declares_the_track_it_came_from() {
+        // The measured case: the same bytes score nothing at 30 and 0.974 at
+        // the recording's true length, so the flag has to reach the lookup
+        // rather than only the help text.
+        let given = Args {
+            duration: Some(371.4),
+            length: Some(30.0),
+            ..args()
+        };
+        assert_eq!(declared(&given, &excerpt()), 371);
+    }
 }

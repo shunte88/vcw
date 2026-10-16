@@ -401,6 +401,14 @@ enum Command {
         /// How much to fingerprint, in seconds. Omit for the rest of the side.
         #[arg(long)]
         length: Option<f64>,
+        /// The track's believed length in seconds, for --identify to declare.
+        ///
+        /// AcoustID filters on this figure exactly rather than treating it as a
+        /// hint, so it is the length of the recording and not of the window:
+        /// 30 s of a 371 s track declared as 30 s matches nothing. Omit when the
+        /// span is a whole track, which is what --tracks and a bare run produce.
+        #[arg(long)]
+        duration: Option<f64>,
         /// Fingerprint each track the detectors imply, rather than one span.
         #[arg(long, conflicts_with_all = ["from", "length"])]
         tracks: bool,
@@ -1329,6 +1337,7 @@ fn run() -> anyhow::Result<()> {
             capture,
             from,
             length,
+            duration,
             tracks,
             min_sources,
             identify,
@@ -1338,6 +1347,7 @@ fn run() -> anyhow::Result<()> {
             capture,
             from,
             length,
+            duration,
             tracks,
             min_sources,
             identify,
