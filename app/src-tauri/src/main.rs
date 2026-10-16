@@ -90,7 +90,7 @@ use vcw_shell::state::Shell;
 /// this list is the assertion about it. A copy compiled into the binary would
 /// be a second answer to the same question.
 #[cfg(test)]
-pub(crate) const WIRED: [&str; 21] = [
+pub(crate) const WIRED: [&str; 22] = [
     "arm",
     "transport",
     "play",
@@ -109,6 +109,7 @@ pub(crate) const WIRED: [&str; 21] = [
     "detect_tracks",
     "search_metadata",
     "select_release",
+    "identify",
     "export",
     "new_project",
     "save_settings",
@@ -235,6 +236,7 @@ fn main() {
             commands::detect_tracks,
             commands::search_metadata,
             commands::select_release,
+            commands::identify,
             commands::play,
             commands::playback,
             commands::export_plan,

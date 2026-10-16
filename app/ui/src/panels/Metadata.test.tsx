@@ -29,7 +29,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
 
-import type { Curve, Release } from "../bindings/vcw";
+import type { Candidate, Curve, Identified, Release } from "../bindings/vcw";
 import type { Store } from "../store";
 import { Metadata } from "./Metadata";
 
@@ -39,6 +39,13 @@ vi.mock("../api", () => ({
     { id: "columbia_lp", name: "Columbia LP", era: "1948-1954", labels: "" },
   ] as Curve[]),
   editRelease: vi.fn(async () => undefined),
+  identify: vi.fn(async () => ({
+    resolved: false,
+    candidates: [],
+    because: "nothing",
+    lookups: 3,
+    refusals: [],
+  })),
   searchMetadata: vi.fn(async () => []),
   selectRelease: vi.fn(async () => undefined),
 }));
@@ -159,5 +166,123 @@ describe("the two facts a provider cannot supply", () => {
       isMono: true,
       playbackEq: null,
     });
+  });
+});
+
+/** The panel's Identify button, which is the second in the head. */
+function identifyButton(container: HTMLElement): HTMLButtonElement {
+  const buttons = [
+    ...container.querySelectorAll<HTMLButtonElement>(".panel-head button"),
+  ];
+  const found = buttons.find((one) => one.textContent?.startsWith("Identify"));
+  expect(found, "the panel offers an automatic lookup").toBeTruthy();
+  return found as HTMLButtonElement;
+}
+
+function pressing(id: string, country: string): Candidate {
+  return {
+    provider: "discogs",
+    id,
+    album: "Vienna",
+    artist: "Ultravox",
+    year: 1980,
+    label: "Chrysalis",
+    catalog: "CHR 1296",
+    country,
+    format: "Vinyl, LP, Album",
+    tracks: 9,
+  };
+}
+
+// The walk is the one lookup a person does not type a query for, so the panel
+// has to account for it: what it concluded, and what it cost. A shortlist with
+// no sentence over it is indistinguishable from a search that went badly.
+describe("the automatic lookup", () => {
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    vi.mocked(api.identify).mockClear();
+    // jsdom has no layout, so it has no `scrollIntoView`. The panel scrolls
+    // the selected row into view and these are the first tests to render one.
+    HTMLElement.prototype.scrollIntoView = () => {};
+  });
+
+  it("fills the same table a search does, and says why it is asking", async () => {
+    const answer: Identified = {
+      resolved: false,
+      candidates: [pressing("1865584", "Spain"), pressing("1107608", "Israel")],
+      because: "tooClose",
+      lookups: 1,
+      refusals: [],
+    };
+    vi.mocked(api.identify).mockResolvedValueOnce(answer);
+    const container = await render(release());
+    await act(async () => {
+      identifyButton(container).click();
+    });
+    expect(vi.mocked(api.identify)).toHaveBeenCalledWith({
+      provider: null,
+      listen: false,
+    });
+    const rows = container.querySelectorAll("table.rows tbody tr");
+    expect(rows.length, "both pressings are offered").toBe(2);
+    const verdict = container.querySelector(".verdict")?.textContent ?? "";
+    expect(verdict).toContain("too close to separate");
+    // The headline, because every lookup is a request to somebody else.
+    expect(verdict).toContain("1 lookup.");
+  });
+
+  // A walk that found nothing is not a walk that failed, and a token that
+  // expired is not a record no database has. Both used to read the same.
+  it("separates nothing-found from a lookup that could not be made", async () => {
+    vi.mocked(api.identify).mockResolvedValueOnce({
+      resolved: false,
+      candidates: [],
+      because: "nothing",
+      lookups: 2,
+      refusals: ["discogs-catalog: no token"],
+    });
+    const container = await render(release());
+    await act(async () => {
+      identifyButton(container).click();
+    });
+    const verdict = container.querySelector(".verdict")?.textContent ?? "";
+    expect(verdict).toContain("Nothing the project's own facts support");
+    expect(verdict).toContain("discogs-catalog: no token");
+  });
+
+  // Nothing found and nothing asked read the same before this, and only one of
+  // them is a statement about the record.
+  it("does not call a walk it never made an answer", async () => {
+    vi.mocked(api.identify).mockResolvedValueOnce({
+      resolved: false,
+      candidates: [],
+      because: "nothing",
+      lookups: 0,
+      refusals: [],
+    });
+    const container = await render(release());
+    await act(async () => {
+      identifyButton(container).click();
+    });
+    const verdict = container.querySelector(".verdict")?.textContent ?? "";
+    expect(verdict).toContain("No lookup could be made");
+  });
+
+  it("offers a certain answer rather than writing it", async () => {
+    vi.mocked(api.identify).mockResolvedValueOnce({
+      resolved: true,
+      candidates: [pressing("1865584", "Spain")],
+      because: null,
+      lookups: 1,
+      refusals: [],
+    });
+    const container = await render(release());
+    await act(async () => {
+      identifyButton(container).click();
+    });
+    expect(vi.mocked(api.selectRelease), "nothing is written by a walk")
+      .not.toHaveBeenCalled();
+    const verdict = container.querySelector(".verdict")?.textContent ?? "";
+    expect(verdict).toContain("Accept it to write it in");
   });
 });

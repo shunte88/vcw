@@ -472,6 +472,26 @@ pub struct Search {
     pub provider: Option<String>,
 }
 
+/// What to let the resolver spend on one identification (§26, §27).
+///
+/// There is no query here, and that is the point: a walk asks the project what
+/// it already knows rather than a person what to type. The only thing worth
+/// saying from outside is which service to ask, and even that is a narrowing
+/// rather than an instruction.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Walk {
+    /// `discogs` or `musicbrainz`. `null` asks every configured provider.
+    pub provider: Option<String>,
+    /// Whether the walk may fingerprint audio if the text lookups settle nothing.
+    ///
+    /// Separate from the provider because it is a different kind of cost: the
+    /// text lookups are a request each, and this one decodes and analyzes a
+    /// track first. A person who is watching a window should be able to say no
+    /// to that without turning off AcoustID in settings.
+    pub listen: bool,
+}
+
 /// Which candidate the operator accepted (§26).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -1062,6 +1082,8 @@ pub enum Request {
     SearchMetadata(Search),
     /// Accept a candidate (§26).
     SelectRelease(Selection),
+    /// Work out which release this is, from what the project already knows (§26).
+    Identify(Walk),
     /// Turn the project into files (§33).
     Export(Export),
     /// Create a project, seeded from what is on the sleeve (§34).

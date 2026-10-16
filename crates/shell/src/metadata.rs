@@ -102,12 +102,15 @@
 
 use std::path::PathBuf;
 
-use vcw_contract::command::{Search, Selection};
+use vcw_contract::command::{Search, Selection, Walk};
 use vcw_contract::settings::Metadata;
-use vcw_contract::view::{Accepted, Candidate};
+use vcw_contract::view::{Accepted, Candidate, Identified};
 use vcw_core::identity;
+use vcw_identify::candidate::Claim;
+use vcw_identify::resolver::{Doubt, Outcome, Ranked};
+use vcw_identify::walk::{self, Audio};
 use vcw_metadata::credentials::Credentials;
-use vcw_metadata::{Cancel, ProviderId, Query, Setup, artwork};
+use vcw_metadata::{Cancel, Provider, ProviderId, Query, Setup, artwork};
 use vcw_project::{Project, release};
 
 use crate::config;
@@ -131,7 +134,11 @@ pub fn search_metadata(
     search: Search,
 ) -> Result<Vec<Candidate>, Error> {
     let settings = config::load(host)?.metadata;
-    let (musicbrainz, discogs) = which(&search, settings.musicbrainz, settings.discogs)?;
+    let (musicbrainz, discogs) = which(
+        search.provider.as_deref(),
+        settings.musicbrainz,
+        settings.discogs,
+    )?;
 
     let query = query(&search)?;
     let identified = credentials(&settings);
@@ -258,6 +265,136 @@ pub fn select_release(
     Ok(Accepted::of(&found, &applied).with_artwork(stored))
 }
 
+/// Works out which release this is, from what the project already knows (§26).
+///
+/// The automatic half of §28. [`search_metadata`] asks a person what to type and
+/// sends one query; this asks the *project* and escalates - catalog number first
+/// because it is the only lookup that identifies a pressing, then the two name
+/// searches, then the audio - stopping the moment the evidence settles. A record
+/// whose catalog number is on the sleeve therefore costs one request, and
+/// [`Identified::lookups`] says so.
+///
+/// Nothing is written. A resolved answer comes back as a one-row shortlist and
+/// the person accepts it with [`select_release`] like any other candidate, for
+/// the reason on [`Identified`].
+///
+/// # Errors
+///
+/// [`Error::NoProject`] with nothing open, [`Error::Invalid`] for a provider
+/// name that is not one of the two or a project that says nothing about the
+/// record yet, and [`Error::Project`] if the project will not read.
+pub fn identify_release(shell: &Shell, host: &Hosted, asked: Walk) -> Result<Identified, Error> {
+    let path = shell.project_path()?;
+    let settings = config::load(host)?.metadata;
+    let (musicbrainz, discogs) = which(
+        asked.provider.as_deref(),
+        settings.musicbrainz,
+        settings.discogs,
+    )?;
+
+    // Read-only and closed again before a provider is built, so a walk that
+    // waits twenty seconds on somebody else's service is not holding a reader
+    // on the project while it does.
+    let project = Project::open_read_only(&path)?;
+    let known = vcw_core::observe(project.conn())?;
+    project.close()?;
+    if known.observed.is_empty() {
+        return Err(Error::Invalid {
+            field: "project".to_owned(),
+            why: "this project says nothing about the record yet - fill in an artist, \
+                  a title or a catalog number and identify again"
+                .to_owned(),
+        });
+    }
+
+    let mut setup = Setup::new()
+        .online(settings.online)
+        .only(musicbrainz, discogs);
+    if let Some(directory) = cache(host) {
+        setup = setup.with_cache(directory);
+    }
+    let identified = credentials(&settings);
+    let owned = setup.providers(&identified);
+    let borrowed: Vec<&dyn Provider> = owned.iter().map(AsRef::as_ref).collect();
+    let acoustid = setup.acoustid(&identified);
+    let source = asked
+        .listen
+        .then(|| vcw_core::heard(&path, &known))
+        .flatten();
+    let audio = source.as_ref().map(|found| Audio {
+        acoustid: &acoustid,
+        fingerprint: found.fingerprint.as_ref(),
+    });
+
+    // Cancelled by the next search or walk, the same way a search is: a window
+    // whose operator has moved on should stop paying for the round trip.
+    let cancel = Cancel::new();
+    if let Some(previous) = shell
+        .searching
+        .lock()
+        .expect("the search mutex")
+        .replace(cancel.clone())
+    {
+        previous.cancel();
+    }
+    let walked = walk::walk(&borrowed, audio.as_ref(), &known.observed, &cancel);
+
+    let (resolved, candidates, because) = match &walked.outcome {
+        Outcome::Resolved { chosen } => (true, vec![offered(chosen)], None),
+        Outcome::Ask { shortlist, because } => (
+            false,
+            shortlist.iter().map(offered).collect(),
+            Some(doubt(*because).to_owned()),
+        ),
+        Outcome::Nothing => (false, Vec::new(), Some("nothing".to_owned())),
+    };
+    Ok(Identified {
+        resolved,
+        candidates,
+        because,
+        lookups: u32::try_from(walked.steps.len()).unwrap_or(u32::MAX),
+        refusals: walked
+            .steps
+            .iter()
+            .filter_map(|step| {
+                step.failed
+                    .as_ref()
+                    .map(|why| format!("{}: {why}", step.lookup.as_str()))
+            })
+            .collect(),
+    })
+}
+
+/// A ranked candidate as the panel's existing table reads it.
+///
+/// Built by hand rather than through [`Candidate::found`] because a [`Claim`] is
+/// what survived the resolver rather than what a provider said, and the two are
+/// different types on purpose.
+fn offered(ranked: &Ranked) -> Candidate {
+    let claim: &Claim = &ranked.assessed.claim;
+    Candidate {
+        provider: claim.provider.map_or("", name).to_owned(),
+        id: claim.ids.first().cloned().unwrap_or_default(),
+        album: claim.album.clone(),
+        artist: claim.artist.clone(),
+        year: claim.year,
+        label: claim.label.clone(),
+        catalog: claim.catalog.clone(),
+        country: claim.country.clone(),
+        format: claim.format.clone(),
+        tracks: claim.tracks.map(|n| u32::try_from(n).unwrap_or(u32::MAX)),
+    }
+}
+
+/// The wire code for a doubt, which `i18n/` turns into a sentence.
+const fn doubt(because: Doubt) -> &'static str {
+    match because {
+        Doubt::NotEnoughEvidence => "notEnoughEvidence",
+        Doubt::TooClose => "tooClose",
+        Doubt::ContradictsAPerson => "contradictsAPerson",
+    }
+}
+
 /// The credentials a provider call runs with: §39's environment, plus the
 /// contact §39's settings file is allowed to hold.
 ///
@@ -289,8 +426,8 @@ fn cache(host: &Hosted) -> Option<PathBuf> {
 /// than refused. §39 is a default and a request is specific, and a person who
 /// clicked "ask Discogs" has said what they want more recently than the
 /// settings panel did.
-fn which(search: &Search, musicbrainz: bool, discogs: bool) -> Result<(bool, bool), Error> {
-    match search.provider.as_deref() {
+fn which(named: Option<&str>, musicbrainz: bool, discogs: bool) -> Result<(bool, bool), Error> {
+    match named {
         None => {
             if !(musicbrainz || discogs) {
                 return Err(Error::Invalid {
@@ -368,11 +505,10 @@ mod tests {
         // The rule worth a test, because the other reading is defensible and
         // wrong: a person who clicked "ask Discogs" while Discogs is off in
         // settings gets Discogs, not a refusal explaining their own settings.
-        let search = Search {
-            provider: Some("discogs".to_owned()),
-            ..Search::default()
-        };
-        assert_eq!(which(&search, true, false).expect("which"), (false, true));
+        assert_eq!(
+            which(Some("discogs"), true, false).expect("which"),
+            (false, true)
+        );
     }
 
     #[test]
@@ -416,9 +552,57 @@ mod tests {
     }
 
     #[test]
+    fn a_shortlist_carries_what_tells_two_pressings_apart() {
+        // The defect this exists to keep fixed. A walk nearly always comes back
+        // with several pressings of one record, so every field the resolver
+        // weighed reads the same on every row; the country and the format are
+        // what a person actually chooses on, and they are the two the claim
+        // used to drop on the way to the panel.
+        use vcw_identify::candidate::Assessed;
+        use vcw_identify::confidence::weigh;
+
+        let claim = Claim {
+            provider: Some(ProviderId::Discogs),
+            ids: vec!["1865584".to_owned()],
+            album: "Vienna".to_owned(),
+            artist: "Ultravox".to_owned(),
+            country: "Spain".to_owned(),
+            format: "Vinyl, LP, Album".to_owned(),
+            tracks: Some(9),
+            ..Claim::default()
+        };
+        let assessed = Assessed {
+            claim,
+            agreements: Vec::new(),
+        };
+        let row = offered(&Ranked {
+            confidence: weigh(&assessed),
+            assessed,
+        });
+        assert_eq!(row.provider, "discogs");
+        assert_eq!(row.id, "1865584");
+        assert_eq!(row.country, "Spain");
+        assert_eq!(row.format, "Vinyl, LP, Album");
+        assert_eq!(row.tracks, Some(9));
+    }
+
+    #[test]
+    fn every_doubt_has_a_code_the_window_can_translate() {
+        // A code the panel has no case for renders as the code itself, which is
+        // visible but not a sentence. Spelled out here so that adding a
+        // `Doubt` fails on this side too.
+        for (because, code) in [
+            (Doubt::TooClose, "tooClose"),
+            (Doubt::NotEnoughEvidence, "notEnoughEvidence"),
+            (Doubt::ContradictsAPerson, "contradictsAPerson"),
+        ] {
+            assert_eq!(doubt(because), code);
+        }
+    }
+
+    #[test]
     fn asking_nobody_is_refused_rather_than_answered_emptily() {
-        let search = Search::default();
-        let refused = which(&search, false, false).expect_err("nothing to ask");
+        let refused = which(None, false, false).expect_err("nothing to ask");
         assert_eq!(refused.field(), Some("provider".to_owned()));
     }
 

@@ -267,7 +267,7 @@ fn search(
         Ok(found) => {
             let before = claims.len();
             for candidate in &found {
-                keep(claims, Claim::of(candidate));
+                keep(claims, Claim::of(candidate).from(provider.id()));
             }
             Step {
                 lookup,
@@ -350,7 +350,7 @@ fn identify(
     let mut failed = None;
     for id in to_fetch(&matched) {
         match provider.fetch(&id, cancel) {
-            Ok(release) => keep(claims, Claim::of_release(&release)),
+            Ok(release) => keep(claims, Claim::of_release(&release).from(provider.id())),
             Err(Error::Canceled) => {
                 failed = Some(Error::Canceled);
                 break;
@@ -511,6 +511,14 @@ mod tests {
         let walked = walk(&[&discogs], None, &sleeve(), &Cancel::new());
 
         assert_eq!(chosen(&walked.outcome), "d1");
+        assert_eq!(
+            match &walked.outcome {
+                Outcome::Resolved { chosen } => chosen.assessed.claim.provider,
+                _ => None,
+            },
+            Some(ProviderId::Discogs),
+            "a resolved claim names the service to fetch it back from"
+        );
         assert_eq!(walked.steps.len(), 1, "{:?}", walked.steps);
         assert_eq!(walked.steps[0].lookup, Lookup::CatalogAtDiscogs);
         assert_eq!(

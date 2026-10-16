@@ -40,6 +40,7 @@ import type {
   Export,
   ExportPlan,
   Failure,
+  Identified,
   Listing,
   Lock,
   Marker,
@@ -61,6 +62,7 @@ import type {
   Track,
   TrackEdit,
   Transport,
+  Walk,
   Waveform,
   Wire,
   Zoom,
@@ -232,6 +234,15 @@ export function searchMetadata(search: Search): Promise<Candidate[]> {
  */
 export function selectRelease(selection: Selection): Promise<Accepted> {
   return invoke("select_release", { selection });
+}
+
+/**
+ * Works out which release this is from what the project already knows, and
+ * writes nothing: even a resolved answer comes back as a shortlist of one, to
+ * be accepted with `selectRelease` like any other candidate.
+ */
+export function identify(walk: Walk): Promise<Identified> {
+  return invoke("identify", { walk });
 }
 
 /** Resolves an export and returns the plan, writing nothing. */

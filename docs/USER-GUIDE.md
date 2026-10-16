@@ -641,6 +641,44 @@ One thing that catches people searching by hand: a provider's `format:` field is
 an exact medium-name match, so `format:vinyl` finds nothing. Vinyl is spelled
 four different ways across the catalog, and VCW's own search asks for all four.
 
+### Letting VCW work it out
+
+```text
+vcw identify album.vcw                     # escalate until the evidence settles
+vcw identify album.vcw --provider discogs  # ask one service
+vcw identify album.vcw --no-audio          # never reach the fingerprint
+vcw identify album.vcw --apply             # write a resolved release in
+vcw identify album.vcw --json              # the same walk, for a script
+```
+
+The Metadata panel's **Identify** button, `i`, is the same thing. Neither types
+a query: both take what the project already holds - whatever was entered at
+setup, how many tracks are laid out, how long each captured side runs - and
+escalate through the lookups until one of them settles it. The catalog number
+at Discogs goes first, because it is the only lookup that identifies a
+*pressing* rather than a work; then the two searches by name; then, last and
+usually not at all, the audio.
+
+The report leads on what it cost, because every lookup is a request to somebody
+else's service. A record whose catalog number is on the sleeve says
+`lookup 1  discogs-catalog  1 new candidate` and stops there.
+
+Nothing is written by the walk. Even a release it is certain of comes back as a
+list of one, to be accepted the same way any candidate is - choosing between two
+pressings is yours to do. `--apply` is the opt-in on the command line, and it
+refuses a shortlist rather than taking the top row.
+
+Expect a shortlist more often than an answer. Discogs carries a release row per
+territory, so a catalog number that identifies exactly one pressing in the world
+still comes back a dozen times over, every row agreeing on artist, title, label,
+number and year. The country and the format are what tell them apart, and that
+is why the list prints them.
+
+The audio lookup fingerprints the **first track** of the first captured side,
+never the whole side: AcoustID filters on the declared length exactly, and a
+side is not a recording anybody submitted. A project with no tracks laid out has
+nothing to ask with, so run `vcw tracks album.vcw detect --write` first.
+
 ### The release decides how the record is cut
 
 Accepting a candidate in the Metadata panel does three things: it writes the
@@ -991,6 +1029,7 @@ that claimed to cover them would be describing the wrong thing.
 | Key | Does | Workflow (§44) | §43 default |
 | --- | --- | --- | --- |
 | `l` | Look the record up with a provider | `search-metadata` | - |
+| `i` | Work out which release this is, from what the project knows | `search-metadata` | - |
 | `Enter` | Accept the selected release | `choose-release` | - |
 | `ArrowUp` | Select the candidate above | `choose-release` | - |
 | `ArrowDown` | Select the candidate below | `choose-release` | - |

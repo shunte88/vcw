@@ -849,6 +849,31 @@ with two frame columns instead of one. The chain runs at §51's two insertion po
 no new ones, repairs before anything VCW applies, and `Option<Filter>` becomes `Chain`
 only when there is a second stage to put in it.
 
+**WP-23 has a door, 2026-10-16.** The resolver had been complete since WP-23 and
+unreachable: `walk()` landed earlier the same day with nothing calling it. `vcw
+identify <project>` and the Metadata panel's **Identify** button are the two callers,
+and between them they needed three pieces that were missing rather than hard.
+`vcw_core::evidence::observe` turns a project's rows into [`Observed`] - what a person
+typed as `Stated`, what the project measured as `Signal`, because §26 only lets a
+candidate contradict the first; `vcw_core::evidence::heard` picks the track an audio
+lookup would ask about, which is the *first track* of the first captured side rather
+than the side, because AcoustID filters on the declared duration exactly; and
+`Claim` gained the provider that answered with it, without which a resolved candidate
+names an id that means nothing to whoever is meant to fetch it.
+
+Two findings came out of running it against real catalog numbers rather than fixtures.
+**A shortlist of one record's pressings is unreadable if it prints only what was
+weighed**: five Discogs rows for `CHR 1296` agreed on artist, title, label, catalog
+number and year and differed only in country and format, so `Claim` now carries those
+two - they are explicitly *not* evidence, because no project states a country and
+nothing can therefore agree or disagree with it. And **`Doubt::TooClose` is the normal
+answer, not the edge case**, because Discogs has a pressing row per territory; the
+resolve rather than ask path needed a catalog number with exactly one exact match to
+exercise at all. Neither door writes on its own: a release the resolver is certain of
+comes back as a shortlist of one, and `--apply` is the opt-in that refuses anything
+less. A side length is offered only where the capture is that side's alone, since half
+a two-face capture is a figure a candidate would then *disagree* with.
+
 **ALAC replaces AAC, 2026-10-10. It shipped 2026-10-11.** §33 carries the reasoning;
 this is what the work turned out to be. It was two pieces, and only one of them was a
 codec.

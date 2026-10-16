@@ -21,6 +21,7 @@ vcw-metadata = { workspace = true }
 vcw-eq = { workspace = true }
 vcw-export = { workspace = true }
 vcw-i18n = { workspace = true }
+vcw-identify = { workspace = true }
 vcw-import = { workspace = true }
 vcw-project = { workspace = true }
 vcw-serve = { workspace = true, optional = true }

@@ -18,6 +18,23 @@ loud if it cannot.
 
 ### Added
 
+* **VCW can work out which release a project is, on its own.** `vcw identify
+  <project>` and the Metadata panel's **Identify** button take what the project
+  already holds - whatever was typed at setup, how many tracks were laid out,
+  how long each captured side runs - and escalate through the providers until
+  the evidence settles: the catalog number at Discogs first, then the two name
+  searches, then the audio. It stops at the first lookup that answers, so a
+  record whose catalog number is on the sleeve costs one request, and the
+  report says how many were made. Nothing is written by the walk itself: even a
+  release it is certain of is offered to be accepted, because choosing between
+  two pressings is the operator's decision. `--apply` is the opt-in for the
+  command line, and it refuses a shortlist.
+
+* **A shortlist says what tells two pressings apart.** A walk nearly always
+  comes back with several pressings of one record, which agree on everything
+  that was weighed. The country and the format are now carried through to the
+  list, where before every row read identically.
+
 * **The pressing can be corrected after setup.** Mono and the cutting
   characteristic were asked for once, at new-project, and could not be changed
   afterwards from the window - only from the command line. The Metadata panel

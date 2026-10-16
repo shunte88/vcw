@@ -361,6 +361,41 @@ pub struct Candidate {
     pub tracks: Option<u32>,
 }
 
+/// What a resolver walk concluded, and what it cost (§26, §27).
+///
+/// Deliberately the same [`Candidate`] rows a search returns, so a panel that
+/// can already show a provider's answer can show this one with no second table
+/// and the accept path stays [`crate::command::Selection`]. The walk never
+/// writes: even a release it is certain of is offered rather than applied,
+/// because choosing between pressings is the decision §26 reserves for a
+/// person and an automatic write would be making it by running.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Identified {
+    /// Whether one candidate is well enough supported to accept without a choice.
+    ///
+    /// `true` means `candidates` holds exactly one.
+    pub resolved: bool,
+    /// The shortlist, best first, or empty where nothing was supported.
+    pub candidates: Vec<Candidate>,
+    /// Why it is a question rather than an answer, as a code the window turns
+    /// into a sentence: `tooClose`, `notEnoughEvidence`, `contradictsAPerson`,
+    /// or `nothing`. `null` when it resolved.
+    ///
+    /// A code rather than the sentence itself because the sentence belongs in
+    /// `i18n/`, and a shell that wrote English here would be a second catalog
+    /// nobody translates.
+    pub because: Option<String>,
+    /// How many lookups were made, which is how many requests this cost.
+    pub lookups: u32,
+    /// Lookups that were reached and could not be made, as `name: reason`.
+    ///
+    /// A provider that refused is not the same as a provider that was never
+    /// needed, and a walk that came back empty because a token expired should
+    /// not read as a record no database has.
+    pub refusals: Vec<String>,
+}
+
 /// A window of the waveform, ready to draw (§19).
 ///
 /// Three floats per column and never a sample: §35 forbids PCM on this wire,
@@ -534,12 +569,6 @@ impl Track {
 }
 
 impl Candidate {
-    /// Builds the view from a provider's answer.
-    ///
-    /// The provider's name is an argument because a
-    /// [`vcw_metadata::release::Release`] does not carry it: whoever asked
-    /// knows who answered, and storing it on the record would let the two
-    /// disagree.
     /// Builds the view from a search hit.
     ///
     /// Separate from [`Candidate::of`] because a provider's *search* answer and

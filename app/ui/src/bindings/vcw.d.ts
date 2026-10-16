@@ -353,7 +353,7 @@ export type Request = { "command": "arm" } & Arm | { "command": "transport",
 /**
  * Which verb.
  */
-verb: Transport, } | { "command": "play" } & Audition | { "command": "seek" } & Seek | { "command": "move_marker" } & Marker | { "command": "place_marker" } & Placement | { "command": "delete_marker" } & Removal | { "command": "lock_marker" } & Lock | { "command": "set_provenance" } & CaptureProvenance | { "command": "edit_release" } & ReleaseEdit | { "command": "edit_side" } & SideEdit | { "command": "edit_track" } & TrackEdit | { "command": "add_track" } & NewTrack | { "command": "split_track" } & Split | { "command": "merge_tracks" } & Merge | { "command": "detect_tracks" } & Detect | { "command": "search_metadata" } & Search | { "command": "select_release" } & Selection | { "command": "export" } & Export | { "command": "new_project" } & NewProject | { "command": "save_settings" } & Settings;
+verb: Transport, } | { "command": "play" } & Audition | { "command": "seek" } & Seek | { "command": "move_marker" } & Marker | { "command": "place_marker" } & Placement | { "command": "delete_marker" } & Removal | { "command": "lock_marker" } & Lock | { "command": "set_provenance" } & CaptureProvenance | { "command": "edit_release" } & ReleaseEdit | { "command": "edit_side" } & SideEdit | { "command": "edit_track" } & TrackEdit | { "command": "add_track" } & NewTrack | { "command": "split_track" } & Split | { "command": "merge_tracks" } & Merge | { "command": "detect_tracks" } & Detect | { "command": "search_metadata" } & Search | { "command": "select_release" } & Selection | { "command": "identify" } & Walk | { "command": "export" } & Export | { "command": "new_project" } & NewProject | { "command": "save_settings" } & Settings;
 
 export type Failure = {
 /**
@@ -538,6 +538,55 @@ captureId: number,
  * `flat`, `riaa` or `unknown`.
  */
 eq: string, };
+
+export type Walk = {
+/**
+ * `discogs` or `musicbrainz`. `null` asks every configured provider.
+ */
+provider: string | null,
+/**
+ * Whether the walk may fingerprint audio if the text lookups settle nothing.
+ *
+ * Separate from the provider because it is a different kind of cost: the
+ * text lookups are a request each, and this one decodes and analyzes a
+ * track first. A person who is watching a window should be able to say no
+ * to that without turning off AcoustID in settings.
+ */
+listen: boolean, };
+
+export type Identified = {
+/**
+ * Whether one candidate is well enough supported to accept without a choice.
+ *
+ * `true` means `candidates` holds exactly one.
+ */
+resolved: boolean,
+/**
+ * The shortlist, best first, or empty where nothing was supported.
+ */
+candidates: Array<Candidate>,
+/**
+ * Why it is a question rather than an answer, as a code the window turns
+ * into a sentence: `tooClose`, `notEnoughEvidence`, `contradictsAPerson`,
+ * or `nothing`. `null` when it resolved.
+ *
+ * A code rather than the sentence itself because the sentence belongs in
+ * `i18n/`, and a shell that wrote English here would be a second catalog
+ * nobody translates.
+ */
+because: string | null,
+/**
+ * How many lookups were made, which is how many requests this cost.
+ */
+lookups: number,
+/**
+ * Lookups that were reached and could not be made, as `name: reason`.
+ *
+ * A provider that refused is not the same as a provider that was never
+ * needed, and a walk that came back empty because a token expired should
+ * not read as a record no database has.
+ */
+refusals: Array<string>, };
 
 export type ReleaseEdit = {
 /**

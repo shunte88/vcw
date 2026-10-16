@@ -250,6 +250,9 @@ text = "Tracks"
 ["keys.help"]
 text = "Show the keyboard map"
 
+["keys.identify"]
+text = "Work out which release this is, from what the project knows"
+
 ["keys.log"]
 text = "Show the event log"
 
@@ -787,6 +790,9 @@ text = "Artist"
 ["metadata.column.catalog"]
 text = "Catalog"
 
+["metadata.column.country"]
+text = "Country"
+
 ["metadata.column.format"]
 text = "Format"
 
@@ -810,6 +816,45 @@ text = "The characteristic the lacquer was cut with. No provider carries this an
 
 ["metadata.eq.unstated"]
 text = "Not stated (RIAA applies)"
+
+["metadata.identify"]
+text = "Identify ({chord})"
+
+["metadata.identify.close"]
+text = "{count} pressings of the same record, too close to separate. The country and the format are what tell them apart."
+
+["metadata.identify.cost.one"]
+text = "{n} lookup."
+
+["metadata.identify.cost.other"]
+text = "{n} lookups."
+
+["metadata.identify.disputed"]
+text = "{count} to choose from, and the best of them disputes what was typed at setup. Check the catalog number on the label before accepting one."
+
+["metadata.identify.listen"]
+text = "Fingerprint the audio"
+
+["metadata.identify.listen.title"]
+text = "The last resort, and by far the slowest: AcoustID is only asked when the text lookups found nothing, and it has to decode and analyze the first track before it can ask. Needs a track laid out on a captured side."
+
+["metadata.identify.nothing"]
+text = "Nothing the project's own facts support. A track count or a side length the record does not have will refuse the right pressing, so check those before asking again."
+
+["metadata.identify.nothing.asked"]
+text = "No lookup could be made. Every one of them needs something the project does not have yet: a catalog number, or an artist and a title."
+
+["metadata.identify.refused"]
+text = "Some lookups could not be made: {refusals}"
+
+["metadata.identify.resolved"]
+text = "One release accounts for everything the project knows. Accept it to write it in."
+
+["metadata.identify.thin"]
+text = "{count} to choose from, and not enough is known to prefer one. An artist, a title or a catalog number narrows it."
+
+["metadata.identifying"]
+text = "Identifying."
 
 ["metadata.kb"]
 text = "{n} KB"

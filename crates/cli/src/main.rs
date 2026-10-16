@@ -55,6 +55,7 @@ mod devices;
 mod eq;
 mod export;
 mod fingerprint;
+mod identify;
 mod import;
 mod logging;
 mod metadata;
@@ -421,6 +422,44 @@ enum Command {
         /// person asks for. Nothing is written to the project either way.
         #[arg(long)]
         identify: bool,
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Work out which pressing this is, escalating only as far as it has to
+    /// (§26, §27).
+    ///
+    /// Reads what the project already says - artist, title, catalog number,
+    /// track count, side lengths - and asks the providers in cost order:
+    /// Discogs by catalog number, then by name, then MusicBrainz by name, and
+    /// only then the audio. It stops at the first answer the evidence
+    /// supports, so a record whose catalog number is on the sleeve costs one
+    /// request. Writes nothing without --apply.
+    Identify {
+        /// Project to identify.
+        project: std::path::PathBuf,
+        /// Which provider to ask.
+        #[arg(long = "provider", value_enum, default_value_t = metadata::Which::Both)]
+        which: metadata::Which,
+        /// Refuse to use the network (§40).
+        #[arg(long)]
+        offline: bool,
+        /// Directory to cache provider responses in. Omit for no cache.
+        #[arg(long)]
+        cache: Option<std::path::PathBuf>,
+        /// Never reach the AcoustID lookup, however the text lookups go.
+        ///
+        /// The audio lookup is last and usually unreached, but it is also the
+        /// expensive one: it fingerprints a track before it asks.
+        #[arg(long)]
+        no_audio: bool,
+        /// Write a resolved release into the project (§26).
+        ///
+        /// Refused when the answer is a shortlist rather than one release,
+        /// because choosing between two pressings is a person's decision.
+        #[arg(long)]
+        apply: bool,
         /// Machine-readable output.
         #[arg(long)]
         json: bool,
@@ -1351,6 +1390,23 @@ fn run() -> anyhow::Result<()> {
             tracks,
             min_sources,
             identify,
+            json,
+        }),
+        Command::Identify {
+            project,
+            which,
+            offline,
+            cache,
+            no_audio,
+            apply,
+            json,
+        } => identify::run(&identify::Args {
+            project,
+            which,
+            offline,
+            cache,
+            no_audio,
+            apply,
             json,
         }),
         Command::Waveform {

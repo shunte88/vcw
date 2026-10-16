@@ -310,12 +310,15 @@ mod tests {
 
     fn pressing(id: &str, catalog: &str) -> Claim {
         Claim {
+            provider: None,
             ids: vec![id.into()],
             artist: "Ultravox".into(),
             album: "Vienna".into(),
             catalog: catalog.into(),
             label: "Chrysalis".into(),
             year: Some(1980),
+            country: "UK".into(),
+            format: "Vinyl, LP, Album".into(),
             tracks: Some(9),
             sides: Vec::new(),
         }

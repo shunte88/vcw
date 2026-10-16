@@ -46,7 +46,7 @@
 
 use std::time::Duration;
 
-use vcw_metadata::release::{Candidate as Found, Release};
+use vcw_metadata::release::{Candidate as Found, ProviderId, Release};
 
 use crate::evidence::{Fact, Item, Kind, Observed, Source, fold_catalog, fold_text};
 
@@ -67,6 +67,13 @@ pub const SIDE_SLACK: Duration = Duration::from_secs(90);
 /// rather than as a worse score.
 #[derive(Debug, Clone, Default)]
 pub struct Claim {
+    /// Who said so, where a lookup rather than a test built this.
+    ///
+    /// Carried because a resolved candidate is only actionable if the caller knows
+    /// which service to go back to for the full release: the first of [`Claim::ids`]
+    /// is that service's own identifier and means nothing to the other one. `None`
+    /// for a claim assembled by hand.
+    pub provider: Option<ProviderId>,
     /// Every identifier this release answers to, for matching a recording's release
     /// list: the provider's own id plus any cross-referenced ids.
     pub ids: Vec<String>,
@@ -80,6 +87,15 @@ pub struct Claim {
     pub label: String,
     /// The year, when stated.
     pub year: Option<u32>,
+    /// Where it was pressed, empty when the provider has none.
+    ///
+    /// Not evidence: no project states a country, so nothing can agree or disagree
+    /// with it. It is carried because when two pressings tie, the country and the
+    /// format are usually the only things that tell them apart on a shortlist.
+    pub country: String,
+    /// The format as the provider words it, `Vinyl, LP, Album, 180g`. Not evidence,
+    /// for the same reason as [`Claim::country`].
+    pub format: String,
     /// How many tracks, when known.
     pub tracks: Option<usize>,
     /// The total length of each side whose tracks all have durations.
@@ -91,12 +107,15 @@ impl Claim {
     #[must_use]
     pub fn of(found: &Found) -> Self {
         Self {
+            provider: None,
             ids: vec![found.id.clone()],
             artist: found.artist.clone(),
             album: found.album.clone(),
             catalog: found.catalog.clone(),
             label: found.label.clone(),
             year: found.year,
+            country: found.country.clone(),
+            format: found.format.clone(),
             tracks: found.tracks,
             sides: Vec::new(),
         }
@@ -115,15 +134,25 @@ impl Claim {
             }
         }
         Self {
+            provider: None,
             ids,
             artist: release.album_artist.clone(),
             album: release.album.clone(),
             catalog: release.catalog.clone(),
             label: release.label.clone(),
             year: release.year,
+            country: release.country.clone(),
+            format: String::new(),
             tracks: Some(release.tracks().len()),
             sides: side_lengths(release),
         }
+    }
+
+    /// The same claim, attributed to the service that answered with it.
+    #[must_use]
+    pub fn from(mut self, provider: ProviderId) -> Self {
+        self.provider = Some(provider);
+        self
     }
 }
 
@@ -299,12 +328,15 @@ mod tests {
 
     fn vienna() -> Claim {
         Claim {
+            provider: None,
             ids: vec!["1".into()],
             artist: "Ultravox".into(),
             album: "Vienna".into(),
             catalog: "CHRH1296".into(),
             label: "Chrysalis".into(),
             year: Some(1980),
+            country: "UK".into(),
+            format: "Vinyl, LP, Album".into(),
             tracks: Some(9),
             sides: vec![Duration::from_secs(1300), Duration::from_secs(1260)],
         }

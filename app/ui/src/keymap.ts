@@ -248,6 +248,12 @@ export const BINDINGS = {
     scope: "metadata",
     label: key("keys.lookup"),
   },
+  identify: {
+    chord: "i",
+    workflow: "search-metadata",
+    scope: "metadata",
+    label: key("keys.identify"),
+  },
   accept: {
     chord: "Enter",
     workflow: "choose-release",
@@ -488,7 +494,7 @@ export const COVERAGE: Record<Workflow, readonly Action[]> = {
   "delete-marker": ["deleteMarker"],
   "detect-tracks": ["detect"],
   "edit-track-metadata": ["rename", "previousTrack", "nextTrack"],
-  "search-metadata": ["lookup"],
+  "search-metadata": ["lookup", "identify"],
   "choose-release": ["accept", "previousCandidate", "nextCandidate"],
   export: ["exportRun"],
   checkpoint: ["checkpoint"],

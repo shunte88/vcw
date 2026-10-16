@@ -192,12 +192,15 @@ mod tests {
 
     fn claim() -> Claim {
         Claim {
+            provider: None,
             ids: vec!["1".into()],
             artist: "Ultravox".into(),
             album: "Vienna".into(),
             catalog: "CHRH1296".into(),
             label: "Chrysalis".into(),
             year: Some(1980),
+            country: "UK".into(),
+            format: "Vinyl, LP, Album".into(),
             tracks: Some(9),
             sides: vec![Duration::from_secs(1300)],
         }

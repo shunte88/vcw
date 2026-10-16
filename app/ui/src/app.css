@@ -207,6 +207,29 @@ main.project {
   max-width: 14rem;
 }
 
+/* The "listen too" tick beside Identify. Same trap as `.face`: the bare
+   `label` rule is a column, so left alone the box sat above its word and the
+   head grew a second line. */
+.panel-head .listen {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+/* What the walk concluded, over the table it filled. Reads as prose rather
+   than as a row of the table, because it is about the list and not in it. */
+.verdict {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 .panel-head h2 {
   font-size: 0.85rem;
   font-weight: 600;

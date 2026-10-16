@@ -43,9 +43,14 @@
 import { useCallback, useState } from "react";
 
 import * as api from "../api";
-import type { Accepted, Candidate, ReleaseEdit } from "../bindings/vcw";
+import type {
+  Accepted,
+  Candidate,
+  Identified,
+  ReleaseEdit,
+} from "../bindings/vcw";
 import { label, useCurves } from "../curves";
-import { type Translate, t, useText } from "../i18n";
+import { type Translate, count, t, useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
 import type { Store } from "../store";
@@ -72,6 +77,10 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
   // for was filled.
   const [searched, setSearched] = useState(false);
   const [accepted, setAccepted] = useState<Accepted | null>(null);
+  // What the last walk concluded, kept so the panel can say *why* it is asking
+  // rather than dropping a shortlist on the table with no account of it.
+  const [walked, setWalked] = useState<Identified | null>(null);
+  const [listen, setListen] = useState(false);
   const curves = useCurves();
 
   // A project nobody has identified yet has no release row at all, and both
@@ -117,6 +126,27 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
     }).then(() => setSearching(false));
   };
 
+  // The automatic lookup. It fills the same table a search does, and accepting
+  // is the same click: a walk the resolver is certain of still comes back as a
+  // shortlist of one, because writing a release is the operator's act.
+  const identify = () => {
+    setSearching(true);
+    setSearched(false);
+    setAccepted(null);
+    setWalked(null);
+    void run(async () => {
+      const found = await api.identify({
+        provider: provider === "" ? null : provider,
+        listen,
+      });
+      setWalked(found);
+      setCandidates(found.candidates);
+      const first = found.candidates[0];
+      setChosen(first === undefined ? null : key(first));
+      setSearched(true);
+    }).then(() => setSearching(false));
+  };
+
   const accept = () => {
     const candidate = candidates.find((row) => key(row) === chosen);
     if (candidate === undefined) {
@@ -144,6 +174,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
 
   useKeys("metadata", {
     lookup: search,
+    identify,
     accept,
     previousCandidate: move(-1),
     nextCandidate: move(1),
@@ -158,10 +189,35 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
             ? text("metadata.searching")
             : text("metadata.lookup", { chord: "l" })}
         </button>
+        <button type="button" disabled={searching} onClick={identify}>
+          {searching
+            ? text("metadata.identifying")
+            : text("metadata.identify", { chord: "i" })}
+        </button>
         <button type="button" disabled={chosen === null} onClick={accept}>
           {text("metadata.accept", { chord: "Enter" })}
         </button>
+        <label className="listen" title={text("metadata.identify.listen.title")}>
+          <input
+            type="checkbox"
+            checked={listen}
+            onChange={(event) => setListen(event.target.checked)}
+          />
+          {text("metadata.identify.listen")}
+        </label>
       </header>
+
+      {walked === null ? null : (
+        <p className="verdict">
+          {verdict(walked, text)}{" "}
+          {count(walked.lookups, "metadata.identify.cost")}
+          {walked.refusals.length === 0
+            ? null
+            : ` ${text("metadata.identify.refused", {
+                refusals: walked.refusals.join("; "),
+              })}`}
+        </p>
+      )}
 
       <form
         className="fields"
@@ -278,6 +334,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
               <th className="n">{text("metadata.column.year")}</th>
               <th>{text("metadata.column.label")}</th>
               <th>{text("metadata.column.catalog")}</th>
+              <th>{text("metadata.column.country")}</th>
               <th>{text("metadata.column.format")}</th>
               <th className="n">{text("metadata.column.tracks")}</th>
               <th>{text("metadata.column.from")}</th>
@@ -297,6 +354,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
                 <td className="n">{row.year ?? ""}</td>
                 <td>{row.label}</td>
                 <td>{row.catalog}</td>
+                <td>{row.country}</td>
                 <td>{row.format}</td>
                 <td className="n">{row.tracks ?? "-"}</td>
                 <td>{row.provider}</td>
@@ -399,6 +457,44 @@ function key(candidate: Candidate): string {
  * said the first of those regardless, so the common path read as a complaint
  * about a field that was already filled.
  */
+/**
+ * What a walk concluded, as a sentence.
+ *
+ * Exported for the same reason [`nothing`] is: the interesting part is the
+ * mapping from a wire code to a string, and testing it through a rendered
+ * panel would be testing React.
+ */
+export function verdict(walked: Identified, text: Translate = t): string {
+  if (walked.because === null) {
+    return text("metadata.identify.resolved");
+  }
+  if (walked.because === "nothing") {
+    // Nothing found and nothing asked read the same before this. A walk makes
+    // no lookup at all when the project holds no text to search with - track
+    // counts and side lengths narrow a list and cannot start one - and
+    // "nothing supports it" is then a claim about databases nobody queried.
+    return walked.lookups === 0
+      ? text("metadata.identify.nothing.asked")
+      : text("metadata.identify.nothing");
+  }
+  // Spelled out rather than interpolated from the code. The catalog test reads
+  // the string literals handed to the translator in this directory to decide
+  // which keys are used, so a key built by template would be an untranslated
+  // string nothing warns about - and a doubt added on the Rust side should
+  // fail that test rather than render blank.
+  const count = String(walked.candidates.length);
+  switch (walked.because) {
+    case "tooClose":
+      return text("metadata.identify.close", { count });
+    case "notEnoughEvidence":
+      return text("metadata.identify.thin", { count });
+    case "contradictsAPerson":
+      return text("metadata.identify.disputed", { count });
+    default:
+      return walked.because;
+  }
+}
+
 export function nothing(
   criteria: { artist: string; album: string; catalog: string; barcode: string },
   searching: boolean,

@@ -240,6 +240,11 @@ impl Backend for Served {
                 host,
                 args.get("selection")?,
             )),
+            "identify" => done(vcw_shell::metadata::identify_release(
+                shell,
+                host,
+                args.get("walk")?,
+            )),
             // Playback and export.
             "play" => done(vcw_shell::audition::play(
                 shell,

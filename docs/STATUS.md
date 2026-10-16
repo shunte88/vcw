@@ -7883,3 +7883,70 @@ refutation moves onto a chain predicate rather than a filter check, so a future 
 covered the day it is added. And `Option<Filter>` becomes `Chain` only when there is a
 second stage to put in it, because one stage is not a chain and the playback path is the
 one §4.2 says nothing may compromise.
+
+## 2026-10-16, the door onto the resolver
+
+`walk()` landed this morning with nothing calling it, which is the honest version of
+WP-23's status for the last three weeks: evidence, candidates, confidence, the resolver
+and now the escalation around them, all complete and all unreachable. This afternoon it
+has two callers.
+
+**`vcw identify <project>`** reads the project read-only, escalates through the
+providers and prints what each lookup cost before it prints the answer. That order is
+deliberate: every lookup is a request to somebody else's service, so the headline is
+which were made and which were never reached, and a record whose catalog number is on
+the sleeve says `lookup 1  discogs-catalog  1 new candidate` and stops. `--provider`
+narrows it, `--no-audio` refuses the expensive one, `--json` is machine readable and
+`--apply` writes a resolved release in. `--apply` refuses a shortlist, because choosing
+between two pressings a hair apart is the one decision §26 reserves for a person and a
+flag that took the top row would be making it by being set.
+
+**The Metadata panel's Identify button** is the same walk, and it fills the same table
+a search does. Nothing is written: a resolved answer comes back as a shortlist of one,
+accepted with the same click as any candidate. There is a tick beside the button for
+whether the walk may fingerprint audio, separate from the provider picker because it is
+a different kind of cost - a text lookup is a request, and this one decodes and analyzes
+a track before it can ask.
+
+Three pieces were missing underneath, and all three are small:
+
+- **`vcw_core::evidence::observe`** turns a project's rows into an `Observed`. What a
+  person typed is `Source::Stated` and what the project measured is `Source::Signal`,
+  because §26 only lets a candidate *contradict* the first. A release somebody has
+  already accepted is the awkward case - its text came back from a provider, so reading
+  it as stated lets that provider vouch for itself at a person's weight - and nothing
+  here can tell the two apart from the row alone, so `Known::confirmed` carries the flag
+  out and the caller says so rather than quietly scoring a circle.
+- **`vcw_core::evidence::heard`** picks the audio an AcoustID lookup would ask about:
+  the *first track* of the first captured side, never the side, because AcoustID filters
+  on the declared duration exactly and a whole side is not a recording anybody submitted.
+- **`Claim::provider`.** A resolved candidate is only actionable if the caller knows
+  which service to go back to; the first of `Claim::ids` is that service's own
+  identifier and means nothing to the other one.
+
+A side's length is the sum of its tracks where it has tracks, the capture's committed
+frames where it has none *and the capture is that side's alone*, and nothing otherwise.
+Two faces in one pass is the case `sides.capture_id` exists to allow, and half of that
+capture is not a side: a figure that might be two faces is worse than no figure, because
+a candidate would then disagree with it.
+
+### Two findings from running it against real records
+
+**A shortlist of one record's pressings is unreadable if it prints only what was
+weighed.** Five Discogs rows came back for Ultravox's `CHR 1296`, all at confidence
+1.00, agreeing on artist, title, label, catalog number and year - every field the
+resolver had looked at - and differing only in country and format. The panel and the
+report were both asking a person to choose between five identical strings. `Claim` now
+carries country and format, and they are explicitly *not* evidence: no project states a
+country, so nothing can agree or disagree with one. They are there because when two
+pressings tie, they are the only things that tell them apart.
+
+**`Doubt::TooClose` is the normal answer, not the edge case.** Discogs has a release row
+per territory, so a catalog number that identifies exactly one pressing in the world
+still returns a dozen. Finding a case that reaches `Outcome::Resolved` at all took a
+catalog number with one exact match - `KSP-10131`, a 1982 bluegrass record nobody has
+reissued - and that is what `--apply` was finally exercised against: four track titles
+written, the catalog number normalized to the provider's spelling, confirmed in the
+database afterwards. The resolver is behaving as designed. It is the shape of the data
+that makes asking the common outcome, and the shortlist is therefore the product rather
+than the fallback.

@@ -4622,6 +4622,7 @@ dependencies = [
  "vcw-eq",
  "vcw-export",
  "vcw-i18n",
+ "vcw-identify",
  "vcw-metadata",
  "vcw-project",
  "vcw-signal",

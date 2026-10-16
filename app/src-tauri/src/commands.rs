@@ -53,11 +53,11 @@ use tauri::{AppHandle, Manager, State};
 use vcw_contract::command::{
     Arm, Audition, CaptureProvenance, Detect, Export, Lock, Marker, Merge, NewProject, NewTrack,
     Placement, Playback, ReleaseEdit, Removal, Search, Selection, SideEdit, Split, TrackEdit,
-    Transport, Zoom,
+    Transport, Walk, Zoom,
 };
 use vcw_contract::settings::{Credential, Settings};
 use vcw_contract::view::{
-    About, Accepted, Boundary, Candidate, Capture, Curve, Device, ExportPlan, Listing,
+    About, Accepted, Boundary, Candidate, Capture, Curve, Device, ExportPlan, Identified, Listing,
     Project as ProjectRow, Release, Side, Track, Waveform,
 };
 use vcw_shell::state::{Error, Shell};
@@ -310,6 +310,14 @@ pub(crate) async fn select_release(
 ) -> Result<Accepted, Error> {
     off_the_main_thread("id", app, move |app| {
         vcw_shell::metadata::select_release(&app.state::<Shell>(), &hosted(&app), selection)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn identify(app: AppHandle, walk: Walk) -> Result<Identified, Error> {
+    off_the_main_thread("id", app, move |app| {
+        vcw_shell::metadata::identify_release(&app.state::<Shell>(), &hosted(&app), walk)
     })
     .await
 }
