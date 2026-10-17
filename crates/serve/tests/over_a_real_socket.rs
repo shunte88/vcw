@@ -117,28 +117,36 @@ fn start() -> Running {
     // what the traversal test below tries to reach.
     std::fs::write(root.path().join("../secret.txt"), "not yours").ok();
 
+    let backend = Stub::new();
     // Claim a port, then let go of it: the guard has to be told the address
     // before the listener binds, because the address is part of what it
-    // checks.
-    let port = TcpListener::bind("127.0.0.1:0")
-        .expect("a free port")
-        .local_addr()
-        .expect("its address")
-        .port();
-
-    let backend = Stub::new();
-    let guard = Guard::new(
-        Secret::stated(TOKEN),
-        &format!("127.0.0.1:{port}"),
-        Vec::<String>::new(),
-    );
-    let listener = Listener::bind(
-        &format!("127.0.0.1:{port}"),
-        guard,
-        root.path(),
-        Arc::clone(&backend) as Arc<dyn Backend>,
-    )
-    .expect("the listener binds");
+    // checks. Letting go leaves a window, and the seven tests in this file run
+    // at once, so two of them can be handed the same port - which is what
+    // `Address already in use` was on a 32-core box, where they really do
+    // overlap. Claim and bind as one step, and take another port if the window
+    // closed on us.
+    let (port, listener) = (0..16)
+        .find_map(|_| {
+            let port = TcpListener::bind("127.0.0.1:0")
+                .expect("a free port")
+                .local_addr()
+                .expect("its address")
+                .port();
+            let guard = Guard::new(
+                Secret::stated(TOKEN),
+                &format!("127.0.0.1:{port}"),
+                Vec::<String>::new(),
+            );
+            Listener::bind(
+                &format!("127.0.0.1:{port}"),
+                guard,
+                root.path(),
+                Arc::clone(&backend) as Arc<dyn Backend>,
+            )
+            .ok()
+            .map(|listener| (port, listener))
+        })
+        .expect("a loopback port nothing else took");
     std::thread::spawn(move || listener.serve());
 
     // Wait for the accept loop rather than sleeping a guessed interval.
