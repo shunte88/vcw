@@ -59,6 +59,7 @@ mod identify;
 mod import;
 mod logging;
 mod metadata;
+mod migrate;
 mod play;
 mod recover;
 mod release;
@@ -494,6 +495,23 @@ enum Command {
         #[arg(long)]
         rebuild: bool,
         /// Machine-readable output: the columns as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Bring an older project up to this build's schema (§16).
+    ///
+    /// The window migrates a project silently when it opens it for writing.
+    /// This is the same upgrade, asked for rather than stumbled into, for
+    /// anybody working without one. Forward-only: an older VCW will refuse
+    /// the file afterwards, so copy it first if that matters.
+    Migrate {
+        /// Project to upgrade.
+        project: std::path::PathBuf,
+        /// Report what would happen and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Machine-readable output.
         #[arg(long)]
         json: bool,
     },
@@ -1428,6 +1446,15 @@ fn run() -> anyhow::Result<()> {
             pixels,
             rows,
             rebuild,
+            json,
+        }),
+        Command::Migrate {
+            project,
+            dry_run,
+            json,
+        } => migrate::run(&migrate::Args {
+            project,
+            dry_run,
             json,
         }),
         Command::Recover {

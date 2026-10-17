@@ -163,6 +163,9 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 fn read(path: &PathBuf) -> Result<Known> {
     let project =
         Project::open_read_only(path).with_context(|| format!("opening {}", path.display()))?;
+    // The evidence is the release and its tracks, so there is nothing to observe
+    // in a project written before either existed.
+    project.require_current_schema()?;
     let known = evidence::observe(project.conn())?;
     project.close()?;
     Ok(known)

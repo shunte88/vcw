@@ -85,7 +85,7 @@ pub enum Error {
     /// is broken.
     #[error(
         "{path} was written by an older VCW (schema version {found}, this build uses \
-         {supported}). Open it to upgrade it."
+         {supported}). Run `vcw migrate {path}` to upgrade it, or open it in the window."
     )]
     SchemaNeedsUpgrade {
         /// The file we were asked to read.

@@ -418,7 +418,7 @@ mod tests {
             "the reason should name the cause, got {problem:?}"
         );
         assert!(
-            problem.contains("Open it to upgrade it"),
+            problem.contains("vcw migrate"),
             "and say what to do about it, got {problem:?}"
         );
         assert!(

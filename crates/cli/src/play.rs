@@ -104,6 +104,11 @@ impl Args {
     /// Resolves the capture id and the scope against the project.
     fn audition(&self) -> Result<(Audition, SampleRate, u64)> {
         let project = Project::open_read_only(&self.project)?;
+        // Only `--track`: a whole-capture audition, or one aimed by time, reads
+        // nothing but the capture, and a v1 project plays perfectly well.
+        if self.track.is_some() {
+            project.require_current_schema()?;
+        }
         let capture_id = match self.capture {
             Some(id) => id,
             None => latest(project.conn())?,

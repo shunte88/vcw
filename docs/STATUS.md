@@ -7991,3 +7991,81 @@ handed it, and seven of them passed against a shape the real service never retur
 live probe over `vcw serve` found it in one request, which is the same lesson as the
 first-light screenshots: a test proves the code does what it was written to do, and only
 running the thing proves it was written against the world.
+
+## 2026-10-17, the upgrade a CLI user was getting by accident
+
+`vcw migrate <project>` ships, and with it the refusals that make it findable.
+
+The machinery was already there and had been since WP-13: `migrate::pending` says what
+a file is missing, `migrate::apply` runs each step in its own transaction with its own
+`schema_migrations` row, and `Project::open` calls the second of those on the way in.
+That last fact is the whole problem. Opening a project for writing **is** the migration,
+so the window has been upgrading people's projects since the day schema v2 landed, and
+has never once mentioned it. Somebody working without a window got the same upgrade with
+even less ceremony: by happening to run a verb that takes a write handle. `vcw waveform`
+is one. `vcw release <project> show` is another, which means `show` is not a read.
+
+So the verb is a reporting verb over machinery that already worked, and its shape follows
+from the one constraint: **there is no read-write handle that leaves an old file alone.**
+It therefore reads the plan through a read-only handle first, which is also the only way
+`--dry-run` can say anything, and the real run reports what `schema_migrations` records
+afterwards rather than replaying the plan it printed. Prediction and measurement, two
+different sources, held to each other by a test - the rule from the dry-run note, which
+was written for `vcw recover` and applies unchanged here.
+
+**It keeps no backup, and that was decided rather than overlooked.** A migration cannot
+half-apply, so the risk a copy covers is not a torn file but a change of mind: afterwards
+the build that wrote the project refuses it as `SchemaTooNew`. The verb says that in
+plain words before it writes. It does not make the copy, because a side is well over a
+gigabyte and the audience this verb exists for - the piCorePlayer user with no window -
+is the one most likely to have nowhere to put a second one.
+
+### Four verbs were handing SQLite's sentence to a person holding a record
+
+Found by asking the question the verb answers. Against a genuine v1 project:
+
+| verb | said | says now |
+| --- | --- | --- |
+| `vcw export` | `no such table: releases` | which file, which version, run `vcw migrate` |
+| `vcw identify` | `no such table: releases` | the same |
+| `vcw play --track 1` | `no such table: sides` | the same |
+| `vcw fingerprint --tracks` | `no track boundaries were agreed by 1 detectors` | the same, and without the detection pass |
+
+The first three are one mistake: `open_read_only` does not migrate - deliberately, because
+v1 is a schema this build reads perfectly well - and these three never asked
+`require_current_schema()`, which exists for exactly this and carries a comment saying so.
+The fourth is worse and was the reason to check the others. It did not fail on a missing
+table at all; it ran a **full detection pass** over the capture, found no stored
+boundaries to agree with, and reported the absence as a detection result. A person reading
+that learns that their record has no tracks on it, which is not what happened.
+
+The guards are scoped to the path that needs the newer shape, not to the door. A whole
+capture still plays, a span given by `--from`/`--length` still fingerprints, and both
+leave the project at the version they found it.
+
+`Error::SchemaNeedsUpgrade` used to end "Open it to upgrade it", which is advice you can
+only take if you have a window. It names the verb now.
+
+### Two things found while checking what still works, neither fixed
+
+Both are recorded here rather than acted on, because both are wider than the verb.
+
+**A file can claim v1 and not be the v1 this build defines.** `MIGRATIONS[0]` *is*
+`SCHEMA_V1`, which is what stops the create path and the upgrade path drifting - but
+migration 1 only ever runs against an empty database. `SCHEMA_V1` was edited on
+2026-09-25 to add the two covering indexes WP-09 needed, and `/data2/vcw_soak/live.vcw`,
+written before that, has neither. It migrates to v5 cleanly and still has neither,
+because nothing between 2 and 5 mentions them. `vcw waveform` on that file answers
+`no such index: sampleblocks_summary256` - the same class of leak as the four above, and
+the one `vcw migrate` cannot cure. **Nothing a released build ever wrote is affected**:
+the edit predates 0.1.0 and the only example is our own pre-release soak fixture. The
+general point survives the specific case though, which is why it is written down: a
+post-hoc edit to `SCHEMA_V1` is invisible to every file already on disk, so it needs a
+migration of its own or it is not a schema change at all.
+
+**A read that upgrades is still a write.** `vcw waveform` and `vcw release <project> show`
+take a write handle and therefore migrate, which is how `live.vcw` reached v5 during this
+very investigation. Neither needs one for the whole of what it does; `waveform` needs it
+only to build a pyramid that is not there yet. Until that is untangled the user guide
+says so out loud, because the alternative is a person copying a project to be safe and
+then running the verb that defeats the copy.

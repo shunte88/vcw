@@ -120,6 +120,10 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     // the capture, which is the one thing in the project that cannot be redone.
     let project = Project::open_read_only(&args.project)
         .with_context(|| format!("opening {}", args.project.display()))?;
+    // An export is a read of the §29 layout, which a project older than v2 does
+    // not have. Without this the planner asks for `releases` and the person is
+    // handed SQLite's opinion of their project instead of ours.
+    project.require_current_schema()?;
     let plan = splitter::plan(project.conn(), &request)?;
 
     if args.dry_run {

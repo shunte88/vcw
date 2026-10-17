@@ -53,6 +53,17 @@ loud if it cannot.
   header carries a per-side **Cut with** picker, so a two-sided capture whose
   faces came from different pressings can say so.
 
+* **`vcw migrate <project>`.** An older project has always been brought
+  forward when a newer VCW opens it, but only the window ever did that, and it
+  did it without saying so. The verb makes the same upgrade something a person
+  asks for and watches: it prints the version the file is at, the version this
+  build wants, and a line for every step in between. `--dry-run` prints exactly
+  the same report and writes nothing, and a project that is already current says
+  so and exits cleanly, so it is safe in a script. It does not keep a backup,
+  and it says so before it writes: a migration only goes forwards, so an older
+  VCW will refuse the file afterwards. This is for anybody working without a
+  window - a headless box or a Pi - who until now got upgraded by accident.
+
 * **`vcw fingerprint --duration <SECONDS>`.** AcoustID filters on the declared
   duration exactly, so a 30-second excerpt that declared itself as 30 seconds
   could never match the four-minute recording it came from. `--identify` over a
@@ -60,6 +71,16 @@ loud if it cannot.
   not been told.
 
 ### Fixed
+
+* **An old project is refused by name rather than by SQLite.** `vcw export`,
+  `vcw identify` and `vcw play --track` against a project written before the
+  vinyl data model existed answered `no such table: releases` - a true statement
+  about a database and a useless one to put in front of somebody holding a
+  record. `vcw fingerprint --tracks` was worse: it ran a full detection pass
+  first and then said no boundaries were agreed, which named neither the cause
+  nor the cure. All four now say which file, which version, and to run `vcw
+  migrate`. The readers that are genuinely happy with an old project - playing a
+  capture, fingerprinting a span given by time - are untouched.
 
 * **`vcw eq list` no longer says nothing selects a curve.** Its closing note,
   and the command's own help, were written for 0.3.2-alpha when the catalog

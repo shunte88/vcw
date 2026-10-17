@@ -482,6 +482,42 @@ So the first `vcw recover` reads the log whatever flags it was given. If you wan
 the crashed state kept exactly as it is, copy the `.vcw`, the `-wal` and the
 `-shm` together, before running anything at all.
 
+## When a project is older than VCW
+
+Projects written by an earlier VCW keep working. The file carries a schema
+version, this build understands up to the one it ships with, and an older file
+is brought forward a step at a time. The window does it quietly the moment it
+opens a project for writing, so with a window you will probably never notice.
+
+Without a window you can ask for it:
+
+```text
+vcw migrate album.vcw --dry-run   # say what would change; write nothing
+vcw migrate album.vcw             # bring it up to date
+```
+
+Both print the same thing: the version the file is at, the version this build
+wants, and one line for every step in between. A project that is already current
+says so and exits cleanly, so it is safe to put in front of a script.
+
+**It only goes forwards.** Once a project has been brought up to date, an older
+VCW will refuse to open it and say so, because reading a schema it does not know
+is how data gets lost. VCW does not keep a copy for you - a side is well over a
+gigabyte and quietly doubling that is the wrong thing to do to a small disk - so
+if going back matters, copy the `.vcw` yourself first.
+
+If a verb that needs the newer shape meets an older file, it says which file,
+which version, and what to run. A reader that is perfectly happy with the old
+shape carries on unbothered: playing a whole capture, or fingerprinting a span
+given by time, works on a project of any age and leaves it at that age.
+
+One thing to know before you reach for `--dry-run` to avoid an upgrade: **any
+verb that writes to a project upgrades it on the way in.** That is the same
+quiet migration the window does, and it includes a few that read more than they
+write - `vcw waveform` and `vcw release <project> show` among them, because both
+take a write handle. If you want a project left at the version it is, copy it
+before you run anything, exactly as you would around `vcw recover`.
+
 ## Importing from Audacity
 
 A `.aup3` or `.aup4` project comes in as an ordinary capture:

@@ -186,6 +186,13 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     // another one is being recorded.
     let project = Project::open_read_only(&args.project)
         .with_context(|| format!("opening {}", args.project.display()))?;
+    // Only `--tracks`, which reads the stored boundaries. Fingerprinting a span
+    // given by `--from`/`--length` needs no layout at all. Without this the
+    // refusal arrives as "no track boundaries were agreed", after a full
+    // detection pass, which names neither the cause nor the cure.
+    if args.tracks {
+        project.require_current_schema()?;
+    }
     let layout = Layout::of(project.conn(), capture_id)?;
     let wanted = spans(args, capture_id, &layout)?;
     if wanted.is_empty() {
