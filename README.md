@@ -6,11 +6,13 @@
 
 **Capture the album. Export tagged tracks. Preserve the signal.**
 
-VCW helps listeners preserve and catalog their vinyl collections, with a complete desktop workflow and reusable services for those building their own tools and interfaces.
+VCW helps listeners and archivists preserve and catalog their vinyl collections, with a complete desktop workflow and reusable services for those building their own tools and interfaces.
 
 Built around audiophile-quality, bit-perfect input and output, VCW takes you from recording the complete album to exporting individual tracks with metadata, cover art, and filenames you choose. Check your levels, capture the recording, identify the release, review the track boundaries, and export, all in one app.
 
 Keep the complete album in one project, including double and triple albums. Recording and reviewing it as a whole makes it easier to maintain a consistent setup across the release, without dividing the work into separate side projects.
+
+Not every record was cut to RIAA. Before the late 1950s the curve varies by label and by year, and the wrong choice is a transfer you cannot fix later without the disc back in your hands. VCW carries sixteen historic playback curves, each with the published source its numbers came from.
 
 VCW separates the tracks. It cannot settle the argument about which pressing sounds better.
 
@@ -23,6 +25,7 @@ VCW separates the tracks. It cannot settle the argument about which pressing sou
 - **Preserves the original audio.** Adjust track boundaries and metadata without rewriting the captured samples.
 - **Helps identify the release.** Look up catalog details through Discogs and MusicBrainz, with AcoustID audio identification when needed. Review and correct the result before exporting.
 - **Suggests track boundaries.** Check detection results on the waveform, listen around transitions, and adjust or lock boundaries yourself.
+- **Plays the curve the record was cut with.** Sixteen historic equalization curves, set for the release, a side, or a single track. Applied on playback, render, and export, never to the stored capture.
 - **Exports a tagged collection.** Write supported WAV, AIFF, FLAC, ALAC, MP3, or Ogg Vorbis files, with artist, album, track information, genres, artwork, and custom naming. Preview the export paths before writing.
 - **Recovers interrupted recordings.** Audio is committed throughout capture; recovery reports what was saved and can finalize the recoverable recording.
 - **Imports existing work.** Bring supported Audacity `.aup3` and `.aup4` projects into the same review and export workflow.
