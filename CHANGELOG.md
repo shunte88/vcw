@@ -16,7 +16,7 @@ loud if it cannot.
 
 ## 0.3.4-alpha
 
-2026-10-16
+2026-10-17
 
 ### Added
 
