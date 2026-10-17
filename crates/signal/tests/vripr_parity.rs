@@ -100,8 +100,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use vcw_signal::features::{Frame, Shape, Windows};
-use vcw_signal::regions::{Config, Trace};
+use vcw_signal::features::{Frame, Shape, Windows, db_to_linear};
+use vcw_signal::regions::{Config, STYLUS_OFF_DB, Trace};
 use vcw_signal::resolve::{Decision, Tolerance, resolve};
 use vcw_signal::{hmm, silence, spectral};
 use vcw_types::{BoundaryObservation, Edge, Provenance, SampleRate, StorageFormat};
@@ -127,6 +127,11 @@ const LOOSE_SECS: f64 = 1.0;
 /// 98.71% and 98.01% with an adaptive one. The floor sits below the worst of
 /// those with room for a rebuild of the reference, and not so far below that a
 /// real regression could hide under it.
+///
+/// Re-measured on 2026-10-17, when the stylus-off gate landed: 97.56%, 98.67%
+/// and 98.01% adaptive, the fixed figures unchanged. The adaptive numbers moved
+/// *up* despite twelve snippets leaving the comparison, because the gate stops a
+/// percentile from landing in material VRipr never had in front of it.
 const PARITY_FLOOR: f64 = 0.97;
 
 /// The floor for snippets where every boundary matched, both ways.
@@ -416,6 +421,9 @@ struct Parity {
     identical: usize,
     /// Snippets compared.
     snippets: usize,
+    /// Snippets left out of the comparison, and why there are any: see
+    /// [`outside_vriprs_domain`].
+    held_out: usize,
 }
 
 impl Parity {
@@ -505,8 +513,33 @@ impl Parity {
             },
             median,
             worst,
-        )
+        ) + &if self.held_out == 0 {
+            String::new()
+        } else {
+            format!("   held out {}", self.held_out)
+        }
     }
+}
+
+/// Whether a snippet is outside the domain the parity claim covers.
+///
+/// VRipr analyzed files a person had already trimmed, so every window it ever
+/// took a percentile over had a record under the stylus. VCW analyzes what the
+/// capture caught, which since §52 can open minutes before the stylus lands, so
+/// [`STYLUS_OFF_DB`] holds that population out of the estimate - see
+/// `vcw_signal::regions::threshold_for`. On a snippet that contains such windows
+/// the two are *entitled* to differ, and twelve of the 595 snippets in VRipr's
+/// own corpus do contain them: an excerpt cut from an untrimmed capture carries
+/// whatever was on the tape.
+///
+/// So they are held out and counted rather than scored. Holding them out is not
+/// slack in the floors: it is the statement that the parity claim is about the
+/// arithmetic VRipr ran, over the material VRipr ran it on. The predicate is
+/// deliberately about the *audio* and not about the branch - any window this
+/// quiet, whether or not it moved the percentile - so it cannot be satisfied by
+/// the implementation drifting.
+fn outside_vriprs_domain(frames: &[Frame], cfg: &Config) -> bool {
+    cfg.adaptive && frames.iter().any(|f| f.rms <= db_to_linear(STYLUS_OFF_DB))
 }
 
 /// Runs every detector and the resolver over the corpus under one configuration.
@@ -522,6 +555,7 @@ fn sweep(
         let (frames, windows, _shape) = frames_of(snippet);
         let trace = Trace::from_windows(&frames, &windows);
         let rate = f64::from(snippet.rate);
+        let held_out = outside_vriprs_domain(&frames, cfg);
 
         let passes = [
             (Provenance::Silence, silence::scan(&trace, cfg)),
@@ -544,10 +578,12 @@ fn sweep(
                 .and_then(|detectors| detectors.get(provenance.as_str()))
             {
                 let theirs = as_boundaries(theirs);
-                parity
-                    .entry(provenance.as_str().to_string())
-                    .or_default()
-                    .note(&found, &theirs, rate);
+                let entry = parity.entry(provenance.as_str().to_string()).or_default();
+                if held_out {
+                    entry.held_out += 1;
+                } else {
+                    entry.note(&found, &theirs, rate);
+                }
                 // VRipr's own answer, scored against the labels by the same rule.
                 // Without this the agreement figures below could be read as a
                 // verdict on the port; with it they are a verdict on the corpus.
@@ -623,9 +659,19 @@ fn the_detectors_agree_with_vripr_on_its_own_corpus() {
         }
         for (detector, measured) in &parity {
             assert_eq!(
-                measured.snippets,
+                measured.snippets + measured.held_out,
                 snippets.len(),
                 "{detector} was not compared over the whole corpus at the {name} threshold"
+            );
+            // The hold-out is evidence, so it has a ceiling. If a change to the
+            // stylus-off gate started excluding the corpus wholesale the floors
+            // below would still pass over whatever was left.
+            assert!(
+                measured.held_out * 20 < snippets.len(),
+                "{detector} at the {name} threshold held {} of {} snippets out of \
+                 the comparison",
+                measured.held_out,
+                snippets.len()
             );
             assert!(
                 measured.rate() >= PARITY_FLOOR,

@@ -251,3 +251,73 @@ fn an_old_project_is_refused_by_name_rather_than_by_sqlite() {
     );
     assert_eq!(version(&path), 1, "a refused read migrated the project");
 }
+
+/// The other half of the refusal: a verb that only reads must not migrate.
+///
+/// `Project::open` *is* the migration, so until WP-13 was followed up every verb
+/// taking a write handle upgraded the file as the price of running - including
+/// two that read far more than they write. `vcw release show` was the worse of
+/// the two, because `show` is not a read if it changes the schema, and a person
+/// who copies a project to be safe and then looks inside the copy has defeated
+/// the copy.
+#[test]
+fn a_verb_that_only_reads_leaves_the_schema_where_it_found_it() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let path = dir.path().join("old.vcw");
+    record(&path);
+    wind_back_to_v1(&path);
+
+    // `release show` reads the §29 tables, which arrive in v2, so on a v1
+    // project it has to refuse rather than quietly build what it wants to read.
+    let out = Command::new(VCW)
+        .args(["release", &path.display().to_string(), "show"])
+        .output()
+        .expect("run vcw release show");
+    assert!(!out.status.success(), "release show accepted a v1 project");
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        said.contains("vcw migrate"),
+        "the refusal did not name the verb that fixes it:\n{said}"
+    );
+    assert_eq!(version(&path), 1, "release show migrated the project");
+
+    // `waveform` reads nothing newer than v1, so it draws the old project as it
+    // is - and still leaves it alone.
+    let out = Command::new(VCW)
+        .args([
+            "waveform",
+            &path.display().to_string(),
+            "--pixels",
+            "20",
+            "--json",
+        ])
+        .output()
+        .expect("run vcw waveform");
+    assert!(
+        out.status.success(),
+        "waveform refused a v1 project it can read:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let drawn: Value =
+        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).expect("json columns");
+    assert!(
+        drawn["channels"].as_array().is_some_and(|c| !c.is_empty()),
+        "waveform drew nothing, so leaving the schema alone proves nothing"
+    );
+    assert_eq!(version(&path), 1, "waveform migrated the project");
+
+    // And the write that is still a write still upgrades, because asking for one
+    // is asking for the other.
+    let (text, ok) = migrate(&path, &[]);
+    assert!(ok, "the migration failed:\n{text}");
+    assert_eq!(version(&path), vcw_project::SCHEMA_VERSION);
+    let out = Command::new(VCW)
+        .args(["release", &path.display().to_string(), "show"])
+        .output()
+        .expect("run vcw release show");
+    assert!(
+        out.status.success(),
+        "release show refused a current project:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

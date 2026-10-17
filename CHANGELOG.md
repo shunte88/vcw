@@ -72,6 +72,29 @@ loud if it cannot.
 
 ### Fixed
 
+* **A capture that starts before the stylus lands still finds its tracks.** The
+  adaptive threshold estimates the noise floor from the quietest 3% of a
+  capture, which is the groove on a capture made at the deck. Start the capture
+  from a browser in another room - which is what `vcw serve` is for - and the
+  quietest 3% is the minute you spent walking to the turntable, roughly 35 dB
+  below any groove. The threshold went with it, every lead-in and inter-track
+  gap read as music, and the side came back as one track. Levels too quiet to be
+  a record are now held out of that estimate, so the floor lands in the groove
+  whether or not the recording opens with an empty room. A capture made at the
+  deck is unaffected: the test is on the answer, not on the audio, and it only
+  engages when the estimate has come back below anything a record produces.
+
+* **Looking at a project no longer upgrades it.** `vcw waveform` and `vcw
+  release <project> show` took a handle that can write, and opening a project
+  for writing *is* the schema migration - so asking what was in a project
+  silently brought it forward a version, and copying a project to be safe before
+  looking inside the copy defeated the copy. Both now read. `vcw waveform` draws
+  an old project as it is, because nothing it draws is newer than the first
+  schema; `vcw release show` and `vcw release covers` say to run `vcw migrate`,
+  because the release tables they read arrive in the second. `--rebuild` and
+  every `set` still write, and still upgrade, because asking for one is asking
+  for the other.
+
 * **An old project is refused by name rather than by SQLite.** `vcw export`,
   `vcw identify` and `vcw play --track` against a project written before the
   vinyl data model existed answered `no such table: releases` - a true statement

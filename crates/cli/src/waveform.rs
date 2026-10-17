@@ -78,8 +78,17 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     if !args.project.exists() {
         bail!("{} does not exist", args.project.display());
     }
-    let mut project = Project::open(&args.project)
-        .with_context(|| format!("opening {}", args.project.display()))?;
+    // Only `--rebuild` writes. Everything else here is a read, and a read-write
+    // handle is a migration - `Project::open` applies one - so the old shape of
+    // this verb upgraded a project's schema as the price of drawing it. Nothing
+    // the drawing touches is newer than schema v1, so an older file is drawn as
+    // it is rather than refused.
+    let mut project = if args.rebuild {
+        Project::open(&args.project)
+    } else {
+        Project::open_read_only(&args.project)
+    }
+    .with_context(|| format!("opening {}", args.project.display()))?;
 
     let capture_id = match args.capture {
         Some(id) => id,

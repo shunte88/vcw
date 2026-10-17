@@ -51,7 +51,7 @@
 //! Requirements: §22 (the three detectors), §24 (position, confidence, provenance,
 //! evidence).
 
-use crate::features::{Frame, Shape, Windows, linear_to_db};
+use crate::features::{Frame, Shape, Windows, db_to_linear, linear_to_db};
 use vcw_types::{BoundaryObservation, Edge, Provenance, SampleRate};
 
 /// How a detector is tuned.
@@ -258,17 +258,72 @@ impl Outcome {
     }
 }
 
+/// The level below which a window is not the record at all.
+///
+/// Groove noise is the quietest thing a *record* produces, and on vinyl it is not
+/// very quiet: a clean pressing runs around -50 dBFS at normal capture gain and a
+/// worn one is louder still. Nothing in a groove gets anywhere near -75 dB. What
+/// does is the input with the stylus off the disc - the deck stopped, the arm
+/// still in its rest, the preamp hissing into a capture that is already running.
+///
+/// That is a different population of windows from the groove, and it has to be
+/// out of the way before a percentile is taken over the rest. See
+/// [`threshold_for`].
+///
+/// Deliberately not a [`Config`] field. It is not a tuning preference, it is a
+/// statement about what vinyl sounds like, and the only way to want a different
+/// number is to be capturing something that is not a record.
+pub const STYLUS_OFF_DB: f64 = -75.0;
+
 /// The threshold a trace is judged against, and the floor it was derived from.
 ///
 /// Ported from VRipr's phase 2. The fixed case returns the configured level and no
 /// floor, and says so in the second element rather than by convention.
+///
+/// # Windows with no record in them
+///
+/// The adaptive case departs from VRipr here, and it has to. VRipr analyzed a file
+/// somebody had already trimmed; VCW analyzes what the capture caught, and §52's
+/// remote operator starts the capture from a browser in another room. Resume
+/// therefore lands minutes before the stylus does, and those minutes are recorded.
+///
+/// [`adaptive_floor`] assumes every window is either music or groove. Stylus-off
+/// silence is neither, and it sits about 35 dB below the groove - so once it is
+/// more than 3% of the capture the percentile lands in *it* instead, the threshold
+/// goes 36 dB below groove noise, every lead-in and inter-track gap reads as music
+/// and the detector finds no tracks at all. On a 40-minute two-face capture, 3% is
+/// 72 seconds: a walk down a hallway. The first report of this was a §52 user
+/// whose sides came back with most of their tracks missing.
+///
+/// So the estimate is checked against [`STYLUS_OFF_DB`] and, if it has landed
+/// below it, taken again over the windows that are plausibly the record. The test
+/// is on the *answer*, not on the input, and that is the narrow version
+/// deliberately: an ordinary capture that happens to contain a handful of windows
+/// of digital silence has a floor in the groove already, and filtering them out
+/// would move it for no reason. Twelve snippets in VRipr's own corpus are exactly
+/// that case. The gate engages only when the percentile is describing something
+/// that is not a record, which no capture of a record can produce.
+///
+/// A capture that is *entirely* below the gate has no record in it anywhere, and
+/// the unfiltered estimate is as good an answer as exists, so that is what it
+/// keeps rather than reporting a floor derived from no windows.
 #[must_use]
 pub fn threshold_for(trace: &Trace<'_>, cfg: &Config) -> (f64, Option<f64>) {
     if !cfg.adaptive {
         return (cfg.threshold_db, None);
     }
     let levels: Vec<f64> = trace.frames.iter().map(|f| f.rms).collect();
-    let floor_db = linear_to_db(adaptive_floor(&levels));
+    let gate = db_to_linear(STYLUS_OFF_DB);
+    let mut floor = adaptive_floor(&levels);
+    if floor <= gate {
+        // The percentile landed below anything a record produces, so it is
+        // describing the windows with no record in them. Ask the rest.
+        let with_a_record: Vec<f64> = levels.iter().copied().filter(|&rms| rms > gate).collect();
+        if !with_a_record.is_empty() {
+            floor = adaptive_floor(&with_a_record);
+        }
+    }
+    let floor_db = linear_to_db(floor);
     (floor_db + cfg.adaptive_margin_db, Some(floor_db))
 }
 
@@ -494,7 +549,7 @@ pub fn boundaries_for(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::{DEFAULT_WINDOW_MILLIS, db_to_linear};
+    use crate::features::DEFAULT_WINDOW_MILLIS;
     use vcw_types::StorageFormat;
 
     const RATE: SampleRate = SampleRate(48_000);
@@ -585,6 +640,95 @@ mod tests {
         // than the percentile's share of the side for the estimate to land in it at
         // all. Six percent of this side is groove, and the estimate found it.
         assert!(60.0 / frames.len() as f64 > 0.03);
+    }
+
+    #[test]
+    fn a_few_silent_windows_do_not_move_a_floor_that_is_already_in_the_groove() {
+        // The other half of the gate, and the half that cost a parity failure to
+        // learn: an ordinary side can contain a window or two of digital silence -
+        // a dropout, a splice, an excerpt cut on a quiet frame - without having a
+        // stylus-off *population* in it. Twelve snippets in VRipr's corpus do. The
+        // floor there is in the groove already, so the gate has to leave the
+        // estimate exactly as it found it rather than nudging the percentile.
+        // The groove ramps rather than sitting flat, because a real one wanders and
+        // a plateau would hide the bug: dropping two windows from the front of the
+        // sort moves which window the percentile lands on, and over a plateau every
+        // candidate has the same value.
+        let mut runs: Vec<(f64, usize)> = vec![(-80.0, 2)];
+        runs.extend((0..120).map(|i| (-50.0 + f64::from(i) / 30.0, 1)));
+        runs.push((-20.0, 1800));
+        let frames = trace_of(&runs);
+        let shape = test_shape();
+        let trace = view(&frames, &shape);
+
+        let (_, floor_db) = threshold_for(&trace, &Config::adaptive());
+        let levels: Vec<f64> = frames.iter().map(|f| f.rms).collect();
+        assert_eq!(
+            floor_db,
+            Some(linear_to_db(adaptive_floor(&levels))),
+            "the gate changed an estimate it had no business changing"
+        );
+    }
+
+    #[test]
+    fn recorded_silence_does_not_drag_the_floor_out_of_the_groove() {
+        // A §52 capture: the operator pressed Resume in a browser in another room and
+        // walked to the deck, so the capture opens with twelve seconds of input with
+        // no record under the stylus at all. Everything after it is an ordinary side -
+        // two tracks, a lead-in, a gap, a lead-out - and the groove is 5.9% of it,
+        // comfortably over the 3% the percentile needs.
+        let frames = trace_of(&[
+            (-84.0, 120), // the walk: stylus off the disc
+            (-48.0, 30),  // lead-in
+            (-20.0, 900), // track one
+            (-48.0, 20),  // the gap
+            (-20.0, 900), // track two
+            (-48.0, 70),  // lead-out
+        ]);
+        let shape = test_shape();
+        let trace = view(&frames, &shape);
+
+        let (threshold_db, floor_db) = threshold_for(&trace, &Config::adaptive());
+        let floor_db = floor_db.expect("an adaptive pass reports its floor");
+        assert!(
+            (floor_db + 48.0).abs() < 0.5,
+            "the floor landed at {floor_db} dB, which is not the groove"
+        );
+        assert!(
+            threshold_db > -48.0,
+            "the threshold at {threshold_db} dB is below groove noise, so the groove \
+             between the tracks reads as music and there are no tracks"
+        );
+
+        // The arithmetic the gate exists to stop. Over every window, including the
+        // ones with no record in them, the quietest 3% *is* the walk: 120 of 2040
+        // windows is 5.9%, so the percentile never reaches the groove and the
+        // threshold comes out 36 dB below it.
+        let every: Vec<f64> = frames.iter().map(|f| f.rms).collect();
+        let ungated = linear_to_db(adaptive_floor(&every));
+        assert!(
+            (ungated + 84.0).abs() < 0.5,
+            "the ungated estimate was {ungated} dB, so this fixture no longer \
+             reproduces what it was written for"
+        );
+
+        // And the same side captured at the deck, which the gate must answer
+        // identically: its estimate was never below `STYLUS_OFF_DB`, so the gate
+        // never engaged and there is nothing for it to have changed.
+        let at_the_deck = trace_of(&[
+            (-48.0, 30),
+            (-20.0, 900),
+            (-48.0, 20),
+            (-20.0, 900),
+            (-48.0, 70),
+        ]);
+        let trace = view(&at_the_deck, &shape);
+        let (deck_threshold, deck_floor) = threshold_for(&trace, &Config::adaptive());
+        assert_eq!(
+            deck_floor.map(|f| (f * 1e9).round()),
+            Some((floor_db * 1e9).round())
+        );
+        assert!((deck_threshold - threshold_db).abs() < 1e-9);
     }
 
     #[test]

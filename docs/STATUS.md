@@ -8080,3 +8080,119 @@ edit looked cross-crate until the gate said so.
 
 Gate green across all seventeen legs at **1345 tests**, up from 1342, 23 ignored, 243 in
 the frontend, zero em dashes.
+
+## 2026-10-17, a read that upgrades the project is still a write
+
+The section above names the two verbs and then leaves them where they were. This closes
+that, and the fix is smaller than the sentence describing it: **the handle follows what
+the task does.** `Project::open` is the migration, `Project::open_read_only` is not, and
+every verb that only looks at a project was asking for the first one out of habit.
+
+`vcw release <project> show` and `vcw release <project> covers` now take the read-only
+handle and call `require_current_schema()`, so an old project is named and refused rather
+than quietly brought forward. They have to refuse rather than cope, because the §29
+tables they read arrive in schema v2 and there is nothing to report from a file that
+predates them. `Task::writes()` is the whole decision, asked before the file is opened
+because the answer is which handle to take.
+
+`vcw waveform` is the other way around. Nothing it draws is newer than schema v1, so it
+takes the read-only handle and draws an old project *as it is* - no refusal, no upgrade,
+the picture a person asked for. `--rebuild` writes the pyramid back, so `--rebuild` still
+takes a write handle and still migrates, which is correct: asking for one is asking for
+the other.
+
+One incidental thing fell out of it. `release::load` returns `None` for a project with no
+`releases` row, and `release::ensure` was papering over that by inserting one - which a
+read-only handle cannot do. A derived `Record::default()` is not the answer either,
+because the DDL defaults `discs` to 1 (a record is one disc until somebody says
+otherwise) where `default()` would say zero, and therefore no sides. So `release::fresh()`
+states the row the first write would have made, and a test compares it field by field
+against the row `ensure` actually inserts, because the two will drift the day somebody
+adds a column with a default.
+
+The test for all of this is in `crates/cli/tests/migrate_from_cli.rs`, beside the dry-run
+pair, and it is the shape that proves the property rather than the mechanism: wind a real
+project back to v1, run `release show` and check both that it refused *and* that
+`PRAGMA user_version` is still 1, run `waveform` and check both that it drew something
+*and* that the version is still 1, then migrate and check `release show` is happy. It was
+confirmed able to fail by collapsing waveform's branch back to `Project::open`: it says
+`waveform migrated the project`.
+
+## 2026-10-17, a remote operator breaks the adaptive noise floor
+
+This one came out of §52 rather than out of the detector, and it is the first defect that
+`vcw serve` has caused somewhere else in the program.
+
+`adaptive_floor` estimates the noise floor as the interpolated 3rd-percentile window
+level. The reasoning behind the 3 is VRipr's and it is sound: the 10th percentile lands
+*inside quiet music* on a densely cut LP, so the detector treats the quietest verse as the
+groove. What the 3 assumes is that the quietest 3% of a capture **is** the groove, and on
+every capture VCW had ever analyzed it was, because the operator was standing at the deck
+with the mouse in one hand and the arm in the other.
+
+Serve breaks that. Resume is now a button in a browser in another room, so the capture
+opens with however long it takes to walk to the turntable: the deck stopped, the arm in
+its rest, the preamp hissing into a recording that is already running. That is a third
+population of windows, not music and not groove, and it sits about 35 dB below the groove.
+Measured on the author's own captures: music around -20 dBFS, groove around -48, the input
+with the stylus off the disc around -84.
+
+The arithmetic is unforgiving. Once that silence is more than 3% of the capture the
+percentile lands in it, the floor comes back at -84 instead of -48, the threshold goes to
+-72 - which is 24 dB *below* groove noise - and every lead-in and inter-track gap on the
+side reads as music. The detector finds nothing. On a forty-minute two-face capture, 3% is
+seventy-two seconds: a walk down a hallway and back. The modeling put the flip between a
+sixty-second walk (2.5% of the capture) and a two-minute one (4.9%).
+
+**The fix is a gate on the estimate, not on the audio.** `STYLUS_OFF_DB` is -75 dBFS:
+groove noise on a clean pressing runs around -50 at normal capture gain and a worn one is
+louder, so nothing in a groove gets near -75, and what does is the stylus not being on the
+record. If the percentile comes back at or below that line it is describing windows with no
+record in them, so the estimate is taken again over the windows above the line.
+
+It is deliberately the narrow version. The first attempt filtered the input
+unconditionally - remove every window below the gate, then take the percentile - and the
+parity suite caught it inside a minute. Twelve of VRipr's 595 corpus snippets contain a
+window or two below -75 dB without having a stylus-off *population* in them, and their
+floor was in the groove already; filtering those out moved the percentile by one index
+and shifted real boundaries by half a second for no reason at all. Testing the answer
+instead of the input makes the gate a strict no-op on every capture whose floor is already
+where it belongs, which is every capture of a record made at the deck.
+
+`STYLUS_OFF_DB` is a module constant and not a `Config` field, on purpose. It is not a
+tuning preference, it is a statement about what vinyl sounds like, and the only way to
+want a different number is to be capturing something that is not a record. Keeping it out
+of `Config` also keeps it out of the settings struct, its exhaustive construction test,
+the ts-rs bindings and the three places the window would have had to name it.
+
+**The parity suite needed a change, and this is the interesting part.** Four of those
+twelve snippets have a floor genuinely below -75 dB, which means VRipr placed their
+boundaries using an estimate taken over material it never designed for: the corpus itself
+contains the bug. VCW now answers differently there, by design, so the suite holds those
+snippets out of the comparison and counts them rather than scoring them. That is not slack
+in the floors - it is the statement that the parity claim is about the arithmetic VRipr
+ran, over the material VRipr ran it on, and VRipr's inputs were files somebody had already
+trimmed. The hold-out predicate is about the *audio* and not about the branch, so it
+cannot be satisfied by the implementation drifting, and it has a ceiling of 5% of the
+corpus so a future change to the gate cannot quietly excuse the comparison away.
+
+With twelve snippets held out, the adaptive figures came back **up**: 97.56%, 98.67% and
+98.01% of VRipr's boundaries against 97.48%, 98.39% and 98.01% before, whole snippets
+matching 95.20%, 96.05% and 94.00% against 94.79%, 95.13% and 93.95%, and the worst
+agreement back to 0.000 s - exact to the frame, which is the claim that matters. The fixed
+threshold is untouched to the last digit, because the gate is inside the adaptive branch.
+
+Three tests, each confirmed able to fail on its own. One on the floor, which asserts both
+that the gated estimate lands on the groove and that the ungated one lands in the silence,
+so the fixture cannot stop reproducing what it was written for without saying so. One on
+the detector, which runs the full level pass over a side with a twelve-second walk in front
+of it and asserts the two tracks are found and that the first region does not reach back
+into the walk. And one on the no-op half, which is the one that cost a parity failure to
+learn: a trace with two silent windows and a floor already in the groove must come back
+byte-identical to the ungated percentile. Its first draft passed under the broken rule
+too, because the groove in it was a flat plateau and every candidate window had the same
+value. A real groove wanders, so the fixture now ramps, and the blunt rule fails it.
+
+Gate green across all seventeen legs at **1350 tests**, up from 1345, 23 ignored, 243 in
+the frontend, zero em dashes. The parity leg runs the corpus sweep, so the figures above
+are a gate condition and not a one-off measurement.

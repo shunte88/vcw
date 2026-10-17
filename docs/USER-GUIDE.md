@@ -513,10 +513,12 @@ given by time, works on a project of any age and leaves it at that age.
 
 One thing to know before you reach for `--dry-run` to avoid an upgrade: **any
 verb that writes to a project upgrades it on the way in.** That is the same
-quiet migration the window does, and it includes a few that read more than they
-write - `vcw waveform` and `vcw release <project> show` among them, because both
-take a write handle. If you want a project left at the version it is, copy it
-before you run anything, exactly as you would around `vcw recover`.
+quiet migration the window does. The verbs that only look at a project do not:
+`vcw waveform` draws an old project and leaves it old, and
+`vcw release <project> show` reports on a current one or says to migrate, rather
+than migrating on your behalf. If you want a project left at the version it is,
+copy it before you run anything that writes, exactly as you would around
+`vcw recover`.
 
 ## Importing from Audacity
 

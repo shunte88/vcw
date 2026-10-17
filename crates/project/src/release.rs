@@ -160,6 +160,24 @@ pub fn ensure(project: &mut Project) -> Result<Record> {
     load(conn)?.map_or_else(|| unreachable!("the row was just inserted"), Ok)
 }
 
+/// The release a project has before anybody fills one in.
+///
+/// Mirrors what the `releases` DDL puts in a bare row, which is not what
+/// `Record::default()` gives: the table defaults `discs` to 1 because a record
+/// is one disc until somebody says otherwise, and a derived default would say
+/// zero and therefore no sides. A reader that cannot insert the row - anything
+/// holding a read-only handle - needs the same answer `ensure` would have
+/// produced, so it gets it from here rather than inventing its own.
+///
+/// `updated_at` is 0, because nothing has been written.
+#[must_use]
+pub fn fresh() -> Record {
+    Record {
+        discs: 1,
+        ..Record::default()
+    }
+}
+
 /// Reads the release, or `None` if the project has none yet.
 ///
 /// # Errors
@@ -539,6 +557,22 @@ mod tests {
         assert_eq!(record.discs, 1);
         assert_eq!(record.numbering, Numbering::Alpha);
         assert_eq!(record.sides().len(), 2, "one disc is two sides");
+    }
+
+    #[test]
+    fn a_fresh_record_is_the_row_ensure_would_have_inserted() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir);
+        let inserted = ensure(&mut p).expect("ensure");
+        // `updated_at` is the one field a stored row has and a synthesized one
+        // cannot: the insert stamps it. Everything else has to agree, or a
+        // read-only `vcw release show` describes a different release from the
+        // one the first write would create.
+        let synthesized = Record {
+            updated_at: inserted.updated_at,
+            ..fresh()
+        };
+        assert_eq!(inserted, synthesized);
     }
 
     #[test]

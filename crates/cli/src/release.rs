@@ -72,6 +72,19 @@ pub(crate) enum Task {
     Covers,
 }
 
+impl Task {
+    /// Whether this task needs a handle that can write.
+    ///
+    /// Asked before the project is opened, because the answer decides which
+    /// handle to take and a read-write handle migrates the file.
+    fn writes(&self) -> bool {
+        match self {
+            Self::Show | Self::Covers => false,
+            Self::Set(_) | Self::Artwork { .. } => true,
+        }
+    }
+}
+
 /// The fields `vcw release set` was given, each `None` for "leave it".
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Change {
@@ -123,16 +136,26 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     if !args.project.exists() {
         bail!("{} does not exist", args.project.display());
     }
-    let mut project = Project::open(&args.project)
-        .with_context(|| format!("opening {}", args.project.display()))?;
+    // `show` and `covers` read, so they take a read-only handle - and a
+    // read-write handle is a migration (`Project::open` applies one), which
+    // means the old shape of this verb upgraded somebody's project just by being
+    // asked what was in it. A reader has to refuse an older file out loud
+    // instead, because the §29 tables it reads arrive in schema v2.
+    let mut project = if args.task.writes() {
+        Project::open(&args.project)
+    } else {
+        Project::open_read_only(&args.project)
+    }
+    .with_context(|| format!("opening {}", args.project.display()))?;
+    project.require_current_schema()?;
 
     match &args.task {
-        Task::Show => show(&mut project, args.json)?,
+        Task::Show => show(&project, args.json)?,
         Task::Set(change) => {
             let mut record = release::ensure(&mut project)?;
             apply(&mut record, change)?;
             release::store(&mut project, &record)?;
-            show(&mut project, args.json)?;
+            show(&project, args.json)?;
         }
         Task::Artwork { file, role } => {
             if !ROLES.contains(&role.as_str()) {
@@ -157,8 +180,10 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     Ok(())
 }
 
-fn show(project: &mut Project, json: bool) -> Result<()> {
-    let record = release::ensure(project)?;
+fn show(project: &Project, json: bool) -> Result<()> {
+    // Not `release::ensure`: a project with no release row yet reads as the
+    // release it would have, rather than being given one by a question.
+    let record = release::load(project.conn())?.unwrap_or_else(release::fresh);
     let sides = side::list(project.conn())?;
     let recorded = disc::recorded(project.conn())?;
     let missing = disc::missing(project.conn())?;

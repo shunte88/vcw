@@ -434,6 +434,47 @@ mod tests {
     }
 
     #[test]
+    fn a_capture_that_starts_before_the_stylus_still_finds_its_tracks() {
+        // §52's operator: Resume is in a browser in another room, so the capture
+        // opens with twelve seconds of a preamp hissing into a stopped deck. The
+        // detector's job is unchanged - the side after it is ordinary - but the
+        // quietest 3% of the *capture* is now that hiss rather than the groove, and
+        // a floor estimated over it puts the threshold 36 dB too low.
+        let layout = layout();
+        let frames = trace_of(&[
+            (-84.0, 120), // the walk to the deck
+            (-48.0, 30),  // lead-in
+            (-20.0, 900), // track one
+            (-48.0, 20),  // the gap
+            (-20.0, 900), // track two
+            (-48.0, 70),  // lead-out
+        ]);
+        let trace = view(&frames, &layout);
+
+        let found = scan(&trace, &Config::adaptive());
+        let floor = found.diagnostics.floor_db.expect("an adaptive floor");
+        assert!(
+            (floor + 48.0).abs() < 0.5,
+            "the floor landed at {floor} dB, in the silence rather than the groove"
+        );
+        assert_eq!(
+            found.regions.len(),
+            2,
+            "the gap between the tracks was swallowed: {:?}",
+            found.regions
+        );
+        // And it starts at the music, not at the hiss: a region reaching back into
+        // the walk would export twelve seconds of a stopped turntable.
+        let first = found.regions[0];
+        let walk_ends = 150 * W;
+        assert!(
+            first.start >= walk_ends - W,
+            "the first track begins at frame {}, inside the walk",
+            first.start
+        );
+    }
+
+    #[test]
     fn the_live_pass_and_the_refine_pass_agree() {
         // The claim §22 rests on: a provisional marker is not a cheaper approximation,
         // it is the same detector with less audio. Feed one path a synthesised side in
