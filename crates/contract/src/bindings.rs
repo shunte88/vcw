@@ -243,6 +243,7 @@ pub fn typescript() -> String {
             decl::<crate::view::ExportFile>(),
             decl::<crate::view::About>(),
             decl::<crate::view::Notice>(),
+            decl::<crate::view::Update>(),
         ],
     );
 

@@ -62,6 +62,7 @@ import type {
   Track,
   TrackEdit,
   Transport,
+  Update,
   Walk,
   Waveform,
   Wire,
@@ -286,6 +287,19 @@ export function about(): Promise<About> {
  */
 export function support(page: string): Promise<void> {
   return invoke("support", { page });
+}
+
+/**
+ * Whether a newer release has been published (WP-28).
+ *
+ * Never rejects for a network: a check that could not reach the forge answers
+ * `checked: false`, because a window has nothing to tell anybody about a
+ * question it could not put. Nothing is downloaded or replaced - a build that
+ * is behind gets a `page` to open, and the operator installs it the way they
+ * installed this one.
+ */
+export function update(): Promise<Update> {
+  return invoke("update");
 }
 
 /** Every audio device the host offers. */

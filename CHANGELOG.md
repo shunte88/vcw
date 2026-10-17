@@ -32,6 +32,15 @@ loud if it cannot.
   two pressings is the operator's decision. `--apply` is the opt-in for the
   command line, and it refuses a shortlist.
 
+* **The window says when a newer release is out.** On launch VCW asks the
+  repository what the newest published release is, and if it is ahead of the
+  running build a single **Update to ...** button appears beside the title. It
+  opens that release's own page in your own browser and does nothing else: VCW
+  does not replace itself, because the copy on disk belongs to whatever
+  installed it - a package manager, a deb, or an unpacked archive on a Pi. The
+  check is one request with a three second ceiling, it is silent if it fails,
+  and turning the network off in Settings turns it off too.
+
 * **A shortlist says what tells two pressings apart.** A walk nearly always
   comes back with several pressings of one record, which agree on everything
   that was weighed. The country and the format are now carried through to the

@@ -1638,6 +1638,41 @@ source: string,
  */
 copyleft: boolean, };
 
+export type Update = {
+/**
+ * The release this build is, as [`About::version`] reports it.
+ */
+current: string,
+/**
+ * The newest published release, as its tag is written - `v0.3.4-alpha`
+ * and not `0.3.4` - or empty where nothing was learned.
+ *
+ * The tag and not a cleaned-up version, because this is the string a
+ * person matches against what they see on the release page.
+ */
+latest: string,
+/**
+ * Whether [`latest`](Self::latest) is ahead of this build.
+ */
+newer: boolean,
+/**
+ * Whether the check reached an answer at all.
+ *
+ * False offline, false when the service refused, and false when nothing
+ * could be parsed from what came back. Never an error: a window that could
+ * not find out whether it is current has nothing to tell anybody, and a
+ * banner saying so would be a complaint about VCW's own maintenance in the
+ * middle of somebody's recording.
+ */
+checked: boolean,
+/**
+ * The [`crate::command`] page name to open, for a build that is behind.
+ *
+ * A name and not an address, like every other link this product offers.
+ * Empty where there is nothing to open.
+ */
+page: string, };
+
 // ----------------------------------------------------------------------
 // Settings (§39)
 //

@@ -205,7 +205,14 @@ impl Setup {
     /// far as it can be - which is not at all - and the build contains no code
     /// that can reach a network. A caller that needs to know asks
     /// [`Provider::is_offline`].
-    fn transport(&self) -> Arc<dyn Transport> {
+    ///
+    /// Public because not every request VCW makes is to a provider: the release
+    /// check asks GitHub, which has no [`Provider`], no rate limit of ours to
+    /// respect and no credential, and the one thing it does share with a lookup
+    /// is this decision. A second `cfg!(feature = "net")` written at that call
+    /// site is a second place for offline mode to be wrong.
+    #[must_use]
+    pub fn transport(&self) -> Arc<dyn Transport> {
         #[cfg(feature = "net")]
         if self.online {
             return Arc::new(crate::agent::Agent::new());

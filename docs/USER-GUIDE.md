@@ -72,7 +72,11 @@ session and the first place to look when something did not do what you expected
 - double-click a line to read it in full, wrapped, which is the form to paste
 into a bug report. `Ctrl+i` opens About, which carries the version, the build
 date and the third-party components this build links; a bug report wants those
-too.
+too. If a newer release has been published, an **Update to ...** button appears
+beside the title: it opens that release's page in your own browser, and that is
+all it does. VCW does not replace itself - whatever installed this copy owns it.
+The check is one request made at launch, it says nothing when it fails, and it
+does not happen at all with **Allow network lookups** turned off in Settings.
 
 The waveform sits above Capture, Tracks and Export, which are the three
 workspaces that point at positions in the recording, and not above Library,

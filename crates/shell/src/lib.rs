@@ -63,6 +63,7 @@ pub mod metadata;
 pub mod pump;
 pub mod state;
 pub mod transport;
+pub mod update;
 
 pub use host::{Host, Hosted};
 pub use state::{Error, Shell};

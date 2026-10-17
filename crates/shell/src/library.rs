@@ -170,6 +170,9 @@ fn addresses() -> Vec<(String, String)> {
 /// opener exits as soon as it has handed the URL on, so what the browser does
 /// next is not VCW's to report.
 pub fn support(page: String) -> Result<(), Error> {
+    if let Some(tag) = page.strip_prefix(RELEASE_PAGE) {
+        return open(&release_page(tag)?);
+    }
     let known = addresses();
     let url = known
         .iter()
@@ -177,9 +180,46 @@ pub fn support(page: String) -> Result<(), Error> {
         .map(|(_, url)| url.as_str())
         .ok_or_else(|| Error::Invalid {
             field: "page".to_owned(),
-            why: format!("no page called {page:?} - this build offers {}", named()),
+            why: format!(
+                "no page called {page:?} - this build offers {}, or {RELEASE_PAGE}<tag>",
+                named()
+            ),
         })?;
+    open(url)
+}
 
+/// The one page name that carries an argument: `release:v0.3.4-alpha`.
+///
+/// A prefix and not a row in `addresses` because there is one release page
+/// per tag, and a build cannot enumerate the tags cut after it shipped - the
+/// newest is learned from the forge at runtime by `crate::update`.
+pub const RELEASE_PAGE: &str = "release:";
+
+/// `{repository}/releases/tag/{tag}`, for a tag that is shaped like one.
+///
+/// The check is a charset and not a list for the reason above, which makes this
+/// the one address a frontend has a say in. What it can say is bounded: the
+/// host and the path are this build's, so the worst a hostile window achieves
+/// is a 404 on the repository's own releases.
+fn release_page(tag: &str) -> Result<String, Error> {
+    let shaped = !tag.is_empty()
+        && tag
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
+    if !shaped {
+        return Err(Error::Invalid {
+            field: "page".to_owned(),
+            why: format!("{tag:?} is not a release tag"),
+        });
+    }
+    Ok(format!(
+        "{}/releases/tag/{tag}",
+        About::current().repository
+    ))
+}
+
+/// Hands one address to the platform's browser.
+fn open(url: &str) -> Result<(), Error> {
     // ponytail: not reaped, so a click leaves one zombie until the app exits.
     // `status()` would reap it and block the window while the browser starts -
     // see the module note on sync commands - and a thread per click to call
@@ -407,6 +447,33 @@ mod tests {
             PAGES.len() + 1 + about.notices.len(),
             "the table offers something the dialog does not list: {offered:?}"
         );
+    }
+
+    /// The one address a frontend has a say in, and the bound on what it can
+    /// say. Not opened, for the reason the refusal test is not: `support`
+    /// spawns a browser.
+    #[test]
+    fn a_release_page_is_a_tag_and_nothing_else() {
+        let built = release_page("v0.3.4-alpha").expect("a tag is shaped like a tag");
+        assert_eq!(
+            built,
+            format!("{}/releases/tag/v0.3.4-alpha", About::current().repository)
+        );
+
+        for junk in [
+            "",
+            "../../shunte88/evil",
+            "v1 ; rm -rf",
+            "v1\nv2",
+            "v1#fragment",
+            "v1?query",
+            "v1/../..",
+        ] {
+            assert!(
+                release_page(junk).is_err(),
+                "{junk:?} was accepted as a release tag"
+            );
+        }
     }
 
     /// How many arguments the platform's opener is given, the URL included.

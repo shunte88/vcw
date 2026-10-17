@@ -1102,6 +1102,46 @@ impl About {
     }
 }
 
+/// Whether a newer release has been published, and what it is called.
+///
+/// Not an updater. VCW does not replace its own binary - a package manager
+/// owns the copy on Linux, an installer owns it on Windows and a signed bundle
+/// owns it on macOS, and a program that overwrites itself behind any of them is
+/// how an installation ends up in a state nothing can repair. This reports, and
+/// the page it names is a release page a person downloads from.
+///
+/// [`checked`](Self::checked) is the field that makes the other three
+/// readable: no answer at all and "you have the newest" are different facts,
+/// and a window that cannot tell them apart either claims a build is current
+/// when the check never ran, or nags about a network that was switched off.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Update {
+    /// The release this build is, as [`About::version`] reports it.
+    pub current: String,
+    /// The newest published release, as its tag is written - `v0.3.4-alpha`
+    /// and not `0.3.4` - or empty where nothing was learned.
+    ///
+    /// The tag and not a cleaned-up version, because this is the string a
+    /// person matches against what they see on the release page.
+    pub latest: String,
+    /// Whether [`latest`](Self::latest) is ahead of this build.
+    pub newer: bool,
+    /// Whether the check reached an answer at all.
+    ///
+    /// False offline, false when the service refused, and false when nothing
+    /// could be parsed from what came back. Never an error: a window that could
+    /// not find out whether it is current has nothing to tell anybody, and a
+    /// banner saying so would be a complaint about VCW's own maintenance in the
+    /// middle of somebody's recording.
+    pub checked: bool,
+    /// The [`crate::command`] page name to open, for a build that is behind.
+    ///
+    /// A name and not an address, like every other link this product offers.
+    /// Empty where there is nothing to open.
+    pub page: String,
+}
+
 /// One directory, as a path browser draws it (§52).
 ///
 /// `serve` has no native file chooser to open - the chooser belongs to the

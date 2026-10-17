@@ -748,6 +748,33 @@ agree with the features, asserted in `vcw-export` so the `features` leg runs it 
 four combinations, and removing the filter passes in the default build and fails in the
 other three - which is the condition failing on purpose.
 
+**Extended 2026-10-16: the same dialog's other job, telling a person their copy
+is old.** The version has been on screen since 2026-10-04 and said nothing about
+whether it was the current one, which for a product distributed as a deb and an
+unpacked archive means a user has no way to learn a release happened short of
+watching the repository. So the window now asks the forge for the newest
+published release on launch, and shows one button beside the title if it is
+ahead of the running build. It opens that release's page and nothing more - VCW
+does **not** update itself, because the copy on disk belongs to whatever
+installed it, and a binary that replaces itself behind a package manager's back
+is a bug in somebody's fleet.
+
+Two things made this smaller than it looks. The address table WP-28 already
+generates is what the button opens, so the webview still never holds a URL - it
+holds the page name `release:<tag>`, which is the one entry in that table taking
+an argument, because a build cannot enumerate tags cut after it shipped and the
+tag therefore has to come from the network answer. What bounds it is a charset
+and not a list: the host and the path are this build's, so the worst a hostile
+window achieves is a 404 on the repository's own releases.
+
+The second is that the obvious endpoint is wrong here. GitHub's
+`releases/latest` **excludes pre-releases**, and the whole 0.x line is `-alpha`,
+so it answers 404 for this project and would have reported for a year of
+releases that there were none. That is a defect no unit test would have found,
+because a recorded transport answers whatever it was handed; the live probe over
+`vcw serve` found it in one request. The check reads the list endpoint instead
+and takes the first row that is not a draft.
+
 **WP-21, built 2026-10-04.** §25's two halves, and neither of them is the
 algorithm: `chromaprint-next` does that. The work was the two seams around it.
 

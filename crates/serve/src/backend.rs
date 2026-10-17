@@ -189,6 +189,7 @@ impl Backend for Served {
             // Reading what is open.
             "about" => ok(&vcw_shell::library::about()),
             "support" => done(vcw_shell::library::support(args.get("page")?)),
+            "update" => done(vcw_shell::update::check(host)),
             "devices" => ok(&vcw_shell::library::devices()),
             "curves" => ok(&vcw_shell::library::curves()),
             "release" => done(vcw_shell::library::release(shell)),

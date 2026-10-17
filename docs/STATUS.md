@@ -7950,3 +7950,44 @@ written, the catalog number normalized to the provider's spelling, confirmed in 
 database afterwards. The resolver is behaving as designed. It is the shape of the data
 that makes asking the common outcome, and the shortlist is therefore the product rather
 than the fallback.
+
+## The window says when it is old (WP-28, extended 2026-10-16)
+
+The version has been on the About dialog since 2026-10-04 and said nothing about whether
+it was the current one. For a product handed out as a deb, an rpm, an AppImage and an
+unpacked archive on a Raspberry Pi, that left a user no way to learn a release happened.
+
+`vcw_shell::update::check` asks the repository for its newest published release and
+answers an `Update { current, latest, newer, checked, page }`. The window asks once at
+launch, outside the startup read so a slow forge cannot hold the first paint, and draws
+one button beside the title when `newer`. It opens that release's page in the operator's
+own browser. Nothing is downloaded and nothing is replaced: the copy on disk belongs to
+whatever installed it, and a binary that overwrites itself behind a package manager is a
+bug in somebody's fleet.
+
+- **`checked` is not `newer`.** A build that could not reach the forge and a build that
+  is current both have nothing to offer, and conflating them makes a failed check look
+  like good news. `checked` is false only when nothing was learned.
+- **The webview still holds no URL.** It holds the page name `release:<tag>`, which is
+  the one entry in WP-28's address table that takes an argument - a build cannot
+  enumerate tags cut after it shipped, so the tag has to come from the network answer.
+  What bounds it is a charset rather than a list, which makes the worst a hostile window
+  can achieve a 404 on this repository's own releases.
+- **Three seconds, one request, silent on failure.** The check is not the reason anybody
+  launched the application. `settings.metadata.online` governs it like every other
+  request, which means an offline build asks nobody.
+
+### The endpoint everybody reaches for is wrong here
+
+`GET /repos/{owner}/{repo}/releases/latest` **excludes pre-releases**, and every VCW
+release is one: the whole 0.x line is `-alpha`. It answers 404 for this repository, so
+the first working version of this feature reported, for a year of published releases,
+that there were none. The web address `github.com/shunte88/vcw/releases/latest`
+redirects to the releases *index* for the same reason, which is why the button opens
+`releases/tag/<tag>` and not that.
+
+No unit test could have caught it. A recorded transport answers whatever body the test
+handed it, and seven of them passed against a shape the real service never returns. The
+live probe over `vcw serve` found it in one request, which is the same lesson as the
+first-light screenshots: a test proves the code does what it was written to do, and only
+running the thing proves it was written against the world.

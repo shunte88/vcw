@@ -96,6 +96,19 @@ body {
   flex: 1;
 }
 
+/*
+  Shown only by a build that is behind, so it is allowed to be the one colored
+  thing in the bar. `flex-shrink: 0` because `.project` above it grows: without
+  it a long project title squeezes the version out of its own button.
+*/
+.titlebar button.update {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0c0e12;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
 .tabs {
   display: flex;
   gap: 0.25rem;

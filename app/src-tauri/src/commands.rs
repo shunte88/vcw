@@ -58,7 +58,7 @@ use vcw_contract::command::{
 use vcw_contract::settings::{Credential, Settings};
 use vcw_contract::view::{
     About, Accepted, Boundary, Candidate, Capture, Curve, Device, ExportPlan, Identified, Listing,
-    Project as ProjectRow, Release, Side, Track, Waveform,
+    Project as ProjectRow, Release, Side, Track, Update, Waveform,
 };
 use vcw_shell::state::{Error, Shell};
 
@@ -312,6 +312,15 @@ pub(crate) async fn select_release(
         vcw_shell::metadata::select_release(&app.state::<Shell>(), &hosted(&app), selection)
     })
     .await
+}
+
+/// Whether a newer release is out (WP-28).
+///
+/// Off the main thread like the provider commands, for the same reason: it is a
+/// network round trip, and a synchronous command runs where the window draws.
+#[tauri::command]
+pub(crate) async fn update(app: AppHandle) -> Result<Update, Error> {
+    off_the_main_thread("update", app, |app| vcw_shell::update::check(&hosted(&app))).await
 }
 
 #[tauri::command]

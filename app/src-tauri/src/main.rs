@@ -203,6 +203,7 @@ fn main() {
             commands::open_project,
             commands::about,
             commands::support,
+            commands::update,
             commands::devices,
             commands::curves,
             commands::release,

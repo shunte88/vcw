@@ -1130,6 +1130,12 @@ text = "{panel} ({chord})"
 ["app.tab.tracks"]
 text = "Tracks"
 
+["app.update"]
+text = "Update to {latest}"
+
+["app.update.title"]
+text = "{latest} has been published and this is {current}. Opens the release page in your own browser - VCW does not replace itself, because the copy on disk belongs to whatever installed it."
+
 ["app.untitled"]
 text = "untitled"
 
@@ -1601,8 +1607,9 @@ text = "Allow network lookups"
 ["settings.online.hint"]
 text = """
 Offline, nothing here reaches the network: no catalog search, and also no \
-AcoustID fingerprint lookup and no cover art, neither of which the two \
-switches below cover. Online, those two choose which catalogs a search asks."""
+AcoustID fingerprint lookup, no cover art and no check for a newer release, \
+none of which the two switches below cover. Online, those two choose which \
+catalogs a search asks."""
 
 ["settings.online.off"]
 text = "Offline"

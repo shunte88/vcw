@@ -63,6 +63,7 @@ import type {
   Device,
   Project,
   Settings as Values,
+  Update,
 } from "./bindings/vcw";
 import { Face } from "./Face";
 import { describe } from "./describe";
@@ -232,6 +233,7 @@ export function App(): React.JSX.Element {
   const [help, setHelp] = useState(false);
   const [about, setAbout] = useState(false);
   const [log, setLog] = useState(false);
+  const [published, setPublished] = useState<Update | null>(null);
 
   const [devices, setDevices] = useState<readonly Device[]>([]);
   const [settings, setSettings] = useState<Values | null>(null);
@@ -252,6 +254,34 @@ export function App(): React.JSX.Element {
   // with nothing said about it. Four panels describing a state that has gone.
   // `run` puts the reason in the status line instead. `store.run` is stable,
   // so the dependency stays `generation` alone.
+  // Asked once, when the window opens, and never again (WP-28). Not through
+  // `store.run`: a release check that could not be made is not a failure a
+  // person needs told about, and `update` already answers `checked: false`
+  // rather than rejecting for anything a network did. The empty dependency
+  // list is the "once" - a check per settings change would be a request to
+  // GitHub every time somebody typed in the export template.
+  //
+  // ponytail: once per launch, so a window left open for a week never notices.
+  // A timer is the upgrade, and a week-old window is not what this is for.
+  useEffect(() => {
+    let canceled = false;
+    void api.update().then(
+      (found) => {
+        if (!canceled) {
+          setPublished(found);
+        }
+      },
+      () => {
+        // Deliberately silent, and the one `catch` in this file that is: the
+        // host rejects when the command is not registered, which is a build
+        // problem and not news for whoever is holding the build.
+      },
+    );
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
   useEffect(() => {
     let canceled = false;
     void store.run(async () => {
@@ -472,6 +502,19 @@ export function App(): React.JSX.Element {
           VCW
         </h1>
         <span className="project">{titled(project, text)}</span>
+        {published !== null && published.newer && (
+          <button
+            type="button"
+            className="update"
+            onClick={() => void store.run(() => api.support(published.page))}
+            title={text("app.update.title", {
+              latest: published.latest,
+              current: published.current,
+            })}
+          >
+            {text("app.update", { latest: published.latest })}
+          </button>
+        )}
         <nav className="tabs">
           {PANELS.map((tab) => (
             <button
