@@ -8069,3 +8069,14 @@ very investigation. Neither needs one for the whole of what it does; `waveform` 
 only to build a pyramid that is not there yet. Until that is untangled the user guide
 says so out loud, because the alternative is a person copying a project to be safe and
 then running the verb that defeats the copy.
+
+**One test had to change, in another crate.** `Error::SchemaNeedsUpgrade` grew the
+sentence naming the verb, and the gate failed in `vcw-contract`, where a browse test
+asserted the old wording in full. It now asserts `vcw migrate` - the verb, which is the
+part a person has to type and therefore the part that cannot quietly change. That is the
+generated-advice rule arriving from an unfamiliar direction: the string lived in
+`vcw-project` and the test that pinned it lived two crates away, so nothing about the
+edit looked cross-crate until the gate said so.
+
+Gate green across all seventeen legs at **1345 tests**, up from 1342, 23 ignored, 243 in
+the frontend, zero em dashes.
