@@ -520,6 +520,33 @@ than migrating on your behalf. If you want a project left at the version it is,
 copy it before you run anything that writes, exactly as you would around
 `vcw recover`.
 
+**The version number is not the whole story, and `vcw migrate` says so.** After
+the steps are applied - or straight away on a project that is already current -
+it compares what the project actually holds against what this build would
+create, and names anything missing, anything it does not recognize, and anything
+whose definition differs. A project this build wrote has nothing to report and
+prints nothing more. The reason the check exists is a real file: two indexes
+were added to the waveform tables during development, and because they went
+into the *first* migration - the one that only ever runs against an empty file
+- every project made before that edit is missing them while being current by
+every number in it. `vcw waveform` on such a project fails with a SQL error.
+That edit came before the first public release, so no VCW you could have
+installed wrote a project like that; the check exists because the shape of the
+failure is general, and the next edit to the first migration might not be so
+lucky. `vcw migrate` names each object and prints the statement that restores
+it; `--json` carries each statement whole. VCW
+will not run them for you, because an object it did not make is not its to
+change, but you can. The statements come back exactly as SQLite stores them,
+which is without the terminating semicolon, so add one:
+
+```text
+vcw migrate album.vcw --json | jq -r '.drift[].sql + ";"' | sqlite3 album.vcw
+```
+
+Anything it reports as **not ours** is an object VCW has never created. If you
+added it yourself, that line is the report working as intended and you can
+ignore it.
+
 ## Importing from Audacity
 
 A `.aup3` or `.aup4` project comes in as an ordinary capture:

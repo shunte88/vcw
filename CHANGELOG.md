@@ -72,6 +72,24 @@ loud if it cannot.
 
 ### Fixed
 
+* **`vcw migrate` now checks what the project holds, not only what version it
+  says it is.** A project's version number records which migrations ran, and
+  every one of them did run - but the first migration only ever runs against an
+  empty database, so an edit to it reaches every project made afterwards and no
+  project made before. One such edit happened in this project's own history:
+  two covering indexes were added to the waveform tables on 2026-09-25, and a
+  project written the week before has neither, is current by every number in
+  it, and answers `vcw waveform` with a SQL error. That edit landed before
+  0.1.1-alpha, so no released VCW ever wrote such a file - the one on this
+  machine is a development soak project, and it is what the check was built
+  against. `vcw migrate` now compares the project
+  against the schema this build would create and names anything missing,
+  anything it does not recognize and anything whose definition differs, with
+  the statement that puts it right; `--json` carries each statement whole, so
+  the report is the remedy. A project this build wrote has nothing to report
+  and says nothing. The check waits until the version number is current,
+  because before that the answer is just the migration that is about to run.
+
 * **A capture that starts before the stylus lands still finds its tracks.** The
   adaptive threshold estimates the noise floor from the quietest 3% of a
   capture, which is the groove on a capture made at the deck. Start the capture

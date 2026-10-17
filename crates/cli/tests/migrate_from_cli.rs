@@ -321,3 +321,111 @@ fn a_verb_that_only_reads_leaves_the_schema_where_it_found_it() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// The question `user_version` cannot answer: what the project actually holds.
+///
+/// `MIGRATIONS[0]` *is* `SCHEMA_V1`, which stops the create path and the upgrade
+/// path drifting - but migration 1 only ever runs against an empty database, so
+/// an edit to `SCHEMA_V1` reaches every project made afterwards and no project
+/// made before. One such edit happened: two covering indexes were added to the
+/// waveform tables on 2026-09-25, eleven days before 0.1.1-alpha. A project
+/// written the week before is current by every version number in it, has
+/// neither index, and answers with a SQL error when the pyramid is read.
+/// Nothing in `schema_migrations` can say so, because every migration it names
+/// did run. No released build ever wrote such a file - `/data2/vcw_soak/live.vcw`
+/// is a development project and it is what this check was built against - so
+/// the test manufactures the shape rather than carrying the file.
+#[test]
+fn migrate_asks_the_dictionary_and_not_only_the_version_number() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let path = dir.path().join("current.vcw");
+    record(&path);
+
+    // A project this build wrote has nothing to report, and says nothing.
+    let (text, ok) = migrate(&path, &[]);
+    assert!(ok, "{text}");
+    assert!(
+        !text.contains("dictionary"),
+        "a clean project was given a drift paragraph:\n{text}"
+    );
+
+    // Now the shape of the real case, reproduced by taking the index away.
+    {
+        let project = vcw_project::Project::open(&path).expect("opening");
+        project
+            .conn()
+            .execute_batch("DROP INDEX sampleblocks_summary256;")
+            .expect("dropping the index");
+        project.close().expect("closing");
+    }
+
+    let (text, ok) = migrate(&path, &[]);
+    assert!(
+        ok,
+        "drift is a statement about the file, not a failure of the verb:\n{text}"
+    );
+    assert!(
+        text.contains("already current"),
+        "the version number is still current and the report has to say so:\n{text}"
+    );
+    assert!(
+        text.contains("sampleblocks_summary256"),
+        "the missing index was not named:\n{text}"
+    );
+
+    // The statement in `--json` is the remedy, not a description of one.
+    let (text, ok) = migrate(&path, &["--json"]);
+    assert!(ok, "{text}");
+    let said: Value = serde_json::from_str(&text).expect("json");
+    let drift = said["drift"].as_array().expect("a drift list");
+    assert_eq!(drift.len(), 1, "{drift:?}");
+    assert_eq!(drift[0]["how"], "missing");
+    assert_eq!(drift[0]["kind"], "index");
+    let sql = drift[0]["sql"].as_str().expect("the statement");
+    {
+        let project = vcw_project::Project::open(&path).expect("opening");
+        project.conn().execute_batch(sql).expect("the remedy runs");
+        project.close().expect("closing");
+    }
+
+    let (text, ok) = migrate(&path, &["--json"]);
+    assert!(ok, "{text}");
+    let said: Value = serde_json::from_str(&text).expect("json");
+    assert_eq!(
+        said["drift"].as_array().map(Vec::len),
+        Some(0),
+        "running the statement the report carried did not clear the drift"
+    );
+}
+
+/// An older project is not asked, because the answer would be the migration.
+#[test]
+fn the_dictionary_check_waits_until_the_project_is_current() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let path = dir.path().join("old.vcw");
+    record(&path);
+    wind_back_to_v1(&path);
+
+    // A v1 project is missing every §29 table, and listing them under a plan
+    // that is about to create them would bury anything that mattered.
+    let (text, ok) = migrate(&path, &["--dry-run"]);
+    assert!(ok, "{text}");
+    assert!(
+        text.contains("runs once the project is current"),
+        "a dry run on an old project should say the check was not made:\n{text}"
+    );
+    assert!(
+        !text.contains("missing     table releases"),
+        "the pending migration's own tables were reported as drift:\n{text}"
+    );
+
+    let (text, ok) = migrate(&path, &["--json"]);
+    assert!(ok, "{text}");
+    let said: Value = serde_json::from_str(&text).expect("json");
+    assert_eq!(
+        said["drift"].as_array().map(Vec::len),
+        Some(0),
+        "a project migrated to current should have no drift: {}",
+        said["drift"]
+    );
+}

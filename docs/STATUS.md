@@ -8196,3 +8196,100 @@ value. A real groove wanders, so the fixture now ramps, and the blunt rule fails
 Gate green across all seventeen legs at **1350 tests**, up from 1345, 23 ignored, 243 in
 the frontend, zero em dashes. The parity leg runs the corpus sweep, so the figures above
 are a gate condition and not a one-off measurement.
+
+## 2026-10-17, the question a version number cannot answer
+
+The third hole in the migration story, and the one that had no answer at all until
+now. `user_version` records *which migrations ran*, and `schema_migrations` records
+them by name and by when - but neither records what they produced. For every
+migration after the first that distinction is academic, because an `ALTER TABLE` in
+migration 3 runs against every project that reaches migration 3. Migration 1 is
+different: it is `SCHEMA_V1`, the whole create path, and it only ever runs against an
+empty database. So an edit to it reaches every project made afterwards and no project
+made before, and the version number cannot tell the two apart because in both cases
+migration 1 ran.
+
+**This is not hypothetical.** WP-09 added two covering indexes to the waveform tables
+on 2026-09-25 - `sampleblocks_levels` and `sampleblocks_summary256`, the ones that
+turned a three-float read of a `sampleblocks` row from a 64 KiB page fault into a
+covered lookup. They went into `SCHEMA_V1`. `/data2/vcw_soak/live.vcw`, written during
+WP-05's soak the week before, is at schema 1, has neither index, and the moment you
+bring it to 5 it is current by every number in it and still cannot draw a waveform:
+`vcw waveform` answers `Error code 1: SQL logic error`. The edit landed eleven days
+before 0.1.1-alpha, so no released VCW ever wrote a file in that state - but the shape
+is general, the first migration is the one most likely to be edited, and nothing in
+the file would have said so.
+
+**Three options were on the table and the user picked the third.** Make the create
+path idempotent (`CREATE ... IF NOT EXISTS` everywhere, and a sixth migration that
+re-runs the index statements); add a migration 6 that creates just the two indexes;
+or have `vcw migrate` ask the project's own data dictionary what it holds and report
+the difference. The user's reasoning: *"IF NOT EXISTS workable for some things but
+dictionary lookups give us a more granular test facility."* It is the only one of the
+three that answers the general question rather than this instance of it, and the only
+one that would catch the *next* edit to `SCHEMA_V1` without anybody remembering to
+write a migration for it.
+
+`migrate::expected` applies the whole migration set to an in-memory database and reads
+`sqlite_master` back; `migrate::drift` reads the real project's `sqlite_master` and
+compares. The comparison is not on the stored text. SQLite stores a `CREATE` statement
+verbatim, comments and indentation included, and the DDL in `schema.rs` is commented
+line by line - so the first run against the real file reported `differs table captures`
+and `differs table capture_blocks`, both of which were somebody rewording a comment
+months ago. `migrate::canonical` strips `--` comments and collapses
+whitespace, and both false positives went away. It is deliberately not an SQL parser:
+a `--` inside a string literal would be mangled, no statement in `schema.rs` has one,
+and the alternative - `PRAGMA table_info` per object - cannot see a `CHECK`, a `UNIQUE`
+or the expression an index is on.
+
+The verb **reports and does not repair**, and the report carries the remedy:
+
+```text
+The schema version is not the whole story. This project's own
+dictionary differs from the one this build defines:
+
+  missing     index sampleblocks_levels
+              CREATE INDEX sampleblocks_levels ON sampleblocks (blockid, summin, summax, sumrms)
+  missing     index sampleblocks_summary256
+              CREATE INDEX sampleblocks_summary256 ON sampleblocks (blockid, summin, summax, sumrms, summary256)
+
+A migration cannot fix this: every migration this project names did
+run. Nothing here is written for you. An object VCW did not make is
+not VCW's to remove, and each statement above restores one that VCW
+did. `--json` carries each statement whole.
+```
+
+Verified on a copy of the real soak file, end to end:
+`vcw migrate` applied 2, 3, 4 and 5, then printed exactly the two lines above;
+`vcw migrate --json | jq -r '.drift[].sql + ";"' | sqlite3 live.vcw` - the one-liner
+the user guide now gives - cleared the drift; and `vcw waveform`, which before that
+answered with a SQL error, drew the capture at **summary256, read in 0.757 ms**. A
+freshly created project reports nothing, which also proves `Project::create` and the
+migration path agree.
+
+Two things the report deliberately does not do. It does not run on a project that is
+not yet current, because the answer there is the migration that is about to run and
+listing every §29 table as missing would bury anything that mattered - a dry run on a
+v1 project says *"The dictionary check runs once the project is current."* instead. And
+it never writes: an object VCW did not create is not VCW's to drop, which is why
+`not ours` is a category in the report rather than a cleanup.
+
+Five tests, and the three that are about the dictionary confirmed able to fail on
+purpose by stubbing `drift` to return nothing. The other two stay green under the stub
+and should: one is the canonical comparison, which is pure text, and the other asserts
+an *absence* - that an old project is not asked. The unit tests cover a dropped index,
+an object nobody here defines, and a reworded comment; the CLI test drops `sampleblocks_summary256`
+from a project this build wrote, asserts the verb still exits zero because drift is a
+statement about the file and not a failure of the verb, takes the statement out of
+`--json`, runs it, and asserts the drift is gone.
+
+One gate finding on the way through, and it belongs to the documentation rather than
+the code: `every_command_line_in_the_user_guide_is_one_the_cli_accepts` reads every
+word after `vcw` on a fenced line as an argument, and the remedy the guide now gives is
+a **pipeline** - so it reported that `-r` is not a flag of `vcw migrate`, which is true
+and not the point. The extractor now stops at the first `|`, because what follows it
+belongs to `jq` or `sqlite3`. Confirmed both ways: a bad flag written *before* the pipe
+still fails the test.
+
+Gate green across all seventeen legs at **1356 tests**, up from 1350, 23 ignored, 243
+in the frontend, zero em dashes.

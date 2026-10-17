@@ -165,6 +165,145 @@ pub fn apply(conn: &mut Connection, set: &[Migration]) -> Result<Vec<u32>> {
     Ok(applied)
 }
 
+/// How one schema object in a project differs from the one this build defines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum How {
+    /// This build defines it and the project has not got it. Carries the DDL
+    /// that would create it, taken from the dictionary rather than written down.
+    Missing(String),
+    /// The project has it and this build does not define it.
+    Unexpected,
+    /// Both have it, under different definitions.
+    Differs {
+        /// What this build's migrations produce.
+        expected: String,
+        /// What the project's dictionary says.
+        found: String,
+    },
+}
+
+/// One object a project and this build disagree about. See [`drift`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Drift {
+    /// `sqlite_master.type`: `table`, `index`, `trigger` or `view`.
+    pub kind: String,
+    /// The object's name.
+    pub name: String,
+    /// Which way it differs.
+    pub how: How,
+}
+
+/// A stored `CREATE` statement reduced to the part that is the schema.
+///
+/// The DDL in `schema.rs` is commented line by line and SQLite stores the
+/// statement verbatim, comments and indentation included. Two projects can
+/// therefore hold the same table under different text because somebody reworded
+/// a comment - and both of `captures` and `capture_blocks` have been reworded
+/// since the schema was first written, so a raw comparison reports two false
+/// differences on every project old enough to matter. Comments and whitespace
+/// come out; what is left is the columns, the constraints and their order.
+///
+/// Not an SQL parser and not trying to be: a `--` inside a string literal would
+/// be mangled, and no statement in `schema.rs` has one. The alternative is
+/// `PRAGMA table_info` per object, which cannot see a `CHECK`, a `UNIQUE` or the
+/// expression an index is on.
+#[must_use]
+pub fn canonical(sql: &str) -> String {
+    sql.lines()
+        .map(|line| match line.find("--") {
+            Some(at) => &line[..at],
+            None => line,
+        })
+        .flat_map(str::split_whitespace)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Every schema object the migrations produce, as `(type, name, sql)`, sorted.
+///
+/// Built by running them, not by writing them down a second time. Objects SQLite
+/// manages itself - `sqlite_sequence`, the autoindexes, `sqlite_stat1` - are left
+/// out: they follow from the DDL that is compared, and `sqlite_sequence` in
+/// particular only materializes once a row is inserted, so a project with data
+/// would otherwise always look different from a freshly built one.
+pub fn expected(set: &[Migration]) -> Result<Vec<(String, String, String)>> {
+    let mut conn = Connection::open_in_memory()?;
+    apply(&mut conn, set)?;
+    Ok(dictionary(&conn)?)
+}
+
+/// The project's own schema objects, in the same shape as [`expected`].
+fn dictionary(conn: &Connection) -> rusqlite::Result<Vec<(String, String, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT type, name, COALESCE(sql, '') FROM sqlite_master
+         WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name",
+    )?;
+    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+    rows.collect()
+}
+
+/// What a project's data dictionary says that this build's schema does not, or
+/// the other way round.
+///
+/// `user_version` records which migrations *ran*. It does not record what they
+/// produced, and the two can part company: `MIGRATIONS[0]` **is** `SCHEMA_V1`,
+/// which is what stops the create path and the upgrade path drifting - but
+/// migration 1 only ever runs against an empty database, so an edit to
+/// `SCHEMA_V1` reaches every project made afterwards and no project made before.
+/// One such edit has happened: two covering indexes were added to the waveform
+/// tables in September 2026. A project written the week before migrates to the
+/// current version, is current by every version number in it, and still answers
+/// `no such index` when the pyramid is read. Nothing in `schema_migrations` can
+/// say so, because every migration it names did run.
+///
+/// So this asks the dictionary instead. That is also why it reports object by
+/// object rather than returning a yes or a no: a missing covering index is a
+/// slow query, a missing table is a verb that cannot run, and an object nobody
+/// here defines is somebody else's and not ours to touch. Only the caller can
+/// weigh those, so each one is named, and [`How::Missing`] carries the statement
+/// that would create it.
+///
+/// Comparison is on [`canonical`] text: the statement with its comments and
+/// indentation taken out. It can be that literal because the migrated path and
+/// the create path execute the same statements in the same order, so a project
+/// built by migration and one built fresh hold the same columns in the same
+/// order. What it must not be is *exact*, because the comments in `schema.rs`
+/// get reworded and a difference in prose is not a difference in schema.
+pub fn drift(conn: &Connection, set: &[Migration]) -> Result<Vec<Drift>> {
+    let expected = expected(set)?;
+    let found = dictionary(conn)?;
+    let mut out = Vec::new();
+
+    for (kind, name, sql) in &expected {
+        match found.iter().find(|(k, n, _)| k == kind && n == name) {
+            None => out.push(Drift {
+                kind: kind.clone(),
+                name: name.clone(),
+                how: How::Missing(sql.clone()),
+            }),
+            Some((_, _, theirs)) if canonical(theirs) != canonical(sql) => out.push(Drift {
+                kind: kind.clone(),
+                name: name.clone(),
+                how: How::Differs {
+                    expected: sql.clone(),
+                    found: theirs.clone(),
+                },
+            }),
+            Some(_) => {}
+        }
+    }
+    for (kind, name, _) in &found {
+        if !expected.iter().any(|(k, n, _)| k == kind && n == name) {
+            out.push(Drift {
+                kind: kind.clone(),
+                name: name.clone(),
+                how: How::Unexpected,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// The highest version `set` can produce.
 pub fn target_version(set: &[Migration]) -> u32 {
     set.iter().map(|m| m.version).max().unwrap_or(0)
@@ -177,6 +316,73 @@ mod tests {
     #[test]
     fn the_migration_set_reaches_the_declared_schema_version() {
         assert_eq!(target_version(MIGRATIONS), crate::schema::SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn a_project_the_migrations_built_has_no_drift() {
+        let mut conn = Connection::open_in_memory().expect("in memory");
+        apply(&mut conn, MIGRATIONS).expect("apply");
+        assert_eq!(drift(&conn, MIGRATIONS).expect("drift"), []);
+    }
+
+    #[test]
+    fn drift_names_the_object_and_carries_the_statement_that_restores_it() {
+        // The shape of the real case: `SCHEMA_V1` grew two covering indexes in
+        // September 2026, and migration 1 only ever runs against an empty
+        // database, so a project written the week before is current by every
+        // version number in it and has neither index. Simulated here by dropping
+        // one, because the file that proves it is a pre-release soak fixture.
+        let mut conn = Connection::open_in_memory().expect("in memory");
+        apply(&mut conn, MIGRATIONS).expect("apply");
+        conn.execute_batch("DROP INDEX sampleblocks_summary256;")
+            .expect("drop the index");
+
+        let found = drift(&conn, MIGRATIONS).expect("drift");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].kind, "index");
+        assert_eq!(found[0].name, "sampleblocks_summary256");
+        let How::Missing(sql) = &found[0].how else {
+            panic!("expected a missing index, got {:?}", found[0].how)
+        };
+
+        // The statement is the remedy, not a description of one: run it and the
+        // drift is gone. A hand-written list of expected objects could not make
+        // this claim, which is the argument for asking the dictionary.
+        conn.execute_batch(sql).expect("the carried statement runs");
+        assert_eq!(drift(&conn, MIGRATIONS).expect("drift"), []);
+    }
+
+    #[test]
+    fn rewording_a_comment_is_not_a_schema_difference() {
+        // Both `captures` and `capture_blocks` have had their comments reworded
+        // since the schema was first written, and SQLite stores a CREATE statement
+        // verbatim. A raw text comparison therefore reports two differences on
+        // every project written before those edits - which is every project this
+        // check exists for.
+        let then = "CREATE TABLE t (\n  -- the old wording\n  a INTEGER NOT NULL\n)";
+        let now = "CREATE TABLE t (\n    -- a much longer and better wording, -- even\n    a INTEGER NOT NULL\n)";
+        assert_eq!(canonical(then), canonical(now));
+        assert_eq!(canonical(then), "CREATE TABLE t ( a INTEGER NOT NULL )");
+
+        // And it still sees a column.
+        let later = "CREATE TABLE t (a INTEGER NOT NULL, b TEXT)";
+        assert_ne!(canonical(then), canonical(later));
+    }
+
+    #[test]
+    fn an_object_nobody_here_defines_is_reported_rather_than_ignored() {
+        // Somebody else's index on our table. It is not ours to remove - another
+        // tool may depend on it - but a dictionary comparison that stayed quiet
+        // about it would be a comparison in one direction only.
+        let mut conn = Connection::open_in_memory().expect("in memory");
+        apply(&mut conn, MIGRATIONS).expect("apply");
+        conn.execute_batch("CREATE INDEX theirs ON sampleblocks (blockid);")
+            .expect("their index");
+
+        let found = drift(&conn, MIGRATIONS).expect("drift");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].name, "theirs");
+        assert_eq!(found[0].how, How::Unexpected);
     }
 
     #[test]

@@ -50,6 +50,16 @@
 //! measurement and not the same sentence twice. `migrate_from_cli` holds them to
 //! each other.
 //!
+//! # What the version number cannot say
+//!
+//! `user_version` records which migrations ran, not what they produced, and the
+//! two can part company - see [`migrate::drift`]. So the verb ends by asking the
+//! project's own data dictionary what it actually contains, which is the only
+//! question that catches an object a current, fully migrated file is missing. It
+//! reports rather than repairs: a missing covering index is a slow query, a
+//! missing table is a verb that cannot run, and an index nobody here defines
+//! belongs to whoever made it.
+//!
 //! # No backup
 //!
 //! Decided rather than overlooked. A migration cannot half-apply - each step is
@@ -63,6 +73,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
+use vcw_project::migrate::{Drift, How};
 use vcw_project::{MIGRATIONS, Project, migrate};
 
 /// Everything the verb was asked to do.
@@ -89,7 +100,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 
     // Read-only, because opening for writing is what performs the migration.
     // A project from the future is refused here, by `identify`, and says so.
-    let (found, planned) = {
+    let (found, planned, drift) = {
         let project = Project::open_read_only(&args.project)
             .with_context(|| format!("opening {}", args.project.display()))?;
         let found = project.schema_version()?;
@@ -100,21 +111,32 @@ pub(crate) fn run(args: &Args) -> Result<()> {
                 description: m.description.to_owned(),
             })
             .collect();
+        // Only worth asking of a project that is already current. On an older
+        // one the dictionary is of course missing everything the pending
+        // migrations are about to create, and saying so would bury the one
+        // object that matters under the schema it already knows is coming.
+        let drift = if planned.is_empty() {
+            Some(migrate::drift(project.conn(), MIGRATIONS)?)
+        } else {
+            None
+        };
         project.close()?;
-        (found, planned)
+        (found, planned, drift)
     };
     let target = migrate::target_version(MIGRATIONS);
 
     if planned.is_empty() {
         // Exit 0. "There was nothing to do" is a successful answer to "bring
         // this up to date", and a script that runs this before every session
-        // should not have to special-case the ordinary outcome.
-        print(args, found, target, &planned, None);
+        // should not have to special-case the ordinary outcome. Drift is
+        // reported the same way and for the same reason: it is a statement
+        // about the file, not a failure of the verb.
+        print(args, found, target, &planned, None, drift.as_deref());
         return Ok(());
     }
 
     if args.dry_run {
-        print(args, found, target, &planned, None);
+        print(args, found, target, &planned, None, drift.as_deref());
         return Ok(());
     }
 
@@ -122,6 +144,9 @@ pub(crate) fn run(args: &Args) -> Result<()> {
         .with_context(|| format!("upgrading {}", args.project.display()))?;
     let reached = project.schema_version()?;
     let applied = recorded_since(project.conn(), found)?;
+    // Re-asked after the write: the migrations that just ran are the ones most
+    // likely to have changed the answer.
+    let drift = migrate::drift(project.conn(), MIGRATIONS)?;
     project.close()?;
 
     if reached != target {
@@ -130,7 +155,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
             args.project.display()
         );
     }
-    print(args, found, reached, &planned, Some(&applied));
+    print(args, found, reached, &planned, Some(&applied), Some(&drift));
     Ok(())
 }
 
@@ -156,18 +181,33 @@ fn recorded_since(conn: &vcw_project::Connection, found: u32) -> Result<Vec<Step
 ///
 /// `applied` present means the run was real; the body above it is identical
 /// either way, which is the point - a dry run is the real run's own sentence.
-fn print(args: &Args, found: u32, target: u32, planned: &[Step], applied: Option<&[Step]>) {
+fn print(
+    args: &Args,
+    found: u32,
+    target: u32,
+    planned: &[Step],
+    applied: Option<&[Step]>,
+    drift: Option<&[Drift]>,
+) {
     if args.json {
-        print_json(args, found, target, planned, applied);
+        print_json(args, found, target, planned, applied, drift);
     } else {
-        print_human(args, found, target, planned, applied);
+        print_human(args, found, target, planned, applied, drift);
     }
 }
 
-fn print_human(args: &Args, found: u32, target: u32, planned: &[Step], applied: Option<&[Step]>) {
+fn print_human(
+    args: &Args,
+    found: u32,
+    target: u32,
+    planned: &[Step],
+    applied: Option<&[Step]>,
+    drift: Option<&[Drift]>,
+) {
     let path = args.project.display();
     if planned.is_empty() {
         println!("{path}  schema {found}, already current");
+        print_drift(drift);
         return;
     }
 
@@ -184,9 +224,68 @@ fn print_human(args: &Args, found: u32, target: u32, planned: &[Step], applied: 
         None => println!("dry run - nothing was written"),
         Some(done) => println!("applied {} - {path} is now schema {target}", versions(done)),
     }
+    print_drift(drift);
 }
 
-fn print_json(args: &Args, found: u32, target: u32, planned: &[Step], applied: Option<&[Step]>) {
+/// Says what the dictionary holds that the version number does not.
+///
+/// `None` is "not asked", which is the honest answer on a project that still has
+/// migrations to run. Silent on an empty list, because the ordinary outcome is
+/// no outcome and a line reading "no drift" after every run trains people to
+/// skip the paragraph that matters.
+fn print_drift(drift: Option<&[Drift]>) {
+    let Some(drift) = drift else {
+        println!();
+        println!("The dictionary check runs once the project is current.");
+        return;
+    };
+    if drift.is_empty() {
+        return;
+    }
+    println!();
+    println!("The schema version is not the whole story. This project's own");
+    println!("dictionary differs from the one this build defines:");
+    println!();
+    for item in drift {
+        match &item.how {
+            How::Missing(sql) => {
+                println!("  missing     {} {}", item.kind, item.name);
+                println!("              {}", one_line(sql));
+            }
+            How::Unexpected => println!("  not ours    {} {}", item.kind, item.name),
+            How::Differs { .. } => println!("  differs     {} {}", item.kind, item.name),
+        }
+    }
+    println!();
+    println!("A migration cannot fix this: every migration this project names did");
+    println!("run. Nothing here is written for you. An object VCW did not make is");
+    println!("not VCW's to remove, and each statement above restores one that VCW");
+    println!("did. `--json` carries each statement whole.");
+}
+
+/// A stored `CREATE` statement as one readable line.
+///
+/// `migrate::canonical` is already the statement without its comments, which is
+/// also the form that fits on a line; all this adds is a cut for anything still
+/// long enough to wrap. An index fits. A table does not, and was never going to
+/// be pasted out of a report anyway - `--json` has it whole.
+fn one_line(sql: &str) -> String {
+    let flat = migrate::canonical(sql);
+    if flat.chars().count() <= 100 {
+        return flat;
+    }
+    let cut: String = flat.chars().take(97).collect();
+    format!("{cut}...")
+}
+
+fn print_json(
+    args: &Args,
+    found: u32,
+    target: u32,
+    planned: &[Step],
+    applied: Option<&[Step]>,
+    drift: Option<&[Drift]>,
+) {
     let steps = |set: &[Step]| -> Vec<serde_json::Value> {
         set.iter()
             .map(|s| serde_json::json!({"version": s.version, "description": s.description}))
@@ -200,6 +299,14 @@ fn print_json(args: &Args, found: u32, target: u32, planned: &[Step], applied: O
         "pending": steps(planned),
         "applied": applied.map(steps),
         "dry_run": args.dry_run,
+        "drift": drift.map(|set| set.iter().map(|item| {
+            let (how, sql) = match &item.how {
+                How::Missing(sql) => ("missing", Some(sql.clone())),
+                How::Unexpected => ("unexpected", None),
+                How::Differs { found, .. } => ("differs", Some(found.clone())),
+            };
+            serde_json::json!({"kind": item.kind, "name": item.name, "how": how, "sql": sql})
+        }).collect::<Vec<_>>()),
     });
     println!("{out}");
 }

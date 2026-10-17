@@ -153,7 +153,8 @@ fn words(line: &str) -> Vec<String> {
 ///
 /// A line's trailing `# comment` is dropped, an `ENV=value` prefix is ignored,
 /// and a line with no bare `vcw` word in it - `export VCW_CONTACT=...` - is not
-/// a command and is skipped.
+/// a command and is skipped. A pipeline stops at the first `|`: what follows it
+/// belongs to `jq` or `sqlite3`, and `-r` is not a flag of `vcw migrate`.
 fn documented() -> Vec<(String, Vec<String>)> {
     let text = guide();
     let mut lines = Vec::new();
@@ -171,7 +172,12 @@ fn documented() -> Vec<(String, Vec<String>)> {
         let Some(at) = parts.iter().position(|word| word == "vcw") else {
             continue;
         };
-        lines.push((line.trim().to_owned(), parts[at + 1..].to_vec()));
+        let rest = &parts[at + 1..];
+        let end = rest
+            .iter()
+            .position(|word| word == "|")
+            .unwrap_or(rest.len());
+        lines.push((line.trim().to_owned(), rest[..end].to_vec()));
     }
     assert!(
         lines.len() > 20,
