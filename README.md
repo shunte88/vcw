@@ -177,7 +177,7 @@ The desktop app has a separate Cargo workspace, so the root build does not build
 
 VCW is the successor to [VRipr](https://github.com/shunte88/vripr), which analyzed recordings made in Audacity. VCW handles recording itself and can import supported Audacity projects.
 
-Two weeks ago, VCW was a requirements document. Since then, the repository has seen almost 1,000 clone operations from 199 unique cloners, without any promotion from me. Seeing that interest while the tool is still taking shape means a lot. Those figures describe the roughly two-week development period leading up to this alpha introduction.
+Three weeks ago, VCW was a requirements document. Since then the repository has seen almost 2,000 clone operations from more than 240 unique cloners, nearly all of it before I had posted about the project anywhere. Seeing that interest while the tool is still taking shape means a lot.
 
 Our goal is to make VCW the de facto tool for vinyl capture across platforms: a complete workstation for listeners preserving and cataloging their collections, with reusable services for people building their own workflows and interfaces.
 
