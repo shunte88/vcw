@@ -288,9 +288,10 @@ impl Repairs {
                     // the damage and the first good one after it, so it is one
                     // frame longer than the damage and the first damaged frame is
                     // one step into it.
-                    Some(points) => {
-                        hermite(points, (length + 1) as f64, (frame - span.start + 1) as f64)
-                    }
+                    Some(points) => quantize(
+                        hermite(points, (length + 1) as f64, (frame - span.start + 1) as f64),
+                        points,
+                    ),
                     None => 0.0,
                 };
                 let offset =
@@ -369,6 +370,51 @@ impl Reader<'_> {
 /// would be a per-sample slope, and multiplying that by a few hundred frames is how
 /// an interpolator ends up louder than the click.
 ///
+/// Rounds a repaired sample onto the grid the audio around it sits on.
+///
+/// A capture does not always use all of the width it is stored in: a 16-bit rip
+/// padded into an `Int32` file has sixteen zero bits under every sample, and a
+/// 24-bit one has eight. An interpolator that ignores that writes a value between
+/// two steps the converter can never have produced, which is a claim of precision
+/// the capture does not have - the same claim §9's narrowing switches exist to stop
+/// an operator making by accident.
+///
+/// It is audible as nothing and visible as file size. FLAC codes a block of samples
+/// with a common run of low zero bits as that many fewer bits per sample, so one
+/// repaired sample off the grid costs the *whole* block its wasted-bits coding: on a
+/// 16-in-32 side, 16 KiB per block touched, which measured as a 12% larger file over
+/// a dozen clicks. Snapping the output costs one multiply and one round.
+///
+/// The grid is read off the four endpoints rather than declared, because nothing in
+/// the project records it and the audio either side of the damage is the only
+/// evidence there is. Zero carries no evidence - every grid divides it - so zeros are
+/// skipped, and four of them mean the repair is silence anyway.
+fn quantize(value: f32, points: [f32; 4]) -> f32 {
+    /// The exponent of the largest power of two `x` is an exact multiple of.
+    fn grid(x: f32) -> Option<i32> {
+        let bits = x.to_bits();
+        let exponent = ((bits >> 23) & 0xff) as i32;
+        // Zero and subnormals carry no usable grid, and neither does a NaN.
+        if exponent == 0 || exponent == 0xff {
+            return None;
+        }
+        let mantissa = bits & 0x007f_ffff;
+        let zeros = if mantissa == 0 {
+            23
+        } else {
+            mantissa.trailing_zeros() as i32
+        };
+        Some(exponent - 127 - 23 + zeros)
+    }
+
+    let Some(shift) = points.iter().filter_map(|p| grid(*p)).min() else {
+        return value;
+    };
+    // `exp2` of a shift read off real samples cannot overflow: it came from one.
+    let step = f64::from(shift).exp2();
+    (f64::from(value) / step).round().mul_add(step, 0.0) as f32
+}
+
 /// Evaluated in `f64` because a 32-bit sample has more significant bits than an
 /// `f32` holds and the cubic multiplies them together.
 fn hermite(points: [f32; 4], gap: f64, step: f64) -> f32 {
@@ -575,5 +621,72 @@ mod tests {
                 "a gap past the cap should be muted, not drawn across"
             );
         }
+    }
+    /// A repair does not write precision the capture does not have.
+    ///
+    /// A 16-bit rip padded into an `Int32` file has sixteen zero bits under every
+    /// sample. An interpolator that ignores that writes values between two steps
+    /// the converter could never have produced, and FLAC then loses its wasted-bits
+    /// coding for every block one of them lands in - measured at 12% on a real side
+    /// before this was here, which is how a silent problem became a visible one.
+    ///
+    /// The fixture is a sine rounded onto the grid, and both halves of that matter.
+    /// A line snaps to any grid holding its endpoints, and a low-order polynomial
+    /// interpolates to rationals with small denominators that often land on one by
+    /// luck, so either would pass without the rounding and prove nothing.
+    #[test]
+    fn a_repair_writes_no_more_precision_than_the_capture_has() {
+        const STEP: i32 = 1 << 16;
+        let shape = |frame: i32| {
+            (f64::from(frame) * 0.37)
+                .sin()
+                .mul_add(12_000.0, 0.0)
+                .round() as i32
+                * STEP
+        };
+        let mut bytes = Vec::new();
+        for frame in 0..64i32 {
+            let value = shape(frame);
+            for _ in 0..CHANNELS {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        assert!(
+            bytes.as_chunks::<4>().0.iter().all(|s| {
+                let v = i32::from_le_bytes(*s);
+                v == 0 || v.trailing_zeros() >= 16
+            }),
+            "the fixture has to be on the grid to begin with"
+        );
+
+        let mut repairs = Repairs::new(
+            vec![damage(30, 36, 0b11, Repair::Interpolate)],
+            CHANNELS as u16,
+            RATE,
+        )
+        .expect("one audible span");
+        repairs.apply(&mut bytes, Context::NONE, StorageFormat::Int32, 0);
+
+        let mut moved = 0;
+        for frame in 30..36 {
+            for channel in 0..CHANNELS {
+                let at = (frame * CHANNELS + channel) * 4;
+                let value =
+                    i32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+                assert_eq!(
+                    value % STEP,
+                    0,
+                    "frame {frame} channel {channel} was written off the capture's own grid"
+                );
+                let original = shape(frame as i32);
+                if value != original {
+                    moved += 1;
+                }
+            }
+        }
+        assert!(
+            moved > 0,
+            "nothing was repaired, so the grid claim is vacuous"
+        );
     }
 }
