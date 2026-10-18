@@ -14,7 +14,7 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
-## 0.3.5-alpha
+## 0.3.6-alpha
 
 2026-10-18
 

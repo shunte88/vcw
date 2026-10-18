@@ -8424,7 +8424,7 @@ Steps 5, 6 and 7 remain: the repair stage with the straddling-defect decision fr
 section 4, the waveform overlay and per-defect veto, and `VCW_PROCESSING` with the
 bit-perfect refutation moved onto the chain predicate.
 
-## 2026-10-18, 0.3.5-alpha: a second kind of import, and a threshold that was measured
+## 2026-10-18, 0.3.6-alpha: a second kind of import, and a threshold that was measured
 
 Three things a person can see, and one they cannot.
 
@@ -8451,3 +8451,18 @@ what made the fix measurable, which is why the two landed together.
 
 Gate green across all seventeen legs at **1367 tests**, 23 ignored, 243 in the
 frontend, zero em dashes.
+
+**It went out as 0.3.6 and not 0.3.5, and the reason is worth the paragraph.**
+The `v0.3.5-alpha` tag was cut on a green branch round and its own tag round
+went red on the `tauri shell` leg with all 243 frontend tests passing: a React
+root that `Waveform.test.tsx` mounted and never unmounted left work queued on a
+macrotask, which ran after Vitest had torn jsdom down and threw
+`window is not defined`. The same job had passed on the same commit an hour
+earlier, so it is a race by definition - and stepping over it on that basis
+would have been wrong, because the cause was this repository's own test hygiene
+and not the weather. It is fixed at `caedece`; ten other test files still mount
+a root they never unmount and are latent for the same reason. The draft was
+deleted rather than published, and the version moved on rather than the tag
+moving under it, because a tag that has already been pushed is not a thing to
+re-point. **A red leg that names a file in this repository gets read before it
+gets excused.**
