@@ -61,10 +61,10 @@
 
 use vcw_contract::command::{
     CaptureProvenance, Lock, Marker, Merge, NewTrack, Placement, ReleaseEdit, Removal, SideEdit,
-    Split, TrackEdit,
+    Split, TrackEdit, Veto,
 };
 use vcw_project::track::NewBoundary;
-use vcw_project::{Connection, Project, release, session, side, track};
+use vcw_project::{Connection, Project, defect, release, session, side, track};
 use vcw_types::SampleRate;
 
 use crate::state::{Error, Shell};
@@ -168,6 +168,27 @@ pub fn lock_marker(shell: &Shell, lock: Lock) -> Result<(), Error> {
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     track::set_lock(&mut project, lock.boundary_id, lock.locked)?;
+    project.close()?;
+    Ok(())
+}
+
+/// Sets what a defect's repair does, or undoes it. WP-30 §6's veto.
+///
+/// The row is locked by the write and not by this command: choosing a repair,
+/// the veto included, is a decision §24 reserves to a person, and a decision the
+/// next detection pass silently undid would not be one.
+/// [`vcw_project::defect::set_repair`] owns that rule because it is a property of
+/// the project rather than of a window, and a second spelling of it here is
+/// exactly the drift §24's note warns about.
+///
+/// # Errors
+///
+/// [`Error::NoProject`] with nothing open, and [`Error::Project`] if the defect
+/// is absent or the write fails.
+pub fn veto_defect(shell: &Shell, veto: Veto) -> Result<(), Error> {
+    let path = shell.project_path()?;
+    let mut project = Project::open(&path)?;
+    defect::set_repair(&mut project, veto.defect_id, veto.repair.into())?;
     project.close()?;
     Ok(())
 }

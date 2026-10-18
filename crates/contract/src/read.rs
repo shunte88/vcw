@@ -32,7 +32,7 @@
 
 //! Project rows assembled into the view models a UI binds to (§35).
 //!
-//! Five readers, and they are here rather than in the shell for the reason the
+//! Six readers, and they are here rather than in the shell for the reason the
 //! crate exists: none of them is a single row. A track's position is §29's
 //! numbering rule applied to the side letter and the running sequence, its
 //! seconds are frames divided by the rate the side's *capture* ran at, and its
@@ -53,7 +53,7 @@
 use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
-use vcw_project::{Result, release, session, side, track};
+use vcw_project::{Result, defect, release, session, side, track};
 use vcw_types::SampleRate;
 
 use crate::view;
@@ -154,6 +154,31 @@ pub fn boundaries(conn: &Connection) -> Result<Vec<view::Boundary>> {
         for boundary in track::boundaries_of(conn, record.id)? {
             let promoted = used.contains(&boundary.id);
             out.push(view::Boundary::of(record.side, &boundary, rate, promoted));
+        }
+    }
+    Ok(out)
+}
+
+/// Every defect in every capture, in timeline order (WP-30 §6).
+///
+/// Keyed by capture rather than by side, because that is how the rows are
+/// addressed and because two faces can share one capture, so a side is not an
+/// extent to hang them off. The overlay draws them over the capture's waveform,
+/// which is the same timeline.
+///
+/// All of them, vetoed included. A veto is `repair = 'none'` on a row that stays,
+/// so a reader that filtered to the audible ones would hide exactly the decisions
+/// a person made and leave them nothing to reverse.
+///
+/// The rate comes from the capture's own session row, read once per capture: this
+/// is a few hundred rows at the shipped threshold and a few thousand past it, and
+/// a rate lookup per defect would be the only expensive thing about it.
+pub fn defects(conn: &Connection) -> Result<Vec<view::Defect>> {
+    let mut out = Vec::new();
+    for record in session::all(conn)? {
+        let rate = record.info.rate;
+        for row in defect::of_capture(conn, record.id)? {
+            out.push(view::Defect::of(&row, rate));
         }
     }
     Ok(out)

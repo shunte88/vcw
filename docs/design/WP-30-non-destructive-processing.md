@@ -403,6 +403,47 @@ to apply, analytic to decide. Worth noticing now, not worth designing now.
    are fused and therefore how long a gap the repair draws across, and that is a question
    for a listener and the step 6 overlay, not for an assertion.
 6. The waveform overlay and the per-defect veto.
+   **Done, 2026-10-18:** a defect is a span drawn over the audio it describes, and a
+   double-click on it flips `repair` between the detector's instruction and `'none'`.
+
+   The view mirrors the boundary view on purpose: `view::Defect` carries the frames, the
+   seconds, the channels, the repair and the evidence, and `read::defects` sends every
+   row including the vetoed ones - a veto is `repair = 'none'` on a row that stays, so a
+   view that filtered them out would make the one reversible decision in WP-30 the one
+   thing the window could not show. The reader is keyed by capture and not by side,
+   which is where it differs from every list beside it: §21 lets one recording hold two
+   faces, so a side is not an extent damage can be filtered by.
+
+   `ProvenanceName` was missing `Declick`, so every row the detector wrote reached the
+   window as `"unknown"`. The new `RepairName` has no `Unknown` to match it, and that is
+   deliberate rather than an omission: a provenance is a report and an unreadable one is
+   honestly unknown, where a repair is an *instruction* - offering a veto against a row
+   whose instruction the window could not read would be offering to change something it
+   cannot name.
+
+   The gesture is a double-click because every single-click gesture over the picture is
+   taken - cue, select, scrub, scroll, drag a boundary - and the two free modifiers are
+   both worse: Shift is the scrub, and Alt-drag belongs to the window manager on the
+   desktop this runs on. The hit test is by the gap to the span rather than by the
+   distance to its midpoint, which is the cheaper thing `nearestFrame` already does for
+   boundaries: zoomed in far enough to pick one span out of a cluster, a span is wide,
+   and the midpoint of one whose near edge is under the pointer can be half the picture
+   away. Zoomed out, where every defect is sub-pixel, the two agree.
+
+   Both colors are translucent, because a cluster has to read as a cluster - forty
+   overlapping marks must come out darker than one, which is the diagnosis section 6
+   says the drawing is for. A vetoed defect keeps its mark in the gray every rejected
+   thing on this picture is drawn in: a veto nobody can see is a veto nobody can undo.
+
+   **A minimum width, found in the window and not in a test.** The overlay was green at
+   seven unit tests and seventeen gate legs, and in the real window a veto looked like
+   nothing happening: a sub-pixel defect drew one pixel wide, and the second of the two
+   clicks under a double-click sets the cue, so the playhead landed on the mark that had
+   just changed color and covered it exactly. `DEFECT = 3` is the floor, and three is
+   the number because the playhead is one: it leaves a pixel of the mark showing either
+   side of the cue the gesture plants. Measured on screen over the 82.154 s defect, at
+   row 150 of a 1600x1000 window: before, x876-878 all `#552a2d`; at the veto, 876 the
+   playhead and 877-878 `#31353a`; with the cue moved off, all three gray.
 7. `VCW_PROCESSING`, and moving the bit-perfect refutation onto the chain predicate.
 
 ## What this does not build

@@ -4,7 +4,7 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  A drag that lands on a boundary moves it, rather than selecting across it.
+ *  A drag that lands on a boundary moves it, and a double-click vetoes a defect.
  *
  *  MIT License - see the header in any Rust source file for the full text.
  */
@@ -33,7 +33,7 @@ import {
 } from "vitest";
 
 import * as api from "../api";
-import type { Boundary, Capture, Track } from "../bindings/vcw";
+import type { Boundary, Capture, Defect, Track } from "../bindings/vcw";
 import { Waveform, type Region } from "./Waveform";
 
 /** Ten seconds at 48 kHz, drawn 800 CSS pixels wide. */
@@ -99,6 +99,27 @@ function track(id: number, start: number, end: number): Track {
   } as unknown as Track;
 }
 
+/** A defect over a stretch of seconds, repaired unless it has been vetoed. */
+function defect(id: number, from: number, to: number, audible: boolean): Defect {
+  return {
+    id,
+    captureId: 1,
+    startFrame: from * RATE,
+    endFrame: to * RATE,
+    startSeconds: from,
+    endSeconds: to,
+    frames: (to - from) * RATE,
+    channels: 3,
+    kind: "click",
+    confidence: 1,
+    provenance: "declick",
+    repair: audible ? "interpolate" : "none",
+    audible,
+    locked: false,
+    evidence: [],
+  } as unknown as Defect;
+}
+
 const capture = {
   id: 1,
   rate: RATE,
@@ -121,6 +142,7 @@ describe("taking hold of a boundary", () => {
   let moved: Mock<(boundaryId: number, seconds: number) => void>;
   let selected: Mock<(selection: Region | null) => void>;
   let cued: Mock<(seconds: number) => void>;
+  let vetoed: Mock<(defect: Defect) => void>;
   let canvas: HTMLCanvasElement;
   let root: Root;
   let host: HTMLDivElement;
@@ -152,6 +174,7 @@ describe("taking hold of a boundary", () => {
     moved = vi.fn();
     selected = vi.fn();
     cued = vi.fn();
+    vetoed = vi.fn();
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -162,6 +185,8 @@ describe("taking hold of a boundary", () => {
           view={{ captureId: 1, channel: 0, startFrame: 0, endFrame: null }}
           onView={() => {}}
           boundaries={[boundary(10, 2), boundary(11, 6)]}
+          defects={[defect(1, 8.5, 8.502, true), defect(2, 4, 4.002, false)]}
+          onVeto={vetoed}
           tracks={[track(1, 2, 6)]}
           playhead={0}
           playing={false}
@@ -244,5 +269,42 @@ describe("taking hold of a boundary", () => {
       press(canvas, "pointermove", at(9));
     });
     expect(canvas.title).toBe("");
+  });
+
+  // WP-30 §6: the chain is only non-destructive if the person can see what it
+  // will do and refuse one of them. Both halves are here, because a veto that
+  // cannot be read off the picture is a veto nobody will find: the tooltip
+  // names the gesture, and the gesture reaches the project.
+  it("says what a defect is and takes the veto back off it", async () => {
+    await act(async () => {
+      press(canvas, "pointermove", at(8.5));
+    });
+    expect(canvas.title).toBe(
+      "Damage at 00:00:08.500, 2 ms - repaired on the way out. Double-click to leave it as captured.",
+    );
+    await act(async () => {
+      press(canvas, "pointermove", at(4));
+    });
+    expect(canvas.title).toBe(
+      "Damage at 00:00:04.000, 2 ms - left as captured. Double-click to repair it.",
+    );
+
+    await act(async () => {
+      press(canvas, "dblclick", at(8.5));
+    });
+    expect(vetoed).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, audible: true }),
+    );
+  });
+
+  // The hit test is by the gap to the span, not by the distance to its
+  // midpoint, and nothing else in this file would notice the difference: at
+  // this zoom every defect is a thousandth of a pixel wide. A double-click on
+  // bare audio must not veto the nearest click half a second away.
+  it("vetoes nothing when the pointer is not on a defect", async () => {
+    await act(async () => {
+      press(canvas, "dblclick", at(7));
+    });
+    expect(vetoed).not.toHaveBeenCalled();
   });
 });

@@ -1251,6 +1251,12 @@ text = "Channel"
 ["waveform.columns"]
 text = "{columns} column(s)"
 
+["waveform.defect.repaired"]
+text = "Damage at {at}, {ms} ms - repaired on the way out. Double-click to leave it as captured."
+
+["waveform.defect.vetoed"]
+text = "Damage at {at}, {ms} ms - left as captured. Double-click to repair it."
+
 ["waveform.empty"]
 text = "Nothing captured yet."
 

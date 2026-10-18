@@ -198,6 +198,7 @@ impl Backend for Served {
             "captures" => done(vcw_shell::library::captures(shell)),
             "waveform" => done(vcw_shell::library::waveform(shell, args.get("zoom")?)),
             "boundaries" => done(vcw_shell::library::boundaries(shell)),
+            "defects" => done(vcw_shell::library::defects(shell)),
             // Settings and the library.
             "settings" => done(vcw_shell::config::settings(host)),
             "save_settings" => done(vcw_shell::config::save_settings(
@@ -218,6 +219,7 @@ impl Backend for Served {
             "place_marker" => done(vcw_shell::edit::place_marker(shell, args.get("placement")?)),
             "delete_marker" => done(vcw_shell::edit::delete_marker(shell, args.get("removal")?)),
             "lock_marker" => done(vcw_shell::edit::lock_marker(shell, args.get("lock")?)),
+            "veto_defect" => done(vcw_shell::edit::veto_defect(shell, args.get("veto")?)),
             "edit_track" => done(vcw_shell::edit::edit_track(shell, args.get("edit")?)),
             "set_provenance" => done(vcw_shell::edit::set_provenance(shell, args.get("stated")?)),
             "edit_release" => done(vcw_shell::edit::edit_release(shell, args.get("edit")?)),

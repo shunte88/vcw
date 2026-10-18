@@ -337,7 +337,9 @@ export type PhaseName = "idle" | "armed" | "recording" | "paused" | "stopped";
 
 export type EdgeName = "start" | "end";
 
-export type ProvenanceName = "silence" | "spectral-change" | "hmm" | "fingerprint" | "metadata-duration" | "release-topology" | "user" | "unknown";
+export type ProvenanceName = "silence" | "spectral-change" | "hmm" | "fingerprint" | "metadata-duration" | "release-topology" | "declick" | "user" | "unknown";
+
+export type RepairName = "interpolate" | "mute" | "none";
 
 export type CaptureStateName = "recording" | "finalised" | "interrupted" | "recovered" | "unknown";
 
@@ -493,6 +495,16 @@ boundaryId: number,
  * What to set it to.
  */
 locked: boolean, };
+
+export type Veto = {
+/**
+ * Which defect.
+ */
+defectId: number,
+/**
+ * What to do about it on the way out.
+ */
+repair: RepairName, };
 
 export type TrackEdit = {
 /**
@@ -1177,6 +1189,82 @@ locked: boolean,
  * `false` is the interesting case: a detected boundary that no track uses.
  */
 promoted: boolean,
+/**
+ * The measurements behind it.
+ */
+evidence: Array<Measurement>, };
+
+export type Defect = {
+/**
+ * Row id, for the veto.
+ */
+id: number,
+/**
+ * The capture the damage is in.
+ */
+captureId: number,
+/**
+ * First damaged frame, from the start of the capture.
+ */
+startFrame: number,
+/**
+ * One past the last damaged frame.
+ */
+endFrame: number,
+/**
+ * Where it starts, in seconds, divided by the capture's own rate.
+ */
+startSeconds: number,
+/**
+ * Where it ends, in seconds.
+ */
+endSeconds: number,
+/**
+ * How long the damage is, in frames.
+ *
+ * Sent rather than left as a subtraction because it is what a person sorts
+ * by: most of these are one or two frames and the long ones are the ones
+ * worth looking at, and an overlay too dense to click is still sortable.
+ */
+frames: number,
+/**
+ * Which channels are damaged, as a bitmask: bit 0 is channel 0.
+ *
+ * A click is damage to one groove wall far more often than both, so an
+ * overlay that drew every defect across both channels would be lying about
+ * half of them.
+ */
+channels: number,
+/**
+ * What kind of damage: `click`, `crackle`, `dropout`.
+ */
+kind: string,
+/**
+ * How sure the detector was, in `0.0..=1.0`.
+ */
+confidence: number,
+/**
+ * Which detector found it, or [`ProvenanceName::User`].
+ */
+provenance: ProvenanceName,
+/**
+ * What will be done about it on the way out.
+ */
+repair: RepairName,
+/**
+ * Whether this row changes the audio.
+ *
+ * `repair != none`, computed here rather than in the frontend so that the
+ * overlay's "vetoed" styling and the chain's own predicate cannot disagree
+ * about what a veto is.
+ */
+audible: boolean,
+/**
+ * Whether automatic analysis may change it (§24).
+ *
+ * Set by vetoing, because a veto a re-run undid would not be a veto.
+ */
+locked: boolean,
 /**
  * The measurements behind it.
  */

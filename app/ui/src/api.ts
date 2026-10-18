@@ -35,6 +35,7 @@ import type {
   CaptureProvenance,
   Credential,
   Curve,
+  Defect,
   Detect,
   Device,
   Export,
@@ -63,6 +64,7 @@ import type {
   TrackEdit,
   Transport,
   Update,
+  Veto,
   Walk,
   Waveform,
   Wire,
@@ -154,6 +156,17 @@ export function deleteMarker(removal: Removal): Promise<void> {
  */
 export function lockMarker(lock: Lock): Promise<void> {
   return invoke("lock_marker", { lock });
+}
+
+/**
+ * Sets what a defect's repair does, or undoes it (WP-30 §6).
+ *
+ * `none` is the veto. The row stays either way, so re-analysis does not
+ * propose the same damage again and the decision is reversible by sending the
+ * same command with `interpolate`.
+ */
+export function vetoDefect(veto: Veto): Promise<void> {
+  return invoke("veto_defect", { veto });
 }
 
 /**
@@ -344,6 +357,17 @@ export function waveform(zoom: Zoom): Promise<Waveform> {
 /** Every boundary, promoted into a track or not. */
 export function boundaries(): Promise<Boundary[]> {
   return invoke("boundaries");
+}
+
+/**
+ * Every defect found in the project, vetoed ones included (WP-30 §6).
+ *
+ * All of them, because a veto is a row that stays with its repair set to
+ * `none`: a list that showed only the audible ones would hide exactly the
+ * decisions a person made and leave nothing to reverse.
+ */
+export function defects(): Promise<Defect[]> {
+  return invoke("defects");
 }
 
 /** Every project in the library, newest first. */

@@ -173,6 +173,7 @@ pub fn typescript() -> String {
             decl::<crate::event::PhaseName>(),
             decl::<crate::event::EdgeName>(),
             decl::<crate::event::ProvenanceName>(),
+            decl::<crate::event::RepairName>(),
             decl::<crate::event::CaptureStateName>(),
         ],
     );
@@ -195,6 +196,7 @@ pub fn typescript() -> String {
             decl::<crate::command::Placement>(),
             decl::<crate::command::Removal>(),
             decl::<crate::command::Lock>(),
+            decl::<crate::command::Veto>(),
             decl::<crate::command::TrackEdit>(),
             decl::<crate::command::CaptureProvenance>(),
             decl::<crate::command::Walk>(),
@@ -231,6 +233,7 @@ pub fn typescript() -> String {
             decl::<crate::view::Side>(),
             decl::<crate::view::Track>(),
             decl::<crate::view::Boundary>(),
+            decl::<crate::view::Defect>(),
             decl::<crate::view::Measurement>(),
             decl::<crate::view::Project>(),
             decl::<crate::view::Listing>(),

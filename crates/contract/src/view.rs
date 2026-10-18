@@ -45,7 +45,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::event::{EdgeName, ProvenanceName};
+use crate::event::{EdgeName, ProvenanceName, RepairName};
 
 /// One channel's levels, in dBFS.
 ///
@@ -778,6 +778,101 @@ pub struct Boundary {
     pub promoted: bool,
     /// The measurements behind it.
     pub evidence: Vec<Measurement>,
+}
+
+/// A defect, as the waveform overlay and the veto need it (WP-30 §6).
+///
+/// `track_boundaries` has a view and so does this, and the two are deliberately
+/// alike: a click is the same kind of object as a boundary - something an analyzer
+/// proposed, at a position in a capture, with a confidence and a provenance, which
+/// a person may confirm, veto or lock. A boundary is a point and a defect is a
+/// span, and that is the whole difference.
+///
+/// There are far more of these than there are boundaries. A real side at the
+/// shipped threshold is a few hundred rows and an aggressive pass is a few
+/// thousand, so this type carries what an overlay draws and what a veto needs and
+/// nothing else. In particular it does not carry the audio around the damage: a
+/// person who wants to hear a click auditions the span, which is the existing
+/// [`crate::Audition::Region`] and not a new picture.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Defect {
+    /// Row id, for the veto.
+    pub id: i64,
+    /// The capture the damage is in.
+    pub capture_id: i64,
+    /// First damaged frame, from the start of the capture.
+    pub start_frame: u64,
+    /// One past the last damaged frame.
+    pub end_frame: u64,
+    /// Where it starts, in seconds, divided by the capture's own rate.
+    pub start_seconds: f64,
+    /// Where it ends, in seconds.
+    pub end_seconds: f64,
+    /// How long the damage is, in frames.
+    ///
+    /// Sent rather than left as a subtraction because it is what a person sorts
+    /// by: most of these are one or two frames and the long ones are the ones
+    /// worth looking at, and an overlay too dense to click is still sortable.
+    pub frames: u64,
+    /// Which channels are damaged, as a bitmask: bit 0 is channel 0.
+    ///
+    /// A click is damage to one groove wall far more often than both, so an
+    /// overlay that drew every defect across both channels would be lying about
+    /// half of them.
+    pub channels: u32,
+    /// What kind of damage: `click`, `crackle`, `dropout`.
+    pub kind: String,
+    /// How sure the detector was, in `0.0..=1.0`.
+    pub confidence: f32,
+    /// Which detector found it, or [`ProvenanceName::User`].
+    pub provenance: ProvenanceName,
+    /// What will be done about it on the way out.
+    pub repair: RepairName,
+    /// Whether this row changes the audio.
+    ///
+    /// `repair != none`, computed here rather than in the frontend so that the
+    /// overlay's "vetoed" styling and the chain's own predicate cannot disagree
+    /// about what a veto is.
+    pub audible: bool,
+    /// Whether automatic analysis may change it (§24).
+    ///
+    /// Set by vetoing, because a veto a re-run undid would not be a veto.
+    pub locked: bool,
+    /// The measurements behind it.
+    pub evidence: Vec<Measurement>,
+}
+
+impl Defect {
+    /// Builds the view from a row and its capture's rate.
+    #[must_use]
+    pub fn of(record: &vcw_project::defect::Defect, rate: vcw_types::SampleRate) -> Self {
+        let hz = f64::from(rate.hz()).max(1.0);
+        Self {
+            id: record.id,
+            capture_id: record.capture_id,
+            start_frame: record.start_frame,
+            end_frame: record.end_frame,
+            start_seconds: record.start_frame as f64 / hz,
+            end_seconds: record.end_frame as f64 / hz,
+            frames: record.frames(),
+            channels: record.channels,
+            kind: record.kind.clone(),
+            confidence: record.confidence,
+            provenance: record.provenance.into(),
+            repair: record.repair.into(),
+            audible: record.is_audible(),
+            locked: record.locked,
+            evidence: record
+                .evidence
+                .iter()
+                .map(|e| Measurement {
+                    name: e.name.clone(),
+                    value: e.value,
+                })
+                .collect(),
+        }
+    }
 }
 
 /// A project in the library, as the browser lists it (§34).

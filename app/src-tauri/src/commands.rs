@@ -53,12 +53,12 @@ use tauri::{AppHandle, Manager, State};
 use vcw_contract::command::{
     Arm, Audition, CaptureProvenance, Detect, Export, Lock, Marker, Merge, NewProject, NewTrack,
     Placement, Playback, ReleaseEdit, Removal, Search, Selection, SideEdit, Split, TrackEdit,
-    Transport, Walk, Zoom,
+    Transport, Veto, Walk, Zoom,
 };
 use vcw_contract::settings::{Credential, Settings};
 use vcw_contract::view::{
-    About, Accepted, Boundary, Candidate, Capture, Curve, Device, ExportPlan, Identified, Listing,
-    Project as ProjectRow, Release, Side, Track, Update, Waveform,
+    About, Accepted, Boundary, Candidate, Capture, Curve, Defect, Device, ExportPlan, Identified,
+    Listing, Project as ProjectRow, Release, Side, Track, Update, Waveform,
 };
 use vcw_shell::state::{Error, Shell};
 
@@ -132,6 +132,11 @@ pub(crate) fn waveform(shell: State<'_, Shell>, zoom: Zoom) -> Result<Waveform, 
 #[tauri::command]
 pub(crate) fn boundaries(shell: State<'_, Shell>) -> Result<Vec<Boundary>, Error> {
     vcw_shell::library::boundaries(&shell)
+}
+
+#[tauri::command]
+pub(crate) fn defects(shell: State<'_, Shell>) -> Result<Vec<Defect>, Error> {
+    vcw_shell::library::defects(&shell)
 }
 
 #[tauri::command]
@@ -214,6 +219,11 @@ pub(crate) fn delete_marker(shell: State<'_, Shell>, removal: Removal) -> Result
 #[tauri::command]
 pub(crate) fn lock_marker(shell: State<'_, Shell>, lock: Lock) -> Result<(), Error> {
     vcw_shell::edit::lock_marker(&shell, lock)
+}
+
+#[tauri::command]
+pub(crate) fn veto_defect(shell: State<'_, Shell>, veto: Veto) -> Result<(), Error> {
+    vcw_shell::edit::veto_defect(&shell, veto)
 }
 
 #[tauri::command]

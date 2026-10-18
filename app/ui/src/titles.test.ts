@@ -32,6 +32,7 @@ function project(over: Partial<ProjectState> = {}): ProjectState {
     sides: [],
     tracks: [],
     boundaries: [],
+    defects: [],
     release: null,
     ...over,
   };

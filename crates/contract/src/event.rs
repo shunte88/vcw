@@ -187,6 +187,9 @@ pub enum ProvenanceName {
     MetadataDuration,
     /// The side topology implies one (§29).
     ReleaseTopology,
+    /// An autoregressive residual stood out from the audio around it: a click
+    /// (WP-30). The one provenance that reports a span rather than a point.
+    Declick,
     /// A person said so, and analysis may not move it (§24).
     User,
     /// A detector this contract has not been taught about.
@@ -207,8 +210,49 @@ impl From<vcw_types::Provenance> for ProvenanceName {
             P::Fingerprint => Self::Fingerprint,
             P::MetadataDuration => Self::MetadataDuration,
             P::ReleaseTopology => Self::ReleaseTopology,
+            P::Declick => Self::Declick,
             P::User => Self::User,
             _ => Self::Unknown,
+        }
+    }
+}
+
+/// What a defect's repair instruction says to do (WP-30 §3).
+///
+/// Mirrored rather than re-exported for the reason [`ProvenanceName`] is: a
+/// repair added later must be named here on purpose. There is no `Unknown`,
+/// because unlike a provenance a repair is an *instruction* - a frontend that
+/// met one it did not recognize and drew it as an unlabeled chip would be
+/// offering a person a veto on something it cannot say the effect of.
+/// [`vcw_types::Repair::parse`] already refuses an unreadable column for the
+/// same reason, so a row that reaches here is one of these three.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum RepairName {
+    /// Predict the damaged samples from the audio around them.
+    Interpolate,
+    /// Silence them.
+    Mute,
+    /// Leave them alone. The veto (WP-30 §6).
+    None,
+}
+
+impl From<vcw_types::Repair> for RepairName {
+    fn from(repair: vcw_types::Repair) -> Self {
+        match repair {
+            vcw_types::Repair::Interpolate => Self::Interpolate,
+            vcw_types::Repair::Mute => Self::Mute,
+            vcw_types::Repair::None => Self::None,
+        }
+    }
+}
+
+impl From<RepairName> for vcw_types::Repair {
+    fn from(repair: RepairName) -> Self {
+        match repair {
+            RepairName::Interpolate => Self::Interpolate,
+            RepairName::Mute => Self::Mute,
+            RepairName::None => Self::None,
         }
     }
 }

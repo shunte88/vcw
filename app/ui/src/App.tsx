@@ -359,6 +359,11 @@ export function App(): React.JSX.Element {
   const held = new Set(naming.map((row) => row.id));
   const labels = project.tracks.filter((row) => held.has(row.sideId));
   const marks = project.boundaries.filter((row) => held.has(row.sideId));
+  // By capture and not by side, which is the one place this list differs from
+  // the two above it. A defect is damage to a recording, and §21 lets one
+  // recording hold two faces - so a side is not an extent a defect can be
+  // filtered by, and asking for the ones in this capture is the whole of it.
+  const damage = project.defects.filter((row) => row.captureId === capture?.id);
   const [view, setView] = useState<View | null>(null);
   // # The selection
   //
@@ -571,6 +576,7 @@ export function App(): React.JSX.Element {
               view={view}
               onView={setView}
               boundaries={marks}
+              defects={damage}
               tracks={labels}
               playhead={engine.playhead}
               playing={engine.playing}
@@ -588,6 +594,22 @@ export function App(): React.JSX.Element {
                     api.playback({ verb: "seek", to: seconds }),
                   );
                 }
+              }}
+              onVeto={(defect) => {
+                // A toggle, and the detector only ever writes `interpolate` -
+                // so restoring a vetoed row restores the instruction it had.
+                // The lock and the provenance come with it: `set_repair` in
+                // the project layer writes both, because a person who has
+                // judged one click has judged it and re-analysis may not
+                // unjudge it.
+                void store
+                  .run(() =>
+                    api.vetoDefect({
+                      defectId: defect.id,
+                      repair: defect.audible ? "none" : "interpolate",
+                    }),
+                  )
+                  .then(store.reload);
               }}
               onMoveBoundary={(boundaryId, to) => {
                 // `force`, and that is the point of this call rather than an

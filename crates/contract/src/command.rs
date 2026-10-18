@@ -817,6 +817,27 @@ pub struct Lock {
     pub locked: bool,
 }
 
+/// Set what a defect's repair does, or undo it (WP-30 §6).
+///
+/// The veto, and the thing that makes WP-30's design non-destructive rather than
+/// merely reversible-in-principle: a person who hears a snare hit where the
+/// detector heard a click sets this to `none` and the row stays, so re-analysis
+/// does not propose it again and the evidence for the decision is still readable.
+/// Setting it back to `interpolate` is the same command with the other value.
+///
+/// Explicit rather than a toggle, for the reason [`Lock`] is: two clicks in quick
+/// succession on a stale read must not end up with the opposite of what was meant.
+/// There are three states here and not two, so a toggle could not have expressed
+/// `mute` at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Veto {
+    /// Which defect.
+    pub defect_id: i64,
+    /// What to do about it on the way out.
+    pub repair: crate::event::RepairName,
+}
+
 /// Change a track's metadata (§31, §32).
 ///
 /// Every field is a three-state answer and the distinction matters:

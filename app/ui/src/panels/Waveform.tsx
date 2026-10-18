@@ -145,6 +145,20 @@
 // belongs to. The lane is only there when there are tracks, so a project with
 // nothing detected yet gives the picture the whole of its height.
 //
+// # Defects and the veto
+//
+// WP-30 §6: the chain is only non-destructive if a person can see what it is
+// about to do and say no to one of them. Seeing it is a translucent band over
+// the audio the repair will touch; saying no is a double-click on that band,
+// which flips `repair` between the detector's instruction and `'none'` and
+// leaves the row where it is.
+//
+// A double-click because every single-click gesture over the picture is
+// already taken and the two obvious modifiers are worse: Shift is the scrub,
+// and Alt-drag is the window manager's own on the desktop this runs on. The
+// cost is that the two clicks under it still cue, which is harmless - a person
+// about to listen to a repair wants the playhead there anyway.
+
 // The bar drag is coalesced to one change a frame: a pointer reports faster than
 // the screen draws, each change asks the shell for a fresh set of columns, and
 // the positions a drag passed through are not something anybody asked to see.
@@ -161,6 +175,7 @@ import * as api from "../api";
 import type {
   Boundary,
   Capture,
+  Defect,
   Track,
   Waveform as Peaks,
 } from "../bindings/vcw";
@@ -188,6 +203,11 @@ const COLORS = {
   peak: "#2b5f8f",
   center: "#2a2f39",
   playhead: "#f2c14e",
+  // Translucent, both of them: a defect is drawn over the audio it describes
+  // rather than instead of it, and a cluster has to read as a cluster - which
+  // it only does if forty of them stack up darker than one.
+  defect: "rgba(214, 90, 90, 0.35)",
+  vetoed: "rgba(138, 143, 153, 0.28)",
   promoted: "#7ec46f",
   rejected: "#8a8f99",
   locked: "#f2874e",
@@ -263,6 +283,17 @@ const SCRUB = 90;
 const SLOP = 3;
 
 /**
+ * The narrowest a defect may be drawn, in CSS pixels.
+ *
+ * Three, and the number was read off a screenshot rather than chosen. At one
+ * pixel a defect is exactly as wide as the playhead, and the playhead lands on
+ * it: the two clicks under a double-click cue, so vetoing a click put the
+ * playhead over the mark that had just changed color and the person saw
+ * nothing happen. Three leaves the mark showing either side of it.
+ */
+const DEFECT = 3;
+
+/**
  * How near a boundary a click must land to snap to it, in CSS pixels.
  *
  * Wider than `SLOP`, because this is a target being aimed at rather than a
@@ -335,6 +366,8 @@ export function Waveform({
   view,
   onView,
   boundaries,
+  defects,
+  onVeto,
   tracks,
   playhead,
   playing,
@@ -349,6 +382,8 @@ export function Waveform({
   view: View | null;
   onView: (view: View) => void;
   boundaries: readonly Boundary[];
+  defects: readonly Defect[];
+  onVeto: (defect: Defect) => void;
   tracks: readonly Track[];
   playhead: number;
   playing: boolean;
@@ -644,18 +679,45 @@ export function Waveform({
       );
     }
 
-    // The boundaries, on top. A rejected one is drawn dimmer rather than left
-    // out: WP-11 asked whether it should be visible at all, and it should -
-    // §31 lets a person promote one by hand, and they cannot promote what the
-    // picture does not show.
-    //
-    // Across the band only, not the whole canvas: a line through a ruler label
-    // makes the label unreadable, and the ruler is the reason a person can say
-    // where the boundary *is*. Nor down through the lane - a boundary belongs
-    // to one side, and a line across every row of a two-faced capture would
-    // claim it belongs to both. Each row draws its own starts instead.
     const span = peaks.endFrame - peaks.startFrame;
     if (span > 0) {
+      // WP-30's defects, under the boundaries and over the audio. A click is
+      // a span rather than a point, so it is drawn as one - but most of them
+      // are a frame or two, which at any zoom a side fits in is less than a
+      // pixel, hence the floor. A vetoed one stays on the picture in the gray
+      // every rejected thing here is drawn in: `repair = 'none'` keeps the
+      // row, and a veto a person cannot see is a veto they cannot undo.
+      //
+      // The dense cluster is the point. One mark is dirt and forty in a row
+      // is a scratch, and that diagnosis is in the drawing rather than in any
+      // number VCW could put beside it.
+      for (const defect of defects) {
+        const from = ((defect.startFrame - peaks.startFrame) / span) * width;
+        const to = ((defect.endFrame - peaks.startFrame) / span) * width;
+        if (to < 0 || from > width) {
+          continue;
+        }
+        const left = Math.floor(from);
+        context.fillStyle = defect.audible ? COLORS.defect : COLORS.vetoed;
+        context.fillRect(
+          left,
+          bandTop,
+          Math.max(Math.round(DEFECT * scale), Math.ceil(to) - left),
+          bandHeight,
+        );
+      }
+
+      // The boundaries, on top. A rejected one is drawn dimmer rather than
+      // left out: WP-11 asked whether it should be visible at all, and it
+      // should - §31 lets a person promote one by hand, and they cannot
+      // promote what the picture does not show.
+      //
+      // Across the band only, not the whole canvas: a line through a ruler
+      // label makes the label unreadable, and the ruler is the reason a person
+      // can say where the boundary *is*. Nor down through the lane - a
+      // boundary belongs to one side, and a line across every row of a
+      // two-faced capture would claim it belongs to both. Each row draws its
+      // own starts instead.
       for (const boundary of boundaries) {
         const x = ((boundary.atFrame - peaks.startFrame) / span) * width;
         if (x < 0 || x > width) {
@@ -808,7 +870,7 @@ export function Waveform({
       context.closePath();
       context.fill();
     }
-  }, [peaks, boundaries, tracks, playhead, size.height, size.scale]);
+  }, [peaks, boundaries, defects, tracks, playhead, size.height, size.scale]);
 
   // The wheel, bound natively rather than as an `onWheel` prop. React attaches
   // `wheel` at the root container as a *passive* listener, so `preventDefault`
@@ -954,6 +1016,72 @@ export function Waveform({
   };
 
   /**
+   * The defect under a pointer, or the nearest one within [`SNAP`], or `null`.
+   *
+   * By the gap to the span rather than by the distance to a midpoint, which is
+   * what [`nearestFrame`] would have given for free. A defect is a stretch,
+   * and zoomed in far enough to pick one out of a cluster it is a wide one:
+   * the midpoint of a span whose near edge is under the pointer can be half
+   * the picture away, and the thing a person is pointing at would not be
+   * found. Zoomed out, where every span is sub-pixel, the two agree.
+   */
+  const nearDefect = (clientX: number, element: HTMLElement): Defect | null => {
+    if (peaks === null) {
+      return null;
+    }
+    const bounds = element.getBoundingClientRect();
+    const span = peaks.endFrame - peaks.startFrame;
+    if (bounds.width <= 0 || span <= 0) {
+      return null;
+    }
+    const at = clientX - bounds.left;
+    const perFrame = bounds.width / span;
+    let found: Defect | null = null;
+    let nearest = SNAP;
+    for (const defect of defects) {
+      const from = (defect.startFrame - peaks.startFrame) * perFrame;
+      const to = (defect.endFrame - peaks.startFrame) * perFrame;
+      const away = at < from ? from - at : at > to ? at - to : 0;
+      if (away <= nearest) {
+        nearest = away;
+        found = defect;
+      }
+    }
+    return found;
+  };
+
+  /**
+   * What the picture says about the defect under the pointer.
+   *
+   * The length in milliseconds rather than in frames, which is what the row
+   * carries: a person judging whether a repair is the right call is judging
+   * how long a hole they are about to hear interpolated across, and two
+   * frames means nothing without a rate this panel deliberately does not have.
+   * Both ends are in seconds on the row, so the subtraction needs no rate.
+   *
+   * It names the gesture, because nothing else can: a double-click leaves no
+   * mark on a picture the way a cursor does, and the veto is the one thing in
+   * WP-30 §6 that makes the chain reversible rather than merely non-destructive.
+   */
+  const tells = (defect: Defect): string => {
+    const at = clock(defect.startSeconds);
+    // Floored at a millisecond rather than rounded to zero: most of these are
+    // two frames, and "0 ms" reads as a bug in the panel rather than as the
+    // smallest thing the detector can find.
+    const ms = Math.max(
+      1,
+      Math.round((defect.endSeconds - defect.startSeconds) * 1000),
+    );
+    // Two whole calls rather than one with the key chosen in the argument,
+    // which is what the first version did. `vcw-i18n`'s caller scan reads the
+    // literal after `text("`, so a computed key is a key nothing asks for -
+    // and a translator who cannot grep for a string cannot find it either.
+    return defect.audible
+      ? text("waveform.defect.repaired", { at, ms })
+      : text("waveform.defect.vetoed", { at, ms });
+  };
+
+  /**
    * Whether a pointer is on one of the two rulers, and so whether a drag from
    * here would scroll.
    *
@@ -1047,6 +1175,7 @@ export function Waveform({
       return;
     }
     const near = nearBoundary(at.x, element);
+    const damage = near === null ? nearDefect(at.x, element) : null;
     element.dataset.gesture =
       scrubbing.current || scrolling.current !== null || moving.current !== null
         ? "dragging"
@@ -1055,7 +1184,11 @@ export function Waveform({
           : near !== null
             ? "snap"
             : "select";
-    element.title = near === null ? "" : says(near);
+    // A boundary first where both are in reach, because a boundary has a drag
+    // attached to it and a defect has not - the tooltip has to describe the
+    // gesture the press is about to start.
+    element.title =
+      near !== null ? says(near) : damage !== null ? tells(damage) : "";
   };
 
   // Through a ref so the listener below can be attached once. An effect that
@@ -1337,6 +1470,16 @@ export function Waveform({
             // and a click is already the gesture for "here, not there".
             if (selection !== null) {
               onSelect(null);
+            }
+          }}
+          onDoubleClick={(event) => {
+            // The veto, and the only gesture here that writes to the project
+            // rather than to the view. It is deliberately the same gesture in
+            // both directions: a vetoed defect is still drawn, so undoing a
+            // veto is pointing at the same place again. See the header.
+            const damage = nearDefect(event.clientX, event.currentTarget);
+            if (damage !== null) {
+              onVeto(damage);
             }
           }}
         />

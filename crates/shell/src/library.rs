@@ -52,7 +52,9 @@ use std::process::Command;
 
 use vcw_contract::command::Zoom;
 use vcw_contract::read;
-use vcw_contract::view::{About, Boundary, Capture, Curve, Device, Release, Side, Track, Waveform};
+use vcw_contract::view::{
+    About, Boundary, Capture, Curve, Defect, Device, Release, Side, Track, Waveform,
+};
 use vcw_project::{Project, session};
 
 use crate::state::{Error, Shell};
@@ -317,6 +319,19 @@ pub fn captures(shell: &Shell) -> Result<Vec<Capture>, Error> {
 /// As [`release`].
 pub fn boundaries(shell: &Shell) -> Result<Vec<Boundary>, Error> {
     with_project(shell, read::boundaries)
+}
+
+/// Every defect found in the project, vetoed ones included (WP-30 §6).
+///
+/// What the waveform overlay draws and what the veto acts on. All of them and
+/// not only the audible ones: a veto is a row that stays with `repair = 'none'`,
+/// so filtering here would hide the decisions a person has already made.
+///
+/// # Errors
+///
+/// As [`release`].
+pub fn defects(shell: &Shell) -> Result<Vec<Defect>, Error> {
+    with_project(shell, read::defects)
 }
 
 /// One channel of one capture, drawn to a given width (§17, §20).

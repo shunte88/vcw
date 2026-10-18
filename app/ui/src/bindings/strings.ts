@@ -531,6 +531,8 @@ export const SOURCE: Readonly<Record<string, string>> = {
   "waveform.boundary.of": "{position} {edge}, at {at} - drag to move it.",
   "waveform.channel": "Channel",
   "waveform.columns": "{columns} column(s)",
+  "waveform.defect.repaired": "Damage at {at}, {ms} ms - repaired on the way out. Double-click to leave it as captured.",
+  "waveform.defect.vetoed": "Damage at {at}, {ms} ms - left as captured. Double-click to repair it.",
   "waveform.empty": "Nothing captured yet.",
   "waveform.fit": "Fit",
   "waveform.fit.title": "Show the whole capture ({chord})",

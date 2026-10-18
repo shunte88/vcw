@@ -40,6 +40,7 @@ import * as api from "./api";
 import type {
   Boundary,
   Capture,
+  Defect,
   Diagnostics,
   Failure,
   Meter,
@@ -402,8 +403,8 @@ export type Store = {
 /**
  * What has been read out of the open project.
  *
- * Five commands, read together, because a panel that asked for its own rows
- * would be a fifth place that decides when they are stale. They are read as a
+ * Six commands, read together, because a panel that asked for its own rows
+ * would be a sixth place that decides when they are stale. They are read as a
  * batch and replaced as a batch, so nothing ever renders a track list from one
  * generation beside a boundary list from another.
  */
@@ -418,6 +419,8 @@ export type ProjectState = {
   readonly tracks: readonly Track[];
   /** Every boundary, promoted into a track or not. */
   readonly boundaries: readonly Boundary[];
+  /** Every defect, vetoed ones included (WP-30 §6). */
+  readonly defects: readonly Defect[];
   /** The release, or null in a project nobody has identified yet. */
   readonly release: Release | null;
 };
@@ -428,6 +431,7 @@ const NO_PROJECT: ProjectState = {
   sides: [],
   tracks: [],
   boundaries: [],
+  defects: [],
   release: null,
 };
 
@@ -519,16 +523,25 @@ export function useEngine(): Store {
           setProject(NO_PROJECT);
           return;
         }
-        const [captures, sides, tracks, boundaries, release] =
+        const [captures, sides, tracks, boundaries, defects, release] =
           await Promise.all([
             api.captures(),
             api.sides(),
             api.tracks(),
             api.boundaries(),
+            api.defects(),
             api.release(),
           ]);
         if (!canceled) {
-          setProject({ path, captures, sides, tracks, boundaries, release });
+          setProject({
+            path,
+            captures,
+            sides,
+            tracks,
+            boundaries,
+            defects,
+            release,
+          });
         }
       } catch (error) {
         if (canceled) {
