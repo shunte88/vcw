@@ -13,6 +13,7 @@ vcw-alac = { workspace = true }
 vcw-eq = { workspace = true }
 vcw-i18n = { workspace = true }
 vcw-types = { workspace = true }
+vcw-process = { workspace = true }
 vcw-project = { workspace = true }
 flac-codec = { workspace = true }
 mp3lame-encoder = { workspace = true, optional = true }

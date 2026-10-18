@@ -51,6 +51,7 @@ vcw-identify = { path = "crates/identify", version = "0.3.4" }
 vcw-i18n = { path = "crates/i18n", version = "0.3.4" }
 vcw-import = { path = "crates/import", version = "0.3.4" }
 vcw-metadata = { path = "crates/metadata", version = "0.3.4" }
+vcw-process = { path = "crates/process", version = "0.3.4" }
 vcw-project = { path = "crates/project", version = "0.3.4" }
 vcw-serve = { path = "crates/serve", version = "0.3.4" }
 vcw-shell = { path = "crates/shell", version = "0.3.4" }

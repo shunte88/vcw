@@ -4523,6 +4523,7 @@ dependencies = [
  "vcw-fingerprint",
  "vcw-identify",
  "vcw-metadata",
+ "vcw-process",
  "vcw-project",
  "vcw-signal",
  "vcw-types",
@@ -4550,6 +4551,7 @@ dependencies = [
  "vcw-alac",
  "vcw-eq",
  "vcw-i18n",
+ "vcw-process",
  "vcw-project",
  "vcw-types",
  "vorbis_rs",
@@ -4592,6 +4594,14 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "ureq",
+ "vcw-types",
+]
+
+[[package]]
+name = "vcw-process"
+version = "0.3.4"
+dependencies = [
+ "vcw-eq",
  "vcw-types",
 ]
 

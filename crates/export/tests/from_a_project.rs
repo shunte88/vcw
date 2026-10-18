@@ -1231,12 +1231,12 @@ fn the_curve_is_applied_per_track_tagged_and_refused_without_provenance() {
 
     let plan = splitter::plan(project.conn(), &request).expect("plan");
     assert_eq!(
-        plan.items[0].filter.as_ref().map(|f| f.curve()),
+        plan.items[0].chain.curve(),
         Some("columbia_lp"),
         "track one took the release's curve"
     );
     assert_eq!(
-        plan.items[1].filter.as_ref().map(|f| f.curve()),
+        plan.items[1].chain.curve(),
         Some("decca_lp"),
         "track two's own curve did not override it"
     );
@@ -1284,7 +1284,7 @@ fn the_curve_is_applied_per_track_tagged_and_refused_without_provenance() {
     let out = dir.path().join("flat");
     let request = Request::new(&out, Container::Wav);
     let plan = splitter::plan(project.conn(), &request).expect("plan");
-    assert!(plan.items.iter().all(|item| item.filter.is_none()));
+    assert!(plan.items.iter().all(|item| item.chain.is_empty()));
     splitter::run(project.conn(), &plan, &mut quiet).expect("run");
     assert_eq!(data_chunk(&plan.items[0].path), stored);
 }

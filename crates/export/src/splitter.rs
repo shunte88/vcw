@@ -74,6 +74,7 @@ use std::path::PathBuf;
 // direct `rusqlite` dependency: ADR-0003 puts the database behind that crate,
 // and an exporter that named the driver itself would be a second door to it.
 use vcw_eq::{Catalog, Filter};
+use vcw_process::Chain;
 use vcw_project::{Connection, pcm, release, side, track};
 use vcw_types::vinyl::{Numbering, Side};
 use vcw_types::{Span, StorageFormat};
@@ -189,13 +190,13 @@ pub struct Item {
     pub path: PathBuf,
     /// What goes in its tags.
     pub tags: Tags,
-    /// §51's playback equalization for this track, resolved at plan time from
-    /// the track, its side and the release in that order, or `None` when the
-    /// samples go out as stored.
+    /// What WP-30 applies to this track on the way out: §51's playback
+    /// equalization today, resolved at plan time from the track, its side and
+    /// the release in that order, and empty when the samples go out as stored.
     ///
     /// Carried rather than looked up again in `cut` so that a refusal lands
     /// in [`plan`], where no file has been written yet.
-    pub filter: Option<Filter>,
+    pub chain: Chain,
 }
 
 impl Item {
@@ -465,7 +466,7 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             span,
             path,
             tags,
-            filter,
+            chain: Chain::from(filter),
         });
     }
 
@@ -612,12 +613,16 @@ fn cut(
     // to be odd and non-zero, and this one is the 64-bit constant the algorithm
     // is usually published with.
     let mut noise = 0x2545_F491_4F6C_DD1Du64;
-    // §51's curve, cloned so each file starts with the filter's state zeroed:
-    // the sections are recursive, and carrying the end of one track into the
-    // start of the next would ring across a boundary nobody crossed.
-    let mut filter = item.filter.clone();
+    // WP-30's chain, cloned so each file starts with its stages' state zeroed:
+    // the equalization sections are recursive, and carrying the end of one
+    // track into the start of the next would ring across a boundary nobody
+    // crossed.
+    let mut chain = item.chain.clone();
     let mut frames = 0u64;
     loop {
+        // Before the fill, for the reason `Pump::fill` reads it there: it is
+        // the capture frame the bytes about to be read begin at.
+        let at = reader.position();
         let read = reader.fill(&mut buffer)?;
         if read == 0 {
             break;
@@ -625,9 +630,7 @@ fn cut(
         // First, and on the stored bytes: equalization is per channel, so it
         // has to happen before a fold sums them, and before a narrowing throws
         // away the bits it would have moved.
-        if let Some(filter) = filter.as_mut() {
-            filter.process_stored(&mut buffer[..read], layout.format);
-        }
+        chain.process_stored(&mut buffer[..read], layout.format, at);
         let mut chunk: &[u8] = &buffer[..read];
         if folding {
             fold(layout.format, layout.channels, chunk, &mut folded);

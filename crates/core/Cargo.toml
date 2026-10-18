@@ -13,6 +13,7 @@ vcw-types = { workspace = true }
 vcw-eq = { workspace = true }
 vcw-audio = { workspace = true }
 vcw-signal = { workspace = true }
+vcw-process = { workspace = true }
 vcw-project = { workspace = true }
 vcw-export = { workspace = true }
 vcw-identify = { workspace = true }

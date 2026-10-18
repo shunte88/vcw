@@ -1,0 +1,27 @@
+# The non-destructive processing chain of WP-30: everything that is applied to a
+# span of audio on its way out of the project, and nothing that is applied on the
+# way in.
+#
+# Its own crate for the reason WP-30 §7 gives. The repair stages are processing,
+# so they do not belong in `vcw-signal`, which is analysis and writes only
+# observations; and they are not curves, so they do not belong in `vcw-eq`, which
+# is sixteen characteristics and a biquad. What is left is a crate both consumers
+# can see: `vcw-core` owns the audition path and `vcw-export` owns the render and
+# export paths, and `vcw-core` depends on `vcw-export` rather than the other way
+# around, so a shared type has to sit below both.
+[package]
+name = "vcw-process"
+description = "The non-destructive processing chain - the stages a span of audio passes on its way out"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+vcw-eq = { workspace = true }
+vcw-types = { workspace = true }
+
+[lints]
+workspace = true

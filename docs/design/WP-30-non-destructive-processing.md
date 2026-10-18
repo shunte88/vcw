@@ -265,7 +265,10 @@ literature pass the way §51 did.
 **Where a repair stage lives.** `vcw-signal` is analysis and writes nothing, so
 detection belongs there beside the boundary detectors. The repair is processing and
 does not belong in `vcw-eq`, which is sixteen curves and a biquad. Probably a new
-small crate; not worth naming before there is code in it.
+small crate; not worth naming before there is code in it. **Settled 2026-10-18:** it
+is `vcw-process`, which step 3 created to hold `Chain`. It sits below both consumers
+because `vcw-core` owns the audition path, `vcw-export` owns the render and export
+paths, and `vcw-core` depends on `vcw-export` rather than the other way about.
 
 **Normalization.** It is in §46 and it is parametric, so it fits the left-hand column
 with nothing new required. It is also the one stage that needs a measurement over the
@@ -278,14 +281,23 @@ to apply, analytic to decide. Worth noticing now, not worth designing now.
    of this list; the rest of this list is blocked on it, because a chain with one stage
    in it is still not a chain. **Done, 2026-10-17:**
    [WP-30 - the declick detector survey](WP-30-declick-detector-survey.md). It picks an
-   AR residual detector in `vcw-signal`, so step 7's guess at a new crate is withdrawn,
-   and it adds a requirement this note does not have: a detection run reports what
+   AR residual detector in `vcw-signal`, which answers section 7's question for the
+   *detector* and not for the repair stage, and it adds a requirement this note does
+   not have: a detection run reports what
    fraction of the side it flagged, because the published defaults flag 5 to 7 percent
    of a 78 rpm transfer and an LP is not that material.
 2. Schema v6: the `defects` table, and the five places a migration touches.
 3. `Chain`, replacing `Option<Filter>` at both insertion points, with the frame
    position argument. This is a refactor with no behavior change and should be a
    commit of its own, provable by the §51 conformance tests passing unchanged.
+   **Done, 2026-10-18:** `vcw-process`, the small crate section 7 said would probably
+   be needed and was not worth naming before there was code in it. It holds one
+   `Option<Filter>` and a `process_stored` that reads the frame position it is given
+   with nothing, which is the whole of the step: the plumbing a frame-addressed repair
+   needs, threaded through `Pump` and `splitter::Item` on its own so that the thing
+   that reads it arrives alone. `Pump::equalizing` went with it - it had no callers,
+   and once a second stage exists an "is a curve in force" question answered from the
+   chain's emptiness is answered wrongly.
 4. The detector, writing defect rows, re-runnable, respecting `locked`.
 5. The repair stage, and the straddling-defect decision from section 4.
 6. The waveform overlay and the per-defect veto.
