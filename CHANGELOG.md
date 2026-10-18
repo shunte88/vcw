@@ -18,6 +18,26 @@ loud if it cannot.
 
 ### Added
 
+* **`vcw import` now takes a WAV file, not only an Audacity project.** Point it
+  at a rip and it lands as a capture like any other - playback, the waveform,
+  detection, tagging and export all work on it with nothing special about where
+  it came from. The audio is copied, not converted: 16, 24 and 32-bit integer
+  PCM at whatever rate and channel count the file declares, byte for byte into
+  the blocks. A file that would have to be converted to land is refused and
+  says which part of it was the problem, because an import that quietly changed
+  the audio would be indistinguishable from one that did not.
+
+  Nothing is taken on trust from the header. The audio is found by walking the
+  container's chunks rather than assuming it starts at byte 44, which it does
+  not in any file that has been tagged or recorded above 16 bits, and the
+  length the file declares is checked against the length it has - a recorder
+  killed mid-take leaves a header it never went back to correct. If the two
+  disagree the import says so and lands what is really there.
+
+  `--dry-run` reports what would land without writing, as it already did for an
+  Audacity project, and a source that is neither kind now says so instead of
+  reporting that it is not a database.
+
 * **VCW can find the clicks in a side.** `vcw declick <project>` fits a model to
   every fiftieth of a second of the capture, inverse-filters it and reports what
   the model could not predict - which is what a click is. It writes one row per

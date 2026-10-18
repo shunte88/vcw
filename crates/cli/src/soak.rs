@@ -234,7 +234,7 @@ pub(crate) fn run(options: &Options) -> Result<()> {
     let layout = options
         .from_file
         .as_deref()
-        .map(crate::wavfile::layout)
+        .map(vcw_import::wav::layout)
         .transpose()?;
     let (rate, channels, format) = match layout {
         Some(l) => (l.rate.hz(), l.channels, l.format),
@@ -1067,7 +1067,7 @@ enum Expected {
 
 impl Expected {
     /// Opens the source a run was fed from.
-    fn open(path: Option<&Path>, layout: Option<crate::wavfile::Layout>) -> Result<Self> {
+    fn open(path: Option<&Path>, layout: Option<vcw_import::wav::Layout>) -> Result<Self> {
         let (Some(path), Some(layout)) = (path, layout) else {
             return Ok(Self::Generated);
         };

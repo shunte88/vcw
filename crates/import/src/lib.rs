@@ -74,6 +74,7 @@ pub mod model;
 pub mod read;
 pub mod sniff;
 pub mod timeline;
+pub mod wav;
 
 pub use audit::{Audit, audit};
 pub use doc::{Dict, Event, Record, Value};

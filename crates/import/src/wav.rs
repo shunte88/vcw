@@ -1,10 +1,10 @@
 /*
- *  wavfile.rs
+ *  wav.rs
  *
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  Finding the audio in a WAV container, for file-backed capture (41).
+ *  Landing a WAV file as a VCW capture, and finding the audio in the container.
  *
  * MIT License
  *
@@ -30,13 +30,15 @@
  *
  */
 
-//! Finding the audio in a WAV container, for file-backed capture (§41).
+//! Landing a WAV file as a VCW capture (§12), and finding the audio in the
+//! container to do it (§41).
 //!
-//! §41 asks for file-backed capture, and the files are the 62 real vinyl rips
-//! in `/data2/source_rips`. Feeding one through the capture path means knowing
-//! three things about it: where the audio starts, how much of it there is, and
-//! what format it is in. All three are in the container, and none of them is at
-//! a fixed offset.
+//! The sibling of [`mod@crate::land`], and much the shorter of the two. An Audacity
+//! project is a document plus a block store and needs a timeline assembled out
+//! of it; a WAV is one run of interleaved frames, so the landing is a read loop.
+//! What the two share is the thing that matters: both write through
+//! [`vcw_project::persistence::Writer`], so what lands is a capture like any
+//! other and nothing downstream has an import-shaped branch in it.
 //!
 //! # Why not just skip 44 bytes
 //!
@@ -49,44 +51,60 @@
 //! capture that verifies byte for byte against a source that was reading the
 //! wrong bytes. So the chunks are walked.
 //!
-//! # This is a reader for a test harness, not an import feature
+//! # Nothing is converted
 //!
-//! It reads exactly what feeding a capture needs and refuses everything else.
-//! It does not resample, it does not convert, and it does not handle the
-//! float-format or ADPCM variants, because a source that quietly converted
-//! would destroy the one property that makes file-backed capture worth having:
-//! that the bytes which come out of the project are the bytes that went into
-//! it. When VCW grows a real import verb this moves into a product crate and
-//! grows the cases; until then it lives with the harness that needs it.
+//! Sixteen, twenty-four and thirty-two bit integer PCM, at whatever rate and
+//! channel count the container declares, and nothing else: no resampling, no
+//! width change, no float, no ADPCM. VCW stores 24-bit packed and a WAV writes
+//! it packed, so every supported width is a byte-for-byte copy from the `data`
+//! chunk into the blocks (D4). A reader that quietly converted would make the
+//! import a lossy operation that looked lossless, which is the one thing an
+//! import must not be. A file this refuses is a file to convert *on purpose*,
+//! with a tool that says what it did.
+//!
+//! This module began as the WAV reader behind `vcw soak --from-file`, where
+//! §41's file-backed capture needed the same three facts - where the audio is,
+//! how much of it there is, and what format it is in. Its own documentation
+//! said it would move into a product crate when VCW grew a real import verb.
+//! This is that move, and the soak reads it from here now.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
-use vcw_types::{SampleFormat, SampleRate};
+use vcw_project::persistence::{Config, Writer};
+use vcw_project::{Project as Destination, meta, side};
+use vcw_types::vinyl::Side;
+use vcw_types::{
+    CaptureEq, CaptureInfo, CaptureMode, CaptureState, SampleFormat, SampleRate, StorageFormat,
+};
+
+use crate::error::{Error, Result};
+use crate::land::SOURCE_KEY;
 
 /// Where the audio is in a WAV file, and what it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Layout {
+pub struct Layout {
     /// First byte of the `data` chunk's payload.
-    pub(crate) offset: u64,
-    /// Bytes of audio, as the container declares. Never trusted downstream:
-    /// [`vcw_audio::source::Pattern::File`] clamps it to the file's real size.
-    pub(crate) bytes: u64,
+    pub offset: u64,
+    /// Bytes of audio, as the container declares. A claim and not a
+    /// measurement: every reader of this clamps it to the file's real size,
+    /// because the length is written before the audio and a recorder that died
+    /// mid-take never went back to correct it.
+    pub bytes: u64,
     /// Frames a second.
-    pub(crate) rate: SampleRate,
+    pub rate: SampleRate,
     /// Channels, interleaved.
-    pub(crate) channels: u16,
+    pub channels: u16,
     /// The sample format, as the capture path names it.
-    pub(crate) format: SampleFormat,
+    pub format: SampleFormat,
     /// Bytes per frame, from the container's own block align.
-    pub(crate) frame_bytes: u16,
+    pub frame_bytes: u16,
 }
 
 impl Layout {
     /// Frames of audio in the file.
-    pub(crate) fn frames(&self) -> u64 {
+    pub fn frames(&self) -> u64 {
         if self.frame_bytes == 0 {
             return 0;
         }
@@ -94,8 +112,24 @@ impl Layout {
     }
 
     /// Seconds of audio in the file.
-    pub(crate) fn seconds(&self) -> f64 {
+    pub fn seconds(&self) -> f64 {
         self.frames() as f64 / f64::from(self.rate.hz())
+    }
+}
+
+/// A refusal naming the file and the reason in one place.
+fn refuse(path: &Path, reason: impl Into<String>) -> Error {
+    Error::NotWave {
+        path: path.to_path_buf(),
+        reason: reason.into(),
+    }
+}
+
+/// The operating system refused, which is not the file's fault.
+fn io(path: &Path, source: std::io::Error) -> Error {
+    Error::Io {
+        path: path.to_path_buf(),
+        source,
     }
 }
 
@@ -105,19 +139,17 @@ impl Layout {
 ///
 /// If the file cannot be read, is not a RIFF/WAVE file, has no `fmt ` or `data`
 /// chunk, or is in a format the capture path has no name for.
-pub(crate) fn layout(path: &Path) -> Result<Layout> {
-    let mut file = File::open(path)
-        .with_context(|| format!("opening {} to read its header", path.display()))?;
+pub fn layout(path: &Path) -> Result<Layout> {
+    let mut file = File::open(path).map_err(|source| io(path, source))?;
 
     let mut riff = [0u8; 12];
     file.read_exact(&mut riff)
-        .with_context(|| format!("{} is too short to be a WAV file", path.display()))?;
+        .map_err(|_| refuse(path, "it is too short to be a WAV file"))?;
     if &riff[0..4] != b"RIFF" || &riff[8..12] != b"WAVE" {
-        bail!(
-            "{} is not a RIFF/WAVE file: it starts {:02X?}",
-            path.display(),
-            &riff[0..4],
-        );
+        return Err(refuse(
+            path,
+            format!("it is not a RIFF/WAVE file: it starts {:02X?}", &riff[0..4]),
+        ));
     }
 
     let mut fmt: Option<Format> = None;
@@ -134,15 +166,13 @@ pub(crate) fn layout(path: &Path) -> Result<Layout> {
         let size = u64::from(u32::from_le_bytes(
             header[4..8].try_into().expect("four bytes"),
         ));
-        let payload = file
-            .stream_position()
-            .with_context(|| format!("reading {}", path.display()))?;
+        let payload = file.stream_position().map_err(|s| io(path, s))?;
 
         match &id {
             b"fmt " => {
                 let mut bytes = vec![0u8; size.min(64) as usize];
                 file.read_exact(&mut bytes)
-                    .with_context(|| format!("{} has a truncated fmt chunk", path.display()))?;
+                    .map_err(|_| refuse(path, "its fmt chunk is truncated"))?;
                 fmt = Some(parse_fmt(path, &bytes)?);
             }
             // `data` before `fmt ` is legal, so finding it is not the end of
@@ -156,7 +186,7 @@ pub(crate) fn layout(path: &Path) -> Result<Layout> {
         // so a reader that added only the size would land one byte short on any
         // file with an odd-length chunk and read the next header as garbage.
         file.seek(SeekFrom::Start(payload + padded(size)))
-            .with_context(|| format!("walking the chunks of {}", path.display()))?;
+            .map_err(|s| io(path, s))?;
     }
 
     match (fmt, data) {
@@ -168,8 +198,8 @@ pub(crate) fn layout(path: &Path) -> Result<Layout> {
             format: fmt.format,
             frame_bytes: fmt.frame_bytes,
         }),
-        (_, None) => bail!("{} has no data chunk", path.display()),
-        (None, _) => bail!("{} has no fmt chunk", path.display()),
+        (_, None) => Err(refuse(path, "it has no data chunk")),
+        (None, _) => Err(refuse(path, "it has no fmt chunk")),
     }
 }
 
@@ -189,11 +219,10 @@ struct Format {
 /// Reads a `fmt ` chunk.
 fn parse_fmt(path: &Path, bytes: &[u8]) -> Result<Format> {
     if bytes.len() < 16 {
-        bail!(
-            "{} has a {}-byte fmt chunk; 16 is the minimum",
-            path.display(),
-            bytes.len(),
-        );
+        return Err(refuse(
+            path,
+            format!("its fmt chunk is {} bytes; 16 is the minimum", bytes.len()),
+        ));
     }
     let u16_at = |at: usize| u16::from_le_bytes(bytes[at..at + 2].try_into().expect("two bytes"));
     let u32_at = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().expect("four bytes"));
@@ -209,16 +238,16 @@ fn parse_fmt(path: &Path, bytes: &[u8]) -> Result<Format> {
     // chunk; it is not read, because the only sub-format a vinyl rip uses is
     // PCM and a rip that used another would fail the format match below anyway.
     if tag != 1 && tag != 0xFFFE {
-        bail!(
-            "{} declares WAVE format tag {tag:#06X}; file-backed capture reads PCM only",
-            path.display(),
-        );
+        return Err(refuse(
+            path,
+            format!("it declares WAVE format tag {tag:#06X}, and only integer PCM is stored"),
+        ));
     }
     if channels == 0 || rate == 0 {
-        bail!(
-            "{} declares {channels} channels at {rate} Hz",
-            path.display(),
-        );
+        return Err(refuse(
+            path,
+            format!("it declares {channels} channels at {rate} Hz"),
+        ));
     }
     // From the bit depth, not from the block align: a container may pad a frame
     // wider than its samples need, and the capture path names a format by its
@@ -227,10 +256,12 @@ fn parse_fmt(path: &Path, bytes: &[u8]) -> Result<Format> {
         16 => SampleFormat::S16,
         24 => SampleFormat::S24,
         32 => SampleFormat::S32,
-        other => bail!(
-            "{} is {other}-bit; file-backed capture handles 16, 24 and 32",
-            path.display(),
-        ),
+        other => {
+            return Err(refuse(
+                path,
+                format!("it is {other}-bit, and 16, 24 and 32 are what a capture stores"),
+            ));
+        }
     };
     // The one consistency check worth making. A block align that disagrees with
     // the bit depth and the channel count means the file is not laid out the
@@ -238,11 +269,13 @@ fn parse_fmt(path: &Path, bytes: &[u8]) -> Result<Format> {
     // byte mismatch thousands of frames in.
     let expected = channels * (bits / 8);
     if frame_bytes != expected {
-        bail!(
-            "{} declares {frame_bytes} bytes a frame but {channels} channels of \
-             {bits}-bit needs {expected}",
-            path.display(),
-        );
+        return Err(refuse(
+            path,
+            format!(
+                "it declares {frame_bytes} bytes a frame but {channels} channels of \
+                 {bits}-bit needs {expected}"
+            ),
+        ));
     }
     Ok(Format {
         rate: SampleRate(rate),
@@ -250,6 +283,162 @@ fn parse_fmt(path: &Path, bytes: &[u8]) -> Result<Format> {
         format,
         frame_bytes,
     })
+}
+
+/// `meta` key holding which container the audio was imported from.
+pub const FORMAT_KEY: &str = "import.format";
+
+/// What landing a WAV produced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Landed {
+    /// The project written.
+    pub path: PathBuf,
+    /// The capture the audio landed as.
+    pub capture_id: i64,
+    /// Which side it was attached to. Nothing in a WAV says, so the caller did.
+    pub side: Side,
+    /// The rate, from the `fmt ` chunk.
+    pub rate: SampleRate,
+    /// Channels, interleaved as the file had them.
+    pub channels: u16,
+    /// How the samples are stored, which is how the file stored them.
+    pub storage_format: StorageFormat,
+    /// Frames written per channel.
+    pub frames: u64,
+    /// Blocks written.
+    pub blocks: u64,
+    /// Transactions they were written in.
+    pub commits: u64,
+    /// The batch size that was in force.
+    pub batch_blocks: usize,
+    /// Bytes of audio the `data` chunk declared.
+    pub declared_bytes: u64,
+    /// Bytes of audio there turned out to be, whole frames only.
+    ///
+    /// Reported beside the declared figure rather than checked against it,
+    /// because the two disagree for two innocent reasons - a recorder killed
+    /// mid-write leaves a length it never went back to patch, and a trailing
+    /// partial frame is one short sample - and for one guilty one. An import
+    /// that silently landed less audio than the file said it had would be
+    /// indistinguishable from a correct one, so the numbers are both printed
+    /// and the person decides.
+    pub read_bytes: u64,
+}
+
+impl Landed {
+    /// The capture's duration in seconds.
+    #[must_use]
+    pub fn seconds(&self) -> f64 {
+        if self.rate.hz() == 0 {
+            return 0.0;
+        }
+        self.frames as f64 / f64::from(self.rate.hz())
+    }
+}
+
+/// Reads a WAV file and writes it as a new `.vcw`.
+///
+/// The source is opened read-only and never written to. `destination` must not
+/// exist; see [`mod@crate::land`] for why an interrupted import is discarded rather
+/// than resumed.
+///
+/// # Errors
+///
+/// Anything [`layout`] can refuse, plus [`Error::Io`] if the audio cannot be
+/// read and [`crate::Error::Project`] if the destination cannot be written.
+pub fn land(source: &Path, destination: &Path, side: Side, config: Config) -> Result<Landed> {
+    tracing::info!(
+        source = %source.display(),
+        destination = %destination.display(),
+        "importing a WAV file"
+    );
+    let layout = layout(source)?;
+
+    // The declared length is a claim, not a measurement: it is written before
+    // the audio and a recorder that died mid-take never went back to correct
+    // it. Clamped to what is on disk, and then down to a whole frame, because
+    // half a frame landed is a channel swap for every sample after it.
+    let on_disk = std::fs::metadata(source).map_err(|s| io(source, s))?.len();
+    let frame_bytes = u64::from(layout.frame_bytes);
+    let available = layout.bytes.min(on_disk.saturating_sub(layout.offset));
+    let frames = available / frame_bytes;
+    if frames == 0 {
+        return Err(refuse(
+            source,
+            format!(
+                "its data chunk holds no whole frames: {available} bytes at {frame_bytes} a frame"
+            ),
+        ));
+    }
+    let audio = frames * frame_bytes;
+
+    let info = CaptureInfo {
+        rate: layout.rate,
+        channels: layout.channels,
+        storage_format: StorageFormat::native_for(layout.format),
+        // No stream was opened, exactly as for an Audacity import.
+        capture_mode: CaptureMode::Imported,
+        host_api: None,
+        device_id: None,
+        device_name: None,
+        os_verified: false,
+        os_report: None,
+        // A WAV carries no signal chain, so nothing may be assumed about one.
+        eq: CaptureEq::Unknown,
+    };
+
+    let mut file = File::open(source).map_err(|s| io(source, s))?;
+    file.seek(SeekFrom::Start(layout.offset))
+        .map_err(|s| io(source, s))?;
+
+    let project = Destination::create(destination)?;
+    let mut writer = Writer::begin(project, &info, config)?;
+    let chunk = (writer.block_frames() * frame_bytes) as usize;
+    let mut buffer = vec![0u8; chunk];
+    let mut left = audio;
+    while left > 0 {
+        let want = chunk.min(left as usize);
+        file.read_exact(&mut buffer[..want])
+            .map_err(|s| io(source, s))?;
+        writer.push(&buffer[..want])?;
+        left -= want as u64;
+    }
+    let (outcome, mut project, _session) = writer.finish_with_project(CaptureState::Finalised)?;
+
+    side::attach(&mut project, side, outcome.capture_id)?;
+    {
+        let conn = project.conn();
+        meta::set(conn, SOURCE_KEY, &source.display().to_string())?;
+        meta::set(conn, FORMAT_KEY, "wav")?;
+    }
+    project.close()?;
+
+    let landed = Landed {
+        path: destination.to_path_buf(),
+        capture_id: outcome.capture_id,
+        side,
+        rate: layout.rate,
+        channels: layout.channels,
+        storage_format: info.storage_format,
+        frames: outcome.frames,
+        blocks: outcome.blocks,
+        commits: outcome.commits,
+        batch_blocks: config.batch_blocks,
+        declared_bytes: layout.bytes,
+        read_bytes: audio,
+    };
+    tracing::info!(
+        destination = %landed.path.display(),
+        rate = landed.rate.hz(),
+        channels = landed.channels,
+        storage = ?landed.storage_format,
+        frames = landed.frames,
+        blocks = landed.blocks,
+        declared_bytes = landed.declared_bytes,
+        read_bytes = landed.read_bytes,
+        "a WAV file landed as a capture"
+    );
+    Ok(landed)
 }
 
 #[cfg(test)]

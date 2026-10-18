@@ -29,7 +29,14 @@
  * SOFTWARE.
  *
  */
-//! The `vcw import` verb: read an Audacity project, write a VCW one (§12).
+//! The `vcw import` verb: read someone else's file, write a VCW one (§12).
+//!
+//! Two kinds of source, told apart by their first sixteen bytes rather than by
+//! their extension. An **Audacity project** is a document plus a block store,
+//! and lands through [`mod@vcw_import::land`]. A **WAV file** is one run of
+//! frames, and lands through [`vcw_import::wav`]. They share a destination
+//! rule, a side flag, a batch size and a dry run, which is why they share a
+//! verb.
 //!
 //! Two modes, and the default is to do the work. That is the opposite of
 //! `vcw recover`, deliberately: recovery rewrites a project that already
@@ -86,6 +93,22 @@ pub(crate) fn run(args: &Args) -> Result<()> {
             "{} already exists. Import writes a new project and will not overwrite one.",
             destination.display()
         );
+    }
+
+    // The source decides the path, and it says what it is in its own first
+    // bytes.
+    match kind(&args.source) {
+        Kind::Wave => return wave(args, &destination, side),
+        // Refused here rather than left to the sniffer, which would open it as
+        // a database and report "file is not a database" - true, and no help at
+        // all to someone who handed it a FLAC.
+        Kind::Other => bail!(
+            "{} is neither an Audacity project nor a WAV file. Import reads \
+             .aup3 and .aup4 projects, and WAV files holding 16, 24 or 32-bit \
+             integer PCM.",
+            args.source.display()
+        ),
+        Kind::Sqlite => {}
     }
 
     // Every field named, which clippy insists on now that there are only four
@@ -222,6 +245,154 @@ fn survey(args: &Args, destination: &Path, options: &Options) -> Result<()> {
         destination.display(),
         options.side.letter()
     );
+    Ok(())
+}
+
+/// What kind of source a file is, by its first sixteen bytes.
+///
+/// Not by its extension, for the reason [`sniff`] decides an Audacity
+/// generation by `user_version` and not by `.aup3`: the extension is whatever
+/// the user typed, and a rip that has been through a tagger or a file manager
+/// has often been renamed.
+enum Kind {
+    /// A RIFF/WAVE container.
+    Wave,
+    /// A SQLite database, which is what every Audacity project is. Whether it
+    /// is an *Audacity* one is `sniff`'s question, not this one's, and its
+    /// refusal names what it found instead.
+    Sqlite,
+    /// Something else, including a file too short to say.
+    Other,
+}
+
+/// Reads the first sixteen bytes and says what they are.
+fn kind(path: &Path) -> Kind {
+    let mut head = [0_u8; 16];
+    if std::fs::File::open(path)
+        .and_then(|mut file| std::io::Read::read_exact(&mut file, &mut head))
+        .is_err()
+    {
+        return Kind::Other;
+    }
+    if &head[0..4] == b"RIFF" && &head[8..12] == b"WAVE" {
+        Kind::Wave
+    } else if &head == b"SQLite format 3\0" {
+        Kind::Sqlite
+    } else {
+        Kind::Other
+    }
+}
+
+/// Imports a WAV file, or reports what importing one would land.
+fn wave(args: &Args, destination: &Path, side: Side) -> Result<()> {
+    let config = vcw_project::persistence::Config {
+        batch_blocks: args.batch_blocks,
+        ..Options::default().config
+    };
+
+    if args.dry_run {
+        let layout = vcw_import::wav::layout(&args.source)?;
+        if args.json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "source": args.source.display().to_string(),
+                    "destination": destination.display().to_string(),
+                    "dry_run": true,
+                    "format": "wav",
+                    "rate": layout.rate.hz(),
+                    "channels": layout.channels,
+                    "storage_format": format!("{:?}", layout.format),
+                    "audio_offset": layout.offset,
+                    "declared_bytes": layout.bytes,
+                    "frames": layout.frames(),
+                    "seconds": layout.seconds(),
+                    "side": side.letter().to_string(),
+                })
+            );
+            return Ok(());
+        }
+        println!("{}", args.source.display());
+        println!("  format      wav");
+        println!(
+            "  audio       {} Hz, {} ch, {:?}",
+            layout.rate.hz(),
+            layout.channels,
+            layout.format
+        );
+        println!(
+            "  data        {} byte(s) at offset {}, {} frame(s), {:.3} s",
+            layout.bytes,
+            layout.offset,
+            layout.frames(),
+            layout.seconds()
+        );
+        println!(
+            "  would write {} as side {}",
+            destination.display(),
+            side.letter()
+        );
+        return Ok(());
+    }
+
+    let landed = vcw_import::wav::land(&args.source, destination, side, config)
+        .with_context(|| format!("importing {}", args.source.display()))?;
+    if args.json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "project": landed.path.display().to_string(),
+                "source": args.source.display().to_string(),
+                "format": "wav",
+                "capture_id": landed.capture_id,
+                "side": landed.side.letter().to_string(),
+                "rate": landed.rate.hz(),
+                "channels": landed.channels,
+                "storage_format": format!("{:?}", landed.storage_format),
+                "frames": landed.frames,
+                "seconds": landed.seconds(),
+                "blocks": landed.blocks,
+                "commits": landed.commits,
+                "batch_blocks": landed.batch_blocks,
+                "declared_bytes": landed.declared_bytes,
+                "read_bytes": landed.read_bytes,
+            })
+        );
+        return Ok(());
+    }
+    println!("{}", landed.path.display());
+    println!(
+        "  capture {:<3} {} frames on every channel, {:.3} s, {} block(s)",
+        landed.capture_id,
+        landed.frames,
+        landed.seconds(),
+        landed.blocks
+    );
+    println!(
+        "              written in {} transaction(s) of up to {} block(s)",
+        landed.commits, landed.batch_blocks
+    );
+    println!(
+        "              {} Hz, {} ch, {:?}",
+        landed.rate.hz(),
+        landed.channels,
+        landed.storage_format
+    );
+    println!(
+        "  side {}      attached to capture {}",
+        landed.side.letter(),
+        landed.capture_id
+    );
+    // Said out loud when it happens, and only then. A file whose header
+    // overstates its audio is a file something went wrong with once already.
+    if landed.read_bytes != landed.declared_bytes {
+        println!(
+            "  !           the data chunk declared {} byte(s) and held {}; the \
+             difference was not there to import",
+            landed.declared_bytes, landed.read_bytes
+        );
+    }
+    println!("  source      {} (wav)", args.source.display());
     Ok(())
 }
 

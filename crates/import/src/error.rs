@@ -379,6 +379,29 @@ pub enum Error {
         blockid: i64,
     },
 
+    /// The file is a WAVE container, but not one that can be landed verbatim.
+    ///
+    /// One variant and not a dozen because every case is the same answer to the
+    /// user: this file has to be converted on purpose, by something that says
+    /// what it did, before VCW will store it as a capture. The `reason` carries
+    /// which case it was.
+    #[error("{path} cannot be imported as WAVE: {reason}")]
+    NotWave {
+        /// The file in question.
+        path: PathBuf,
+        /// What is wrong with it.
+        reason: String,
+    },
+
+    /// Reading the source file failed.
+    #[error("reading {path}: {source}")]
+    Io {
+        /// The file being read.
+        path: PathBuf,
+        /// What the operating system said.
+        source: std::io::Error,
+    },
+
     /// The project being written refused.
     #[error("project: {0}")]
     Project(#[from] vcw_project::Error),

@@ -576,6 +576,34 @@ which integer width you want it narrowed to; see [Narrowing a float
 capture](#narrowing-a-float-capture). Until you do, `vcw export --format flac`
 refuses before it writes anything rather than producing half a library.
 
+## Importing a WAV file
+
+The same verb, and it works out which kind of file you gave it from the file
+itself rather than from the name:
+
+```text
+vcw import ~/rips/side-a.wav --output side-a.vcw --side A
+vcw import ~/rips/side-a.wav --dry-run           # read the header and report
+```
+
+A WAV brings its audio and nothing else, and the audio is **copied, not
+converted**: 16, 24 and 32-bit integer PCM, at whatever rate and however many
+channels the file declares. Anything that would have to be converted to land -
+a float file, an 8-bit one, a compressed one - is refused, and the refusal says
+which part of the file was the problem. That is deliberate. An import that
+quietly resampled or narrowed would be a lossy operation that looked lossless,
+and you would have no way of knowing from the project which it had been. Convert
+it yourself, with something that tells you what it did, and import the result.
+
+Two things it will tell you about. Nothing is assumed about where the audio
+starts: a WAV that has been through a tagger carries its words before its
+sound, so the container is walked rather than skipped past. And if the file's
+header claims more audio than the file holds, which is what a recorder killed
+mid-take leaves behind, the import lands what is really there and says so.
+
+A WAV has no labels and no sides, so the capture arrives whole and unmarked.
+Run `vcw detect` over it, or place the boundaries in the window.
+
 ## Finding the tracks
 
 ```text
