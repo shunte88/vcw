@@ -83,14 +83,16 @@ fn record(path: &Path) {
 /// warning: **every migration after 1 has to be undone here**. v4 and v5 need no
 /// line of their own only because both put their columns on tables migration 2
 /// creates, which this drops outright. One that lands on `captures`, as v3 did,
-/// needs subtracting by name or the fixture is not a v1 project and the
-/// migration fails re-applying its own work.
+/// needs subtracting by name, and one that creates a table of its own, as v6 did,
+/// needs dropping by name - or the fixture is not a v1 project and the migration
+/// fails re-applying its own work.
 fn wind_back_to_v1(path: &Path) {
     let project = vcw_project::Project::open(path).expect("opening the project");
     project
         .conn()
         .execute_batch(
-            "DROP TABLE IF EXISTS tracks;
+            "DROP TABLE IF EXISTS defects;
+             DROP TABLE IF EXISTS tracks;
              DROP TABLE IF EXISTS track_boundaries;
              DROP TABLE IF EXISTS sides;
              DROP TABLE IF EXISTS release_artwork;

@@ -44,7 +44,7 @@
 use rusqlite::Connection;
 
 use crate::error::{Error, Result};
-use crate::schema::{SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5};
+use crate::schema::{SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6};
 
 /// One step from schema version `version - 1` to `version`.
 #[derive(Debug, Clone, Copy)]
@@ -86,6 +86,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 5,
         description: "named playback characteristic: playback_eq on releases, sides and tracks",
         sql: SCHEMA_V5,
+    },
+    Migration {
+        version: 6,
+        description: "the defect list: spans of damage, and the repair proposed for each",
+        sql: SCHEMA_V6,
     },
 ];
 

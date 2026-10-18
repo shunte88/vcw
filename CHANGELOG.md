@@ -14,6 +14,20 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## Unreleased
+
+### Changed
+
+* **Projects now carry a list of defects, and upgrade to schema 6 when opened.**
+  The table is empty: nothing writes to it yet. It lands first on purpose, so
+  that the click detector that fills it arrives as a detector rather than as a
+  detector and a migration at once. What you can see today is the version
+  number: a project opened by this build is schema 6, and VCW 0.3.4 and earlier
+  will say it was written by a newer VCW and decline to open it. Reading in the
+  other direction is unchanged, as it has been since 0.1.1 - this build opens
+  every project any earlier one wrote, upgrading it on the way in, and `vcw
+  migrate <project>` does it without opening anything else.
+
 ## 0.3.4-alpha
 
 2026-10-17

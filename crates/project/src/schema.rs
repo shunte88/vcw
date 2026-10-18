@@ -67,14 +67,16 @@ pub const APPLICATION_ID: u32 = 0x5643_5700;
 /// v1 is capture; v2 adds the §29 vinyl data model; v3 adds `captures.capture_eq`
 /// (§51); v4 adds the two release-level intents the new-project prompt asks for,
 /// `releases.is_mono` and `releases.riaa_eq`; v5 replaces that second one with a
-/// named curve, `playback_eq`, on releases, sides and tracks. [`FORMAT_VERSION`]
-/// has not moved with any of them, because nothing an older version wrote means
-/// anything different now: a v1 or v2 capture has an unrecorded equalization
-/// provenance, and `'unknown'` is what that is, not a changed meaning for a column
-/// that already existed; a pre-v4 release has no stated intent, and `0` is what
-/// that is; and v4's `riaa_eq = 1` means exactly `playback_eq = 'riaa'`, which is
-/// why v5 can carry it across rather than asking again.
-pub const SCHEMA_VERSION: u32 = 5;
+/// named curve, `playback_eq`, on releases, sides and tracks; v6 adds `defects`,
+/// the §46 Phase 3 repair instructions. [`FORMAT_VERSION`] has not moved with any
+/// of them, because nothing an older version wrote means anything different now: a
+/// v1 or v2 capture has an unrecorded equalization provenance, and `'unknown'` is
+/// what that is, not a changed meaning for a column that already existed; a pre-v4
+/// release has no stated intent, and `0` is what that is; v4's `riaa_eq = 1` means
+/// exactly `playback_eq = 'riaa'`, which is why v5 can carry it across rather than
+/// asking again; and a project with no `defects` rows is one nobody has run a
+/// detector over, which is what every project before v6 is.
+pub const SCHEMA_VERSION: u32 = 6;
 
 /// The project-format version: the *meaning* of the schema, as opposed to its shape.
 ///
@@ -608,12 +610,83 @@ ALTER TABLE sides ADD COLUMN playback_eq TEXT;
 ALTER TABLE tracks ADD COLUMN playback_eq TEXT;
 "#;
 
+/// Schema v6: the defect list (§46 Phase 3, WP-30).
+///
+/// A defect is a span of damage on a capture. It is not repaired audio and it is
+/// not a repaired file: §4.1 keeps the sample blocks immutable, so the repair is
+/// computed from these rows every time the audio leaves the project. Detection
+/// writes rows here; a person edits them; nothing else moves them.
+pub const SCHEMA_V6: &str = r#"
+-- Damage found on a capture, and what to do about it (WP-30 §3). One row is one
+-- span: detection proposes them, a person may veto or change any one of them, and
+-- the repair is applied on playback, render and export rather than stored.
+CREATE TABLE defects (
+    -- Surrogate key. Stable across re-detection, which is what lets a person's
+    -- edit to one row survive another analysis pass.
+    defect_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- The capture the damage is in. Deliberately not the track: frames index a
+    -- capture, so a defect survives re-splitting, re-adoption and a side being
+    -- laid out again, none of which change what frame 4,812,330 is.
+    capture_id  INTEGER NOT NULL REFERENCES captures(capture_id),
+    -- First damaged frame, counted from the start of the capture.
+    start_frame INTEGER NOT NULL,
+    -- One past the last damaged frame. Exclusive, so the length is a subtraction
+    -- and an empty span is an error rather than a convention.
+    end_frame   INTEGER NOT NULL,
+    -- Which channels are damaged, as a bitmask: bit 0 is channel 0. A bitmask and
+    -- not a boolean because a vinyl click is physical damage to one groove wall far
+    -- more often than both, and repairing the good channel throws away half a good
+    -- stereo image - which a mono fold would then hear the repair of twice.
+    channels    INTEGER NOT NULL,
+    -- What kind of damage: 'click', 'crackle', 'dropout'. Free text rather than a
+    -- CHECK, because whether crackle is the same detector as clicks is open (WP-30
+    -- §6) and a fourth kind should not need a migration.
+    kind        TEXT    NOT NULL,
+    -- 0..=1, as the detector scored it. A margin rather than a probability unless
+    -- the provenance says otherwise, which is the same rule track_boundaries uses.
+    confidence  REAL    NOT NULL DEFAULT 1.0,
+    -- Which detector found it, kebab-case, or 'user'. §24.
+    provenance  TEXT    NOT NULL,
+    -- The measurements behind it (§24), as 'name=value;name=value'. Read whole, by
+    -- a person, and never queried by name.
+    evidence    TEXT    NOT NULL DEFAULT '',
+    -- What to do about it: 'interpolate', 'mute', or 'none'. No default, because a
+    -- repair nobody chose is a repair nobody can be held to - the writer states it.
+    -- 'none' is the veto, and the row stays so that re-analysis does not propose it
+    -- again and the reason is still readable.
+    repair      TEXT    NOT NULL,
+    -- 1 if automatic analysis may not change it (§24). The same bit, the same
+    -- meaning and the same spelling as on a boundary; a second spelling would be
+    -- the bug.
+    locked      INTEGER NOT NULL DEFAULT 0,
+    -- Unix seconds at creation.
+    created_at  INTEGER NOT NULL,
+    -- Unix seconds at the last edit, veto, lock or unlock.
+    updated_at  INTEGER NOT NULL,
+    -- A span with no frames in it is a bug in whatever wrote it, not a defect.
+    CHECK (end_frame > start_frame),
+    -- So is damage to no channel.
+    CHECK (channels > 0),
+    -- One defect per span per channel set. Two detectors agreeing about the same
+    -- damage is one defect, which is the rule track_boundaries already follows, and
+    -- it is what makes a detector re-runnable: a second pass updates rather than
+    -- duplicates.
+    UNIQUE (capture_id, start_frame, end_frame, channels)
+);
+
+-- Every read walks one capture in frame order: drawing the overlay, playing it,
+-- exporting it. The same shape as track_boundaries_timeline, for the same reason.
+CREATE INDEX defects_timeline
+    ON defects (capture_id, start_frame);
+"#;
+
 /// Tables the current schema must contain. Checked on open, so a truncated or
 /// partially-migrated file is refused rather than half-read.
 pub const REQUIRED_TABLES: &[&str] = &[
     "capture_blocks",
     "capture_diagnostics",
     "captures",
+    "defects",
     "meta",
     "release_artwork",
     "releases",

@@ -214,10 +214,11 @@ mod tests {
         project
             .conn()
             .execute_batch(
-                // Everything migration 2 creates, dropped in the order the
-                // foreign keys point; then migration 3's column; then the
-                // bookkeeping that says either of them ran.
-                "DROP TABLE IF EXISTS tracks;
+                // Migration 6's table, then everything migration 2 creates,
+                // dropped in the order the foreign keys point; then migration
+                // 3's column; then the bookkeeping that says any of them ran.
+                "DROP TABLE IF EXISTS defects;
+                 DROP TABLE IF EXISTS tracks;
                  DROP TABLE IF EXISTS track_boundaries;
                  DROP TABLE IF EXISTS sides;
                  DROP TABLE IF EXISTS release_artwork;
@@ -240,6 +241,13 @@ mod tests {
                 .prepare("SELECT release_id FROM releases")
                 .is_err(),
             "the fixture still has v2's tables, so it is not a v1 project"
+        );
+        assert!(
+            project
+                .conn()
+                .prepare("SELECT defect_id FROM defects")
+                .is_err(),
+            "the fixture still has v6's table, so it is not a v1 project"
         );
         project.close().expect("closing it again");
     }

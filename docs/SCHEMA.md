@@ -16,7 +16,7 @@ no rewriting, and everything else is what Audacity has nowhere to put. See
 |---|---|
 | extension | `.vcw` |
 | `application_id` | `0x56435700` (ASCII `VCW\0`) - Audacity's is `0x41554459`, `AUDY`, for *both* AUP3 and AUP4 |
-| `user_version` | 5 - the schema version, a plain ascending integer |
+| `user_version` | 6 - the schema version, a plain ascending integer |
 | format version | 1 - the *meaning* of the schema, in `meta` |
 | page size | 65536 bytes, set at creation |
 | journal mode | WAL, `synchronous=FULL` (D3) |
@@ -265,6 +265,26 @@ A track: two boundaries, and the metadata naming what is between them (§29, §3
 | `updated_at` | `INTEGER NOT NULL` | Unix seconds of the last change to this row. |
 | `playback_eq` | `TEXT` | The characteristic for one track, which §51 asks for by name: a compilation can carry transfers made from pressings cut years apart. NULL inherits the side. |
 
+### `defects`
+
+Damage found on a capture, and what to do about it (WP-30 §3). One row is one span: detection proposes them, a person may veto or change any one of them, and the repair is applied on playback, render and export rather than stored.
+
+| column | declaration | notes |
+|---|---|---|
+| `defect_id` | `INTEGER PRIMARY KEY AUTOINCREMENT` | Surrogate key. Stable across re-detection, which is what lets a person's edit to one row survive another analysis pass. |
+| `capture_id` | `INTEGER NOT NULL REFERENCES captures(capture_id)` | The capture the damage is in. Deliberately not the track: frames index a capture, so a defect survives re-splitting, re-adoption and a side being laid out again, none of which change what frame 4,812,330 is. |
+| `start_frame` | `INTEGER NOT NULL` | First damaged frame, counted from the start of the capture. |
+| `end_frame` | `INTEGER NOT NULL` | One past the last damaged frame. Exclusive, so the length is a subtraction and an empty span is an error rather than a convention. |
+| `channels` | `INTEGER NOT NULL` | Which channels are damaged, as a bitmask: bit 0 is channel 0. A bitmask and not a boolean because a vinyl click is physical damage to one groove wall far more often than both, and repairing the good channel throws away half a good stereo image - which a mono fold would then hear the repair of twice. |
+| `kind` | `TEXT NOT NULL` | What kind of damage: 'click', 'crackle', 'dropout'. Free text rather than a CHECK, because whether crackle is the same detector as clicks is open (WP-30 §6) and a fourth kind should not need a migration. |
+| `confidence` | `REAL NOT NULL DEFAULT 1.0` | 0..=1, as the detector scored it. A margin rather than a probability unless the provenance says otherwise, which is the same rule track_boundaries uses. |
+| `provenance` | `TEXT NOT NULL` | Which detector found it, kebab-case, or 'user'. §24. |
+| `evidence` | `TEXT NOT NULL DEFAULT ''` | The measurements behind it (§24), as 'name=value;name=value'. Read whole, by a person, and never queried by name. |
+| `repair` | `TEXT NOT NULL` | What to do about it: 'interpolate', 'mute', or 'none'. No default, because a repair nobody chose is a repair nobody can be held to - the writer states it. 'none' is the veto, and the row stays so that re-analysis does not propose it again and the reason is still readable. |
+| `locked` | `INTEGER NOT NULL DEFAULT 0` | 1 if automatic analysis may not change it (§24). The same bit, the same meaning and the same spelling as on a boundary; a second spelling would be the bug. |
+| `created_at` | `INTEGER NOT NULL` | Unix seconds at creation. |
+| `updated_at` | `INTEGER NOT NULL` | Unix seconds at the last edit, veto, lock or unlock. |
+
 ## Indices
 
 - `capture_blocks_timeline`
@@ -275,6 +295,8 @@ A track: two boundaries, and the metadata naming what is between them (§29, §3
   The same trick one rung finer, and it is not free: this one duplicates the 256-frame triplets rather than three floats, which on a 24/192 side is 28 MiB against 2.3 GiB - 1.2%. It buys the zoom an editor actually works at. An eight-minute span at 1920 px is 1,916 blocks per channel, and reaching their summary256 through the row costs 594 ms per channel cold; through this index, 29 ms. Without it that drawing takes 1.35 s, and §37 asks for sub-second.  It repeats the whole-block triplet as well, twelve bytes beside two kilobytes, because the reader falls back to it when a block has no summary blob. Leaving those three columns out makes the index a lookup rather than a covering one, SQLite fetches the row after all, and the whole 28 MiB buys nothing - measured.  There is no matching index for summary64k. Nothing VCW writes ever reads that rung - it is coarser than a 250 ms block and exists for AUP4 compatibility (§49) - and the blocks that do need it, imported from Audacity, have no `capture_blocks` row and so never reach this query. If import ever makes it hot, measure it then.
 - `track_boundaries_timeline`
   Every read of a side walks it in time order: drawing it, playing it, splitting it.
+- `defects_timeline`
+  Every read walks one capture in frame order: drawing the overlay, playing it, exporting it. The same shape as track_boundaries_timeline, for the same reason.
 
 ## What is not here yet
 

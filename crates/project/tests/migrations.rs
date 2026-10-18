@@ -399,3 +399,76 @@ fn a_v4_riaa_box_becomes_the_riaa_curve() {
         );
     }
 }
+
+/// The defect table refuses the three shapes WP-30 §3 calls errors.
+///
+/// Two `CHECK`s and a `UNIQUE` are the only logic in migration 6, and the way
+/// each of them fails is by not failing - `end_frame >= start_frame` would read
+/// the same and admit an empty span, and without the unique index a second
+/// detection pass would duplicate every row it had already found rather than
+/// updating it, which is what WP-30 §7 means by re-runnable. So the test is that
+/// each refusal happens, with a legal row either side proving the table is not
+/// simply refusing everything.
+#[test]
+fn a_defect_is_a_span_on_a_capture_and_the_table_says_what_that_means() {
+    let mut conn = db();
+    migrate::apply(&mut conn, vcw_project::MIGRATIONS).unwrap();
+    conn.execute(
+        "INSERT INTO captures
+            (capture_id, sample_rate, channels, storage_format, capture_mode,
+             started_at, finished_at, frames, state)
+         VALUES (1, 44100, 2, 262148, 'Exclusive', 1700000000, 1700003600, 158760000,
+                 'finalised')",
+        [],
+    )
+    .unwrap();
+
+    // One click, 40 frames long, on the left wall only.
+    let insert = "INSERT INTO defects
+            (capture_id, start_frame, end_frame, channels, kind, provenance,
+             repair, created_at, updated_at)
+         VALUES (1, ?1, ?2, ?3, 'click', 'ar-residual', 'interpolate',
+                 1700000000, 1700000000)";
+    conn.execute(insert, (4_812_330_i64, 4_812_370_i64, 1_i64))
+        .expect("a span with frames in it, on a channel that exists");
+
+    assert!(
+        conn.execute(insert, (9_000_000_i64, 9_000_000_i64, 1_i64))
+            .is_err(),
+        "end_frame is exclusive, so a span of no frames is a bug in the writer"
+    );
+    assert!(
+        conn.execute(insert, (9_000_000_i64, 9_000_040_i64, 0_i64))
+            .is_err(),
+        "damage to no channel is not damage"
+    );
+    assert!(
+        conn.execute(insert, (4_812_330_i64, 4_812_370_i64, 1_i64))
+            .is_err(),
+        "the same span on the same channels is the same defect, found twice"
+    );
+
+    // The same frames on the other wall are a different defect, which is the whole
+    // reason channels is a bitmask: one click rarely damages both grooves.
+    conn.execute(insert, (4_812_330_i64, 4_812_370_i64, 2_i64))
+        .expect("the other channel is its own row");
+
+    let rows: i64 = conn
+        .query_row("SELECT count(*) FROM defects", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(rows, 2, "two legal rows in, three illegal ones refused");
+
+    // Confidence, evidence and locked all default, because a detector that found
+    // something and said nothing about it has still said it is certain and
+    // unconfirmed. `repair` deliberately has no default: see the DDL.
+    let (confidence, evidence, locked): (f64, String, i64) = conn
+        .query_row(
+            "SELECT confidence, evidence, locked FROM defects WHERE channels = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert!((confidence - 1.0).abs() < f64::EPSILON);
+    assert_eq!(evidence, "");
+    assert_eq!(locked, 0, "nothing is locked until a person locks it");
+}
