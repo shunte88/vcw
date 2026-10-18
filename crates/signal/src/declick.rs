@@ -59,9 +59,10 @@
 //! yet - it is WP-30 §8 step 5 - so the second pass instead drops the samples the
 //! first pass marked out of the autocorrelation sums and out of the standard
 //! deviation the threshold is taken from. It serves the same purpose, and it is
-//! cheaper, but it is not the published method and it is one of the things the
-//! re-derivation on `/data2/source_rips` has to measure. Nothing here should be
-//! trusted at its defaults until that has happened: see the survey's section 4.
+//! cheaper, but it is not the published method. The re-derivation on
+//! `/data2/source_rips` measured the detector with this substitution in place, so
+//! the defaults below are right for the detector as written and would have to be
+//! re-measured if the repair-between-passes loop ever replaces it.
 //!
 //! This detector reports spans of damage and never changes a sample (§4.1, §23).
 //!
@@ -74,29 +75,47 @@ use vcw_types::StorageFormat;
 ///
 /// The window, overlap, burst and pass count are the operating point Oudre
 /// publishes - `b=20`, `Nw=2416`, two iterations, 75% overlap - which FFmpeg's
-/// `adeclick` independently defaults to as well. Two of the five are **not** the
-/// published values, and both departures are measured rather than preferred:
+/// `adeclick` independently defaults to as well. The threshold is not, and the
+/// order is not, and both departures are measured.
 ///
-/// - **Threshold 4, not 2.** `K=2` is two standard deviations of a residual that
-///   is very nearly Gaussian where nothing is wrong, so it marks about one sample
-///   in twenty-two *by construction*, and burst fusion then joins the scattering
-///   into near-continuous coverage. On two seconds of synthesized tonal material
-///   with a dither floor and four injected clicks it flags 7.8% of all samples at
-///   `b=1` and 24.2% at `b=20` - the survey's "five to seven percent" reproduced,
-///   which is the best evidence there is that this implementation matches the
-///   paper, and also the proof that the number cannot be shipped. The cliff is
-///   sharp: `K=3` drops the same material to 0.001%, `K=4` to zero, and all four
-///   clicks are still found at every value up to 10.
-/// - **Order 2% of the window, not 12.5%.** This is the one parameter the two
-///   published sources disagree about: Oudre's `p=302` against FFmpeg's 2%. On the
-///   same material the cheap one found the four clicks as four spans where the
-///   expensive one found five, and it runs six times faster - 48 ms per second of
-///   stereo against 290 ms, which is the difference between a side in a minute and
-///   a side in seven.
+/// **The threshold was re-derived on real records.** Eight sides from
+/// `/data2/source_rips`, 4.5 hours of audio from solo piano to dense noise, swept
+/// over `K` from 3 to 40; and separately 300 clicks of a known shape injected into
+/// one of those sides at known frames, fifty each at six amplitudes from equal to
+/// the local RMS up to 18 dB above it, scored for recall against the same side
+/// unmodified. Three things came out of it:
 ///
-/// None of this is the re-derivation the survey asks for. That needs
-/// `/data2/source_rips`, and until it has happened these are a defensible starting
-/// point rather than a recommendation.
+/// - **The residual is heavy-tailed on all music, not Gaussian.** The span count
+///   falls by 1.1x to 2.4x per unit `K` where a Gaussian tail would fall about
+///   tenfold. There is no statistical boundary between a click and loud music
+///   here, so the threshold is a policy and not a discovery, and no amount of
+///   sweeping will produce a knee that argues for itself.
+/// - **Recall is not the binding constraint.** Every injected click at every
+///   amplitude is found up to `K=12`; 98% up to `K=16`; it falls to 79% at `K=24`
+///   and to nothing by `K=40`. The cost of raising the threshold is therefore
+///   almost free until quite late, while the benefit is large: `K=4` flags between
+///   0.31% and 5.6% of a side, and `K=16` flags between 0.0024% and 0.0116%.
+/// - **`K=16` is the lowest value that flags none of 300 randomly chosen music
+///   positions** while still catching 98% of injected clicks, including those whose
+///   peak merely equals the local RMS. It is chosen over `K=12`, which catches the
+///   last 2%, because the repair is destructive and runs unattended: missing a
+///   click at the edge of audibility is a smaller harm than interpolating over
+///   twice as much music that was never damaged.
+///
+/// **Order 2% of the window, not 12.5%.** This is the one parameter the two
+/// published sources disagree about: Oudre's `p=302` against FFmpeg's 2%. At
+/// `K=16` on five of the eight sides, 12.5% changes recall by one injected click
+/// in 300 and the flagged fraction by about a tenth, for six times the work. The
+/// cheap one wins on evidence rather than on taste.
+///
+/// **`burst` was swept too and left alone.** From 1 to 50 it does not move recall
+/// at all. It trades span count against flagged samples - `b=1` flags about half
+/// as many samples in about 8% more spans - so the right value depends on what a
+/// repair sounds like across a fused gap, which cannot be judged until there is a
+/// repair to listen to (WP-30 §8 step 5). Until then it stays at the published 20.
+///
+/// A threshold measured on eight sides is still eight sides. It is a defensible
+/// default and not a constant of nature; `vcw declick --threshold` exists.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Config {
     /// Analysis frame length in milliseconds. Oudre's `Nw`.
@@ -124,7 +143,7 @@ impl Default for Config {
             window_millis: 55,
             overlap_percent: 75,
             order_percent: 2.0,
-            threshold: 4.0,
+            threshold: 16.0,
             burst: 20,
             passes: 2,
         }
@@ -766,24 +785,29 @@ mod tests {
     /// produces more spans than at `b=20`, because a real click dips back under the
     /// threshold in the middle of itself. If this ever stops holding, fusion has
     /// stopped running.
+    ///
+    /// Both arms pin `threshold` rather than taking [`Config::default`]. At the
+    /// shipped `K=16` the residual inside these four synthetic clicks never dips
+    /// back under the bar, so there is no rubble and fusion correctly does nothing.
+    /// Inheriting the default would make this test pass or fail on the default
+    /// rather than on the mechanism it is named after.
     #[test]
     fn fusion_turns_rubble_into_spans() {
         let bytes = material(true);
-        let scattered = {
+        let spans = |burst| {
             let cfg = Config {
-                burst: 1,
+                threshold: 4.0,
+                burst,
                 ..Config::default()
             };
             let mut detector = Detector::new(RATE, 2, StorageFormat::Int16, cfg);
             detector.push(&bytes);
-            detector.finish().0
+            detector.finish().0.len()
         };
-        let (fused, _) = run(&bytes, 65_536);
+        let (scattered, fused) = (spans(1), spans(20));
         assert!(
-            fused.len() < scattered.len(),
-            "fusing {} spans into {} is backwards",
-            scattered.len(),
-            fused.len()
+            fused < scattered,
+            "fusing {scattered} spans into {fused} is backwards"
         );
     }
 }

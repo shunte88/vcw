@@ -14,7 +14,9 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
-## Unreleased
+## 0.3.5-alpha
+
+2026-10-18
 
 ### Added
 
@@ -49,11 +51,23 @@ loud if it cannot.
   The run says, before anything else, what fraction of the side it flagged.
   That number is the whole reason to look: the published settings this detector
   is built from were tuned on 78s and mark five to seven percent of every sample
-  on that material, which on an LP would be nonsense. VCW ships stricter
-  defaults, and all six settings are on the command line - `--threshold`,
-  `--burst`, `--window-ms`, `--overlap`, `--order` and `--passes` - so a side
-  that reads wrong can be argued with. `--dry-run` reports without writing, and
-  `--spans` lists every one found.
+  on that material, which on an LP would be nonsense.
+
+  So the settings were derived again, on records. Eight sides, four and a half
+  hours of it, from solo piano to dense noise, swept across the whole useful
+  range of the threshold; and separately three hundred clicks of a known size
+  put into one of those sides at known places, so that there was something to
+  miss. The clicks are all found well past the point where the false alarms
+  stop, which is what settles it: the shipped threshold flags between one
+  sample in forty thousand and one in nine thousand of a real side, and still
+  finds nineteen clicks in twenty at the faintest size tested - a click no
+  louder than the music around it. What it will not do is tell you a clean
+  record is five percent broken.
+
+  All six settings are on the command line - `--threshold`, `--burst`,
+  `--window-ms`, `--overlap`, `--order` and `--passes` - so a side that reads
+  wrong can be argued with. `--dry-run` reports without writing, and `--spans`
+  lists every one found.
 
   Run it twice and you get one answer, not two: a second pass replaces the
   first pass's findings rather than adding to them, so raising the threshold

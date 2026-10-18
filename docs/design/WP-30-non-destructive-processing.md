@@ -313,9 +313,38 @@ to apply, analytic to decide. Worth noticing now, not worth designing now.
    "five to seven percent" and is unusable; `K=4` flags nothing on clean synthetic
    material and still finds every injected click. Oudre's model order of 12.5% of the
    frame cost six times what FFmpeg's 2% cost and found one more span than there was
-   damage, so the cheap one won. Both numbers came off two seconds of synthesized
-   material, which is not the re-derivation the survey asked for: that needs
-   `/data2/source_rips`, and there is no path from a WAV into a capture yet.
+   damage, so the cheap one won.
+
+   **The re-derivation on real records, 2026-10-18.** WAV import made it possible the
+   same day. Eight sides from `/data2/source_rips` - 4.5 hours, 1.11e9 frames, solo
+   piano to dense noise, one of them at 192 kHz - were swept over `K` from 3 to 40,
+   and 300 clicks of a known four-sample shape were injected into one of them at
+   known frames, fifty each at +0, +3, +6, +9, +12 and +18 dB relative to the local
+   RMS, with the uninjected side as the control. Four results:
+
+   - **The residual is heavy-tailed on music, not Gaussian.** Span counts fall 1.1x
+     to 2.4x per unit `K`, where a Gaussian tail falls about tenfold. There is no
+     knee and no natural boundary; the threshold is a policy choice. The synthetic
+     material that produced `K=4` had a Gaussian floor and so produced a cliff that
+     does not exist on records. That is the methodological lesson: a detector
+     thresholding a residual cannot be tuned on synthesized audio at all.
+   - **Recall is not the binding constraint.** 100% of injected clicks at every
+     amplitude up to `K=12`, 98% at `K=16`, 94% at 20, 79% at 24, 31% at 32, zero by
+     40. False alarms fall far faster than recall over that whole range.
+   - **`K=16` is the shipped value.** It is the lowest threshold that flags none of
+     300 randomly chosen music positions, and it flags 0.0024% to 0.0116% of a side
+     against `K=4`'s 0.31% to 5.6%. `K=12` keeps the last 2% of recall at twice the
+     flagged fraction; 16 wins because the repair is destructive and unattended.
+   - **`burst` and `order_percent` are inert.** Swept at `K=16` across five sides:
+     `burst` from 1 to 50 does not change recall at all, and `order_percent` from 2
+     to 12.5 changes it by one click in 300 for six times the work. Both keep their
+     values. `burst` trades span count against flagged samples and should be
+     revisited in step 5, when there is a repair to listen to across a fused gap.
+
+   One performance finding fell out of it: the 192 kHz side analyzed at 0.9x real
+   time against 14.4x for every 48 kHz side. `window_millis` is fixed in time, so the
+   model order scales with the sample rate and the cost per second of audio scales as
+   the square of it. A 192 kHz side takes longer to analyze than to play.
 
    Two things came out of writing it that were not in the plan. `Provenance` gained a
    variant and the kebab-case *reader* lived in `vcw-project` rather than beside
