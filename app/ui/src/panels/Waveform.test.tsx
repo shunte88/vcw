@@ -21,8 +21,16 @@
 // second. Everything else is the real component.
 
 import { act } from "react";
-import { createRoot } from "react-dom/client";
-import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { type Root, createRoot } from "react-dom/client";
+import {
+  type Mock,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import * as api from "../api";
 import type { Boundary, Capture, Track } from "../bindings/vcw";
@@ -114,6 +122,8 @@ describe("taking hold of a boundary", () => {
   let selected: Mock<(selection: Region | null) => void>;
   let cued: Mock<(seconds: number) => void>;
   let canvas: HTMLCanvasElement;
+  let root: Root;
+  let host: HTMLDivElement;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -142,9 +152,9 @@ describe("taking hold of a boundary", () => {
     moved = vi.fn();
     selected = vi.fn();
     cued = vi.fn();
-    const host = document.createElement("div");
+    host = document.createElement("div");
     document.body.append(host);
-    const root = createRoot(host);
+    root = createRoot(host);
     await act(async () => {
       root.render(
         <Waveform
@@ -166,6 +176,18 @@ describe("taking hold of a boundary", () => {
     });
     canvas = host.querySelector("canvas")!;
     expect(api.waveform).toHaveBeenCalled();
+  });
+
+  // React 19 runs its render work on a macrotask, so an update still queued
+  // when the file ends runs after Vitest has torn the jsdom environment down
+  // and throws `window is not defined` - which fails the whole file even
+  // though every test in it passed. Unmounting flushes that work while there
+  // is still a document to flush it into.
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
   });
 
   it("moves the line the press landed on, and draws no band", async () => {
@@ -207,12 +229,20 @@ describe("taking hold of a boundary", () => {
     expect(cued).toHaveBeenCalledWith(2);
   });
 
-  it("says which track the line under the pointer belongs to", () => {
-    press(canvas, "pointermove", at(2));
+  // Wrapped like every other test here: a bare dispatch sets state that React
+  // has not been told to flush, and the work outlives the test.
+  it("says which track the line under the pointer belongs to", async () => {
+    await act(async () => {
+      press(canvas, "pointermove", at(2));
+    });
     expect(canvas.title).toBe("A1 start, at 00:00:02.000 - drag to move it.");
-    press(canvas, "pointermove", at(6));
+    await act(async () => {
+      press(canvas, "pointermove", at(6));
+    });
     expect(canvas.title).toBe("A1 end, at 00:00:06.000 - drag to move it.");
-    press(canvas, "pointermove", at(9));
+    await act(async () => {
+      press(canvas, "pointermove", at(9));
+    });
     expect(canvas.title).toBe("");
   });
 });
