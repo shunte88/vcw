@@ -8293,3 +8293,161 @@ still fails the test.
 
 Gate green across all seventeen legs at **1356 tests**, up from 1350, 23 ignored, 243
 in the frontend, zero em dashes.
+
+## 2026-10-17, 0.3.4-alpha: the resolver walk, and a verb for the upgrade
+
+The work is written up above - `2026-10-16, the last item on WP-23` and `the door
+onto the resolver` for the walk, `The window says when it is old` for the update
+check, and the two 2026-10-17 sections for `vcw migrate` and the dictionary check.
+This records that it shipped.
+
+One round of each: green on `main` (12 jobs, `package` and `release` correctly
+skipped on a branch push), then the tag (17 jobs, four `package` legs, zero
+failures), then one `-F draft=false` on a draft that already carried the right
+`tag_name` and `prerelease=true`.
+
+The pre-tag sweep found exactly one thing, and it is the reason the sweep exists:
+**the date under the heading was wrong.** The section had been opened on the 16th
+and the release went out on the 17th, and that line is not decoration - it goes
+into the public release notes verbatim. Cheap to fix and expensive to fix late,
+because the tag has to land on a green head, so a one-character correction costs a
+CI round. The pre-tag list is now three items and not two: check the four files the
+version lives in, run the release job's own awk against the changelog, and read the
+date.
+
+## Phase 3 - WP-30, non-destructive processing: the detector, and what tuning it taught
+
+Four of the seven steps in the survey's section 8, built in order over 2026-10-17
+and 18: the survey itself, the schema 6 `defects` table, the `Chain` that replaced
+`Option<Filter>` at both insertion points, and the click detector that fills the
+table. Each is in its own commit with its own reasoning; what belongs here is the
+part that was not in the plan.
+
+**The detector is an AR residual threshold, and it owns no new dependency.** It
+fits an all-pole model to every 55 ms of the capture, inverse-filters it, and marks
+what the model could not predict - which is what a click is, and why a cymbal is
+not one. Every reference implementation of this is copyleft (Oudre's is
+GPL-3.0-or-later, FFmpeg's `af_adeclick.c` is LGPL) against a project that is MIT
+with a permissive-only `deny.toml`, so both were read and neither was vendored.
+It reports spans and changes no sample, per §4.1.
+
+**Then the defaults were re-derived, and the method is the finding.** The detector
+shipped at `K=4`, picked on two seconds of synthesized tonal material with a
+Gaussian dither floor. On that material the cliff is sharp - 7.8% of samples
+flagged at `K=2`, 0.001% at `K=3`, nothing at `K=4`, and all four injected clicks
+found at every value up to 10. On real records there is no cliff anywhere. `K=4`
+flags between **0.31% and 5.6%** of a side.
+
+WAV import landed the same morning and made `/data2/source_rips` reachable, so the
+sweep was finally possible: eight sides, 4.5 hours, 1.11e9 frames, solo piano to
+dense noise, one of them at 192 kHz, swept over `K` from 3 to 40. The corpus has no
+ground truth, so recall had to come from somewhere else: 300 clicks of a known
+four-sample shape were injected into one of those sides at known frames, fifty each
+at +0, +3, +6, +9, +12 and +18 dB over the **local** RMS, and scored against the
+same side unmodified so that a point the detector already flagged in clean audio
+counts for nothing. Four results.
+
+**The residual is heavy-tailed on music, not Gaussian.** Span counts fall 1.1x to
+2.4x per unit `K`, where a Gaussian tail falls about tenfold. There is no
+statistical boundary between a click and loud music, no knee that argues for
+itself, and the threshold is therefore a policy and not a discovery. The synthetic
+test had a Gaussian floor and so produced a cliff that does not exist; it was
+measuring its own noise model. **A detector that thresholds an AR residual cannot
+be tuned on synthesized audio at all**, and that is the transferable lesson.
+
+**Recall is not the binding constraint.** Every injected click at every amplitude
+is found up to `K=12`; 98% at 16, 94% at 20, 79% at 24, 31% at 32, and nothing by
+40. False alarms fall far faster than recall across that whole range, which is what
+makes the choice easy.
+
+```text
+spans per second                  percent of samples flagged
+rip         K=4      K=16         K=4       K=16
+frahm      54.68      1.75        0.3066    0.0069
+gasp      159.36      0.91        0.7908    0.0028
+pole      148.96      2.57        2.2938    0.0116
+boc       139.80      0.79        1.3479    0.0024
+muslim.   521.60      1.22        5.6127    0.0039
+ows20     202.61      1.02        2.1775    0.0031
+clipping  300.16      1.42        4.6361    0.0045
+kingbuf.  258.79      1.20        0.6536    0.0029
+```
+
+**`K=16` ships.** It is the lowest threshold that flags none of 300 randomly chosen
+music positions while still catching 98% of injected clicks, including the faintest
+rung, where the click's peak merely equals the music around it. `K=12` keeps that
+last 2% of recall at twice the flagged fraction, and 16 wins because the repair is
+destructive and runs unattended: missing a click at the edge of audibility is a
+smaller harm than interpolating over twice as much music that was never damaged.
+`K=14` was tried on the user's suggestion to split the difference and is
+**dominated** - identical recall to 16, 55% to 90% more spans on every side.
+
+**`burst` and `order_percent` keep their published values, measured rather than
+assumed.** Swept at `K=16` across five sides: `burst` from 1 to 50 does not change
+recall by a single click, and `order_percent` from 2 to 12.5 changes it by one click
+in 300 for six times the work. `burst` does trade span count against flagged samples
+- `b=1` flags about half as many samples in 8% more spans - so it is the knob to
+revisit at step 5, when there is a repair to listen to across a fused gap.
+
+Three things fell out of the sweep that are worth more than the number.
+
+**A relative threshold means defects hide each other.** At `K=3` and `K=4` the
+*injected* side produced fewer spans than the clean one. Adding 300 clicks raises
+the residual scale the threshold is taken from, which lifts the bar for everything
+else, so a badly damaged record is judged by a laxer standard than a clean one. It
+does not matter at `K=16`, where the flagged fraction is four orders of magnitude
+below the signal, but it is a property of the method and not of the setting.
+
+**Cost per second of audio scales as the square of the sample rate.**
+`window_millis` is fixed in time, so the model order scales with the rate: 14.4x
+real time on every 48 kHz side and **0.9x** on the 192 kHz one. A 192 kHz side
+takes longer to analyze than to play. Nothing is wrong, but a progress bar is not
+optional at that rate and nobody would have predicted it from the 48 kHz numbers.
+
+**One test failed, and it was the right failure.** `fusion_turns_rubble_into_spans`
+asserts that `b=20` yields fewer spans than `b=1`, because a real click dips back
+under the threshold in the middle of itself. At `K=16` the residual inside those
+four synthetic clicks never dips back under the bar, so there is no rubble and
+fusion correctly does nothing. The test had been taking `Config::default()`, which
+made it a test of the default rather than of fusion; both arms now pin
+`threshold: 4.0` with a comment saying why. `clippy::doc_lazy_continuation` then
+caught the comment, because the no-em-dash rule had left a line starting with `- `
+that Markdown reads as a list item.
+
+The harness is outside the repo at `/data2/vcw-scratch/sweep/` - `run.sh`,
+`inject.py`, `match.py`, `report.py`, `secondary.py`, and 11 GB of imported sides.
+One practical note for re-running it: every scalar in `vcw declick --json` precedes
+the defect array, so the analysis reads the first 600 bytes of each result rather
+than parsing up to 500 MB of spans.
+
+Steps 5, 6 and 7 remain: the repair stage with the straddling-defect decision from
+section 4, the waveform overlay and per-defect veto, and `VCW_PROCESSING` with the
+bit-perfect refutation moved onto the chain predicate.
+
+## 2026-10-18, 0.3.5-alpha: a second kind of import, and a threshold that was measured
+
+Three things a person can see, and one they cannot.
+
+**`vcw import` takes a WAV file.** It was the Audacity importer or nothing, which
+left 62 real rips sitting in `/data2/source_rips` with no way into a project. The
+reader is the one that was already in `crates/cli/src/wavfile.rs` feeding the soak
+harness, moved to `crates/import/src/wav.rs` - the move its own module doc had
+promised. Nothing is converted: 16, 24 and 32-bit integer PCM have the same byte
+layout as `StorageFormat::{Int16, Int24Packed, Int32}`, so the `data` chunk copies
+straight into the blocks and a float file is refused by name rather than silently
+narrowed. 208 MB in 1.6 seconds, verified byte for byte against the source at eight
+block boundaries including the short final one.
+
+**The clicks in a side can be found**, at a threshold derived from records rather
+than from synthesized audio. That is the WP-30 section above.
+
+**Projects carry a defect list**, schema 6, which upgrades on open.
+
+And the thing nobody sees: this release exists because the one before it could not
+have shipped the detector honestly. On a real rip at the old default, `vcw declick`
+reported 86,323 spans in nine minutes - about 160 a second - and the first person to
+run it on their own record would have read that as VCW being broken. WAV import is
+what made the fix measurable, which is why the two landed together.
+
+Gate green across all seventeen legs at **1367 tests**, 23 ignored, 243 in the
+frontend, zero em dashes.
