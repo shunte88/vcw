@@ -48,6 +48,7 @@
 
 pub mod adopt;
 pub mod commands;
+pub mod declick;
 pub mod detection;
 pub mod engine;
 pub mod events;
@@ -60,6 +61,7 @@ pub mod state;
 
 pub use adopt::{Adopted, Policy};
 pub use commands::{Command, Setup};
+pub use declick::{Found, Intent};
 pub use detection::{Detectors, Refined};
 pub use engine::{Engine, Recorded, Recorder};
 pub use events::{Bus, Event, Events};

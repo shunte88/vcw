@@ -79,6 +79,10 @@ pub enum Provenance {
     MetadataDuration,
     /// The side topology says there must be one: n tracks, this long a side (§29).
     ReleaseTopology,
+    /// An AR prediction residual stood out from the model fitted around it: a
+    /// click (WP-30). Not a boundary detector - it reports spans of damage - but
+    /// §24's vocabulary is the same one, and so is the locking rule.
+    Declick,
     /// A human said so. Never moved by analysis.
     User,
 }
@@ -94,8 +98,35 @@ impl Provenance {
             Self::Fingerprint => "fingerprint",
             Self::MetadataDuration => "metadata-duration",
             Self::ReleaseTopology => "release-topology",
+            Self::Declick => "declick",
             Self::User => "user",
         }
+    }
+
+    /// Every provenance there is.
+    ///
+    /// Kept beside [`Provenance::parse`] so that the two cannot drift: a variant
+    /// added without a name to read it back by came out of the database as
+    /// `Silence`, which is how a declick row claimed to be a gap in the audio.
+    pub const ALL: [Self; 8] = [
+        Self::Silence,
+        Self::SpectralChange,
+        Self::Hmm,
+        Self::Fingerprint,
+        Self::MetadataDuration,
+        Self::ReleaseTopology,
+        Self::Declick,
+        Self::User,
+    ];
+
+    /// Reads one back from its kebab-case name.
+    ///
+    /// `Option`, so that a caller storing it in a column decides what an
+    /// unreadable value means. It must not mean [`Self::User`]: that is the one
+    /// privilege §24 reserves for a person, and corruption does not earn it.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.as_str() == text)
     }
 
     /// Whether analysis is allowed to move a boundary from this source.
@@ -355,6 +386,34 @@ impl AudioObservation {
 mod tests {
     use super::*;
 
+    /// Every provenance survives the column it is stored in.
+    ///
+    /// The second half is the half that matters. `ALL` is a hand-written list, so
+    /// the exhaustive match below is what keeps it honest: adding a variant stops
+    /// this file compiling until the variant is in the list, which is exactly the
+    /// reminder that was missing the day a declick row read back as a gap.
+    #[test]
+    fn every_provenance_survives_its_name() {
+        for provenance in Provenance::ALL {
+            assert_eq!(Provenance::parse(provenance.as_str()), Some(provenance));
+        }
+        assert_eq!(Provenance::parse("silence "), None);
+        assert_eq!(Provenance::parse(""), None);
+        const fn listed(provenance: Provenance) -> bool {
+            match provenance {
+                Provenance::Silence
+                | Provenance::SpectralChange
+                | Provenance::Hmm
+                | Provenance::Fingerprint
+                | Provenance::MetadataDuration
+                | Provenance::ReleaseTopology
+                | Provenance::Declick
+                | Provenance::User => true,
+            }
+        }
+        assert!(Provenance::ALL.into_iter().all(listed));
+    }
+
     #[test]
     fn a_user_boundary_is_the_only_locked_one() {
         // §24: user-confirmed boundaries shall not be moved by automatic
@@ -366,6 +425,7 @@ mod tests {
             Provenance::Fingerprint,
             Provenance::MetadataDuration,
             Provenance::ReleaseTopology,
+            Provenance::Declick,
         ] {
             assert!(!provenance.is_locked(), "{provenance:?} claimed a lock");
         }

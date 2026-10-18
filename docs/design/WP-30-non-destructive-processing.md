@@ -299,6 +299,33 @@ to apply, analytic to decide. Worth noticing now, not worth designing now.
    and once a second stage exists an "is a curve in force" question answered from the
    chain's emptiness is answered wrongly.
 4. The detector, writing defect rows, re-runnable, respecting `locked`.
+   **Done, 2026-10-18:** `vcw_signal::declick` is the AR residual detector the survey
+   recommended, written from the papers; `vcw_project::defect` stores what it finds;
+   `vcw_core::declick` streams a capture through the one into the other; and `vcw
+   declick <project>` drives it with the five parameters on the command line.
+   Re-runnability is one function - `defect::replace` - because the three rules only
+   hold together: a span this pass did not find goes, a locked row stays, and a span
+   that lands on a locked row keeps the locked row's verdict. A dry run is the same
+   code with the project opened read-only.
+
+   Two of the five published defaults did not survive contact. `K=2` marks one sample
+   in twenty-two of a Gaussian residual by construction, which is the survey's own
+   "five to seven percent" and is unusable; `K=4` flags nothing on clean synthetic
+   material and still finds every injected click. Oudre's model order of 12.5% of the
+   frame cost six times what FFmpeg's 2% cost and found one more span than there was
+   damage, so the cheap one won. Both numbers came off two seconds of synthesized
+   material, which is not the re-derivation the survey asked for: that needs
+   `/data2/source_rips`, and there is no path from a WAV into a capture yet.
+
+   Two things came out of writing it that were not in the plan. `Provenance` gained a
+   variant and the kebab-case *reader* lived in `vcw-project` rather than beside
+   `as_str`, so a declick row came back out of the database claiming to be a gap in
+   the audio; `Provenance::parse` and `Provenance::ALL` now sit next to the names,
+   with an exhaustive match in the test so that the next variant cannot repeat it. And
+   the first version of the re-run test passed with the `locked = 0` clause deleted,
+   because vetoing a span also moves its provenance to `user` and the delete is scoped
+   by provenance - so the test now also pins a row the detector still owns, which is
+   the only case that clause is for.
 5. The repair stage, and the straddling-defect decision from section 4.
 6. The waveform overlay and the per-defect veto.
 7. `VCW_PROCESSING`, and moving the bit-perfect refutation onto the chain predicate.

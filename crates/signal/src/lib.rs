@@ -38,6 +38,7 @@
 //!
 //! Requirements: §17-§19 (metering and waveform), §22-§24 (detection).
 
+pub mod declick;
 pub mod features;
 pub mod hmm;
 pub mod meter;

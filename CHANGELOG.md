@@ -16,6 +16,29 @@ loud if it cannot.
 
 ## Unreleased
 
+### Added
+
+* **VCW can find the clicks in a side.** `vcw declick <project>` fits a model to
+  every fiftieth of a second of the capture, inverse-filters it and reports what
+  the model could not predict - which is what a click is. It writes one row per
+  span of damage and changes no audio at all: the samples stay exactly as they
+  were recorded, and what gets stored is where the damage is and what to do
+  about it. Nothing acts on those rows yet; repairing them is the next piece of
+  work.
+
+  The run says, before anything else, what fraction of the side it flagged.
+  That number is the whole reason to look: the published settings this detector
+  is built from were tuned on 78s and mark five to seven percent of every sample
+  on that material, which on an LP would be nonsense. VCW ships stricter
+  defaults, and all six settings are on the command line - `--threshold`,
+  `--burst`, `--window-ms`, `--overlap`, `--order` and `--passes` - so a side
+  that reads wrong can be argued with. `--dry-run` reports without writing, and
+  `--spans` lists every one found.
+
+  Run it twice and you get one answer, not two: a second pass replaces the
+  first pass's findings rather than adding to them, so raising the threshold
+  shortens the list. Anything you have ruled on yourself survives untouched.
+
 ### Changed
 
 * **Projects now carry a list of defects, and upgrade to schema 6 when opened.**

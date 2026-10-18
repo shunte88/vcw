@@ -55,6 +55,7 @@
 //! # Ok(()) }
 //! ```
 
+pub mod defect;
 pub mod disc;
 pub mod doc;
 pub mod error;
@@ -72,6 +73,7 @@ pub mod track;
 pub mod validate;
 pub mod waveform;
 
+pub use defect::{Defect, NewDefect};
 pub use error::{Error, Result};
 // Re-exported because the project layer's own surface already speaks it:
 // `Session::advance` and `pcm::Reader::open` both take one, so a caller that

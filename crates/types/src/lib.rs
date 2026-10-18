@@ -42,6 +42,7 @@
 //! here; a type earns its place once a requirement or a decision pins it down.
 
 pub mod capture;
+pub mod defect;
 pub mod format;
 pub mod observation;
 pub mod rate;
@@ -50,6 +51,7 @@ pub mod summary;
 pub mod vinyl;
 
 pub use capture::{CaptureInfo, CaptureState, Diagnostics, PcmSource};
+pub use defect::Repair;
 pub use format::{CaptureEq, CaptureMode, SampleFormat, StorageFormat};
 pub use observation::{AudioObservation, BoundaryObservation, Edge, Evidence, Provenance};
 pub use rate::{STANDARD_RATES, SampleRate};

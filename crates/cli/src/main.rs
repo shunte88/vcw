@@ -50,6 +50,7 @@
 mod bundle;
 mod capture;
 mod contend;
+mod declick;
 mod detect;
 mod devices;
 mod eq;
@@ -380,6 +381,60 @@ enum Command {
         /// Print every measurement behind every boundary (§24).
         #[arg(long)]
         evidence: bool,
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Find the clicks in a stored capture and record them (WP-30, §46).
+    ///
+    /// Fits an all-pole model to every short frame, inverse-filters it and
+    /// thresholds the residual: the music is what the model predicts and the
+    /// click is what it cannot. Writes a defect row per span, which is a
+    /// proposal and not an edit - §4.1 keeps the samples immutable and the
+    /// repair is computed on the way out.
+    ///
+    /// Re-runnable: a second pass replaces the first pass's findings and leaves
+    /// every row a person has locked exactly where it is.
+    ///
+    /// The defaults are a starting point, not a recommendation. See
+    /// docs/design/WP-30-declick-detector-survey.md section 4.
+    Declick {
+        /// Project to analyze.
+        project: std::path::PathBuf,
+        /// Capture to analyze. Omit for the most recent.
+        #[arg(long)]
+        capture: Option<i64>,
+        /// Analysis frame length in milliseconds.
+        #[arg(long)]
+        window_ms: Option<u32>,
+        /// How much of a frame the next one repeats, as a percentage.
+        #[arg(long)]
+        overlap: Option<u32>,
+        /// Model order as a percentage of the frame length.
+        #[arg(long)]
+        order: Option<f64>,
+        /// How many standard deviations of the residual counts as damage.
+        #[arg(long)]
+        threshold: Option<f64>,
+        /// Fusion distance in samples: marks closer than this become one span.
+        #[arg(long)]
+        burst: Option<usize>,
+        /// How many times to re-fit the model. Oudre measures four as too many.
+        #[arg(long)]
+        passes: Option<u32>,
+        /// What to call the damage: the defect row's kind.
+        #[arg(long, default_value = "click")]
+        kind: String,
+        /// What to propose doing: interpolate, mute or none.
+        #[arg(long, default_value = "interpolate")]
+        repair: String,
+        /// Find and report, but write nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Print every span found.
+        #[arg(long)]
+        spans: bool,
         /// Machine-readable output.
         #[arg(long)]
         json: bool,
@@ -1387,6 +1442,35 @@ fn run() -> anyhow::Result<()> {
             min_sound,
             min_sources,
             evidence,
+            json,
+        }),
+        Command::Declick {
+            project,
+            capture,
+            window_ms,
+            overlap,
+            order,
+            threshold,
+            burst,
+            passes,
+            kind,
+            repair,
+            dry_run,
+            spans,
+            json,
+        } => declick::run(&declick::Args {
+            project,
+            capture,
+            window_ms,
+            overlap,
+            order,
+            threshold,
+            burst,
+            passes,
+            kind,
+            repair,
+            dry_run,
+            spans,
             json,
         }),
         Command::Fingerprint {

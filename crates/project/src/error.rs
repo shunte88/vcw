@@ -259,6 +259,37 @@ pub enum Error {
         at_frame: u64,
     },
 
+    /// A defect row was asked for that is not there.
+    #[error("no defect {defect_id} in this project")]
+    NoSuchDefect {
+        /// The id that was asked for.
+        defect_id: i64,
+    },
+
+    /// A locked defect was asked to change or to go (§24).
+    ///
+    /// The same rule, the same spelling and the same reason as
+    /// [`Error::BoundaryLocked`]: a span a person vetoed, moved or pinned survives
+    /// the next detection pass, and that is what makes the detector re-runnable.
+    #[error("defect {defect_id} is locked, so analysis may not change it")]
+    DefectLocked {
+        /// The defect concerned.
+        defect_id: i64,
+    },
+
+    /// A defect row stores a repair nothing can carry out.
+    ///
+    /// Refused on read rather than defaulted: §51's rule for a misspelled curve,
+    /// for the same reason. Audio must not leave the project having had something
+    /// done to it that nobody asked for, nor nothing done that somebody did.
+    #[error("defect {defect_id} asks for repair '{repair}', which is not one")]
+    UnknownRepair {
+        /// The defect concerned.
+        defect_id: i64,
+        /// What the column said.
+        repair: String,
+    },
+
     /// A boundary that bounds a track was asked to go.
     ///
     /// Deleting it would leave the track with one end, so the track is what has to

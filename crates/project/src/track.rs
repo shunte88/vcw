@@ -1159,7 +1159,7 @@ fn settle(change: Option<&str>, existing: Option<String>) -> Option<String> {
 /// SQLite integers are signed, and a frame count that overflowed `i64` would be
 /// six million years of audio, so saturating is the honest conversion rather than
 /// a silent wrap.
-fn frame_to_sql(frame: u64) -> i64 {
+pub(crate) fn frame_to_sql(frame: u64) -> i64 {
     i64::try_from(frame).unwrap_or(i64::MAX)
 }
 
@@ -1172,18 +1172,12 @@ fn read_edge(text: &str) -> Edge {
     }
 }
 
-fn read_provenance(text: &str) -> Provenance {
-    match text {
-        "spectral-change" => Provenance::SpectralChange,
-        "hmm" => Provenance::Hmm,
-        "fingerprint" => Provenance::Fingerprint,
-        "metadata-duration" => Provenance::MetadataDuration,
-        "release-topology" => Provenance::ReleaseTopology,
-        "user" => Provenance::User,
-        // Not `User`: an unreadable provenance must not grant the one privilege
-        // §24 reserves for a person.
-        _ => Provenance::Silence,
-    }
+pub(crate) fn read_provenance(text: &str) -> Provenance {
+    // Not `User` on a miss: an unreadable provenance must not grant the one
+    // privilege §24 reserves for a person. The names come from the enum itself,
+    // because a table kept here instead drifted the day a variant was added and
+    // read every declick row back as a gap in the audio.
+    Provenance::parse(text).unwrap_or(Provenance::Silence)
 }
 
 fn write_sources(sources: &[Provenance]) -> String {
@@ -1207,7 +1201,7 @@ fn read_sources(text: &str) -> Vec<Provenance> {
 /// decision after the fact and never queried by name - §24 asks for it to be
 /// carried, not indexed. A name containing `;` or `=` would break the encoding,
 /// so both are stripped; every producer uses kebab-case names.
-fn write_evidence(evidence: &[Evidence]) -> String {
+pub(crate) fn write_evidence(evidence: &[Evidence]) -> String {
     evidence
         .iter()
         .map(|e| {
@@ -1218,7 +1212,7 @@ fn write_evidence(evidence: &[Evidence]) -> String {
         .join(";")
 }
 
-fn read_evidence(text: &str) -> Vec<Evidence> {
+pub(crate) fn read_evidence(text: &str) -> Vec<Evidence> {
     text.split(';')
         .filter(|item| !item.is_empty())
         .filter_map(|item| {
