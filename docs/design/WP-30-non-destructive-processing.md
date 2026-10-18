@@ -276,7 +276,12 @@ to apply, analytic to decide. Worth noticing now, not worth designing now.
 
 1. Read the declick literature and pick a detector. Nothing here is blocked on the rest
    of this list; the rest of this list is blocked on it, because a chain with one stage
-   in it is still not a chain.
+   in it is still not a chain. **Done, 2026-10-17:**
+   [WP-30 - the declick detector survey](WP-30-declick-detector-survey.md). It picks an
+   AR residual detector in `vcw-signal`, so step 7's guess at a new crate is withdrawn,
+   and it adds a requirement this note does not have: a detection run reports what
+   fraction of the side it flagged, because the published defaults flag 5 to 7 percent
+   of a 78 rpm transfer and an LP is not that material.
 2. Schema v6: the `defects` table, and the five places a migration touches.
 3. `Chain`, replacing `Option<Filter>` at both insertion points, with the frame
    position argument. This is a refactor with no behavior change and should be a
