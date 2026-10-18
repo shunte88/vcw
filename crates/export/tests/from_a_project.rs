@@ -42,6 +42,11 @@
 //! turntable's side of the pipeline come back out unchanged, and every layer that
 //! touched them in between is part of what is being tested. It is the same shape
 //! of test as WP-10's gapless render, and for the same reason.
+//!
+//! WP-30's repair stage is tested here too, for the same reason: the stage's own
+//! arithmetic is unit tested beside it, but whether the margin either side of a
+//! buffer actually reaches it is a question about this pipeline and nothing
+//! smaller can ask it.
 
 use std::path::Path;
 
@@ -94,6 +99,23 @@ fn recorded_at(
     channels: u16,
     frames: u64,
 ) -> (Project, Vec<u8>, usize) {
+    let frame_bytes = format.bytes_per_sample() * channels as usize;
+    let sent = pattern(frames as usize * frame_bytes);
+    recorded_bytes(dir, rate, format, channels, sent)
+}
+
+/// The same again, over audio the caller chose.
+///
+/// Split out for WP-30: a repair can only be checked against a known right answer
+/// if the audio around the damage has one, and `pattern` is a byte function with
+/// no shape to interpolate back to.
+fn recorded_bytes(
+    dir: &Path,
+    rate: u32,
+    format: StorageFormat,
+    channels: u16,
+    sent: Vec<u8>,
+) -> (Project, Vec<u8>, usize) {
     let info = CaptureInfo {
         rate: SampleRate(rate),
         channels,
@@ -109,7 +131,6 @@ fn recorded_at(
     let frame_bytes = format.bytes_per_sample() * channels as usize;
     let project = Project::create(dir.join("export.vcw")).expect("create");
     let mut writer = Writer::begin(project, &info, Config::default()).expect("begin");
-    let sent = pattern(frames as usize * frame_bytes);
     writer.push(&sent).expect("push");
     let (outcome, mut project, _) = writer
         .finish_with_project(CaptureState::Finalised)
@@ -1287,4 +1308,126 @@ fn the_curve_is_applied_per_track_tagged_and_refused_without_provenance() {
     assert!(plan.items.iter().all(|item| item.chain.is_empty()));
     splitter::run(project.conn(), &plan, &mut quiet).expect("run");
     assert_eq!(data_chunk(&plan.items[0].path), stored);
+}
+
+/// Frames of audio with a known shape, as `Int16` stereo.
+///
+/// A sawtooth, because a straight line is the one signal a cubic interpolator
+/// reproduces exactly: every repaired sample has a right answer that can be
+/// named, so "it looks smoother" is not something this test can settle for. The
+/// period is long enough that none of the damage below lands near a reset, which
+/// is the only place the line is not a line.
+fn sawtooth(frames: u64) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for frame in 0..frames {
+        for channel in 0..2i16 {
+            let value = ((frame % 2048) as i16 - 1024) * 16 + channel;
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    bytes
+}
+
+/// Overwrites one sample with a full-scale spike, the way a click does.
+fn spike(bytes: &mut [u8], frame: u64, channel: usize) {
+    let at = (frame as usize * 2 + channel) * 2;
+    bytes[at..at + 2].copy_from_slice(&i16::MAX.to_le_bytes());
+}
+
+#[test]
+fn a_defect_is_repaired_on_the_way_out_wherever_it_sits() {
+    // WP-30 §4 and §8 step 5. Three defects, placed at the three positions that
+    // break a repair stage for three different reasons:
+    //
+    //   * mid-buffer, which any implementation gets right;
+    //   * on the track's **first frames**, where the audio the interpolator needs
+    //     is outside the track - this is the straddling decision §4 names, and it
+    //     only passes because `cut` widens its read and discards the margin;
+    //   * across the **seam between two 64 KiB chunks**, which is the same problem
+    //     once per 16,384 frames and is why the margin is read on every buffer and
+    //     not only at the ends.
+    //
+    // The assertion is byte equality against the sawtooth with no spikes in it.
+    // Doing nothing fails it, because the spikes are still there. Repairing
+    // without the margin fails it too, and differently: with no good samples to
+    // read, the stage mutes rather than guesses, so the first track's opening
+    // frames come out as silence instead of as the line.
+    const START: u64 = 1_000;
+    const END: u64 = 60_000;
+    // 64 KiB of `Int16` stereo is 16,384 frames, so the first seam inside the
+    // track is here. Written as the arithmetic rather than as 17,384 so that a
+    // change to the chunk size shows up as a changed test and not a passing one.
+    const SEAM: u64 = START + (64 * 1024) / 4;
+
+    let dir = tempfile::tempdir().unwrap();
+    let clean = sawtooth(120_000);
+    let mut damaged = clean.clone();
+    let places = [
+        (START, START + 4, 0usize),
+        (20_000, 20_006, 1),
+        (SEAM - 2, SEAM + 4, 0),
+    ];
+    for &(from, to, channel) in &places {
+        for frame in from..to {
+            spike(&mut damaged, frame, channel);
+        }
+    }
+    assert_ne!(damaged, clean, "the fixture has to be damaged");
+
+    let (mut project, sent, frame_bytes) =
+        recorded_bytes(dir.path(), 96_000, StorageFormat::Int16, 2, damaged);
+    described(&mut project);
+    titled(&mut project, &[(START, END, "Europe Endless")]);
+    for &(from, to, channel) in &places {
+        vcw_project::defect::add(
+            &mut project,
+            1,
+            &vcw_project::defect::NewDefect {
+                start_frame: from,
+                end_frame: to,
+                channels: 1 << channel,
+                kind: "click".to_owned(),
+                confidence: 1.0,
+                provenance: vcw_types::Provenance::Declick,
+                evidence: Vec::new(),
+                repair: vcw_types::Repair::Interpolate,
+                locked: false,
+            },
+        )
+        .expect("defect");
+    }
+
+    let out = dir.path().join("out");
+    let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Wav)).expect("plan");
+    assert!(
+        !plan.items[0].chain.is_empty(),
+        "the chain lost its repairs"
+    );
+    splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+
+    let written = data_chunk(&plan.items[0].path);
+    let expected = &clean[START as usize * frame_bytes..END as usize * frame_bytes];
+    assert_eq!(
+        written.len(),
+        expected.len(),
+        "the widened read changed how much was written"
+    );
+    // Named before the blanket comparison, so a failure says which of the three
+    // positions broke rather than printing a quarter of a megabyte.
+    for &(from, to, channel) in &places {
+        for frame in from..to {
+            let at = ((frame - START) as usize * 2 + channel) * 2;
+            assert_eq!(
+                i16::from_le_bytes([written[at], written[at + 1]]),
+                i16::from_le_bytes([expected[at], expected[at + 1]]),
+                "frame {frame} channel {channel} was not put back on the line"
+            );
+        }
+    }
+    assert_eq!(written, expected, "something outside the damage moved");
+    assert_ne!(
+        written,
+        sent[START as usize * frame_bytes..END as usize * frame_bytes],
+        "the file is the damaged audio, so nothing was repaired at all"
+    );
 }

@@ -356,6 +356,52 @@ to apply, analytic to decide. Worth noticing now, not worth designing now.
    by provenance - so the test now also pins a row the detector still owns, which is
    the only case that clause is for.
 5. The repair stage, and the straddling-defect decision from section 4.
+   **Done, 2026-10-18:** `vcw_process::repair` applies the stored rows on the way out,
+   and section 4's decision went the way section 4 said it should - widen the read span
+   by the longest repair's context and discard the margin.
+
+   The margin is a `Context { before, after }` of slices borrowed from the caller's own
+   read, one `split_at_mut` apart from the buffer between them, so nothing is copied and
+   the stage stays stateless but for a forward cursor through the span list. The
+   alternative shapes were both worse. A delay line inside the stage is uniform and
+   correct and makes every caller prime it, discard twice the context and flush it with
+   zeros, for a shifted output stream. Splitting the chain into a `repair()` call and a
+   `parametric()` call moves the stage-order decision out to the call sites, which
+   section 4 already calls a knob for getting it wrong.
+
+   What the chosen shape buys is that **a track's first frame and a chunk seam are the
+   same question**. There is no separate code path for the edge of a cut; `splitter::cut`
+   and `Pump::fill` both over-read `Chain::context_frames` at each end of every buffer,
+   rewind to it, and write only the middle. The over-read is about 6% of a 64 KiB chunk
+   at 48 kHz, and the reader keeps its decoded block across the rewind, so re-reading the
+   margin usually costs an index lookup.
+
+   The margin has to be bounded or one pathological row makes every chunk in the file
+   read the whole span around it. `MAX_GAP_MILLIS = 10` is what bounds it, and it is the
+   same number as the musical answer: a curve drawn across more than 10 ms of missing
+   groove is invention, and silence is the more honest failure. A span past the cap
+   degrades to a mute keyed on the span's own length and never on the buffer, so the
+   same damage cannot be interpolated in one chunk and muted in the next.
+
+   The interpolator is cubic Hermite with Catmull-Rom tangents, and the first version of
+   it was wrong in a way worth recording. Uniform Catmull-Rom places its four control
+   points one *parameter step* apart, which here is one gap length, not one frame; reading
+   p0 at `start - 2` and p3 at `end + 1` gives tangents scaled to the wrong interval, and
+   the curve does not reproduce a straight line. Measuring the tangents across the whole
+   gap instead - `m1 = (y2 - y0) / (gap + 1)` - is exact on a line and stays bounded on a
+   long one.
+
+   The test for it is a sawtooth, because a line is the one signal a cubic reproduces
+   exactly: every repaired sample has a right answer that can be named, so "it sounds
+   smoother" is not something the test can settle for. Damage goes on the track's first
+   frame, mid-track, and across the seam between two export chunks, and the assertion is
+   byte equality against the undamaged line. Forcing `context_frames` to zero makes the
+   first-frame defect export as silence and fails it, which is the half of the check that
+   says the margin is load-bearing rather than decorative.
+
+   `burst` was to be revisited here, per step 4. It is not, yet: it changes which spans
+   are fused and therefore how long a gap the repair draws across, and that is a question
+   for a listener and the step 6 overlay, not for an assertion.
 6. The waveform overlay and the per-defect veto.
 7. `VCW_PROCESSING`, and moving the bit-perfect refutation onto the chain predicate.
 

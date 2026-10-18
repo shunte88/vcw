@@ -53,14 +53,47 @@
 //! equalized before the capture, which `captures.capture_eq` records, VCW cannot
 //! get upstream of that and does not pretend to.
 //!
-//! Today the chain holds one stage, so it is not yet a chain. It exists at this
-//! size on purpose: the position argument [`Chain::process_stored`] takes is the
-//! plumbing a frame-addressed repair needs, and threading it through the two
-//! call sites as a change with no behavior in it is cheaper to review than
-//! threading it through at the same time as the thing that reads it.
+//! A repair stage cannot work from the buffer alone. Interpolating across a gap
+//! needs good samples either side of it, and a buffer has nothing before its first
+//! frame and nothing after its last. [`Chain::context_frames`] is how much either
+//! side the chain has to be able to see; a caller reads that much extra at both
+//! ends and hands it over as a [`Context`]. That is WP-30 §4's first option - widen
+//! the read span and discard the margin - and it covers a track's first frame and
+//! every chunk boundary inside it with one mechanism, because to the stage those
+//! are the same question.
+
+pub mod repair;
+
+pub use repair::{Damage, Repairs};
 
 use vcw_eq::Filter;
 use vcw_types::StorageFormat;
+
+/// The audio either side of the buffer being processed.
+///
+/// Borrowed from the caller's own read rather than buffered here: both call sites
+/// already hold one allocation big enough for the margin and the chunk together,
+/// so the three slices are one `split_at_mut` apart and nothing is copied.
+///
+/// [`Context::NONE`] is the honest answer when a caller has no margin - the first
+/// frames of a capture, where no audio exists before them. A stage that cannot see
+/// what it needs does the thing it can defend instead, which for a repair is to
+/// mute rather than to invent.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Context<'a> {
+    /// Frames immediately before the buffer, in the same stored format.
+    pub before: &'a [u8],
+    /// Frames immediately after it.
+    pub after: &'a [u8],
+}
+
+impl Context<'_> {
+    /// No margin either side.
+    pub const NONE: Self = Self {
+        before: &[],
+        after: &[],
+    };
+}
 
 /// What a span of audio passes through on its way out of the project.
 ///
@@ -73,6 +106,13 @@ use vcw_types::StorageFormat;
 /// than carrying the end of one track into the start of the next.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Chain {
+    /// WP-30's stored defect list, or `None` when nothing audible was found.
+    ///
+    /// First, and the order is not configurable: a click is damage to the groove,
+    /// so it is present in the same domain the stored samples are in, and VCW's
+    /// curve is something VCW adds afterwards. Repairing after an IIR has smeared
+    /// the impulse makes the damage longer and lower in contrast than it is.
+    repairs: Option<Repairs>,
     /// §51's playback equalization, or `None` when the samples go out as stored.
     eq: Option<Filter>,
 }
@@ -85,7 +125,26 @@ impl Chain {
     /// the stage is added rather than the day somebody remembers.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.eq.is_none()
+        self.eq.is_none() && self.repairs.is_none()
+    }
+
+    /// How many frames either side of a buffer the chain has to be able to see.
+    ///
+    /// Zero unless a repair stage is in it, which is what keeps today's common
+    /// case - a project nobody has run a detector over - reading exactly the
+    /// frames it means to play. A caller that honors this reads `n` frames extra
+    /// at each end of every buffer and passes them as [`Context`]; one that
+    /// cannot, at the very start or end of a capture, passes what it has and the
+    /// stage degrades rather than guesses.
+    #[must_use]
+    pub fn context_frames(&self) -> u64 {
+        self.repairs.as_ref().map_or(0, Repairs::context)
+    }
+
+    /// How many defect spans are in force, for the export tags (WP-30 §5).
+    #[must_use]
+    pub fn repair_count(&self) -> usize {
+        self.repairs.as_ref().map_or(0, Repairs::count)
     }
 
     /// The §51 curve in force, or `None`.
@@ -103,6 +162,9 @@ impl Chain {
     /// seek are not continuous and carrying state across one rings a transient
     /// into the first few milliseconds after it.
     pub fn reset(&mut self) {
+        if let Some(repairs) = self.repairs.as_mut() {
+            repairs.reset();
+        }
         if let Some(eq) = self.eq.as_mut() {
             eq.reset();
         }
@@ -114,14 +176,35 @@ impl Chain {
     /// from the start of the capture rather than the start of the span. A
     /// parametric stage does not need it; a repair stage does, because the
     /// defects it applies are rows addressed by frame.
-    pub fn process_stored(&mut self, bytes: &mut [u8], format: StorageFormat, at_frame: u64) {
-        // The order of the chain is the order of these statements. Repairs go
-        // above this line when they exist, which is why the position is read by
-        // nothing yet.
-        let _ = at_frame;
+    ///
+    /// `context` is the audio either side, [`Chain::context_frames`] of it where
+    /// the caller could read that much. Only `bytes` is written.
+    pub fn process_stored(
+        &mut self,
+        bytes: &mut [u8],
+        context: Context<'_>,
+        format: StorageFormat,
+        at_frame: u64,
+    ) {
+        // The order of the chain is the order of these two statements, and it is
+        // fixed here rather than offered as a setting. See the module note.
+        if let Some(repairs) = self.repairs.as_mut() {
+            repairs.apply(bytes, context, format, at_frame);
+        }
         if let Some(eq) = self.eq.as_mut() {
             eq.process_stored(bytes, format);
         }
+    }
+
+    /// Adds the stored defect list to a chain that already knows its curve.
+    ///
+    /// Separate from [`Chain::from`] because the two are resolved by different
+    /// questions - a curve can be refused and a defect list cannot - and a
+    /// constructor taking both would have to answer the refusal twice.
+    #[must_use]
+    pub fn with_repairs(mut self, repairs: Option<Repairs>) -> Self {
+        self.repairs = repairs;
+        self
     }
 }
 
@@ -132,13 +215,13 @@ impl From<Option<Filter>> for Chain {
     /// has to name the curve anyway: §51 forbids applying one silently, and a
     /// refusal has to land where no audio has been written yet.
     fn from(eq: Option<Filter>) -> Self {
-        Self { eq }
+        Self { repairs: None, eq }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Chain;
+    use super::{Chain, Context};
     use vcw_eq::{Catalog, Filter, RIAA};
     use vcw_types::{CaptureEq, StorageFormat};
 
@@ -182,14 +265,14 @@ mod tests {
         assert!(!chain.is_empty());
         assert_eq!(chain.curve(), Some(RIAA));
         let mut through = original.clone();
-        chain.process_stored(&mut through, StorageFormat::Int16, 0);
+        chain.process_stored(&mut through, Context::NONE, StorageFormat::Int16, 0);
         assert_eq!(through, direct, "the chain added nothing of its own");
 
         let mut empty = Chain::default();
         assert!(empty.is_empty());
         assert_eq!(empty.curve(), None);
         let mut untouched = original.clone();
-        empty.process_stored(&mut untouched, StorageFormat::Int16, 0);
+        empty.process_stored(&mut untouched, Context::NONE, StorageFormat::Int16, 0);
         assert_eq!(
             untouched, original,
             "an empty chain is inert, not just cheap"
@@ -198,14 +281,14 @@ mod tests {
         // Second pass on the same chain: without the reset the sections still
         // hold the end of the first one, so the first samples differ.
         let mut again = original.clone();
-        chain.process_stored(&mut again, StorageFormat::Int16, 256);
+        chain.process_stored(&mut again, Context::NONE, StorageFormat::Int16, 256);
         assert_ne!(
             again, direct,
             "state carried, which is what a seek must clear"
         );
         chain.reset();
         let mut after_reset = original.clone();
-        chain.process_stored(&mut after_reset, StorageFormat::Int16, 0);
+        chain.process_stored(&mut after_reset, Context::NONE, StorageFormat::Int16, 0);
         assert_eq!(after_reset, direct, "reset reached the stage");
     }
 }

@@ -74,7 +74,7 @@ use std::path::PathBuf;
 // direct `rusqlite` dependency: ADR-0003 puts the database behind that crate,
 // and an exporter that named the driver itself would be a second door to it.
 use vcw_eq::{Catalog, Filter};
-use vcw_process::Chain;
+use vcw_process::{Chain, Context, Damage, Repairs};
 use vcw_project::{Connection, pcm, release, side, track};
 use vcw_types::vinyl::{Numbering, Side};
 use vcw_types::{Span, StorageFormat};
@@ -322,6 +322,9 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
     let mut captures: HashMap<i64, (Option<i64>, Option<String>)> = HashMap::new();
     // capture_id -> what the signal chain had already applied (§51)
     let mut provenance: HashMap<i64, vcw_types::CaptureEq> = HashMap::new();
+    // capture_id -> WP-30's defect list, resolved into a stage. Cached because an
+    // export usually walks one capture and the list can run to thousands of rows.
+    let mut damage: HashMap<i64, Option<Repairs>> = HashMap::new();
     let catalog = Catalog::builtin();
 
     for (side, record) in listing {
@@ -458,6 +461,16 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             ));
         }
 
+        // WP-30: the repairs go in the same chain as the curve and ahead of it.
+        // Resolved here for the reason the curve is - `cut` writes files, and
+        // anything that can fail has to fail before one exists.
+        let repairs = match damage.entry(capture_id) {
+            std::collections::hash_map::Entry::Occupied(seen) => seen.get().clone(),
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(repairs_for(conn, capture_id, &layout)?).clone()
+            }
+        };
+
         items.push(Item {
             track_id: record.id,
             side,
@@ -466,7 +479,7 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             span,
             path,
             tags,
-            chain: Chain::from(filter),
+            chain: Chain::from(filter).with_repairs(repairs),
         });
     }
 
@@ -578,6 +591,36 @@ pub fn export(
 /// deals in frames and the writer deals in whatever it is handed.
 const CHUNK_BYTES: usize = 64 * 1024;
 
+/// Reads a capture's defect list and resolves it into a repair stage.
+///
+/// `None` when nothing audible is left, which includes the ordinary case of a
+/// project nobody has run a detector over and the deliberate one of a side whose
+/// every defect has been vetoed. Both have to answer `None` rather than an empty
+/// stage, because §9's bit-perfect refutation asks the chain whether it is empty.
+///
+/// # Errors
+///
+/// If the rows cannot be read, or one of them names a repair nothing can carry
+/// out - which is the same refusal a misspelled curve gets, and for the same
+/// reason: audio must not leave the project having had something done to it that
+/// nobody asked for.
+pub fn repairs_for(
+    conn: &Connection,
+    capture_id: i64,
+    layout: &pcm::Layout,
+) -> vcw_project::Result<Option<Repairs>> {
+    let spans = vcw_project::defect::of_capture(conn, capture_id)?
+        .into_iter()
+        .map(|row| Damage {
+            start: row.start_frame,
+            end: row.end_frame,
+            channels: row.channels,
+            repair: row.repair,
+        })
+        .collect();
+    Ok(Repairs::new(spans, layout.channels, layout.rate.hz()))
+}
+
 /// Cuts one track out of a capture and returns the file's size.
 fn cut(
     conn: &Connection,
@@ -587,9 +630,23 @@ fn cut(
     narrowing: Narrowing,
     on: &mut dyn FnMut(u64),
 ) -> Result<u64> {
-    let mut reader = pcm::Reader::open(conn, item.capture_id, item.span)?;
+    // WP-30 §4: a repair stage cannot interpolate a defect sitting on the first
+    // frame of the track, because inside the track there is nothing before it. So
+    // the read is widened by what the chain says it needs to see and the margin is
+    // never written. `context_frames` is zero unless a repair stage is in the
+    // chain, which leaves every export that has not run a detector reading exactly
+    // the frames it means to write.
+    let context = item.chain.context_frames();
+    let widened = Span::new(
+        item.span.start.saturating_sub(context),
+        item.span.end.saturating_add(context),
+    );
+    let mut reader = pcm::Reader::open(conn, item.capture_id, widened)?;
     let layout = *reader.layout();
     let frame_bytes = layout.frame_bytes().max(1);
+    // The track, as opposed to the widened read: everything the file claims about
+    // itself comes from this one and not from what the reader was opened on.
+    let span = item.span.clamp_to(layout.frames);
     // One channel out whatever went in, and the same frame count: a fold
     // changes the width of a frame and not how many there are.
     let folding = fold_to_mono && layout.channels > 1;
@@ -597,7 +654,7 @@ fn cut(
         rate: layout.rate.hz(),
         channels: if folding { 1 } else { layout.channels },
         format: layout.format,
-        frames: reader.span().frames(),
+        frames: span.frames(),
     };
     // The same question `plan` asked, asked again from the same layout: a file
     // written here is the file that was vetted there.
@@ -605,7 +662,8 @@ fn cut(
     let narrowing = (spec.format != stored.format).then_some(narrowing);
 
     let mut writer = Writer::create(&item.path, container, spec)?;
-    let mut buffer = vec![0u8; (CHUNK_BYTES / frame_bytes).max(1) * frame_bytes];
+    let mut buffer =
+        vec![0u8; ((CHUNK_BYTES / frame_bytes).max(1) + 2 * context as usize) * frame_bytes];
     let mut folded = Vec::new();
     let mut rounded = Vec::new();
     // Per file and from a constant, which is what keeps a dithered export
@@ -619,19 +677,37 @@ fn cut(
     // crossed.
     let mut chain = item.chain.clone();
     let mut frames = 0u64;
-    loop {
-        // Before the fill, for the reason `Pump::fill` reads it there: it is
-        // the capture frame the bytes about to be read begin at.
-        let at = reader.position();
+    let mut at = span.start;
+    while at < span.end {
+        // Rewind to pick the margin up again. The reader keeps its decoded block
+        // when the new position is still inside it, which it almost always is, so
+        // re-reading the margin costs an index lookup and not a block.
+        let lead = context.min(at - reader.span().start);
+        reader.seek(at - lead);
         let read = reader.fill(&mut buffer)?;
-        if read == 0 {
+        let got = (read / frame_bytes) as u64;
+        if got <= lead {
             break;
         }
-        // First, and on the stored bytes: equalization is per channel, so it
-        // has to happen before a fold sums them, and before a narrowing throws
-        // away the bits it would have moved.
-        chain.process_stored(&mut buffer[..read], layout.format, at);
-        let mut chunk: &[u8] = &buffer[..read];
+        // How much of what was read sits at or after the write position, and how
+        // much of that can be written: everything but the trailing margin, unless
+        // the capture itself has run out and there is no more margin to be had.
+        let ahead = got - lead;
+        let exhausted = at - lead + got >= reader.span().end;
+        let mut mid = ahead.min(span.end - at);
+        if !exhausted {
+            mid = mid.min(ahead.saturating_sub(context));
+        }
+        if mid == 0 {
+            break;
+        }
+        let (before, rest) = buffer[..read].split_at_mut(lead as usize * frame_bytes);
+        let (middle, after) = rest.split_at_mut(mid as usize * frame_bytes);
+        // First, and on the stored bytes: repairs and equalization are both per
+        // channel, so they have to happen before a fold sums them, and before a
+        // narrowing throws away the bits they would have moved.
+        chain.process_stored(middle, Context { before, after }, layout.format, at);
+        let mut chunk: &[u8] = middle;
         if folding {
             fold(layout.format, layout.channels, chunk, &mut folded);
             chunk = &folded;
@@ -641,7 +717,8 @@ fn cut(
             chunk = &rounded;
         }
         writer.write(chunk)?;
-        frames += (read / frame_bytes) as u64;
+        at += mid;
+        frames += mid;
         on(frames);
     }
     writer.finish()

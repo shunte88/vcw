@@ -90,7 +90,7 @@ use vcw_audio::playback::{
     Counters, Cursor, Fidelity, Health, Material, Opened, Playback, Request, Source,
 };
 use vcw_eq::{Catalog, Filter};
-use vcw_process::Chain;
+use vcw_process::{Chain, Context};
 use vcw_project::pcm::{Layout, Reader};
 use vcw_project::{Connection, Project};
 use vcw_signal::meter::{Config, Meter};
@@ -407,7 +407,7 @@ fn chain_for(conn: &Connection, capture_id: i64, layout: &Layout) -> Result<Chai
         .iter()
         .find_map(|side| side.playback_eq.as_deref())
         .or(release.as_ref().and_then(|r| r.playback_eq.as_deref()));
-    Filter::wanted(
+    let chain = Filter::wanted(
         &Catalog::builtin(),
         stated,
         capture.info.eq,
@@ -418,7 +418,12 @@ fn chain_for(conn: &Connection, capture_id: i64, layout: &Layout) -> Result<Chai
     .map_err(|refusal| Error::Equalization {
         capture_id,
         refusal: Box::new(refusal),
-    })
+    })?;
+    // WP-30: the same defect list the export resolves, resolved the same way, so
+    // that auditioning a side and exporting it cannot disagree about what was
+    // done to it. `A/B` is `Chain::default()` at this call site and not a bypass
+    // flag inside the stage, which is what keeps the two in step.
+    Ok(chain.with_repairs(vcw_export::splitter::repairs_for(conn, capture_id, layout)?))
 }
 
 /// What to call a curve on screen.
@@ -469,11 +474,24 @@ pub struct Pump<'a> {
     reader: Reader<'a>,
     /// What has to happen to them on the way out.
     conversion: Conversion,
-    /// Stored-format bytes, in flight. Allocated once.
+    /// Stored-format bytes, in flight. Allocated once, and big enough for the
+    /// chunk plus WP-30's margin at both ends.
     staging: Vec<u8>,
-    /// How much of `staging` the last [`Pump::fill`] read, so the feeder can
-    /// meter what it just sent without reading the blocks a second time.
-    staged: usize,
+    /// Where in `staging` the last [`Pump::fill`] put the frames it handed out,
+    /// as an offset and a length, so the feeder can meter what it just sent
+    /// without reading the blocks a second time. An offset and not just a length
+    /// because the margin the chain read for context sits in front of them.
+    staged: (usize, usize),
+    /// The span asked for, which is not the one the reader was opened on.
+    span: Span,
+    /// The next frame that will be handed out, in capture frames.
+    ///
+    /// Tracked here rather than read off the reader, whose cursor now moves back
+    /// and forth over the margin: this is the position a playhead means.
+    at: u64,
+    /// Frames of margin the chain needs either side (WP-30 §4). Zero unless a
+    /// repair stage is in it.
+    context: u64,
     /// What WP-30 applies on the way out: §51's curve today, repairs later.
     ///
     /// Carries its stages' state across fills, so it must not be rebuilt per
@@ -503,14 +521,34 @@ impl<'a> Pump<'a> {
         chunk_bytes: usize,
         chain: Chain,
     ) -> Result<Self> {
-        let reader = Reader::open(conn, capture_id, span)?;
+        // WP-30 §4: a repair stage has to see past both ends of what it is
+        // playing, or a defect sitting on the first frame of a selection has
+        // nothing to be interpolated from. The reader is opened wider than the
+        // span and the extra is never handed out.
+        let context = chain.context_frames();
+        let reader = Reader::open(
+            conn,
+            capture_id,
+            Span::new(
+                span.start.saturating_sub(context),
+                span.end.saturating_add(context),
+            ),
+        )?;
+        let span = span.clamp_to(reader.layout().frames);
         let frames = chunk_bytes / conversion.to_frame_bytes().max(1);
-        let staging = vec![0u8; frames.max(1) * conversion.from_frame_bytes().max(1)];
+        let staging = vec![
+            0u8;
+            (frames.max(1) + 2 * context as usize)
+                * conversion.from_frame_bytes().max(1)
+        ];
         Ok(Self {
             reader,
             conversion,
             staging,
-            staged: 0,
+            staged: (0, 0),
+            span,
+            at: span.start,
+            context,
             chain,
         })
     }
@@ -518,7 +556,7 @@ impl<'a> Pump<'a> {
     /// The frame the next [`Pump::fill`] will start at.
     #[must_use]
     pub const fn position(&self) -> u64 {
-        self.reader.position()
+        self.at
     }
 
     /// What is being played.
@@ -534,7 +572,8 @@ impl<'a> Pump<'a> {
     /// carrying state across one rings a transient into the first few
     /// milliseconds after it.
     pub fn seek(&mut self, frame: u64) {
-        self.reader.seek(frame);
+        self.at = frame.clamp(self.span.start, self.span.end);
+        self.reader.seek(self.at);
         self.chain.reset();
     }
 
@@ -547,7 +586,8 @@ impl<'a> Pump<'a> {
     /// device - how many copies of them there are. Neither moves a needle.
     #[must_use]
     pub fn staged(&self) -> &[u8] {
-        &self.staging[..self.staged]
+        let (from, len) = self.staged;
+        &self.staging[from..from + len]
     }
 
     /// Fills `dst` with device-format bytes and returns how many it wrote.
@@ -560,32 +600,54 @@ impl<'a> Pump<'a> {
     ///
     /// If a block the span covers is missing or the wrong size.
     pub fn fill(&mut self, dst: &mut [u8]) -> Result<usize> {
+        self.staged = (0, 0);
+        let frame_bytes = self.conversion.from_frame_bytes().max(1);
         let frames = dst.len() / self.conversion.to_frame_bytes().max(1);
-        let want = (frames * self.conversion.from_frame_bytes()).min(self.staging.len());
-        if want == 0 {
+        if frames == 0 || self.at >= self.span.end {
             return Ok(0);
         }
-        // Read before the fill, because that is where the bytes about to be
-        // read start and a frame-addressed repair stage is asking which frames
-        // it has been handed.
-        let at = self.reader.position();
+        // Rewind over the margin the chain wants behind the write position. The
+        // reader keeps its decoded block while the new cursor is still inside it,
+        // so on every chunk but the first this costs nothing at all.
+        let lead = self.context.min(self.at - self.reader.span().start);
+        self.reader.seek(self.at - lead);
+        let want = ((lead as usize + frames + self.context as usize) * frame_bytes)
+            .min(self.staging.len());
         let read = self.reader.fill(&mut self.staging[..want])?;
-        self.staged = read;
-        if read == 0 {
+        let got = (read / frame_bytes) as u64;
+        if got <= lead {
             return Ok(0);
         }
+        // What can be handed out is everything at or after the position except
+        // the trailing margin - unless the capture has run out, in which case
+        // there is no more margin to wait for and the rest goes now.
+        let ahead = got - lead;
+        let exhausted = self.at - lead + got >= self.reader.span().end;
+        let mut mid = ahead.min(self.span.end - self.at).min(frames as u64);
+        if !exhausted {
+            mid = mid.min(ahead.saturating_sub(self.context));
+        }
+        if mid == 0 {
+            return Ok(0);
+        }
+        let (from, len) = (lead as usize * frame_bytes, mid as usize * frame_bytes);
+        let format = self.reader.layout().format;
+        let (before, rest) = self.staging[..read].split_at_mut(from);
+        let (middle, after) = rest.split_at_mut(len);
         // WP-30, before anything else touches the samples and before `staged()`
         // hands them to the meter: the needle should read what is heard, and
         // what is heard is the processed audio. In the stored format rather
         // than `f32` because that is what the buffer already holds; see
         // `Chain::process_stored`.
         self.chain
-            .process_stored(&mut self.staging[..read], self.reader.layout().format, at);
+            .process_stored(middle, Context { before, after }, format, self.at);
+        self.staged = (from, len);
+        self.at += mid;
         // The units change here and it matters: `Reader::fill` counts bytes in
         // the stored format, `Conversion::apply` counts frames, and a chunk is
         // marked in bytes of the device's format. Two of those three are the
         // same number only by coincidence.
-        let converted = self.conversion.apply(&self.staging[..read], dst);
+        let converted = self.conversion.apply(middle, dst);
         Ok(converted * self.conversion.to_frame_bytes())
     }
 }
