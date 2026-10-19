@@ -1282,6 +1282,13 @@ fn the_curve_is_applied_per_track_tagged_and_refused_without_provenance() {
         said(&plan.items[0], "VCW_PLAYBACK_EQ_APPLIED").as_deref(),
         Some("yes")
     );
+    // WP-30 §5: the same file says what the chain did, in the order it did it.
+    // The id and not the display name, because this one is the machine-readable
+    // half; `VCW_PLAYBACK_EQ` above is the half a person reads.
+    assert_eq!(
+        said(&plan.items[0], "VCW_PROCESSING").as_deref(),
+        Some("playback-eq: columbia_lp")
+    );
 
     splitter::run(project.conn(), &plan, &mut quiet).expect("run");
     let equalized = data_chunk(&plan.items[0].path);
@@ -1306,6 +1313,11 @@ fn the_curve_is_applied_per_track_tagged_and_refused_without_provenance() {
     let request = Request::new(&out, Container::Wav);
     let plan = splitter::plan(project.conn(), &request).expect("plan");
     assert!(plan.items.iter().all(|item| item.chain.is_empty()));
+    assert_eq!(
+        said(&plan.items[0], "VCW_PROCESSING"),
+        None,
+        "a file nothing was done to claimed processing"
+    );
     splitter::run(project.conn(), &plan, &mut quiet).expect("run");
     assert_eq!(data_chunk(&plan.items[0].path), stored);
 }
@@ -1396,12 +1408,42 @@ fn a_defect_is_repaired_on_the_way_out_wherever_it_sits() {
         )
         .expect("defect");
     }
+    // A fourth defect, vetoed, over audio that was never spiked: it must change
+    // nothing below and still be counted in the tag. A veto is a decision about
+    // the record, and "3 repaired" alone cannot be told from a side nobody
+    // reviewed.
+    vcw_project::defect::add(
+        &mut project,
+        1,
+        &vcw_project::defect::NewDefect {
+            start_frame: 40_000,
+            end_frame: 40_010,
+            channels: 0b1,
+            kind: "click".to_owned(),
+            confidence: 0.2,
+            provenance: vcw_types::Provenance::Declick,
+            evidence: Vec::new(),
+            repair: vcw_types::Repair::None,
+            locked: false,
+        },
+    )
+    .expect("veto");
 
     let out = dir.path().join("out");
     let plan = splitter::plan(project.conn(), &Request::new(&out, Container::Wav)).expect("plan");
     assert!(
         !plan.items[0].chain.is_empty(),
         "the chain lost its repairs"
+    );
+    assert_eq!(
+        plan.items[0]
+            .tags
+            .extra
+            .iter()
+            .find(|(name, _)| name == "VCW_PROCESSING")
+            .map(|(_, value)| value.as_str()),
+        Some("repairs: 3 repaired, 1 vetoed"),
+        "the file does not say what was done to it (WP-30 §5)"
     );
     splitter::run(project.conn(), &plan, &mut quiet).expect("run");
 

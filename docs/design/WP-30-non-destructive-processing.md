@@ -233,7 +233,7 @@ Two stages make that a pattern rather than a pair of fields:
   about the record and not only about what VCW did to it, and an archivist reading the
   tag wants to know which characteristic the transfer assumed.
 
-A defect count belongs in that tag too: "declick: 412 repaired, 3 vetoed" is the one
+A defect count belongs in that tag too: "repairs: 412 repaired, 3 vetoed" is the one
 line that tells somebody receiving the file what was done to it. This is the archival
 audience the §51 note identified, and it is the same requirement: state what was
 applied, in terms a person can check.

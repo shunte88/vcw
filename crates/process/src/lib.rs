@@ -69,6 +69,13 @@ pub use repair::{Damage, Repairs};
 use vcw_eq::Filter;
 use vcw_types::StorageFormat;
 
+/// The name [`Chain::stages`] gives §51's stage.
+///
+/// Public because the refutation in `vcw_core` matches on it to give the curve
+/// the name a person reads; matching a constant rather than parsing the string
+/// is what keeps the two from drifting apart.
+pub const EQ_STAGE: &str = "playback-eq";
+
 /// The audio either side of the buffer being processed.
 ///
 /// Borrowed from the caller's own read rather than buffered here: both call sites
@@ -141,10 +148,36 @@ impl Chain {
         self.repairs.as_ref().map_or(0, Repairs::context)
     }
 
-    /// How many defect spans are in force, for the export tags (WP-30 §5).
+    /// The stages in force, as (name, detail), in the order they run (WP-30 §5).
+    ///
+    /// Empty exactly when [`Chain::is_empty`], so a caller that speaks up
+    /// whenever this is not speaks up about exactly the audio that was changed,
+    /// and a stage added later is covered the day it is added.
+    ///
+    /// A list rather than a sentence because the two callers want different
+    /// words for the same fact: the export tag joins them, and §9's bit-perfect
+    /// refutation gives §51's curve the name a person reads. Both are generated
+    /// from the stages themselves, so neither can name a stage the chain does
+    /// not have or stay quiet about one it does.
+    ///
+    /// Both repair numbers are stated, a zero included, because "412 repaired"
+    /// on its own cannot be told apart from a side nobody reviewed.
     #[must_use]
-    pub fn repair_count(&self) -> usize {
-        self.repairs.as_ref().map_or(0, Repairs::count)
+    pub fn stages(&self) -> Vec<(&'static str, String)> {
+        // The order of these two blocks is the order of `process_stored`, which
+        // is what makes this a description of the chain rather than a list of
+        // what is in it.
+        let mut stages = Vec::new();
+        if let Some(repairs) = self.repairs.as_ref() {
+            stages.push((
+                "repairs",
+                format!("{} repaired, {} vetoed", repairs.count(), repairs.vetoed()),
+            ));
+        }
+        if let Some(curve) = self.curve() {
+            stages.push((EQ_STAGE, curve.to_owned()));
+        }
+        stages
     }
 
     /// The §51 curve in force, or `None`.
@@ -221,9 +254,9 @@ impl From<Option<Filter>> for Chain {
 
 #[cfg(test)]
 mod tests {
-    use super::{Chain, Context};
+    use super::{Chain, Context, Damage, Repairs};
     use vcw_eq::{Catalog, Filter, RIAA};
-    use vcw_types::{CaptureEq, StorageFormat};
+    use vcw_types::{CaptureEq, Repair, StorageFormat};
 
     /// A filter, and bytes with enough edge in them to ring one.
     fn fixture() -> (Filter, Vec<u8>) {
@@ -290,5 +323,53 @@ mod tests {
         let mut after_reset = original.clone();
         chain.process_stored(&mut after_reset, Context::NONE, StorageFormat::Int16, 0);
         assert_eq!(after_reset, direct, "reset reached the stage");
+    }
+
+    /// The chain describes itself, in the order it runs (WP-30 §5, step 7).
+    ///
+    /// Two callers read this - the `VCW_PROCESSING` tag and §9's bit-perfect
+    /// refutation - and both are wrong in the same way if the order is wrong or
+    /// a veto goes uncounted. The order is checked here rather than in either
+    /// caller because this is the one place both stages are cheap to build.
+    #[test]
+    fn the_chain_says_what_it_does_in_the_order_it_does_it() {
+        assert!(
+            Chain::default().stages().is_empty(),
+            "an empty chain claimed to do something"
+        );
+
+        let span = |start, end, repair| Damage {
+            start,
+            end,
+            channels: 0b11,
+            repair,
+        };
+        let repairs = Repairs::new(
+            vec![
+                span(1_000, 1_004, Repair::Interpolate),
+                span(2_000, 2_004, Repair::None),
+                span(3_000, 3_004, Repair::Mute),
+            ],
+            2,
+            44_100,
+        );
+        let (filter, _) = fixture();
+        let chain = Chain::from(Some(filter)).with_repairs(repairs);
+        assert_eq!(
+            chain.stages(),
+            vec![
+                ("repairs", "2 repaired, 1 vetoed".to_owned()),
+                ("playback-eq", RIAA.to_owned()),
+            ],
+            "the tag has to read in the order `process_stored` runs"
+        );
+
+        // A side whose every defect is vetoed is a side nothing was done to, so
+        // the chain says so and the tag does not appear at all.
+        let vetoed = Repairs::new(vec![span(1_000, 1_004, Repair::None)], 2, 44_100);
+        assert!(
+            Chain::default().with_repairs(vetoed).stages().is_empty(),
+            "a list of vetoes was reported as processing"
+        );
     }
 }

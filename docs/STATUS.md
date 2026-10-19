@@ -8558,3 +8558,113 @@ earns. `package (windows-x86_64)` did not run on that dispatch - a push to
 `${{ github.workflow }}-${{ github.ref }}` and therefore shared between a push
 and a dispatch on the same branch. Windows is on the untouched
 `runner.os != 'Linux'` branch that macOS exercised and passed.
+
+## 2026-10-19, two tests that could not fail, and the chain says what it did
+
+### A timing claim needs two different gates, not one
+
+A Windows CI leg went red on `capture_writes_audio.rs` with 242,880 frames
+lost to 253 overruns, and an hour earlier the identical commit had passed.
+That is the machine answering, not the capture path: every test in that file
+runs a capture at the speed of a record, and a hosted runner deschedules the
+writer whenever it feels like it. The rest of the suite already has a word for
+this - `VCW_SHARED=1`, which CI sets on the test job and the local gate does
+not - so gating the three bare `is_clean()` assertions the way the other files
+do looked like the whole fix.
+
+It was the wrong fix for two of the three. Forcing the loss to prove the gate
+worked turned the failure into this:
+
+```
+channel 0 frame 48000 is not what the source produced
+```
+
+The writer assigns its own frame index; the generator encodes the *source's*.
+`Counters::frames` increments only when `ring.push` succeeds, so a dropped
+callback is dropped whole, and from the gap onwards the two indexes disagree
+by exactly the frames that never arrived. A test that ends in `audit()`
+cannot tolerate loss at all. Gating the loss assertion there does not remove
+the failure, it swaps a message that names the machine for one that reads like
+corruption.
+
+So there are two helpers, and which one a site gets is decided by what the
+test asserts *after* the loss:
+
+- `lost_nothing` for a claim that **survives** loss. The reconciliation of
+  frames delivered against frames written holds at 15.9 million dropped
+  frames, because both sides count what the ring accepted. Printed on a shared
+  runner, asserted on ours.
+- `can_audit` for the two tests that compare samples against the generator. It
+  asserts loudly on our own machine with the honest message, and on a shared
+  runner skips **the audit alone**, with its reason printed. Every
+  loss-independent assertion in the caller still runs.
+
+The reconciliation test gained one more line while this was open:
+`assert!(delivered > 0)`. Without it the comparison passes when both ends are
+empty, which is precisely what a runner starved hard enough produces - a
+second check that could not fail, found by looking for the first.
+
+### WP-30 step 7: the tag and the predicate
+
+`VCW_PROCESSING` now goes out on every exported file that was processed, and
+it says what was done in the order it was done:
+
+```
+repairs: 3 repaired, 1 vetoed; playback-eq: columbia_lp
+```
+
+It is generated from `Chain::stages()`, which is the chain's own account of
+itself, so the tag cannot name a stage the audio did not get or stay quiet
+about one it did. Absent entirely on a file nothing was done to.
+
+Both repair numbers are stated, a zero included. "412 repaired" on its own
+cannot be told apart from a side nobody reviewed, and the veto is a decision
+about the record. The count is taken **before** the retain, and only for the
+vetoes: a span the retain drops for being empty or channel-less is a malformed
+row, not somebody saying "leave this one alone", and a tag that conflates the
+two is worse than no tag.
+
+The same call moved §9's bit-perfect refutation off §51's curve and onto the
+chain. The old predicate asked whether a curve was in force, which meant a
+side whose clicks had been repaired and whose record was cut flat reported
+itself bit-perfect. It is not; the samples reaching the converter are not the
+samples in the project, which is the whole of what `Fidelity::Confirmed`
+asserts. A stage added after this was written refutes the day it is added,
+and §51's own stage keeps its bespoke sentence - with the catalog's display
+name, because the badge next to it uses the same words - by matching a public
+`EQ_STAGE` constant rather than by parsing the string.
+
+`Chain::repair_count`, which had no callers, is gone.
+
+Both ends were proven by mutation: swapping the stage order and zeroing the
+veto count each failed the new tests, then both were reverted. Gate green at
+eighteen legs, **1374 tests**, 23 ignored, 245 in the frontend.
+
+### The transfer log had a smaller question than it looked
+
+`docs/design/WP-31-archivist-transfer-log.md` is a design note and nothing is
+built. The archival chain - which copy, on what deck, through what stage, by
+whom - is eleven fields rather than the ten asked for, because a stylus is
+replaced on a schedule the cartridge body outlives and the hours on it are the
+commonest reason two transfers of one record do not match.
+
+Three of the open questions answered themselves out of code that already
+exists. "Which tag name per container" is not a question VCW has to answer:
+`Tags::extra` already routes one freeform key into a Vorbis comment, an ID3v2
+`TXXX` frame and an MP4 freeform atom, and `freeform()` already skips an empty
+value, which is the behavior wanted - no key says nothing, an empty key says
+something false. Whether the log belongs in `vcw bundle` was closed by §42
+before it was asked: a bundle emits a shape or a count and never content, and
+an operator's name and an institution's shelf mark are content. And the date
+is not a field anybody types, because `captures.started_at` already is it -
+with one nullable `transferred_on` for the import case, where the capture row
+honestly records when the file arrived and not when the stylus went down.
+
+No `bext` `CodingHistory`. It is WAV-only against six containers, lofty will
+not write it, and the same fact in two places in one container disagrees with
+itself the first time somebody edits a file.
+
+The prefix is `TRANSFER_`, not `VCW_`, which writes down a rule the codebase
+was already keeping: `VCW_*` is what VCW did to the audio, and a domain prefix
+is a fact about the record. What cartridge was fitted is not something VCW
+knows. A person typed it.

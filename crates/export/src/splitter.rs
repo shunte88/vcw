@@ -471,6 +471,22 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             }
         };
 
+        let chain = Chain::from(filter).with_repairs(repairs);
+        // WP-30 §5: what was done to the samples, in the order it was done, from
+        // the chain that will do it rather than from the intent that built it.
+        // Absent on a file nothing was done to, which is the same question
+        // §9's bit-perfect refutation asks, so the tag and the verdict cannot
+        // disagree.
+        let applied = chain.stages();
+        if !applied.is_empty() {
+            let applied = applied
+                .iter()
+                .map(|(stage, detail)| format!("{stage}: {detail}"))
+                .collect::<Vec<_>>()
+                .join("; ");
+            tags.extra.push(("VCW_PROCESSING".to_owned(), applied));
+        }
+
         items.push(Item {
             track_id: record.id,
             side,
@@ -479,7 +495,7 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
             span,
             path,
             tags,
-            chain: Chain::from(filter).with_repairs(repairs),
+            chain,
         });
     }
 

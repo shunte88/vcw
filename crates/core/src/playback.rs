@@ -90,7 +90,7 @@ use vcw_audio::playback::{
     Counters, Cursor, Fidelity, Health, Material, Opened, Playback, Request, Source,
 };
 use vcw_eq::{Catalog, Filter};
-use vcw_process::{Chain, Context};
+use vcw_process::{Chain, Context, EQ_STAGE};
 use vcw_project::pcm::{Layout, Reader};
 use vcw_project::{Connection, Project};
 use vcw_signal::meter::{Config, Meter};
@@ -437,30 +437,41 @@ fn named(id: &str) -> String {
         .map_or_else(|| id.to_owned(), |curve| curve.name.clone())
 }
 
-/// Rules out a bit-perfect claim while a §51 curve is in force.
+/// Rules out a bit-perfect claim while anything in WP-30's chain is in force.
 ///
-/// The curve is sample arithmetic applied after the blocks are read, so the
-/// bytes that reach the converter are not the bytes in the project - which is
+/// A stage is sample arithmetic applied after the blocks are read, so the bytes
+/// that reach the converter are not the bytes in the project - which is
 /// precisely what [`Fidelity::Confirmed`] asserts. `vcw_audio::fidelity` cannot
-/// see it: it weighs the device, the conversion and the counters, and the
-/// filter is none of those. So the verdict is amended here, where the curve is
-/// known.
-fn equalized(verdict: Fidelity, curve: Option<&str>) -> Fidelity {
-    let Some(curve) = curve else {
+/// see it: it weighs the device, the conversion and the counters, and a stage
+/// is none of those. So the verdict is amended here, where the chain is known.
+///
+/// `stages` is [`Chain::stages`], so the refutation is driven by the chain and
+/// not by §51's curve alone: the repairs WP-30 puts in front of the curve
+/// refute too, and so will a stage added after this was written. §51's own
+/// stage keeps the sentence a person reads, with the catalog's name for the
+/// curve, because the badge beside it uses the same words.
+fn processed(verdict: Fidelity, stages: &[(&str, String)]) -> Fidelity {
+    if stages.is_empty() {
         return verdict;
-    };
-    let why = format!(
-        "the {} playback curve is applied to the samples (\u{a7}51)",
-        named(curve)
-    );
+    }
+    let why = stages.iter().map(|(stage, detail)| {
+        if *stage == EQ_STAGE {
+            format!(
+                "the {} playback curve is applied to the samples (\u{a7}51)",
+                named(detail)
+            )
+        } else {
+            format!("the stored {stage} change the samples - {detail} (WP-30)")
+        }
+    });
     match verdict {
         Fidelity::Refuted { mut reasons } => {
-            reasons.push(why);
+            reasons.extend(why);
             Fidelity::Refuted { reasons }
         }
-        Fidelity::Confirmed | Fidelity::Unconfirmed { .. } => {
-            Fidelity::Refuted { reasons: vec![why] }
-        }
+        Fidelity::Confirmed | Fidelity::Unconfirmed { .. } => Fidelity::Refuted {
+            reasons: why.collect(),
+        },
     }
 }
 
@@ -967,6 +978,12 @@ pub struct Player {
     announced: Cell<bool>,
     /// §51's curve in force, or `None` when the samples go out as stored.
     curve: Option<String>,
+    /// What WP-30's chain does to the samples, for §9's refutation at `stop`.
+    ///
+    /// Taken here because the chain itself is moved into the feeder, and kept
+    /// as the chain's own account of itself rather than as a flag per stage:
+    /// see [`processed`].
+    stages: Vec<(&'static str, String)>,
 }
 
 impl std::fmt::Debug for Player {
@@ -1001,6 +1018,7 @@ impl Player {
             (layout, chain)
         };
         let curve = chain.curve().map(str::to_owned);
+        let stages = chain.stages();
         let span = audition.scope.span(&layout);
         let described = audition.scope.describe(&layout);
         if span.is_empty() {
@@ -1067,6 +1085,7 @@ impl Player {
             announced: Cell::new(false),
             playback,
             curve,
+            stages,
         };
         player.announce(&described);
         Ok(player)
@@ -1270,7 +1289,7 @@ impl Player {
             capture_id: self.capture_id,
             span: self.span,
             opened: self.playback.opened().clone(),
-            fidelity: equalized(self.playback.fidelity(), self.curve.as_deref()),
+            fidelity: processed(self.playback.fidelity(), &self.stages),
             health: self.playback.health(),
             playback_eq: self.curve.clone(),
         };
@@ -1563,6 +1582,7 @@ fn finish(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vcw_eq::RIAA;
     use vcw_project::persistence::{Config, Writer};
     use vcw_types::{CaptureInfo, CaptureMode, CaptureState, StorageFormat};
 
@@ -1591,6 +1611,44 @@ mod tests {
             os_report: None,
             eq: vcw_types::CaptureEq::Unknown,
         }
+    }
+
+    /// §9's refutation is driven by the chain, not by §51's curve (WP-30 step 7).
+    ///
+    /// Three claims in one, because they fail separately: an empty chain leaves
+    /// a confirmed verdict alone, a stage that is not the curve refutes on its
+    /// own, and the curve still reaches a reader with the name the badge beside
+    /// it uses rather than the catalog id the tag carries.
+    #[test]
+    fn anything_in_the_chain_refutes_bit_perfect() {
+        assert!(
+            processed(Fidelity::Confirmed, &[]).is_confirmed(),
+            "an empty chain refuted a verdict it does not touch"
+        );
+
+        let stages = [
+            ("repairs", "2 repaired, 1 vetoed".to_owned()),
+            (EQ_STAGE, RIAA.to_owned()),
+        ];
+        let Fidelity::Refuted { reasons } = processed(Fidelity::Confirmed, &stages) else {
+            panic!("the chain did not refute");
+        };
+        assert_eq!(reasons.len(), 2, "a stage went unmentioned: {reasons:?}");
+        assert!(
+            reasons[0].contains("2 repaired, 1 vetoed"),
+            "the repairs refuted without saying what they did: {reasons:?}"
+        );
+        assert!(
+            reasons[1].contains("RIAA") && !reasons[1].contains(RIAA),
+            "the curve reached a reader as its id: {reasons:?}"
+        );
+
+        // The repairs alone, which is the case the old curve-only predicate
+        // could not see at all.
+        assert!(
+            !processed(Fidelity::Confirmed, &stages[..1]).is_confirmed(),
+            "a repaired side was reported bit-perfect"
+        );
     }
 
     /// Every byte is a function of its own offset.

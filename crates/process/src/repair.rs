@@ -125,6 +125,12 @@ pub struct Repairs {
     /// scan of every row per buffer into an amortized step. A seek rewinds it,
     /// which is what [`Repairs::reset`] is for.
     cursor: usize,
+    /// How many detected defects a person set to `None`.
+    ///
+    /// Kept because the export tag has to say it. A veto is a decision about the
+    /// record, and a catalog that reports "412 repaired" without it cannot be
+    /// told apart from one where the detector found 412 and nobody looked.
+    vetoed: usize,
 }
 
 impl Repairs {
@@ -135,6 +141,13 @@ impl Repairs {
     /// whose every defect has been vetoed. A list of vetoes is not processing.
     #[must_use]
     pub fn new(mut spans: Vec<Damage>, channels: u16, rate_hz: u32) -> Option<Self> {
+        // Counted before the retain, and only for the vetoes: a span the retain
+        // drops for being empty or channel-less is a malformed row, not somebody
+        // saying "leave this one alone", and the tag must not conflate the two.
+        let vetoed = spans
+            .iter()
+            .filter(|span| !span.repair.is_audible())
+            .count();
         spans
             .retain(|span| span.repair.is_audible() && span.end > span.start && span.channels != 0);
         if spans.is_empty() {
@@ -146,6 +159,7 @@ impl Repairs {
             channels: channels as usize,
             max_gap: (u64::from(rate_hz) * MAX_GAP_MILLIS / 1_000).max(1),
             cursor: 0,
+            vetoed,
         })
     }
 
@@ -163,6 +177,12 @@ impl Repairs {
     #[must_use]
     pub fn count(&self) -> usize {
         self.spans.len()
+    }
+
+    /// How many detected defects were vetoed. Reported alongside [`Repairs::count`].
+    #[must_use]
+    pub const fn vetoed(&self) -> usize {
+        self.vetoed
     }
 
     /// Rewinds the cursor, for a seek.
