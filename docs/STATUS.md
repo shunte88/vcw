@@ -8668,3 +8668,32 @@ The prefix is `TRANSFER_`, not `VCW_`, which writes down a rule the codebase
 was already keeping: `VCW_*` is what VCW did to the audio, and a domain prefix
 is a fact about the record. What cartridge was fitted is not something VCW
 knows. A person typed it.
+
+### The soak was force-checking-out the tree somebody was working in
+
+`scripts/soak-nightly.cron` opened with a paragraph that is still right - *"the
+tree of record is origin/main, not whatever was left checked out; a soak that
+measured an uncommitted experiment is a number nobody can reproduce"* - and
+enforced it with `git checkout --force origin/main` in `/data2/vcw`. That was
+safe for as long as the soak host was not the dev box. The roles swapped on
+2026-10-17 and the crontab line came with them, so at 03:17:01 on 2026-10-19
+the soak discarded a night's uncommitted work in the only checkout on the
+machine. `/data2/vcw-soak/20261019T071701Z/head.txt` and the reflog name the
+same second.
+
+It took a while to see because the reflog reads innocently: `checkout: moving
+from main to origin/main`, between two commits that are the same commit. A
+plain checkout between two names for one SHA touches nothing. The `--force`
+is the whole of it, and the reflog does not record the flag.
+
+The soak now runs in a worktree of its own under `/data2/vcw-soak/tree`,
+created on the first night and reused after. The guarantee the comment is
+defending is unchanged - the worktree is force-checked-out to `origin/main`
+every night - and the blast radius goes with it: nothing the cron runs writes
+anywhere but `/data2/vcw-soak`. Its `target/` persists too, so a soak no
+longer begins by paying for a cold release build.
+
+Proven both ways before it was committed: the dev tree left dirty survived two
+runs of the new stanza untouched and the second run was a no-op, and the same
+`--force` aimed at the worktree ate a dirty file there, which is the half that
+says the mechanism was identified rather than guessed at.

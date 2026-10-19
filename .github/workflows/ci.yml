@@ -21,8 +21,9 @@ on:
   # bundler that stopped working before a tag needs it.
   #
   # §41's endurance soak is not here at all: it runs nightly on media2026,
-  # which is idle and ours. `scripts/soak-nightly.cron`, installed in that
-  # machine's crontab at 03:17.
+  # which is ours. `scripts/soak-nightly.cron`, installed in that machine's
+  # crontab at 03:17, in a worktree of its own so that the box can be the
+  # dev machine as well.
   schedule:
     - cron: '0 4 * * 0'
 
@@ -345,7 +346,7 @@ jobs:
   # push, for up to thirty minutes of runner time - and it was measuring the
   # same shared machine, so it could gate loss but never latency.
   #
-  # Both now run on media2026, which is idle and ours, out of
+  # Both now run on media2026, which is ours, out of
   # `scripts/soak-nightly.cron` at 03:17 with its logs under /data2/vcw-soak.
   # The latency gates are on there, because on that machine they mean
   # something. See docs/STATUS.md.

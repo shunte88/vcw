@@ -17,7 +17,8 @@
 # and the byte verifier failed it on the neighbors' account. So it runs here,
 # where nothing else does, and the latency gates stay on because they can.
 #
-# Install on the soak host (not the dev box - see docs/STATUS.md):
+# Safe on the dev box, which since 2026-10-17 is also the soak host: the soak
+# runs in a worktree of its own and never touches the checkout you work in.
 #
 #   crontab -e
 #   17 3 * * *  /data2/vcw/scripts/soak-nightly.cron >> /data2/vcw-soak/cron.log 2>&1
@@ -26,6 +27,7 @@ set -euo pipefail
 
 repo=${VCW_REPO:-/data2/vcw}
 out=${VCW_SOAK_OUT:-/data2/vcw-soak}
+tree=${VCW_SOAK_TREE:-$out/tree}
 keep=${VCW_SOAK_KEEP:-14}
 
 # The short leg's corpus case, which a hosted runner can never do: a real rip
@@ -43,9 +45,22 @@ mkdir -p "$run"
 
 # The tree of record is origin/main, not whatever was left checked out. A soak
 # that measured an uncommitted experiment is a number nobody can reproduce.
-cd "$repo"
-git fetch --quiet origin
-git -c advice.detachedHead=false checkout --quiet --force origin/main
+#
+# In a worktree of its own, because this used to force the checkout at $repo
+# and that was only safe while the soak host was not also the dev box. The
+# roles swapped on 2026-10-17 and the cron came with them, so at 03:17 on
+# 2026-10-19 the --force below discarded a night's uncommitted work in the
+# tree somebody was using. The worktree keeps the guarantee the paragraph
+# above is defending and takes the blast radius with it: nothing here writes
+# anywhere but $out.
+#
+# It persists between nights, so its target/ stays warm and a soak is not
+# paying for a cold release build before it starts measuring.
+git -C "$repo" fetch --quiet origin
+git -C "$repo" worktree prune
+[ -e "$tree/.git" ] || git -C "$repo" worktree add --detach --quiet "$tree" origin/main
+cd "$tree"
+git -c advice.detachedHead=false checkout --quiet --force --detach origin/main
 echo "soaking $(git rev-parse --short HEAD) at $stamp" | tee "$run/head.txt"
 
 # Release, not debug: a soak spends its time in the deinterleave, the summaries
