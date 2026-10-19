@@ -91,3 +91,8 @@ vcw.toml
 # which is when a second machine pulled the repo and reported a dirty tree.
 __pycache__/
 *.pyc
+
+# Skill-created tickets and specs. docs/agents/issue-tracker.md points the
+# engineering skills here; none of it is VCW's plan of record, so none of it
+# belongs in the history.
+.scratch/
