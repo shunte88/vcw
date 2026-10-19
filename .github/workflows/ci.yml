@@ -22,8 +22,8 @@ on:
   #
   # §41's endurance soak is not here at all: it runs nightly on media2026,
   # which is ours. `scripts/soak-nightly.cron`, installed in that machine's
-  # crontab at 03:17, in a worktree of its own so that the box can be the
-  # dev machine as well.
+  # crontab at 03:17. It reads the tree and writes only under /data2/vcw-soak,
+  # so the box can be the dev machine as well.
   schedule:
     - cron: '0 4 * * 0'
 

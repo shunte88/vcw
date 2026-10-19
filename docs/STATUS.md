@@ -8686,14 +8686,30 @@ from main to origin/main`, between two commits that are the same commit. A
 plain checkout between two names for one SHA touches nothing. The `--force`
 is the whole of it, and the reflog does not record the flag.
 
-The soak now runs in a worktree of its own under `/data2/vcw-soak/tree`,
-created on the first night and reused after. The guarantee the comment is
-defending is unchanged - the worktree is force-checked-out to `origin/main`
-every night - and the blast radius goes with it: nothing the cron runs writes
-anywhere but `/data2/vcw-soak`. Its `target/` persists too, so a soak no
-longer begins by paying for a cold release build.
+The first fix gave the soak a worktree of its own and kept the force inside
+it. That was the wrong rung. The fetch and the checkout were how a *second
+box* got the code, and there has been one box since 2026-10-17; a worktree
+buys the sync back and pays for it with a second multi-gigabyte `target/` on
+the disk this script already deletes `.vcw` files to protect.
 
-Proven both ways before it was committed: the dev tree left dirty survived two
-runs of the new stanza untouched and the second run was a no-op, and the same
-`--force` aimed at the worktree ate a dirty file there, which is the half that
-says the mechanism was identified rather than guessed at.
+So the checkout is gone altogether. The cron reads the tree, builds it, and
+writes only under `/data2/vcw-soak`.
+
+What the force also bought was worth keeping: a soak that measured a commit
+somebody could go back to. That is now reported rather than enforced.
+`head.txt` names the commit and lists anything modified on top of it, so a
+number taken off a dirty tree is one you can read honestly instead of one
+that quietly is not reproducible:
+
+```
+soaking 12ead56 at 20261020T071701Z
+tree dirty:
+ M scripts/soak-nightly.cron
+```
+
+A tree too broken to soak fails at the release build, where `set -e` stops
+it, which is the same answer the force would have given a night later.
+
+**The flag was proven to be the culprit before anything was changed**: the
+same `--force` aimed at a throwaway worktree ate a dirty file there. That is
+the half that says the mechanism was identified rather than guessed at.
