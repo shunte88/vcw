@@ -8536,8 +8536,25 @@ fail is as much a finding as one that does.**
 Gate green at eighteen legs, **1372 tests**, 23 ignored, 245 in the frontend,
 zero em dashes.
 
-Not proved end to end: no deb can be built here, so that `tauri-bundler` emits
-`libc6 (>= 2.35)` unmangled is read out of its source
-(`debian.rs` writes `Depends: {}` from `depends.join(", ")`) rather than
-observed. The next scheduled `package` run, or a manual dispatch, is what turns
-that into a measurement.
+**Measured end to end** on a dispatched `package` run the same night, both
+architectures, which is what turns the last claim in this section from a
+reading of `tauri-bundler`'s source into an observation:
+
+```
+fix  app/target/release/vcw-app: dropped GLIBC_2.39
+fix  app/src-tauri/binaries/vcw-aarch64-unknown-linux-gnu: dropped GLIBC_2.39
+ok   dist/VCW_0.3.6_arm64.deb!usr/bin/vcw:     nothing over GLIBC_2.35
+ok   dist/VCW_0.3.6_arm64.deb!usr/bin/vcw-app: nothing over GLIBC_2.35
+ok   dist/VCW_0.3.6_arm64.deb: Depends declares libc6 (>= 2.35)
+```
+
+The standalone `cargo tauri bundle` step works, the sidecar glob finds the
+right target triple, and the control file comes out unmangled. The AppImage is
+covered in fact and not by the check: its payload is the same `target/release`
+compile the fix ran over, but the check reads `dist/*.deb` only, because an
+AppImage is a squashfs and extracting one is more machinery than the deb
+earns. `package (windows-x86_64)` did not run on that dispatch - a push to
+`main` while it was in flight sent the concurrency group a cancel, which is
+`${{ github.workflow }}-${{ github.ref }}` and therefore shared between a push
+and a dispatch on the same branch. Windows is on the untouched
+`runner.os != 'Linux'` branch that macOS exercised and passed.
