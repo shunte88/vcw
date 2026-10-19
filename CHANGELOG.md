@@ -16,6 +16,50 @@ loud if it cannot.
 
 ## Unreleased
 
+## 0.3.7-alpha
+
+2026-10-19
+
+### Added
+
+* **A click VCW found is now a click VCW can mend.** The detector in 0.3.6
+  wrote down where the damage was and changed nothing; this build acts on
+  those rows. The repair happens on the way out - in playback and in every
+  exported file - and the capture in the project is never touched, so the
+  same project can be exported repaired today and untouched tomorrow with no
+  copy kept and nothing to undo.
+
+  A gap is drawn across with a curve fitted to the groove either side of it.
+  Ten milliseconds is the limit: beyond that a curve is invention, and a gap
+  too long to mend is silenced instead, which is the honest failure. The
+  decision is made about the damage and not about where it happens to fall in
+  the file, so the same click cannot be drawn across in one place and muted
+  in another, and a defect sitting on a track boundary is mended once, the
+  same way, in both files it lands in.
+
+  The mended samples land on the converter's own grid. A sixteen-bit rip
+  carried in a wider container has sixteen unused bits under every sample,
+  and one value between two steps the converter could never have produced
+  throws that away - the first declicked FLAC came out 11.6% *larger* than
+  the untouched one for thirty-two changed samples. It now comes out smaller,
+  which is the right answer: a click is an expensive thing to encode.
+
+* **The defects are drawn over the waveform, and you can overrule them.**
+  Every span the detector found is marked on the audio it describes, and a
+  double-click on one flips it between mend and leave alone. A vetoed defect
+  stays on screen rather than vanishing, because a veto you cannot see is a
+  veto you cannot undo, and nothing you have ruled on yourself is touched by
+  a later detector run.
+
+* **An exported file says what was done to it.** Anything VCW applied to the
+  samples is written into the file as `VCW_PROCESSING`, in the order it was
+  applied - the repairs, and the playback curve where one was used. Both
+  repair numbers are there, a zero included: *"412 repaired, 0 vetoed"* is a
+  side somebody reviewed, and *"412 repaired"* on its own could be a side
+  nobody looked at. A file nothing was done to carries no such tag, and the
+  bit-perfect verdict in the window agrees with it, because the two are
+  generated from the same answer.
+
 ### Fixed
 
 * **The Linux packages install and run on Debian 12, Ubuntu 22.04 and
