@@ -904,20 +904,26 @@ mod tests {
 
         let project = open(&path);
         // What the writer's timer would have left: real counters, written some
-        // time before the end.
+        // time before the end. Dated from the last block rather than from
+        // `now()`, because the lag is the difference between the two and
+        // anchoring one end to the clock makes it a measurement of how long
+        // `abandoned` took - a Windows runner took two seconds over it on
+        // 2026-10-19 and read the lag as 98.
         project
             .conn()
             .execute(
                 "UPDATE capture_diagnostics SET overruns = 3, dropped_frames = 480,
-                        updated_at = ?2 WHERE capture_id = ?1",
-                params![id, crate::now() - 100],
+                        updated_at = (SELECT MAX(committed_at) FROM capture_blocks
+                                      WHERE capture_id = ?1) - 100
+                   WHERE capture_id = ?1",
+                params![id],
             )
             .expect("counters");
 
         let assessment = assess(project.conn(), id).expect("assess").expect("some");
         assert_eq!(assessment.diagnostics.overruns, 3);
         assert_eq!(assessment.diagnostics.dropped_frames, 480);
-        assert!(assessment.counter_lag_secs().expect("lag") >= 99);
+        assert_eq!(assessment.counter_lag_secs().expect("lag"), 100);
         assert!(assessment.has("stale-counters"));
 
         let mut project = project;
