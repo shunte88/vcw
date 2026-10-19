@@ -55,7 +55,8 @@
     "linux": {
       "deb": {
         "depends": [
-          "libasound2"
+          "libasound2",
+          "libc6 (>= 2.35)"
         ],
         "files": {
           "/usr/share/doc/vcw/copyright": "../../LICENSE"

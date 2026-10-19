@@ -8466,3 +8466,78 @@ deleted rather than published, and the version moved on rather than the tag
 moving under it, because a tag that has already been pushed is not a thing to
 re-point. **A red leg that names a file in this repository gets read before it
 gets excused.**
+
+## 2026-10-18, the floor under the Linux packages
+
+A Raspberry Pi 4 on Bookworm is the first machine outside CI to try the aarch64
+deb as an install rather than an unpack, and it got one line:
+
+```
+./usr/bin/vcw: /lib/aarch64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found
+```
+
+**Two symbols were the whole cost.** `pidfd_spawnp` and `pidfd_getpid`, both
+from Rust's std, both `FUNC WEAK DEFAULT UND` - the code is already written to
+run without them. Everything else in both binaries tops out at `GLIBC_2.35`.
+The refusal does not come from the symbols at all: it comes from the
+`.gnu.version_r` record, where a version need with no `VER_FLG_WEAK` is fatal
+to the loader before `main` runs. So the real floor of the code is glibc 2.35,
+and the runner being Ubuntu 24.04 was costing us everything from 2.35 to 2.39 -
+Debian 12, Ubuntu 22.04 and every Raspberry Pi OS Bookworm image, which is a
+large part of the audience the appliance work is aimed at.
+
+**The deb was not even trying to say so.** Its `Depends` read
+`libasound2, libwebkit2gtk-4.1-0, libgtk-3-0`, with no `libc6` at all, so apt
+installed it onto a machine that could not run it and the first thing the owner
+saw was a loader error. That is now part of the contract: the config declares
+`libc6 (>= 2.35)` and the check reads it back off the built package.
+
+`tools/glibc-floor.py` is both halves and the floor is written down once, as
+`FLOOR = (2, 35)`. It reads an ELF, a `.deb` or a directory and fails on
+anything over the floor; `--fix` drops the offending records and clears the
+version index on the symbols that referenced them. It refuses, writing nothing,
+unless every symbol bound to the version is weak and undefined - the
+precondition the one-off script used on the Pi left to whoever ran it - and
+refuses again if the patch would leave a symbol pointing at a version that is
+gone. `patchelf --clear-symbol-version` is not an alternative on patchelf
+0.14.3, which is what Bookworm has: it clears the symbol references and leaves
+the record, which is the part the loader reads.
+
+In the pipeline it has to run **between the compile and the bundle**, so the
+Linux leg of `package` is now `cargo tauri build --no-bundle`, the fix, then
+`cargo tauri bundle`. Repacking a finished `.deb` or `.AppImage` would
+invalidate the updater `.sig` files tauri writes at bundle time. macOS and
+Windows keep the single step they had.
+
+**What a box with a newer glibc can prove, and what it cannot.** This machine
+runs glibc 2.43, so everything it builds is over the floor by construction and
+a leg that read a local binary would only ever be reporting the machine. The
+`glibcfloor` leg runs `--selftest` instead: the reader against `readelf -V` as
+an independent oracle, `--fix` refusing a strong reference and leaving the file
+byte for byte unchanged, and `--fix` dropping a weak one with the binary still
+running afterwards. Both fixtures are compiled on the spot from two lines of C
+that reference `pidfd_getpid`, so the shape under test is the real one and not
+a model of it. The rest is CI's: the same selftest on every push, and the real
+deb read back after bundling.
+
+**Four mutations, and one of them was not a mutation.** Dropping the
+weak-and-undefined precondition, mis-counting the vernaux walk and leaving the
+symbol version index dangling all failed the selftest as they should - the
+third only after the integrity check was added, because the first version of
+the selftest passed with a dangling index, which is the hole that makes a
+loader read past the end of its version table. The fourth, a `drop` that does
+nothing, did not fail: it hung. The fix loop re-reads the file between drops
+because every offset in the vernaux chain moves as soon as anything is
+unlinked, and a drop that silently failed to unlink made that loop eternal. A
+hang is the one failure a gate cannot report, so the loop now checks that each
+drop removed something and refuses if it did not. **A mutation that does not
+fail is as much a finding as one that does.**
+
+Gate green at eighteen legs, **1372 tests**, 23 ignored, 245 in the frontend,
+zero em dashes.
+
+Not proved end to end: no deb can be built here, so that `tauri-bundler` emits
+`libc6 (>= 2.35)` unmangled is read out of its source
+(`debian.rs` writes `Depends: {}` from `depends.join(", ")`) rather than
+observed. The next scheduled `package` run, or a manual dispatch, is what turns
+that into a measurement.

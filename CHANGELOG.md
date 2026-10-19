@@ -14,6 +14,19 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## Unreleased
+
+### Fixed
+
+* **The Linux packages install and run on Debian 12, Ubuntu 22.04 and
+  Raspberry Pi OS Bookworm again.** They were built on a runner with a newer C
+  library and refused to start anywhere older, with
+  `` version `GLIBC_2.39' not found `` and nothing else to go on. Two unused
+  symbols were the whole cost; the floor is now glibc 2.35, it is stated as a
+  number the build checks itself against, and the `.deb` says so in its own
+  dependencies so a machine too old to run it declines to install it rather
+  than failing at first launch.
+
 ## 0.3.6-alpha
 
 2026-10-18

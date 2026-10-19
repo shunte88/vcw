@@ -113,6 +113,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The glibc floor's tool, proved on every push rather than only when a
+      # release is being cut. It builds its own fixtures and needs no bundle.
+      - run: python3 tools/glibc-floor.py --selftest
 
   # D10: the MSRV in Cargo.toml is a promise, and an unenforced promise drifts the
   # first time someone uses a newer standard-library method.
@@ -431,10 +434,39 @@ jobs:
         run: bash tools/stage-cli.sh
 
       - name: Build the bundles
+        if: runner.os != 'Linux'
         run: cargo tauri build --bundles ${{ matrix.bundles }} --verbose
         working-directory: app/src-tauri
         env:
           # The updater's signing key, which tauri uses only if it is set.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      # Linux builds in two halves with the floor lowered between them. It has
+      # to go there: the runner is 24.04, so everything it links needs
+      # GLIBC_2.39 and refuses to start on Bookworm or 22.04, and repacking a
+      # finished .deb or .AppImage afterwards would invalidate the updater
+      # .sig files tauri writes at bundle time. tools/glibc-floor.py says what
+      # is dropped and what it refuses to drop.
+      - name: Compile the app (Linux)
+        if: runner.os == 'Linux'
+        run: cargo tauri build --no-bundle --verbose
+        working-directory: app/src-tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Lower the glibc floor (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 tools/glibc-floor.py --fix \
+            app/target/release/vcw-app app/src-tauri/binaries/vcw-*
+
+      - name: Bundle (Linux)
+        if: runner.os == 'Linux'
+        run: cargo tauri bundle --bundles ${{ matrix.bundles }} --verbose
+        working-directory: app/src-tauri
+        env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
@@ -483,6 +515,13 @@ jobs:
           done
           ls -la dist
           [ -n "$(ls -A dist)" ] || { echo "::error::nothing was bundled"; exit 1; }
+
+      # And read the floor back off the thing a person actually downloads,
+      # control file included. A post-link patch nobody checks is a fix that
+      # stops working the day std gains another 2.39 symbol.
+      - name: Hold the deb to the glibc floor (Linux)
+        if: runner.os == 'Linux'
+        run: python3 tools/glibc-floor.py dist/*.deb
 
       - name: Write the checksums
         shell: bash
