@@ -8713,3 +8713,34 @@ it, which is the same answer the force would have given a night later.
 **The flag was proven to be the culprit before anything was changed**: the
 same `--force` aimed at a throwaway worktree ate a dirty file there. That is
 the half that says the mechanism was identified rather than guessed at.
+
+### A soak that cannot have the machine does not want it
+
+Removing the checkout fixed the soak harming the dev box. The other direction
+was still open: the dev box harming the soak. Since 2026-10-17 they are one
+machine, so "nothing else is running at 03:17" went from a property of the
+host to a hope about the evening, and a late night that ends with a build
+still going produces a red about the evening rather than about the code. A
+contended run is not a weaker pass, it is a non-result: the 90 minutes on
+2026-09-25 cost 28 overruns and a 965 ms commit against a 250 ms budget, all
+of it inside the ten minutes a test suite ran beside it, and none of it in
+the other 80.
+
+`scripts/soak-nightly.cron` now checks the one-minute load average before it
+builds anything, and a busy box is a skip rather than a failure:
+
+```
+20261019T111945Z skipped: load 4.31 over 2.0, the box is busy
+```
+
+Exit 0, one line in the cron log, no run directory, try again tomorrow. The
+threshold is `VCW_SOAK_MAXLOAD`, default 2.0 - loose enough for the
+housekeeping any box does unprompted, tight enough to catch one `cargo
+build`. The one-minute figure is the right one of the three because the
+question is what is happening now, not what happened over the last quarter
+of an hour.
+
+**Both branches were made to fire on purpose** before this was believed:
+`VCW_SOAK_MAXLOAD=0` against an idle box printed the skip and stopped before
+the guard, and `VCW_SOAK_MAXLOAD=999` carried straight past it. A guard that
+has only ever been seen not firing is not a guard yet.

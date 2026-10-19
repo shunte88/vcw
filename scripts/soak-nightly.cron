@@ -38,6 +38,31 @@ keep=${VCW_SOAK_KEEP:-14}
 [ -r "${VCW_RIP:-}" ] && export VCW_RIP || unset VCW_RIP
 
 mkdir -p "$out"
+
+# Do not soak a machine somebody is still using.
+#
+# A contended soak does not fail honestly, it fails on the neighbors: a
+# 90-minute run on 2026-09-25 took 28 overruns and a 965 ms commit against a
+# 250 ms budget, all of it inside the ten minutes a test suite was running
+# beside it. Since 2026-10-17 the soak host is also the dev box, so "nothing
+# else is running at 03:17" is an assumption and not a fact - a late night
+# ends with a build still going, and the morning gets a red that is about the
+# evening rather than about the code.
+#
+# So the precondition is checked rather than assumed, and a busy box is a skip
+# and not a failure: exit 0, one line in the cron log, try again tomorrow. The
+# one-minute average is the right one of the three - it is asking what is
+# happening now, not what happened over the last quarter of an hour. Two is
+# loose enough for the housekeeping any box does unprompted and tight enough
+# to catch one `cargo build`, which is the thing that actually spoils a run.
+maxload=${VCW_SOAK_MAXLOAD:-2.0}
+load=$(cut -d' ' -f1 /proc/loadavg)
+if awk -v l="$load" -v m="$maxload" 'BEGIN { exit !(l > m) }'; then
+    printf '%s skipped: load %s over %s, the box is busy\n' \
+        "$(date -u +%Y%m%dT%H%M%SZ)" "$load" "$maxload"
+    exit 0
+fi
+
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 run="$out/$stamp"
 mkdir -p "$run"
