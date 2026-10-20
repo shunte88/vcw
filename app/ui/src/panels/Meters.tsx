@@ -32,7 +32,13 @@ import { useSyncExternalStore } from "react";
 import type { Levels, Meter } from "../bindings/vcw";
 import { db } from "../format";
 import { count, useText } from "../i18n";
-import { type MeterStyle, meterStyleOf, onMeterStyle } from "../scale";
+import {
+  type MeterStyle,
+  backlightOf,
+  meterStyleOf,
+  onBacklight,
+  onMeterStyle,
+} from "../scale";
 import { Vu } from "./Vu";
 
 /**
@@ -184,9 +190,18 @@ export function Meters({
   // the tree - here and the settings panel - and threading a prop through
   // both would be more wiring than the thing being wired.
   const style = useSyncExternalStore(onMeterStyle, meterStyleOf);
+  // The bulb rides on the strip rather than on each dial: one attribute, and
+  // the stylesheet decides what a bulb looks like. It is read whatever the
+  // meter style is, because only the dials have a face to light and the
+  // selector below says so - a bars strip carrying the attribute draws
+  // nothing.
+  const bulb = useSyncExternalStore(onBacklight, backlightOf);
   const text = useText();
   return (
-    <section className={style === "vu" ? "meters dials" : "meters"}>
+    <section
+      className={style === "vu" ? "meters dials" : "meters"}
+      data-bulb={bulb}
+    >
       <Bridge
         name={text("meters.input")}
         title={(running) =>

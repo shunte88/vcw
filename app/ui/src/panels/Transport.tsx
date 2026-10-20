@@ -31,6 +31,7 @@
 
 import * as api from "../api";
 import type { Audition, Capture, Side } from "../bindings/vcw";
+import { DROP_DB } from "../drop";
 import { Face } from "../Face";
 import { key, useText } from "../i18n";
 import { inTheShell } from "../host";
@@ -60,11 +61,26 @@ export function Transport({
   capture,
   side,
   selection,
+  onSetLevels,
+  drop,
 }: {
   store: Store;
   capture: Capture | undefined;
   side: Side | null;
   selection: Region | null;
+  /**
+   * Open the device without recording, or `null` where that is not the
+   * question being asked.
+   *
+   * The root passes it only on the Capture panel, because that is the panel
+   * where levels are set: on Tracks or Export a button that opened the sound
+   * card would be answering nothing anybody asked. It is the same function
+   * the panel's own Arm button calls, which is the whole reason arming moved
+   * up there - see `arm.ts`.
+   */
+  onSetLevels: (() => void) | null;
+  /** The needle-drop trigger, from `drop.ts`. */
+  drop: { waiting: boolean; toggle: () => void };
 }): React.JSX.Element {
   const text = useText();
   const { engine, run } = store;
@@ -167,6 +183,28 @@ export function Transport({
       </div>
 
       <div className="transport-buttons">
+        {/* Before Record, because it is what happens before recording: open
+            the device, watch the meters, set the level at the preamp, and
+            only then drop the needle and press Record. Hidden rather than
+            disabled once something is armed - the device is already open and
+            the meters are already live, so the button has nothing left to
+            offer and Stop is what closes it again.
+
+            There is no gain slider beside it and deliberately so. §9's
+            promise is that what the card delivered is what gets written, and
+            a fader in front of the writer ends that. The level is set where
+            it is actually set: on the phono stage, the interface's input
+            trim, or the operating system's own mixer. */}
+        {onSetLevels !== null && !armed && (
+          <button
+            type="button"
+            disabled={store.project.path === null}
+            onClick={onSetLevels}
+            title={text("transport.levels.title", { chord: "a" })}
+          >
+            <Face icon="audition">{text("transport.levels")}</Face>
+          </button>
+        )}
         <button
           type="button"
           disabled={!armed}
@@ -174,6 +212,25 @@ export function Transport({
           title={text("transport.record.title", { chord: "r" })}
         >
           <Face icon="record">{text("transport.record")}</Face>
+        </button>
+        {/* After Record because it is Record, cued: it arms if it has to,
+            starts the capture and holds it paused, and then the stylus
+            releases it. Gone once the recording is running, where it has
+            nothing left to trigger. */}
+        <button
+          type="button"
+          className={drop.waiting ? "listening" : undefined}
+          disabled={store.project.path === null || recording}
+          onClick={drop.toggle}
+          title={
+            drop.waiting
+              ? text("transport.drop.waiting.title")
+              : text("transport.drop.title", { level: DROP_DB })
+          }
+        >
+          <Face icon="needledrop">
+            {drop.waiting ? text("transport.drop.waiting") : text("transport.drop")}
+          </Face>
         </button>
         <button
           type="button"

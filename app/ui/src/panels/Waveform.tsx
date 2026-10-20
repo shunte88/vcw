@@ -369,6 +369,7 @@ export function Waveform({
   defects,
   onVeto,
   tracks,
+  onRename,
   playhead,
   playing,
   onSeek,
@@ -385,6 +386,7 @@ export function Waveform({
   defects: readonly Defect[];
   onVeto: (defect: Defect) => void;
   tracks: readonly Track[];
+  onRename: (trackId: number, title: string) => void;
   playhead: number;
   playing: boolean;
   onSeek: (seconds: number) => void;
@@ -465,6 +467,22 @@ export function Waveform({
    * caller hears once, when the pointer comes up.
    */
   const [drafting, setDrafting] = useState<Region | null>(null);
+  /**
+   * The label being renamed in place, and the box to lay the field over.
+   *
+   * The box is measured once, when the gesture lands, and not re-derived on
+   * every render: the field is a thing a person is typing into, and a window
+   * resize or a scroll underneath it would otherwise move the box out from
+   * under the cursor mid-word. It closes on commit, so a stale box can only
+   * ever be one that nobody is looking at.
+   */
+  const [renaming, setRenaming] = useState<{
+    id: number;
+    was: string;
+    left: number;
+    top: number;
+    width: number;
+  } | null>(null);
   /** The work a drag has asked for and the next frame has not yet done. */
   const queued = useRef<(() => void) | null>(null);
 
@@ -1051,6 +1069,66 @@ export function Waveform({
   };
 
   /**
+   * The track whose label block is under a pointer, with its box in CSS pixels.
+   *
+   * The lane is the one strip of this canvas that is not the picture, so a
+   * gesture landing in it belongs to the names and not to the audio - which is
+   * what lets a double-click mean "rename this" here and "veto this" one pixel
+   * higher up, with no modifier between them.
+   *
+   * The geometry is the drawing's own, run backwards, and it is written twice
+   * rather than lifted out because the two copies are in different units: the
+   * drawing works in device pixels off `size.scale`, and a pointer arrives in
+   * CSS pixels off the element's box. One shared helper would have to be told
+   * which, every time, and the scale is exactly what went wrong the first
+   * time it was tried.
+   */
+  const labelAt = (
+    clientX: number,
+    clientY: number,
+    element: HTMLElement,
+  ): { track: Track; left: number; top: number; width: number } | null => {
+    if (peaks === null) {
+      return null;
+    }
+    const bounds = element.getBoundingClientRect();
+    const visible = peaks.endSeconds - peaks.startSeconds;
+    if (bounds.width <= 0 || visible <= 0) {
+      return null;
+    }
+    const sides = new Map<number, number>();
+    for (const track of tracks) {
+      if (!sides.has(track.sideId)) {
+        sides.set(track.sideId, sides.size);
+      }
+    }
+    const laneTop =
+      bounds.height - RULER.HEIGHT - sides.size * LANE.HEIGHT;
+    const x = clientX - bounds.left;
+    const y = clientY - bounds.top;
+    for (const track of tracks) {
+      // The row test is the lane test: a y outside every row is outside the
+      // lane, so there is no separate bounds check to keep in step with this
+      // one. A project with no tracks has no rows and falls straight through.
+      const top = laneTop + (sides.get(track.sideId) ?? 0) * LANE.HEIGHT;
+      if (y < top || y >= top + LANE.HEIGHT) {
+        continue;
+      }
+      const from = ((track.start - peaks.startSeconds) / visible) * bounds.width;
+      const to = ((track.end - peaks.startSeconds) / visible) * bounds.width;
+      if (x < from || x >= to) {
+        continue;
+      }
+      // Clipped to the box the same way the drawing clips it, so a track
+      // whose start is off screen is renamed in the block that is on screen
+      // rather than in one hanging off the left edge.
+      const left = Math.max(0, from);
+      return { track, left, top, width: Math.min(bounds.width, to) - left };
+    }
+    return null;
+  };
+
+  /**
    * What the picture says about the defect under the pointer.
    *
    * The length in milliseconds rather than in frames, which is what the row
@@ -1473,6 +1551,24 @@ export function Waveform({
             }
           }}
           onDoubleClick={(event) => {
+            // Two gestures on one event, told apart by which strip of the
+            // canvas was hit rather than by a modifier. In the label lane it
+            // renames; over the audio it vetoes.
+            const label = labelAt(
+              event.clientX,
+              event.clientY,
+              event.currentTarget,
+            );
+            if (label !== null) {
+              setRenaming({
+                id: label.track.id,
+                was: label.track.title,
+                left: label.left,
+                top: label.top,
+                width: label.width,
+              });
+              return;
+            }
             // The veto, and the only gesture here that writes to the project
             // rather than to the view. It is deliberately the same gesture in
             // both directions: a vetoed defect is still drawn, so undoing a
@@ -1485,6 +1581,51 @@ export function Waveform({
         />
         {mark !== null && mark >= 0 && mark <= 100 && (
           <div className="waveform-mark" style={{ left: `${mark}%` }} />
+        )}
+        {renaming !== null && (
+          // A real input over the canvas rather than a caret drawn into it.
+          // The canvas has no text editing in it and writing one would be a
+          // second implementation of a thing every browser already has; this
+          // way the field gets selection, an input method and a clipboard for
+          // free, and it sits in the same layer the selection band does.
+          <input
+            className="waveform-rename"
+            style={{
+              left: `${renaming.left}px`,
+              top: `${renaming.top}px`,
+              width: `${renaming.width}px`,
+              height: `${LANE.HEIGHT}px`,
+            }}
+            defaultValue={renaming.was}
+            title={text("waveform.rename.title")}
+            ref={(node) => {
+              // Focused and selected on arrival, because the gesture that
+              // opened it was a gesture at the name: a field that needs a
+              // third click before it will take a keystroke is a field the
+              // double-click did not finish.
+              node?.focus();
+              node?.select();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                // Taken back rather than written. `blur` would commit, so the
+                // row is dropped first and the field is gone by the time the
+                // focus leaves it.
+                setRenaming(null);
+                return;
+              }
+              if (event.key === "Enter" || event.key === "Tab") {
+                event.currentTarget.blur();
+              }
+            }}
+            onBlur={(event) => {
+              const typed = event.target.value.trim();
+              if (typed !== renaming.was) {
+                onRename(renaming.id, typed);
+              }
+              setRenaming(null);
+            }}
+          />
         )}
         {band !== null && (
           // A div over the canvas, not a rectangle drawn into it. The canvas

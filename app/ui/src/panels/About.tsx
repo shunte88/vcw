@@ -50,10 +50,14 @@ const CREDITS: [string, string][] = [
  * Prose for the same reason the credits are: there is no fact to derive it
  * from. Paul is first because he is first - the first person to run VCW who
  * did not write it, on hardware nobody here owns, and every report he sent
- * back turned into a change.
+ * back turned into a change. Jim read the manual before anybody else did,
+ * which is the other half of a first release nobody can use: the window can
+ * be right and the page explaining it still be written for the person who
+ * wrote the window.
  */
 const THANKS: [string, string][] = [
   ["Paul Webster, forum.lyrion.com", key("about.thanks.paul")],
+  ["Jim Ross", key("about.thanks.jim")],
 ];
 
 /** The about overlay. */

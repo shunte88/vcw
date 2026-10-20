@@ -49,8 +49,12 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import * as api from "../api";
-import type { About, Project } from "../bindings/vcw";
-import { label, useCurves } from "../curves";
+import type {
+  About,
+  Project,
+  Settings as Values,
+} from "../bindings/vcw";
+import { RIAA, chainOf, help, label, useCurves } from "../curves";
 import { useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
@@ -194,16 +198,6 @@ function Preview({ peaks }: { peaks: readonly number[] }): React.JSX.Element {
  */
 const VIEW = "vcw.library.view";
 
-/**
- * The characteristic all but a handful of records were cut to.
- *
- * `vcw_eq::RIAA`, and the one curve id this file has to name: it is both the
- * preselected answer and what the Rust side falls back to for a project that
- * states nothing, so the form must not offer a different default from the one
- * playback would use.
- */
-const RIAA = "riaa";
-
 /** The two icons on the toggle, drawn rather than named so they do not need a font. */
 function ViewIcon({ tiles }: { tiles: boolean }): React.JSX.Element {
   return (
@@ -308,6 +302,7 @@ export function Browser({
   onSelect,
   onLibraryChanged,
   onOpened,
+  settings,
 }: {
   store: Store;
   projects: readonly Project[];
@@ -325,6 +320,16 @@ export function Browser({
   onLibraryChanged: () => void;
   /** A project was opened, so the window should move on from the library. */
   onOpened: () => void;
+  /**
+   * The settings, or `null` until they land.
+   *
+   * Only one field is wanted - what the chain does to the signal before it
+   * reaches the card - and it is wanted because the advice beside the curve
+   * picker is different for a phono stage and a flat chain. `null` reads the
+   * same as unstated, which is the honest answer while the file is still
+   * being read.
+   */
+  settings: Values | null;
 }): React.JSX.Element {
   const text = useText();
   const [creating, setCreating] = useState(false);
@@ -339,6 +344,8 @@ export function Browser({
     playbackEq: RIAA,
   });
   const curves = useCurves();
+  const chain = chainOf(settings?.audio.eq);
+  const chosen = curves.find((curve) => curve.id === seed.playbackEq);
 
   // Every way into a project goes through here, so the panel change that
   // follows one cannot be wired to two of the three. Opening lands on Tracks
@@ -571,7 +578,9 @@ export function Browser({
               <span className="picker">
                 <select
                   value={seed.playbackEq}
-                  title={text("library.new.eq.title")}
+                  title={
+                    chosen === undefined ? "" : help(chosen, chain, text)
+                  }
                   onChange={(event) =>
                     setSeed({ ...seed, playbackEq: event.target.value })
                   }
@@ -584,16 +593,21 @@ export function Browser({
                 </select>
               </span>
             </label>
-            {seed.playbackEq !== RIAA && (
-              /*
-                Shown only when the answer is unusual, because it is advice
-                about a decision just taken and not a standing caveat. A record
-                cut to anything but RIAA and played through an ordinary phono
-                stage has already had the wrong curve undone, and §51's answer
-                is to undo RIAA first - which amplifies noise, and is worth
-                saying before the capture rather than after it.
-              */
+            {/*
+              Advice about the decision just taken, and only where there is
+              any. Undoing RIAA before applying something else is what §51
+              does for a phono stage, and it is the one case with a cost worth
+              naming before the capture rather than after it. For a chain that
+              captures flat there is nothing to undo and so nothing to warn
+              about, and for a chain nobody has described the useful thing to
+              say is not a caveat but where to go and describe it. One
+              paragraph covering all three said the first to everybody.
+            */}
+            {chain === "riaa" && seed.playbackEq !== RIAA && (
               <p className="hint warn">{text("library.new.eq.warn")}</p>
+            )}
+            {chain === "unstated" && (
+              <p className="hint">{text("library.new.eq.unstated")}</p>
             )}
           </fieldset>
           <button type="submit">{text("library.new.create")}</button>
@@ -661,8 +675,8 @@ export function Browser({
           <thead>
             <tr>
               <th className="art" />
-              <th>{text("library.column.album")}</th>
               <th>{text("library.column.artist")}</th>
+              <th>{text("library.column.album")}</th>
               <th>{text("library.column.catalog")}</th>
               <th className="n">{text("library.column.sides")}</th>
               <th className="n">{text("library.column.tracks")}</th>
@@ -684,8 +698,8 @@ export function Browser({
                   <td className="art">
                     <Cover project={project} />
                   </td>
-                  <td>{project.album === "" ? project.name : project.album}</td>
                   <td>{project.albumArtist}</td>
+                  <td>{project.album === "" ? project.name : project.album}</td>
                   <td>{project.catalog}</td>
                   {/*
                     A dash and not a zero for a project that could not be

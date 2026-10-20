@@ -121,7 +121,7 @@ pub struct Settings {
 /// negotiated format is whatever the device agreed to, and pinning a value here
 /// is a request that can be refused. What was actually opened arrives in the
 /// `armed` event, which is the number a person should believe.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(rename = "AudioSettings")]
 pub struct Audio {
@@ -152,7 +152,35 @@ pub struct Audio {
     /// operator's preamp, which does not change between records. It cannot be
     /// recovered from the audio afterwards, which is why it is asked for here
     /// instead of when the curves ship.
+    ///
+    /// `riaa` out of the box, which is the one default in this struct that is
+    /// an answer rather than an absence. Every other field here is a request
+    /// the device can refuse, so `None` costs nothing; this one is a statement
+    /// about a chain nobody has described, and the window has to say something
+    /// about what it will do with a curve. Virtually every turntable in use
+    /// goes through a phono stage, and an operator whose does not is an
+    /// operator who already knows the word for it and will change this. The
+    /// honest unstated case has not gone away: [`vcw_types::CaptureEq`] still
+    /// defaults to `Unknown`, so a capture that was taken before anybody
+    /// touched this - or imported from a project that never recorded it - goes
+    /// on saying nobody said, rather than being relabelled by a default
+    /// arriving years later.
     pub eq: Option<String>,
+}
+
+impl Default for Audio {
+    fn default() -> Self {
+        Self {
+            input: None,
+            output: None,
+            backend: None,
+            rate: None,
+            format: None,
+            ring_millis: None,
+            mode: None,
+            eq: Some("riaa".to_owned()),
+        }
+    }
 }
 
 /// §39's recording group.
@@ -581,6 +609,28 @@ mod tests {
         );
         assert_eq!(loaded.detection, Detection::default());
         assert_eq!(loaded.audio, Audio::default());
+    }
+
+    /// The one field in the audio group that defaults to an answer.
+    ///
+    /// Every other field there is a request the device can refuse, and `None`
+    /// is the honest absence. This one has to say something, because the
+    /// window's advice about a curve is different for a phono stage and a flat
+    /// chain and there is no third paragraph worth reading. The honest
+    /// absence has not gone anywhere: [`vcw_types::CaptureEq`] still defaults
+    /// to `Unknown`, which is what a capture taken before anybody looked at
+    /// this - or imported from a project that never recorded it - goes on
+    /// saying. The two are different questions and this test is here so a
+    /// later reader does not "fix" one of them into the other.
+    #[test]
+    fn the_input_characteristic_defaults_to_a_phono_stage() {
+        let loaded: Settings = serde_json::from_str("{}").expect("an empty document loads");
+        assert_eq!(loaded.audio.eq.as_deref(), Some("riaa"));
+        assert_eq!(
+            vcw_types::CaptureEq::default(),
+            vcw_types::CaptureEq::Unknown,
+            "a capture that nobody described still says so"
+        );
     }
 
     /// An unknown field is ignored rather than fatal, so a file written by a

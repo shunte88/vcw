@@ -1337,6 +1337,26 @@ code {
   pointer-events: none;
 }
 
+/*
+ * The field a double-click on a label opens, laid over the block it renames.
+ * Sized and placed by the panel in CSS pixels, because the block it covers is
+ * drawn by arithmetic and not by the layout. It deliberately looks like the
+ * lane rather than like a form control: the gesture is "type over that name",
+ * and a sunken box with a border would move the text it is replacing.
+ */
+.waveform-rename {
+  position: absolute;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  background: var(--sunken);
+  color: var(--text);
+  font: 10px system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1;
+}
+
 .waveform-selection {
   position: absolute;
   top: 0;
@@ -1577,6 +1597,39 @@ code {
   flex: 0 0 auto;
   margin: 0;
   padding: 0.2rem;
+}
+
+/* The bulb behind the dials. It lays a glow over the face rather than
+   replacing the face: every color on this dial - the arcs, the marks, the red
+   zone, the accent needle - was picked against #11131a, and a cream face
+   would mean picking all of them again for a piece of flair. So the light is
+   weak enough that the scale reads exactly the same with it on, and it sits
+   low and center, where the lamp behind a real meter sits.
+
+   Only `.vu` carries it, so a bars strip wearing the attribute draws nothing
+   and there is no second selector to keep in step. */
+.meters[data-bulb="classic"] .vu {
+  background:
+    radial-gradient(
+        ellipse 70% 115% at 50% 100%,
+        rgb(255 212 122 / 24%),
+        rgb(255 212 122 / 7%) 55%,
+        rgb(255 212 122 / 0%) 82%
+      )
+      no-repeat,
+    #11131a;
+}
+
+.meters[data-bulb="macintosh"] .vu {
+  background:
+    radial-gradient(
+        ellipse 70% 115% at 50% 100%,
+        rgb(122 196 255 / 24%),
+        rgb(122 196 255 / 7%) 55%,
+        rgb(122 196 255 / 0%) 82%
+      )
+      no-repeat,
+    #11131a;
 }
 
 /* The channel name, drawn in the SVG's bottom-left corner rather than in a
@@ -2090,6 +2143,16 @@ code {
   -webkit-mask-image: url(../../../assets/capture.svg);
 }
 
+.icon.audition {
+  mask-image: url(../../../assets/audition.svg);
+  -webkit-mask-image: url(../../../assets/audition.svg);
+}
+
+.icon.needledrop {
+  mask-image: url(../../../assets/needledrop.svg);
+  -webkit-mask-image: url(../../../assets/needledrop.svg);
+}
+
 .icon.tracks {
   mask-image: url(../../../assets/tracks.svg);
   -webkit-mask-image: url(../../../assets/tracks.svg);
@@ -2183,6 +2246,27 @@ code {
  * lives here rather than in a second copy of the file. */
 .transport-buttons button:not(:disabled) .icon.record {
   background-color: var(--bad);
+}
+
+/* The needle-drop trigger while it is listening. The same red as Record,
+   because that is what it is about to do, and a slow pulse rather than a
+   steady light: the button is the only thing on the window saying that a
+   capture is going to start without anybody pressing anything. */
+.transport-buttons button.listening .icon.needledrop {
+  background-color: var(--bad);
+  animation: listening 1.6s ease-in-out infinite;
+}
+
+@keyframes listening {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transport-buttons button.listening .icon.needledrop {
+    animation: none;
+  }
 }
 
 .globe {

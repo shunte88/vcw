@@ -138,11 +138,28 @@ function press(node: Element, type: string, clientX: number) {
   );
 }
 
+/**
+ * The middle of the label lane, in client pixels down the box.
+ *
+ * The panel puts the lane between the picture and the bottom ruler, one
+ * twenty-pixel row per side, so with one side on screen it is the twenty
+ * pixels above the ruler. Written out rather than imported because it is the
+ * geometry under test: a lane that moved would have to break this.
+ */
+const LANE_Y = HIGH - 18 - 10;
+
+function press2(node: Element, clientX: number, clientY: number) {
+  node.dispatchEvent(
+    new MouseEvent("dblclick", { bubbles: true, clientX, clientY }),
+  );
+}
+
 describe("taking hold of a boundary", () => {
   let moved: Mock<(boundaryId: number, seconds: number) => void>;
   let selected: Mock<(selection: Region | null) => void>;
   let cued: Mock<(seconds: number) => void>;
   let vetoed: Mock<(defect: Defect) => void>;
+  let renamed: Mock<(trackId: number, title: string) => void>;
   let canvas: HTMLCanvasElement;
   let root: Root;
   let host: HTMLDivElement;
@@ -175,6 +192,7 @@ describe("taking hold of a boundary", () => {
     selected = vi.fn();
     cued = vi.fn();
     vetoed = vi.fn();
+    renamed = vi.fn();
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -188,6 +206,7 @@ describe("taking hold of a boundary", () => {
           defects={[defect(1, 8.5, 8.502, true), defect(2, 4, 4.002, false)]}
           onVeto={vetoed}
           tracks={[track(1, 2, 6)]}
+          onRename={renamed}
           playhead={0}
           playing={false}
           onSeek={() => {}}
@@ -306,5 +325,60 @@ describe("taking hold of a boundary", () => {
       press(canvas, "dblclick", at(7));
     });
     expect(vetoed).not.toHaveBeenCalled();
+  });
+
+  // One gesture, two meanings, told apart by which strip of the canvas was
+  // hit. The lane is the only part of the picture that is not audio, so a
+  // double-click in it renames and a double-click a few pixels higher vetoes
+  // - and the second of those is the one that was already here, which is why
+  // the field must not open over the audio.
+  it("opens a field over the label the gesture landed on", async () => {
+    await act(async () => {
+      press2(canvas, at(4), LANE_Y);
+    });
+    const field = host.querySelector<HTMLInputElement>(".waveform-rename");
+    expect(field, "the lane offers a field").toBeTruthy();
+    expect(vetoed, "a rename is not a veto").not.toHaveBeenCalled();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(field, "Kinloch Rannoch");
+      field?.dispatchEvent(new KeyboardEvent("keydown", {
+        bubbles: true,
+        key: "Enter",
+      }));
+    });
+    expect(renamed).toHaveBeenCalledWith(1, "Kinloch Rannoch");
+    expect(
+      host.querySelector(".waveform-rename"),
+      "the field closes behind the write",
+    ).toBeNull();
+  });
+
+  it("opens no field over the audio", async () => {
+    await act(async () => {
+      press2(canvas, at(4), HIGH / 2);
+    });
+    expect(host.querySelector(".waveform-rename")).toBeNull();
+  });
+
+  it("takes the name back on Escape", async () => {
+    await act(async () => {
+      press2(canvas, at(4), LANE_Y);
+    });
+    const field = host.querySelector<HTMLInputElement>(".waveform-rename");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(field, "Wrong");
+      field?.dispatchEvent(new KeyboardEvent("keydown", {
+        bubbles: true,
+        key: "Escape",
+      }));
+    });
+    expect(renamed, "Escape is not a slow Enter").not.toHaveBeenCalled();
+    expect(host.querySelector(".waveform-rename")).toBeNull();
   });
 });

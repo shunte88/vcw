@@ -128,3 +128,47 @@ export function onButtonStyle(listener: () => void): () => void {
   window.addEventListener(BUTTONS_CHANGED, listener);
   return () => window.removeEventListener(BUTTONS_CHANGED, listener);
 }
+
+// --- The lamp behind the dials ------------------------------------------
+//
+// The fifth screen property, and the only one that is purely flair: a VU
+// meter in a studio has a bulb behind its face, and the two that anybody
+// remembers are the warm one and the blue one. It changes nothing a person
+// can read off the dial, which is the constraint rather than an apology - a
+// backlight that washes out the scale is a backlight that has broken the
+// instrument it is decorating. So it is a glow laid over the dark face and
+// never a change of face: the marks, the needle and the red zone keep the
+// colors they were measured for.
+//
+// Only the dials have one. The bars are an LED readout and an LED readout
+// has nothing behind it to light.
+
+/** Which bulb is behind the dials, if any. */
+export type Backlight = "off" | "classic" | "macintosh";
+
+/** The keys that are ours, which is also what a stored value is checked against. */
+const BULBS: readonly Backlight[] = ["off", "classic", "macintosh"];
+
+/** The key in `localStorage`. */
+const BACKLIGHT = "vcw.backlight";
+
+/** An event of our own, for `CHANGED`'s reason. */
+const BACKLIGHT_CHANGED = "vcw:backlight";
+
+/** The chosen bulb, or none when there is none and when it is not one of ours. */
+export function backlightOf(): Backlight {
+  const stored = localStorage.getItem(BACKLIGHT) as Backlight | null;
+  return stored !== null && BULBS.includes(stored) ? stored : "off";
+}
+
+/** Changes the bulb everywhere, and remembers it. */
+export function applyBacklight(bulb: Backlight): void {
+  localStorage.setItem(BACKLIGHT, bulb);
+  window.dispatchEvent(new Event(BACKLIGHT_CHANGED));
+}
+
+/** Calls `listener` when the bulb changes. Returns the unsubscribe. */
+export function onBacklight(listener: () => void): () => void {
+  window.addEventListener(BACKLIGHT_CHANGED, listener);
+  return () => window.removeEventListener(BACKLIGHT_CHANGED, listener);
+}

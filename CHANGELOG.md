@@ -16,6 +16,59 @@ loud if it cannot.
 
 ## Unreleased
 
+### Added
+
+* **The stylus can start the recorder.** Cue a side the way you always have -
+  press Needle Drop, walk to the deck, lower the arm - and VCW starts writing
+  when the groove does. It arms, begins the capture and holds it paused; the
+  first signal that stays above -35 dBFS releases it. The threshold is not a
+  guess: it was measured off four real needle drops, where the silence before
+  the stylus lands sits fifty decibels below the landing itself. A click on
+  the lead-in is too brief to fool it.
+
+  Nothing about the manual sequence changed. Record, Pause, cue, Resume still
+  works exactly as before; this is a second way in, not a replacement.
+
+* **Set Levels, on the toolbar.** Opening the device to check levels before a
+  take used to mean finding the Capture panel's Arm button. It is now on the
+  transport bar beside Record, and it is the same action - the meters go live,
+  nothing is recorded, and Stop closes the device again.
+
+  There is deliberately no gain slider beside it. What the sound card delivers
+  is what VCW writes, and a fader in front of the writer would end that. Set
+  the level where it is actually set: the phono stage, the interface's input
+  trim, or your operating system's mixer.
+
+* **A backlight behind the VU meters.** Off by default, with a warm classic
+  bulb and a blue one to choose from in Settings under Appearance. It is lit
+  behind the dial face only, so the needles and the scale read exactly as they
+  did before.
+
+### Changed
+
+* **The equalization picker now knows what your phono stage already did.**
+  Settings asks what the signal carried when it reached the card, and that
+  answer now defaults to RIAA - which is what all but a handful of setups
+  have. Each of the sixteen curves carries its own tracking help written for
+  that answer, instead of one paragraph underneath all of them describing a
+  chain that might not be yours. The warning about undoing RIAA first appears
+  only when there is RIAA to undo.
+
+  This changes advice, not audio, and nothing already recorded. A capture that
+  never said what its chain was still says so.
+
+* **Rename a track where you can see it.** Double-click a track's label on the
+  waveform and edit it in place. Enter or Tab commits, Escape abandons, and
+  clicking away saves what you typed.
+
+* **The project list leads with the artist**, then the album, then the catalog
+  number.
+
+### Thanks
+
+* Jim Ross, for forty years of audio engineering at the BBC and then NPR, and
+  for reading the manual before anybody else saw it.
+
 ## 0.3.7-alpha
 
 2026-10-19

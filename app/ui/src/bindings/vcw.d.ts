@@ -1894,6 +1894,19 @@ mode: string | null,
  * operator's preamp, which does not change between records. It cannot be
  * recovered from the audio afterwards, which is why it is asked for here
  * instead of when the curves ship.
+ *
+ * `riaa` out of the box, which is the one default in this struct that is
+ * an answer rather than an absence. Every other field here is a request
+ * the device can refuse, so `None` costs nothing; this one is a statement
+ * about a chain nobody has described, and the window has to say something
+ * about what it will do with a curve. Virtually every turntable in use
+ * goes through a phono stage, and an operator whose does not is an
+ * operator who already knows the word for it and will change this. The
+ * honest unstated case has not gone away: [`vcw_types::CaptureEq`] still
+ * defaults to `Unknown`, so a capture that was taken before anybody
+ * touched this - or imported from a project that never recorded it - goes
+ * on saying nobody said, rather than being relabelled by a default
+ * arriving years later.
  */
 eq: string | null, };
 

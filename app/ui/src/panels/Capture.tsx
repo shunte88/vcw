@@ -31,24 +31,15 @@
 // that stopped for an unknown reason would be the one operation that could lose
 // a rip, and "here is what we found, play it and decide" is the honest offer.
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import * as api from "../api";
-import type { Capture as CaptureRow, Device, Settings } from "../bindings/vcw";
+import type { Capture as CaptureRow, Device } from "../bindings/vcw";
 import { key, useText } from "../i18n";
 import { useKeys } from "../keys";
+import type { Choice } from "../arm";
 import { clock } from "../format";
 import type { Store } from "../store";
-
-/**
- * The device the host itself would pick, if it offers one that can record.
- *
- * Not the same as "no device": `null` arms the simulated source, which is how
- * the transport is driven with nothing plugged in.
- */
-function defaultInput(devices: readonly Device[]): string | null {
-  return devices.find((row) => row.canCapture && row.isDefaultInput)?.id ?? null;
-}
 
 /**
  * The catalog key for what each capture state is called.
@@ -81,11 +72,18 @@ const STATES: Record<string, string> = {
 export function Capture({
   store,
   devices,
-  settings,
+  choice,
+  onChoice,
+  arm,
 }: {
   store: Store;
   devices: readonly Device[];
-  settings: Settings | null;
+  /** What is pinned for the next arm. Held at the root - see `arm.ts`. */
+  choice: Choice;
+  /** Change one of the three. */
+  onChoice: (choice: Choice) => void;
+  /** Open the device. The toolbar's Set Levels button calls this same one. */
+  arm: () => void;
 }): React.JSX.Element {
   const text = useText();
   const { engine, project } = store;
@@ -93,49 +91,11 @@ export function Capture({
   // truth once it is written; this exists only so a half-typed name survives
   // a reload landing mid-word.
   const [operators, setOperators] = useState<Record<number, string>>({});
-  const [device, setDevice] = useState<string | null>(null);
-  const [rate, setRate] = useState<number | null>(null);
-  const [format, setFormat] = useState<string | null>(null);
+  const { device, rate, format } = choice;
   const list = useRef<HTMLSelectElement | null>(null);
   const formats = useRef<HTMLSelectElement | null>(null);
 
-  // The settings are the default and the panel is the override, which is why
-  // this runs once per settings load and not on every render: a person who
-  // picked a device in this panel should not have it replaced by §39's when
-  // something else causes a re-read.
-  //
-  // The fallback to the host's own default input is WP-19's: `device: null` is
-  // the *simulated source* in `contract::command::Arm`, so a first run with
-  // nothing pinned in §39 and nothing chosen here armed a synthetic tone and
-  // showed full-scale meters. Found by arming the packaged AppImage. The row
-  // said "simulated source" and the picker said "Host default", which is two
-  // names for one value and only one of them true.
-  useEffect(() => {
-    if (settings !== null) {
-      setDevice((held) => held ?? settings.audio.input ?? defaultInput(devices));
-      setRate((held) => held ?? settings.audio.rate);
-      setFormat((held) => held ?? settings.audio.format);
-    }
-  }, [settings, devices]);
-
   const chosen = devices.find((row) => row.id === device);
-  const arm = () => {
-    if (project.path === null) {
-      return;
-    }
-    void store.run(() =>
-      api.arm({
-        device,
-        project: project.path ?? "",
-        rate,
-        channels: null,
-        format,
-        mode: settings?.audio.mode ?? null,
-        eq: settings?.audio.eq ?? null,
-        ringMillis: settings?.audio.ringMillis ?? null,
-      }),
-    );
-  };
 
   useKeys("capture", {
     arm,
@@ -160,7 +120,10 @@ export function Capture({
             ref={list}
             value={device ?? ""}
             onChange={(event) =>
-              setDevice(event.target.value === "" ? null : event.target.value)
+              onChoice({
+                ...choice,
+                device: event.target.value === "" ? null : event.target.value,
+              })
             }
           >
             <option value="">{text("capture.simulated")}</option>
@@ -181,7 +144,13 @@ export function Capture({
             ref={formats}
             value={rate === null ? "" : String(rate)}
             onChange={(event) =>
-              setRate(event.target.value === "" ? null : Number(event.target.value))
+              onChoice({
+                ...choice,
+                rate:
+                  event.target.value === ""
+                    ? null
+                    : Number(event.target.value),
+              })
             }
           >
             <option value="">{text("capture.device.default")}</option>
@@ -198,7 +167,10 @@ export function Capture({
           <select
             value={format ?? ""}
             onChange={(event) =>
-              setFormat(event.target.value === "" ? null : event.target.value)
+              onChoice({
+                ...choice,
+                format: event.target.value === "" ? null : event.target.value,
+              })
             }
           >
             <option value="">{text("capture.device.default")}</option>

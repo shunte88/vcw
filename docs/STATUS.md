@@ -8794,3 +8794,109 @@ Both ends were proven by mutation: renaming `TRANSFER_STYLUS` reddened the
 export test, dropping the blur guard reddened the capture panel's "empty when
 nobody has said", and writing on every keystroke reddened "typing is not
 stating". All three were reverted.
+
+## 2026-10-19, seven things a person asked for after using the window
+
+A list of seven, written after an evening of actually capturing records, and
+worth recording as a group because five of them are the same kind of finding:
+the window was built by somebody who knew what every control did.
+
+### The EQ picker was answering a question nobody had been asked
+
+Sixteen curves, and one paragraph of help under all of them saying VCW would
+undo RIAA and then apply the chosen characteristic. That sentence is true for
+an operator with an ordinary phono stage and simply wrong for one capturing
+flat, and a single paragraph covering both says neither. Worse, the warning
+beside it fired on every curve that was not RIAA, including for people whose
+chain made it irrelevant.
+
+So `settings.audio.eq` - the §39 answer to *what had already happened to the
+signal before it reached the card* - now gates both. It also now defaults to
+`riaa`, which reverses the `an-unstated-fact-gets-no-default` rule, and the
+reversal is deliberate and narrow enough to be worth stating:
+
+- **`settings.audio.eq` describes the operator's chain.** The window has to
+  assume something or it has no advice to give at all, and a phono stage is
+  what all but a handful of people have. It is a preference, visible in
+  Settings, and changing it changes nothing already recorded.
+- **`vcw_types::CaptureEq` describes one capture**, cannot be recovered from
+  the audio, and still defaults to `Unknown`. A plausible default there would
+  be read by a later tool as a measurement.
+
+A test asserts both in one place, so the next reader who notices the
+disagreement finds the argument rather than fixing one into the other. The
+help text itself is generated from the curve and the chain rather than written
+out sixteen times, for the `refusal-advice-must-be-generated` reason.
+
+### Arming had two front doors and one of them was new
+
+The toolbar wanted a *Set Levels* button: open the device, watch the meters,
+set the level at the preamp, and only then drop the needle. The Capture panel
+already did exactly that, out of three pinned answers held in its own state.
+Adding a second button would have been a second copy of the same request built
+from a second copy of the same answers - which is how a person pins a device in
+the panel, presses the button on the bar and listens to a different one. So
+the answers and the request moved up to the root in `arm.ts`, and both buttons
+now call one function.
+
+There is no gain slider beside it and there will not be one. Audacity has an
+input gain and a playback volume; §9's promise is that what the card delivered
+is what gets written, and a fader in front of the writer ends that. The level
+is set where it is actually set - the phono stage, the interface's trim, or the
+operating system's mixer - and the tooltip says so rather than leaving a person
+hunting for a control that should not exist.
+
+### The needle-drop trigger, and why it is not in Rust
+
+§50's sequence is set the level, cue the record, drop the needle, start
+recording, and the last two are in the wrong order for one person working
+alone. The trigger inverts them: arm, start, hold paused, and let the stylus
+release it.
+
+The temptation was a detector worker on the §10 fan-out, beside `Meters`,
+`Detectors` and `Fingerprints`. It was not needed. The window already receives
+`meter-update` at §17's refresh rate **from the moment the transport is armed**
+- the event's own doc comment says why, and it is this - so the detector is two
+comparisons in `drop.ts` on an event the UI is drawing anyway. No second reader
+of the device, no worker, nothing in the capture path, and `serve` gets it for
+free because it is the same window.
+
+The threshold was measured, not chosen. The author pointed at a Boards of
+Canada rip as "a mine of information", and it is: four sides, four drops. Read
+read-only, and from the `summary256` blobs Audacity had already computed rather
+than the samples, which gives 5.3 ms resolution for the cost of a SELECT:
+
+| | measured across four drops |
+|---|---|
+| electrical floor before the stylus lands | -55.2 to -64.6 dBFS |
+| the landing transient, one 5.3 ms window | -4.5 to -7.9 dBFS |
+| the groove noise it settles into | -18 to -28 dBFS |
+
+Fifty decibels of daylight. An absolute threshold at **-35 dBFS** separates
+every floor from every drop with no floor-learning and nothing to calibrate,
+and a **50 ms sustain** is what tells a drop from the clicks the same lead-in
+is full of: a click is about a millisecond and the level is back in the floor
+on the next tick, while after a drop it never returns there. The tests are
+driven by those numbers rather than by a synthetic fixture, for the reason
+`declick-threshold-rederivation` already learned.
+
+What it costs is the Tauri boundary's latency, about a tenth of a second of
+stylus noise dropped rather than committed. That is lead-in groove, seconds
+before the first track, and losing it is closer to what an archivist wants than
+keeping it.
+
+### And three small ones
+
+The project list leads with the artist, not the album. A double-click on a
+track label on the waveform opens an inline field - committed on blur, never on
+a timer, which is the `autosave-must-not-adopt-its-own-echo` rule. And the VU
+meters have a bulb behind them, off by default, classic yellow or Macintosh
+blue, drawn as a radial gradient behind the dial face only so the needles and
+the scale are exactly as readable as before. It is flair and it is filed as
+flair: a fifth screen property in `scale.ts` beside the other four, in
+`localStorage` because it is a fact about the screen somebody is sitting at.
+
+Jim Ross is in the thanks, for forty years of audio engineering at the BBC and
+then NPR and for reading the manual before anybody else saw it.
+
+**Gate:** green, 18 legs, 1,377 Rust tests and 270 frontend.

@@ -57,6 +57,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useArm } from "./arm";
+import { useNeedleDrop } from "./drop";
 import * as api from "./api";
 import type {
   Credential,
@@ -237,6 +239,10 @@ export function App(): React.JSX.Element {
 
   const [devices, setDevices] = useState<readonly Device[]>([]);
   const [settings, setSettings] = useState<Values | null>(null);
+  // The Capture panel's three pickers and the one request they build. Here
+  // rather than in the panel because the toolbar arms too - see `arm.ts`.
+  const { choice, setChoice, arm } = useArm(store, devices, settings);
+  const drop = useNeedleDrop(store, arm);
   const [credentials, setCredentials] = useState<readonly Credential[]>([]);
   const [library, setLibrary] = useState<readonly Project[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -611,6 +617,26 @@ export function App(): React.JSX.Element {
                   )
                   .then(store.reload);
               }}
+              onRename={(trackId, title) => {
+                // The same write the track editor's form makes, with the
+                // fields it does not ask about left alone. `confirmed`
+                // is not one of those: a person who typed the title has
+                // accepted it, which is what the form means by it too.
+                void store
+                  .run(() =>
+                    api.editTrack({
+                      trackId,
+                      title: title === "" ? null : title,
+                      artist: null,
+                      composer: null,
+                      comments: null,
+                      musicbrainzId: null,
+                      confirmed: true,
+                      playbackEq: null,
+                    }),
+                  )
+                  .then(store.reload);
+              }}
               onMoveBoundary={(boundaryId, to) => {
                 // `force`, and that is the point of this call rather than an
                 // oversight in it. Every boundary a person places is written
@@ -654,10 +680,17 @@ export function App(): React.JSX.Element {
               onSelect={setSelected}
               onLibraryChanged={reread}
               onOpened={() => setPanel("tracks")}
+              settings={settings}
             />
           )}
           {panel === "capture" && (
-            <Capture store={store} devices={devices} settings={settings} />
+            <Capture
+              store={store}
+              devices={devices}
+              choice={choice}
+              onChoice={setChoice}
+              arm={arm}
+            />
           )}
           {panel === "tracks" && (
             <Tracks
@@ -703,6 +736,8 @@ export function App(): React.JSX.Element {
           capture={capture}
           side={side}
           selection={selection}
+          onSetLevels={panel === "capture" ? arm : null}
+          drop={drop}
         />
       </aside>
 

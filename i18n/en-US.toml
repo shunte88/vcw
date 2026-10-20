@@ -483,11 +483,37 @@ text = "{n} frames in this window"
 ["transport.committed"]
 text = "Frames committed to the project"
 
+["transport.drop"]
+text = "Needle Drop"
+
+["transport.drop.title"]
+text = """
+Cue the recorder and let the stylus start it. VCW arms, begins the capture \
+and holds it paused; the first signal that stays above {level} dBFS releases \
+it, so the lead-in is yours to walk to the deck in."""
+
+["transport.drop.waiting"]
+text = "Listening"
+
+["transport.drop.waiting.title"]
+text = """
+Paused, waiting for the stylus. Press again to cancel and stay paused, or \
+Resume to start by hand."""
+
 ["transport.eq"]
 text = "{curve} EQ"
 
 ["transport.eq.title"]
 text = "The playback equalization being applied to what you are hearing (§51). It is undone on the way out of the project, never written into it."
+
+["transport.levels"]
+text = "Set Levels"
+
+["transport.levels.title"]
+text = """
+Open the device and watch the meters without recording ({chord}). Set the \
+level at the phono stage or the interface, not here: what the card delivers \
+is what VCW writes."""
 
 ["transport.marker"]
 text = "Marker"
@@ -748,6 +774,9 @@ text = "{version} (bundled)"
 
 ["about.thanks"]
 text = "Thanks to"
+
+["about.thanks.jim"]
+text = "forty years of audio engineering at the BBC and then NPR, and a reading of the manual before anybody else saw it"
 
 ["about.thanks.paul"]
 text = "the first outside user: piCorePlayer, and the reports that followed"
@@ -1213,8 +1242,32 @@ text = "Create"
 ["library.new.eq"]
 text = "Equalization"
 
-["library.new.eq.title"]
-text = "The characteristic the record was cut with. Not what your preamp did about it - that is in Settings, under Audio."
+["library.new.eq.chain.flat"]
+text = """
+Your chain captures flat, so VCW applies it exactly as the record was \
+cut."""
+
+["library.new.eq.chain.match"]
+text = """
+Your phono stage has already undone it, so VCW leaves the audio alone."""
+
+["library.new.eq.chain.undo"]
+text = """
+Your phono stage undid RIAA on the way in, so VCW puts that back before \
+applying this one."""
+
+["library.new.eq.chain.unstated"]
+text = """
+VCW has not been told what your phono stage does, so it cannot say what it \
+will do about this."""
+
+["library.new.eq.labels"]
+text = "Cut by {labels}."
+
+["library.new.eq.unstated"]
+text = """
+Say what your chain does to the signal in Settings, under Audio, and this \
+box can tell you what VCW will do with your answer."""
 
 ["library.new.eq.warn"]
 text = "An ordinary phono stage undoes RIAA whatever the record was cut with, so a pressing from before 1954 comes out of it with the wrong correction already applied. VCW can put that right, by undoing RIAA before applying this curve - but undoing a curve lifts the noise with it. Where your chain can capture flat, say so in Settings and this stays exact."
@@ -1302,6 +1355,9 @@ text = "Zoom out ({chord})"
 ["waveform.range"]
 text = "{from} to {to}"
 
+["waveform.rename.title"]
+text = "The track title. Enter or Tab writes it, Escape takes it back."
+
 # The settings panel. A paragraph here may mark a literal with `backticks` and
 # an emphasis with *asterisks* - see `Hint` in `app/ui/src/panels/Settings.tsx`.
 # The braces in `settings.template.hint` are literal: they are what the naming
@@ -1322,6 +1378,26 @@ text = "Folder image"
 ["settings.artwork.none"]
 text = "None"
 
+["settings.backlight"]
+text = "Backlight"
+
+["settings.backlight.classic"]
+text = "Warm bulb"
+
+["settings.backlight.hint"]
+text = """
+The lamp behind the dials, and nothing but flair: it is laid over the face \
+rather than painted on it, so the scale and the needle read exactly as they \
+do with it off. Available when the meters are dials, because a bar is a lit \
+readout and has nothing behind it to light. Remembered on this machine \
+only, like the others above."""
+
+["settings.backlight.macintosh"]
+text = "Blue bulb"
+
+["settings.backlight.off"]
+text = "Off"
+
 ["settings.buttons"]
 text = "Buttons"
 
@@ -1330,8 +1406,8 @@ text = """
 Both rows at once: the panel tabs along the top and the transport along the \
 bottom. Icons give the rows back about a third of their width, and every one \
 of them keeps its name - the tooltip still reads *Record (r)*, and a screen \
-reader still hears the word. Remembered on this machine only, like the two \
-above."""
+reader still hears the word. Remembered on this machine only, like the \
+others above."""
 
 ["settings.buttons.icons"]
 text = "Icons"

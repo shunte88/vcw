@@ -35,12 +35,15 @@ import type { Credential, Device, Settings as Values } from "../bindings/vcw";
 import { effortOf } from "../effort";
 import { key, useText } from "../i18n";
 import {
+  type Backlight,
   type ButtonStyle,
   type MeterStyle,
   SCALES,
+  applyBacklight,
   applyButtonStyle,
   applyMeterStyle,
   applyScale,
+  backlightOf,
   buttonStyleOf,
   meterStyleOf,
   scaleOf,
@@ -164,6 +167,7 @@ export function Settings({
   });
   const [scale, setScale] = useState(scaleOf);
   const [meters, setMeters] = useState(meterStyleOf);
+  const [bulb, setBulb] = useState(backlightOf);
   const [buttons, setButtons] = useState(buttonStyleOf);
   // Asked for once, when the panel opens. The list is a directory listing in
   // the shell and the directory does not change while a person reads a menu.
@@ -463,6 +467,27 @@ export function Settings({
               </select>
             </label>
             <Hint text={text("settings.meters.hint")} />
+            <label>
+              {text("settings.backlight")}
+              <select
+                value={bulb}
+                disabled={meters !== "vu"}
+                onChange={(event) => {
+                  const chosen = event.target.value as Backlight;
+                  applyBacklight(chosen);
+                  setBulb(chosen);
+                }}
+              >
+                <option value="off">{text("settings.backlight.off")}</option>
+                <option value="classic">
+                  {text("settings.backlight.classic")}
+                </option>
+                <option value="macintosh">
+                  {text("settings.backlight.macintosh")}
+                </option>
+              </select>
+            </label>
+            <Hint text={text("settings.backlight.hint")} />
             <label>
               {text("settings.buttons")}
               <select

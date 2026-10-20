@@ -38,10 +38,11 @@ vi.mock("../api", () => ({
   placeMarker: vi.fn(async () => undefined),
 }));
 
-function store(): Store {
+function store(phase = "idle", path: string | null = "/library/a.vcw"): Store {
   return {
+    project: { path },
     engine: {
-      phase: "idle",
+      phase,
       playing: false,
       playhead: 0,
       seconds: 0,
@@ -54,21 +55,45 @@ function store(): Store {
   } as unknown as Store;
 }
 
-async function render(): Promise<HTMLElement> {
+async function render(
+  onSetLevels: (() => void) | null = null,
+  phase = "idle",
+  path: string | null = "/library/a.vcw",
+  drop: { waiting: boolean; toggle: () => void } = {
+    waiting: false,
+    toggle: () => {},
+  },
+): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   await act(async () => {
     root.render(
       <Transport
-        store={store()}
+        store={store(phase, path)}
         capture={{ id: 1 } as unknown as Capture}
         side={null}
         selection={null}
+        onSetLevels={onSetLevels}
+        drop={drop}
       />,
     );
   });
   return container;
+}
+
+/** The toolbar's Set Levels button, if the strip is showing one. */
+function levels(container: HTMLElement): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll("button")].find((button) =>
+    (button.textContent ?? "").includes("Set Levels"),
+  );
+}
+
+/** The toolbar's needle-drop trigger, whichever face it is wearing. */
+function trigger(container: HTMLElement): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll("button")].find((button) =>
+    /Needle Drop|Listening/.test(button.textContent ?? ""),
+  );
 }
 
 describe("the transport strip", () => {
@@ -88,5 +113,68 @@ describe("the transport strip", () => {
   it("says nothing of the sort in the window", async () => {
     const container = await render();
     expect(container.textContent).not.toMatch(/VCW host/);
+  });
+
+  // Opening the device without recording is how a level gets set, and until
+  // now it could only be reached from the Capture panel - a tab away from
+  // Record, which is the button pressed next. The root hands the strip the
+  // same function that panel's own Arm button calls, and hands it over only
+  // where it answers something: on Tracks there is no level to set.
+  it("offers Set Levels only on the panel that asked for it", async () => {
+    expect(levels(await render(null)), "not on the other panels").toBeUndefined();
+
+    const arm = vi.fn();
+    const container = await render(arm);
+    const button = levels(container);
+    expect(button, "on the capture panel").toBeDefined();
+    await act(async () => {
+      button?.click();
+    });
+    expect(arm).toHaveBeenCalledTimes(1);
+  });
+
+  // Nothing to offer once the device is open: the meters are already live.
+  it("takes Set Levels away once something is armed", async () => {
+    const container = await render(vi.fn(), "armed");
+    expect(levels(container)).toBeUndefined();
+  });
+
+  // And nothing to arm without a project to record into.
+  it("cannot set levels with no project open", async () => {
+    const container = await render(vi.fn(), "idle", null);
+    expect(levels(container)?.disabled).toBe(true);
+  });
+
+  // The trigger is a transport verb and lives on the bar beside Record, not
+  // on the panel that happens to be in front. These three are the states a
+  // person can see it in.
+  it("offers the needle-drop trigger beside Record", async () => {
+    const toggle = vi.fn();
+    const container = await render(null, "idle", "/library/a.vcw", {
+      waiting: false,
+      toggle,
+    });
+    const button = trigger(container);
+    expect(button?.textContent).toBe("Needle Drop");
+    await act(async () => {
+      button?.click();
+    });
+    expect(toggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("says it is listening while it waits for the stylus", async () => {
+    const container = await render(null, "paused", "/library/a.vcw", {
+      waiting: true,
+      toggle: () => {},
+    });
+    expect(trigger(container)?.textContent).toBe("Listening");
+    expect(trigger(container)?.className).toBe("listening");
+  });
+
+  // Nothing left to trigger once the record is turning, and nothing to
+  // record into without a project.
+  it("has nothing to trigger while recording or without a project", async () => {
+    expect(trigger(await render(null, "recording"))?.disabled).toBe(true);
+    expect(trigger(await render(null, "idle", null))?.disabled).toBe(true);
   });
 });

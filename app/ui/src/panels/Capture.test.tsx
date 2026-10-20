@@ -32,6 +32,7 @@ import * as api from "../api";
 
 import type { Capture as Row, Device, Settings } from "../bindings/vcw";
 import type { Store } from "../store";
+import { useArm } from "../arm";
 import { Capture, counts, label } from "./Capture";
 
 vi.mock("../api", () => ({
@@ -104,6 +105,37 @@ function store(path: string | null = null, captures: readonly Row[] = []): Store
   } as unknown as Store;
 }
 
+/**
+ * The panel with the arming the root does for it.
+ *
+ * `useArm` holds the three pickers and builds the request, because the
+ * toolbar's Set Levels button issues the same one. Rendering the hook here
+ * rather than handing the panel three literal props is what keeps the tests
+ * below honest: they are about a settings value reaching `api.arm`, and a
+ * fixture that supplied the answer itself would prove only that the fixture
+ * works.
+ */
+function Harness({
+  store,
+  devices,
+  settings,
+}: {
+  store: Store;
+  devices: readonly Device[];
+  settings: Settings | null;
+}): React.JSX.Element {
+  const { choice, setChoice, arm } = useArm(store, devices, settings);
+  return (
+    <Capture
+      store={store}
+      devices={devices}
+      choice={choice}
+      onChoice={setChoice}
+      arm={arm}
+    />
+  );
+}
+
 async function render(
   devices: readonly Device[],
   held: Settings = settings(),
@@ -115,7 +147,7 @@ async function render(
   const root = createRoot(container);
   await act(async () => {
     root.render(
-      <Capture store={store(path, captures)} devices={devices} settings={held} />,
+      <Harness store={store(path, captures)} devices={devices} settings={held} />,
     );
   });
   return container;

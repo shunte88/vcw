@@ -28,7 +28,7 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
-import type { Project } from "../bindings/vcw";
+import type { Project, Settings as Values } from "../bindings/vcw";
 import type { Store } from "../store";
 import { Browser } from "./Browser";
 
@@ -88,6 +88,11 @@ function fakeStore(): { store: Store; reloaded: () => number } {
   return { store, reloaded: () => reloads };
 }
 
+/** Settings stating one thing: what the chain does before the card. */
+function chain(eq: string | null): Values {
+  return { audio: { eq } } as unknown as Values;
+}
+
 function find(container: HTMLElement, label: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll("button")).find((each) =>
     (each.textContent ?? "").includes(label),
@@ -123,6 +128,7 @@ describe("the project browser", () => {
           onSelect={() => {}}
           onLibraryChanged={onLibraryChanged}
           onOpened={() => {}}
+          settings={null}
         />,
       );
     });
@@ -174,6 +180,80 @@ describe("the project browser", () => {
     container.remove();
   });
 
+  // What the chain already did decides what there is to say about a curve,
+  // and before this the form said the same paragraph to everybody. It is the
+  // engineer-facing one - undo RIAA first, it lifts the noise - which is
+  // advice for a phono stage, is simply not true for a chain capturing flat,
+  // and is unanswerable for a chain nobody has described.
+  it("says about a curve only what the stated chain makes true", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const { store } = fakeStore();
+
+    const draw = async (settings: Values | null) => {
+      await act(async () => {
+        root.render(
+          <Browser
+            store={store}
+            projects={[]}
+            selected={null}
+            onSelect={() => {}}
+            onLibraryChanged={() => {}}
+            onOpened={() => {}}
+            settings={settings}
+          />,
+        );
+      });
+    };
+
+    await draw(chain("riaa"));
+    await act(async () => {
+      find(container, "New project").click();
+    });
+
+    // RIAA on an RIAA chain is the ordinary case and has no cost to name, so
+    // the warning stays away until the curve is an unusual one.
+    const advice = () => container.querySelectorAll("form p.hint.warn");
+    expect(advice(), "RIAA through a phono stage needs no warning").toHaveLength(0);
+
+    const picker = container.querySelector<HTMLSelectElement>("select");
+    const choose = async (id: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(
+          HTMLSelectElement.prototype,
+          "value",
+        )!.set!.call(picker, id);
+        picker?.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    };
+    await choose("columbia_lp");
+    expect(advice(), "Columbia through a phono stage has to undo RIAA first")
+      .toHaveLength(1);
+
+    // The same curve, the same form, a chain that captures flat: there is no
+    // RIAA to undo, so there is no noise to warn about.
+    await draw(chain("flat"));
+    expect(picker?.value).toBe("columbia_lp");
+    expect(advice(), "nothing is undone on a flat chain").toHaveLength(0);
+
+    // And unstated is not silence. The useful thing to say to somebody who
+    // has not described their chain is where to describe it.
+    await draw(chain(null));
+    expect(advice(), "nothing can be promised about an unstated chain")
+      .toHaveLength(0);
+    const hints = container.querySelectorAll("form p.hint:not(.warn)");
+    expect(
+      Array.from(hints).some((p) => (p.textContent ?? "").includes("Settings")),
+      "an unstated chain should be pointed at Settings",
+    ).toBe(true);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   // Opening lands on Tracks, by all three routes.
   //
   // The three were wired separately before this - the Open button, the tile
@@ -200,6 +280,7 @@ describe("the project browser", () => {
             onSelect={() => {}}
             onLibraryChanged={() => {}}
             onOpened={opened}
+            settings={null}
           />,
         );
       });
@@ -271,6 +352,7 @@ describe("the project browser", () => {
           onSelect={chose}
           onLibraryChanged={() => {}}
           onOpened={() => {}}
+          settings={null}
         />,
       );
     });
@@ -311,6 +393,7 @@ describe("the project browser", () => {
             onSelect={() => {}}
             onLibraryChanged={() => {}}
             onOpened={() => {}}
+            settings={null}
           />,
         );
       });
@@ -363,6 +446,7 @@ describe("the project browser", () => {
           onSelect={() => {}}
           onLibraryChanged={() => {}}
           onOpened={() => {}}
+          settings={null}
         />,
       );
     });
@@ -399,6 +483,7 @@ describe("the project browser", () => {
             onSelect={() => {}}
             onLibraryChanged={() => {}}
             onOpened={() => {}}
+            settings={null}
           />,
         );
       });
@@ -473,6 +558,7 @@ describe("the project browser", () => {
             onSelect={() => {}}
             onLibraryChanged={() => {}}
             onOpened={() => {}}
+            settings={null}
           />,
         );
       });
@@ -502,6 +588,7 @@ describe("the project browser", () => {
             onSelect={() => {}}
             onLibraryChanged={() => {}}
             onOpened={() => {}}
+            settings={null}
           />,
         );
       });
