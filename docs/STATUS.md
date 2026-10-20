@@ -8900,3 +8900,60 @@ Jim Ross is in the thanks, for forty years of audio engineering at the BBC and
 then NPR and for reading the manual before anybody else saw it.
 
 **Gate:** green, 18 legs, 1,377 Rust tests and 270 frontend.
+
+## 2026-10-20, 0.3.8-alpha: the guide a person reads, and two tests that were racing
+
+The work is written up above - the 2026-10-19 sections for the seven things a
+person asked for after using the window, and WP-31 before them. This records
+that it shipped, and the three things the round itself taught.
+
+**The user guide is no longer mine.** `docs/USER-GUIDE.md` was 1,152 lines
+written by me for me: accurate, complete, and organized around the sections of
+`REQUIREMENTS.md` rather than around a person with a turntable. What replaced
+it is `docs/VCW-User-Guide/`, authored by hand in three formats that are kept
+in step outside this repository, with its own screenshots. The rule that comes
+with it is in `AGENTS.md`: **do not change any file in that folder**, not a
+typo and not a stale version number. Say what needs changing and leave it
+alone. Three gate tests read it - every `vcw` verb documented, every command
+line in it one the CLI accepts, every chord in it one `keymap.ts` binds - and
+when one of those goes red the fix is a verb's documentation or a keymap
+change, never an edit to the guide.
+
+One sentence in it is a fact about the release rather than writing, and that
+one is generated: "Prepared October 20, 2026, against VCW version 0.3.8."
+`tools/guide-version.py` restamps the `.md`, rewrites `word/document.xml`
+inside the `.docx` member by member, and rebuilds the `.pdf` through
+`soffice --headless`. The lossless flag on that conversion is not optional:
+without it LibreOffice re-encodes every screenshot to JPEG, and the first run
+shipped a 166K PNG as 80.8K of JPEG without saying so. Verified member list,
+compression type and image bytes identical, 20 pages, one line of `pdftotext`
+different. `the_guide_names_the_version_it_was_prepared_against` fails the gate
+if a version bump skipped it, so the tool runs in the same commit as the four
+manifests and the pre-tag list is four items rather than three.
+
+**Two tests were races, and both of them failed somewhere that is not this
+machine.** `a_capture_that_recorded_nothing_leaves_nothing_behind` asserted
+zero frames between `record` and `pause`; the writer commits a chunk at a time
+and a chunk is 480 frames, so on a slower runner one lands. The claim it
+actually wanted is an invariant and is now written as one:
+`rows.len() == usize::from(finished > 0)`, plus the recovery survey still
+empty. `a_marker_reaches_the_command_line_while_the_side_is_recording`
+recorded 2.5 seconds and expected a live marker; the detector settles for 1.2
+of those, which is ample here and was not ample on an emulated aarch64 runner.
+The side now gets longer until a marker appears, three takes at most. A fast
+machine still pays for one 2.5 second take and a slow one pays in seconds
+rather than in a red leg. Both were mutation-proven before they were believed:
+`settle-by-convergence-not-by-sleep` says a green run does not clear a flake,
+and neither does a green run after a guess.
+
+**The release round:** green on `main` (12 jobs), then the tag (17 jobs, four
+`package` legs green, a draft carrying the right `tag_name`, `prerelease=true`,
+eight assets and 110 lines of notes), then one `-F draft=false`. One red leg,
+`test (linux-aarch64)`, stepped over on the one rule that permits it - the same
+leg had passed for the same commit on the `main` round, so its result exists
+elsewhere for that commit. Published and then checked rather than assumed: all
+eight assets answer a range request from an anonymous client, the published
+`SHA256SUMS` verifies against the downloaded `.deb`, and that `.deb` unpacked
+gives `vcw 0.3.8` with `usr/lib/VCW/ui` in it.
+
+**Gate:** green, 18 legs, 1,378 Rust tests, 23 ignored, and 280 frontend.
