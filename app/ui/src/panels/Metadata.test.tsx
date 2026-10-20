@@ -24,7 +24,6 @@
 // statement is how somebody takes back a guess.
 
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
@@ -32,6 +31,7 @@ import * as api from "../api";
 import type { Candidate, Curve, Identified, Release } from "../bindings/vcw";
 import type { Store } from "../store";
 import { Metadata } from "./Metadata";
+import { mount } from "../mount";
 
 vi.mock("../api", () => ({
   curves: vi.fn(async () => [
@@ -88,13 +88,7 @@ function release(extra: Partial<Release> = {}): Release {
 }
 
 async function render(held: Release | null): Promise<HTMLElement> {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(<Metadata store={store(held)} />);
-  });
-  return container;
+  return mount(<Metadata store={store(held)} />);
 }
 
 /**

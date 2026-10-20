@@ -18,12 +18,12 @@
 // the speakers in the same room.
 
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Capture } from "../bindings/vcw";
 import type { Engine, Store } from "../store";
 import { Transport } from "./Transport";
+import { mount } from "../mount";
 
 const inTheShell = vi.fn(() => true);
 
@@ -64,11 +64,7 @@ async function render(
     toggle: () => {},
   },
 ): Promise<HTMLElement> {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
+  return mount(
       <Transport
         store={store(phase, path)}
         capture={{ id: 1 } as unknown as Capture}
@@ -78,8 +74,6 @@ async function render(
         drop={drop}
       />,
     );
-  });
-  return container;
 }
 
 /** The toolbar's Set Levels button, if the strip is showing one. */

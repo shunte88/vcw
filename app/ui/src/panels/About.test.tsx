@@ -27,11 +27,11 @@
 // failure the whole work package exists to prevent. Both directions, below.
 
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { About as Build, Notice } from "../bindings/vcw";
 import { About } from "./About";
+import { mount } from "../mount";
 
 const flacenc: Notice = {
   component: "flacenc",
@@ -93,13 +93,7 @@ let refusal: string | null = null;
 /** Renders the dialog with the backend reporting these notices. */
 async function shown(notices: Notice[]): Promise<HTMLElement> {
   current = notices;
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(<About onClose={() => {}} />);
-  });
-  return container;
+  return mount(<About onClose={() => {}} />);
 }
 
 describe("the about dialog", () => {

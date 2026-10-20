@@ -21,7 +21,6 @@
 // faces it actually has rather than a fixed four.
 
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
@@ -30,6 +29,7 @@ import type { Boundary, Side } from "../bindings/vcw";
 import type { Store } from "../store";
 import { Tracks } from "./Tracks";
 import type { Region } from "./Waveform";
+import { mount } from "../mount";
 
 vi.mock("../api", () => ({
   addTrack: vi.fn(async () => 7),
@@ -92,11 +92,7 @@ async function render(
     boundaries?: readonly Boundary[];
   } = {},
 ): Promise<HTMLElement> {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
+  return mount(
       <Tracks
         store={store(discs, boundaries)}
         chosen={{ track: null, boundary: null }}
@@ -106,8 +102,6 @@ async function render(
         onSelect={onSelect}
       />,
     );
-  });
-  return container;
 }
 
 /** The panel button whose label starts with `word`. */

@@ -26,12 +26,12 @@
 // was given the information to avoid.
 
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Settings } from "../bindings/vcw";
 import type { Engine, Exported, Store } from "../store";
 import { Export, size, wrote } from "./Export";
+import { mount } from "../mount";
 
 /** Typed with its options, so a test can assert what the dialog was asked for. */
 const chosen = vi.fn(
@@ -119,13 +119,7 @@ async function render(
   engine: Partial<Engine>,
   library: string | null = null,
 ): Promise<HTMLElement> {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(<Export store={store(engine)} settings={settings(library)} />);
-  });
-  return container;
+  return mount(<Export store={store(engine)} settings={settings(library)} />);
 }
 
 /** The select holding a given option value, found by the option rather than by

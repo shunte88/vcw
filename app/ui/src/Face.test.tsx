@@ -22,12 +22,11 @@
 // nothing between the tab and the stylesheet that would complain. This reads
 // both files and insists they agree.
 
-import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Face } from "./Face";
 import { applyButtonStyle } from "./scale";
+import { mount as render } from "./mount";
 
 const css = Object.values(
   import.meta.glob("./*.css", { eager: true, query: "?raw", import: "default" }),
@@ -65,29 +64,20 @@ const asked = new Set(
   ),
 );
 
-function render(node: React.ReactNode): HTMLElement {
-  const container = document.createElement("div");
-  document.body.append(container);
-  act(() => {
-    createRoot(container).render(node);
-  });
-  return container;
-}
-
 describe("a button's face", () => {
   afterEach(() => {
     applyButtonStyle("text");
   });
 
-  it("is the word, and only the word, out of the box", () => {
-    const container = render(<Face icon="record">Record</Face>);
+  it("is the word, and only the word, out of the box", async () => {
+    const container = await render(<Face icon="record">Record</Face>);
     expect(container.textContent).toBe("Record");
     expect(container.querySelector(".icon")).toBeNull();
   });
 
-  it("keeps the word in the markup when it shows the glyph", () => {
+  it("keeps the word in the markup when it shows the glyph", async () => {
     applyButtonStyle("icons");
-    const container = render(<Face icon="record">Record</Face>);
+    const container = await render(<Face icon="record">Record</Face>);
     const glyph = container.querySelector(".icon");
     expect(glyph?.className).toBe("icon record");
     expect(glyph?.getAttribute("aria-hidden")).toBe("true");

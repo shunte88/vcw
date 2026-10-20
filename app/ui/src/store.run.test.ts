@@ -22,11 +22,11 @@
 
 import { act } from "react";
 import { createElement } from "react";
-import { createRoot } from "react-dom/client";
 import { describe as group, expect, it, vi } from "vitest";
 
 import type { Store } from "./store";
 import { useEngine } from "./store";
+import { mount } from "./mount";
 
 /** Hoisted, because the mock factory below is lifted above these lines. */
 const api = vi.hoisted(() => ({ poll: vi.fn(async () => undefined) }));
@@ -46,11 +46,7 @@ async function mounted(): Promise<() => Store> {
     latest = useEngine();
     return null;
   }
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    createRoot(container).render(createElement(Probe));
-  });
+  await mount(createElement(Probe));
   return () => {
     if (latest === null) {
       throw new Error("the hook never rendered");

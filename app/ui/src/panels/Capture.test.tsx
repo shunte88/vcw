@@ -25,7 +25,6 @@
 // taken through the window permanently 'unknown'.
 
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../api";
@@ -34,6 +33,7 @@ import type { Capture as Row, Device, Settings } from "../bindings/vcw";
 import type { Store } from "../store";
 import { useArm } from "../arm";
 import { Capture, counts, label } from "./Capture";
+import { mount } from "../mount";
 
 vi.mock("../api", () => ({
   arm: vi.fn(async () => undefined),
@@ -150,15 +150,9 @@ async function render(
   path: string | null = null,
   captures: readonly Row[] = [],
 ): Promise<HTMLElement> {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
+  return mount(
       <Harness store={store(path, captures)} devices={devices} settings={held} />,
     );
-  });
-  return container;
 }
 
 /** Presses the panel's arm button and hands back the request it sent. */
