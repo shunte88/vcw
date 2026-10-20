@@ -17,19 +17,27 @@ Single-context: `GLOSSARY.md` at the repo root and `docs/adr/`. See
 `docs/VCW-User-Guide/` holds the authored user guide: the `.docx`, the `.pdf`,
 the `.md` source, and the `assets/` and `screenshots/` folders they reference.
 
-**Do not change any file in that folder.** Not a typo, not a stale version
-number, not a broken link. If something in it needs updating, say what and why
-and leave it alone; the author edits these by hand and the three formats are
-kept in step outside this repo.
+**Do not change any file in that folder.** Not a typo, not a broken link, not
+a sentence that reads badly. If something in it needs updating, say what and
+why and leave it alone; the author edits these by hand.
 
-It replaced `docs/USER-GUIDE.md`, which is gone, so two gate tests now read it
-instead and may only ever *read* it:
+The one exception is the version the guide was prepared against, which is a
+fact about the release rather than a piece of writing. `tools/guide-version.py`
+owns that sentence: it restamps the `.md` and the `.docx` and rebuilds the
+`.pdf` from the `.docx`, copying every other byte of the Word document across
+untouched. **Run it as part of every version bump**, in the same commit as the
+four manifests, and never restamp the edition line by hand in one format.
+
+It replaced `docs/USER-GUIDE.md`, which is gone, so three gate tests now read
+it instead and may only ever *read* it:
 `crates/cli/tests/the_user_guide_names_real_commands.rs` requires every `vcw`
 verb to be documented and every command line in the guide to be one the CLI
 accepts, and `app/src-tauri/tests/the_user_guide_lists_every_key.rs` requires
 every shortcut it prints to be one `app/ui/src/keymap.ts` binds. When one of
 those fails, the fix is a new verb's documentation or a keymap change, not an
-edit to the guide: say what the guide needs and stop.
+edit to the guide: say what the guide needs and stop. The third,
+`the_guide_names_the_version_it_was_prepared_against`, is the one with a fix in
+this repository: run `tools/guide-version.py`.
 
 `docs/TRANSLATING.md` is the one piece of the old guide that was kept in the
 repository, because the new one does not cover writing a catalog. That file is

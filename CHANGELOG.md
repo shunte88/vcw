@@ -14,7 +14,9 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
-## Unreleased
+## 0.3.8-alpha
+
+2026-10-20
 
 ### Added
 
@@ -70,6 +72,10 @@ loud if it cannot.
   `docs/VCW-User-Guide/`, and it replaces `docs/USER-GUIDE.md`, which is gone.
   The one part of the old guide the new one does not cover - writing a message
   catalog - moved to `docs/TRANSLATING.md`.
+
+  Its opening paragraph says which version it was prepared against, and a
+  release now restamps that in all three formats together, so the guide in the
+  package always names the build it shipped beside.
 
 ### Fixed
 

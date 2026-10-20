@@ -280,6 +280,29 @@ fn the_guide_documents_every_verb_a_person_needs() {
 }
 
 #[test]
+fn the_guide_names_the_version_it_was_prepared_against() {
+    // The guide is hand-authored and is not ours to edit, with one exception:
+    // its opening paragraph names the version it describes, and that is a fact
+    // about the release rather than a piece of writing. Nothing else would
+    // notice it going stale - prose does not fail to compile - so a bump used
+    // to ship a guide two versions behind. `tools/guide-version.py` restamps
+    // the sentence in all three formats, and this is what says it was run.
+    let version = env!("CARGO_PKG_VERSION");
+    let line = guide()
+        .lines()
+        .find(|line| line.contains("About this edition."))
+        .expect("the guide opens with an `About this edition.` paragraph")
+        .to_owned();
+    assert!(
+        line.contains(&format!("against VCW version {version}.")),
+        "the guide was prepared against another version:\n  {line}\nand this \
+         is {version}. Run `tools/guide-version.py`, which restamps the \
+         Markdown, the Word document and the PDF together. Do not edit the \
+         guide by hand.",
+    );
+}
+
+#[test]
 fn every_document_links_to_something_that_is_there() {
     // The guide's last section is a table of links to the other documents and
     // to the two worked examples, which is the part of a document that rots
