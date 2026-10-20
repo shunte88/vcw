@@ -73,8 +73,9 @@ fn recorded(dir: &Path, seconds: f64) -> PathBuf {
         .expect("run vcw session");
     assert!(
         out.status.success(),
-        "recording failed:\n{}",
-        String::from_utf8_lossy(&out.stdout)
+        "recording failed:\n{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
     );
     path
 }
@@ -94,7 +95,14 @@ fn render(project: &Path, out: &Path, extra: &[&str]) -> (Vec<u8>, serde_json::V
         .output()
         .expect("run vcw play");
     let stdout = String::from_utf8_lossy(&result.stdout).into_owned();
-    assert!(result.status.success(), "play failed:\n{stdout}");
+    // Both streams, because `vcw play` writes its report to stdout and says
+    // why it could not play to stderr: a Windows runner with no usable device
+    // failed this on 3df2507 and the whole message was "play failed:".
+    assert!(
+        result.status.success(),
+        "play failed:\n{stdout}\n{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
     let report: serde_json::Value = serde_json::from_str(stdout.trim()).expect(&stdout);
     (std::fs::read(out).expect("read the render"), report)
 }
