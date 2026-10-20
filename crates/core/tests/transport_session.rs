@@ -520,12 +520,23 @@ fn a_capture_that_recorded_nothing_leaves_nothing_behind() {
             _ => None,
         })
         .unwrap_or_else(|| panic!("no capture-finished: {seen:?}"));
-    assert_eq!(finished, 0, "the simulated source committed a block");
 
+    // Not `assert_eq!(finished, 0)`. The simulated source has been running
+    // since `arm` and the writer commits on its own thread, a chunk at a
+    // time, so whether anything lands between `record` and `pause` is a race
+    // against a 10 ms cycle: it does not, on an idle machine, and the gate
+    // caught it doing so once under load with 480 frames. Which side of that
+    // race happened is not this test's business. What must hold either way is
+    // that the project holds a side exactly when there is audio under it.
     let project = Project::open(&path).expect("reopen");
-    assert!(
-        session::all(project.conn()).expect("all").is_empty(),
-        "a capture that recorded nothing was filed as a finished side"
+    let rows = session::all(project.conn()).expect("all");
+    assert_eq!(
+        rows.len(),
+        usize::from(finished > 0),
+        "capture-finished reported {finished} frames and the project holds {} \
+         rows: a capture that recorded nothing must leave no side at all, and \
+         one that recorded something must leave exactly one",
+        rows.len(),
     );
     assert!(
         recovery::survey(project.conn()).expect("survey").is_empty(),
