@@ -44,6 +44,21 @@ export function defaultInput(devices: readonly Device[]): string | null {
   return devices.find((row) => row.canCapture && row.isDefaultInput)?.id ?? null;
 }
 
+/**
+ * Whether the transport can be armed from where it is.
+ *
+ * `stopped` counts, which is the whole point of it being a function. A
+ * finished capture leaves the engine in `stopped`, and §35's state machine
+ * only leaves that state on `reset` - so every button that opens a device was
+ * refused for the rest of the session, and the window offered no verb that
+ * would clear it. One side of a record and the app had to be restarted.
+ * [`useArm`]'s `arm` sends the `reset` itself, so a caller only has to ask
+ * whether arming is possible, not which of the two states it is in.
+ */
+export function canArm(phase: string): boolean {
+  return phase === "idle" || phase === "stopped";
+}
+
 /** The pinned answers, a setter for them, and the one way to open the device. */
 export function useArm(
   store: Store,
@@ -84,11 +99,19 @@ export function useArm(
   // Returns its promise rather than firing and forgetting, because the
   // needle-drop trigger has to send `record` after the device is open and not
   // beside it. A caller with nothing to sequence ignores the result.
-  const arm = () => {
+  const arm = async () => {
     if (store.project.path === null) {
-      return Promise.resolve();
+      return;
     }
-    return store.run(() =>
+    // Clear the finished capture out of the way first. The engine takes its
+    // commands on one queue and applies them in order, so the `arm` below
+    // lands after this even though neither call waits for the machine to
+    // move - which is as close to atomic as the boundary gets, and closer
+    // than reading the phase back would be.
+    if (store.engine.phase === "stopped") {
+      await store.run(() => api.transport("reset"));
+    }
+    await store.run(() =>
       api.arm({
         device: choice.device,
         project: store.project.path ?? "",

@@ -37,7 +37,7 @@ import * as api from "../api";
 import type { Capture as CaptureRow, Device } from "../bindings/vcw";
 import { key, useText } from "../i18n";
 import { useKeys } from "../keys";
-import type { Choice } from "../arm";
+import { type Choice, canArm } from "../arm";
 import { clock } from "../format";
 import type { Store } from "../store";
 
@@ -188,7 +188,11 @@ export function Capture({
             the button was a full screen width away from the last of them,
             diagonally opposite Record. `.fields` aligns to the bottom of its
             controls, so it lands on the same line as the selects. */}
-        <button type="button" disabled={project.path === null} onClick={arm}>
+        <button
+          type="button"
+          disabled={project.path === null || !canArm(engine.phase)}
+          onClick={arm}
+        >
           {text("capture.arm", { chord: "a" })}
         </button>
       </div>

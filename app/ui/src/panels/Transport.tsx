@@ -30,6 +30,7 @@
 // answer is `null` the marker key does nothing rather than picking a side.
 
 import * as api from "../api";
+import { canArm } from "../arm";
 import type { Audition, Capture, Side } from "../bindings/vcw";
 import { DROP_DB } from "../drop";
 import { Face } from "../Face";
@@ -85,7 +86,12 @@ export function Transport({
   const text = useText();
   const { engine, run } = store;
   const recording = engine.phase === "recording";
-  const armed = engine.phase !== "idle";
+  // The device is open, which is not the same as "not idle": a finished
+  // capture sits in `stopped` with the device closed, and reading that as
+  // armed left Record, Pause and Stop lit over an engine that refused all
+  // three while the one button that could have opened a device again - Set
+  // Levels - was hidden. `canArm` is the other half of the same question.
+  const armed = !canArm(engine.phase);
 
   /**
    * Put a boundary at the playhead.

@@ -64,6 +64,22 @@ loud if it cannot.
 * **The project list leads with the artist**, then the album, then the catalog
   number.
 
+### Fixed
+
+* **Pressing Stop between sides no longer ends the session.** The manual the
+  guide teaches is Pause between sides, and that always worked - but a person
+  who reached for Stop instead, which is what Audacity trains you to do, found
+  the transport would not come back. Set Levels disappeared, Record and Needle
+  Drop refused, and the Capture panel's Arm button stayed lit and did nothing
+  until the application was restarted. It now arms again from a finished
+  capture, so either habit records both sides of a record.
+
+* **A reloaded window knows what the recorder is doing.** The transport read
+  "idle" over a recorder that was running until the next thing happened, which
+  made every button in the bar wrong for as long as it lasted. It now asks on
+  open. This matters most over `vcw serve`, where refreshing the page is an
+  ordinary thing to do and the deck is in another room.
+
 ### Thanks
 
 * Jim Ross, for forty years of audio engineering at the BBC and then NPR, and

@@ -95,7 +95,15 @@ function capture(eq: string, operator: string | null = null): Row {
 
 function store(path: string | null = null, captures: readonly Row[] = []): Store {
   return {
-    engine: { negotiated: null, verified: false, divergences: [], diagnostics: null },
+    engine: {
+      // The arm button reads it: a panel whose engine has no phase cannot
+      // arm, which is right, and was how this fixture first failed.
+      phase: "idle",
+      negotiated: null,
+      verified: false,
+      divergences: [],
+      diagnostics: null,
+    },
     project: { path, captures },
     run: async (what: () => Promise<unknown>) => {
       await what();
