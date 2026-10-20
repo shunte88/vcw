@@ -11,6 +11,13 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // The repository root, because `src/app.css` masks its glyphs straight out
+    // of `assets/` and that is two levels above this root. Vite inlines a file
+    // under 4 KiB into the stylesheet and serves anything larger over `/@fs/`,
+    // which the default allowlist refuses - so the five glyphs over the limit
+    // were blank in `tauri dev` and correct in every build. First light on the
+    // needle-drop button is what found it.
+    fs: { allow: ["../.."] },
   },
   // `src/*.test.ts` runs under jsdom, because the two things worth testing on
   // this side of the boundary both touch the DOM: which chord a `KeyboardEvent`

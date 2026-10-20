@@ -488,6 +488,14 @@ export function useEngine(): Store {
           off();
         } else {
           unlisten = off;
+          // Ask the engine where it is, now that there is somebody to hear the
+          // answer. The bus replays nothing, so a window that opens after the
+          // transport moved starts at `idle` and keeps saying so: first light
+          // pressed Needle Drop on a reloaded window reading IDLE over an
+          // engine that was stopped, and got three refusals for one click. The
+          // reload is a development affordance in the shell and an ordinary
+          // page refresh under `serve`.
+          void api.poll();
         }
       });
 

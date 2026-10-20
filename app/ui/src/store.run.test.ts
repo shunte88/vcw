@@ -28,10 +28,14 @@ import { describe as group, expect, it, vi } from "vitest";
 import type { Store } from "./store";
 import { useEngine } from "./store";
 
+/** Hoisted, because the mock factory below is lifted above these lines. */
+const api = vi.hoisted(() => ({ poll: vi.fn(async () => undefined) }));
+
 vi.mock("./api", () => ({
   // No project, so the five reads never run.
   openPath: async () => null,
   onEvent: async () => () => {},
+  poll: api.poll,
   asFailure: (error: unknown) => error,
 }));
 
@@ -54,6 +58,18 @@ async function mounted(): Promise<() => Store> {
     return latest;
   };
 }
+
+group("a window that has just subscribed", () => {
+  it("asks the engine where it is", async () => {
+    // The bus replays nothing, so a window that opens after the transport
+    // moved seeds `idle` and keeps saying so until the next event. First light
+    // pressed Needle Drop on a reloaded window reading IDLE over a stopped
+    // engine and got a refusal per verb. The poll has to follow the
+    // subscription: ask before there is a listener and the answer is lost.
+    await mounted();
+    expect(api.poll).toHaveBeenCalled();
+  });
+});
 
 group("a command that refuses", () => {
   it("writes a line in the log as well as a line in the status bar", async () => {

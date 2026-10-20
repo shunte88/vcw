@@ -83,10 +83,14 @@ export function chainOf(eq: string | null | undefined): Chain {
  * would otherwise get a help text that was true about a different list.
  */
 export function help(curve: Curve, chain: Chain, text: Translate): string {
+  // The period is this function's, not the catalog's. `label` ends in a
+  // closing bracket and the clauses are whole sentences, so joining them on a
+  // bare space read as one run-on - "Columbia LP (June 1948 to 1956) Cut by
+  // Columbia" - in the tooltip that is the only place this text appears.
   const cut =
     curve.labels === null
-      ? label(curve)
-      : `${label(curve)} ${text("library.new.eq.labels", { labels: curve.labels })}`;
+      ? `${label(curve)}.`
+      : `${label(curve)}. ${text("library.new.eq.labels", { labels: curve.labels })}`;
   // Each branch calls `text` on a literal rather than choosing a key and
   // looking it up afterwards: the catalog coverage test reads the source for
   // a literal call and a key assembled in a variable is one it cannot see,
