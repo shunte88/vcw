@@ -736,6 +736,9 @@ text = "schema v{schema}, audio v{audio}"
 ["about.license"]
 text = "License"
 
+["about.license.commercial"]
+text = "Commercial use is covered by the license and needs no permission. For support, an integration or an OEM arrangement, open an issue at {address}."
+
 ["about.license.line"]
 text = "VCW's own code is {license}. Copyright (c) 2026 {authors}."
 

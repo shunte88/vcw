@@ -32,6 +32,7 @@ export const SOURCE: Readonly<Record<string, string>> = {
   "about.format": "Project format",
   "about.format.versions": "schema v{schema}, audio v{audio}",
   "about.license": "License",
+  "about.license.commercial": "Commercial use is covered by the license and needs no permission. For support, an integration or an OEM arrangement, open an issue at {address}.",
   "about.license.line": "VCW's own code is {license}. Copyright (c) 2026 {authors}.",
   "about.logo.alt": "VCW on GitHub: {address}",
   "about.notices": "Third-party components",

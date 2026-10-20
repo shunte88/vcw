@@ -187,6 +187,8 @@ For development detail, see the [requirements](REQUIREMENTS.md), [delivery plan]
 
 VCW's own source is [MIT licensed](LICENSE). Distributed binaries also include third-party components, including LGPL-2.1-or-later fingerprinting code and, in builds with MP3 enabled, LGPL-3.0 MP3 encoding components. MP3 and Ogg Vorbis are enabled by default. See [third-party notices and relinking information](THIRD-PARTY-NOTICES.md), the app's About dialog, or `vcw doctor` for component information.
 
+MIT already covers commercial use, so building VCW into a product needs no permission from me. If you want more than the license gives you - support, an integration, or an OEM arrangement - [open an issue](https://github.com/shunte88/vcw/issues) and say what you need.
+
 If VCW helps power your project, a link back is appreciated:
 
 > Built on [VCW - The Vinyl Capture Workstation](https://github.com/shunte88/vcw), © 2026 Stue Hunter. MIT licensed.

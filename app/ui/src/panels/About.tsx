@@ -195,6 +195,11 @@ export function About({
                     authors: build.authors.join(", "),
                   })}
                 </p>
+                <p>
+                  {text("about.license.commercial", {
+                    address: build.repository,
+                  })}
+                </p>
               </section>
 
               <section className="about-group">
