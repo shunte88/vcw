@@ -263,9 +263,30 @@ fn a_whole_session_runs_from_commands_and_reports_through_events() {
         "capture-finished more than once: {seen:?}"
     );
     assert!(frames > at_pause, "the resume recorded nothing");
+    // The last position published is the finished capture's, in frames and in
+    // seconds together. A position used to be published only while the phase
+    // was `Recording`, so the stop - which is where the final frame count
+    // appears - published none, and a window was left holding whatever it read
+    // last before the stop: a clock that disagreed with the row the same stop
+    // had just written, and still disagreed over the next capture, because
+    // arming published nothing either. §35's `recording-position` is the
+    // transport's position, not the recording tick's.
+    let (last_frames, last_seconds) = seen
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            Event::Position { frames, seconds } => Some((*frames, *seconds)),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no recording-position events: {seen:?}"));
+    assert_eq!(
+        last_frames, frames,
+        "the last position is not the finished capture's: {seen:?}"
+    );
+    let expected = frames as f64 / 48_000.0;
     assert!(
-        seen.iter().any(|e| matches!(e, Event::Position { .. })),
-        "no recording-position events: {seen:?}"
+        (last_seconds - expected).abs() < 0.001,
+        "{last_frames} frames at 48 kHz read as {last_seconds} s: {seen:?}"
     );
     assert!(
         seen.last().is_some_and(Event::is_last),

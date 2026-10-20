@@ -473,6 +473,10 @@ impl Deck for Recorder {
         self.writer.as_ref().map_or(0, |w| w.progress().frames())
     }
 
+    fn rate(&self) -> u32 {
+        self.negotiated().rate.hz()
+    }
+
     // A recorder with no writer left has already been finished; one whose
     // writer thread has ended on its own has failed, because the only other
     // way out of that thread is being asked to stop.
@@ -606,14 +610,25 @@ fn run(commands: &Receiver<Command>, bus: &Bus) {
                     phase: machine.phase(),
                     frames: machine.position(),
                 });
+                // `Status` carries no `seconds`, and the window needs one: a
+                // reloaded page asks this question precisely because it has
+                // nothing, and frames without a rate is not a clock.
+                bus.publish(&position(&machine, machine.position()));
             }
             Ok(command) => {
                 let (next, sent) = dispatch(machine, command, bus);
                 machine = next;
                 if sent {
                     // A transition changes the position's meaning as well as
-                    // its value, so republish rather than wait for the tick.
-                    last_position = u64::MAX;
+                    // its value, so republish - here, and not by arranging for
+                    // the tick below to do it, because that tick only runs
+                    // while the phase is `Recording`. Every transition out of
+                    // it therefore left the window holding the last position
+                    // published before the stop: a clock reading four seconds
+                    // over a capture that had just been armed, and a `stopped`
+                    // reading 00:00:00.000 over a row of 1,338,880 frames.
+                    last_position = machine.position();
+                    bus.publish(&position(&machine, last_position));
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
@@ -645,7 +660,11 @@ fn run(commands: &Receiver<Command>, bus: &Bus) {
         if matches!(machine.phase(), Phase::Recording | Phase::Paused) && !machine.deck_running() {
             let (next, _) = dispatch(machine, Command::Stop, bus);
             machine = next;
-            last_position = u64::MAX;
+            // Republished for the same reason as a commanded transition
+            // above: this one leaves `Recording` too, so the tick at the foot
+            // of the loop will not run again.
+            last_position = machine.position();
+            bus.publish(&position(&machine, last_position));
             continue;
         }
 
@@ -859,7 +878,8 @@ fn position(machine: &Machine<Recorder>, frames: u64) -> Event {
         Machine::Armed(a) => a.deck().negotiated().rate.hz(),
         Machine::Recording(r) => r.deck().negotiated().rate.hz(),
         Machine::Paused(p) => p.deck().negotiated().rate.hz(),
-        Machine::Idle(_) | Machine::Stopped(_) => 0,
+        Machine::Stopped(s) => s.rate(),
+        Machine::Idle(_) => 0,
     };
     Event::Position {
         frames,

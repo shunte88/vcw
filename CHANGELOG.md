@@ -80,6 +80,14 @@ loud if it cannot.
   open. This matters most over `vcw serve`, where refreshing the page is an
   ordinary thing to do and the deck is in another room.
 
+* **The clock agrees with the capture it is over.** The elapsed time only ever
+  caught up while a recording was running, so every moment either side of one
+  showed the wrong number: a freshly armed deck wearing the last take's four
+  seconds, and a finished capture of a quarter of a million frames reading
+  00:00:00.000. The position is now published whenever the transport moves,
+  including when a failed writer ends a capture by itself, and a window that
+  has just opened is told the time along with the phase.
+
 ### Thanks
 
 * Jim Ross, for forty years of audio engineering at the BBC and then NPR, and

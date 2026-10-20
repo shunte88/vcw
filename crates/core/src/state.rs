@@ -250,6 +250,20 @@ pub trait Deck {
     /// the *recording*, and a pause is not part of it.
     fn position(&self) -> u64;
 
+    /// The rate the deck is committing at, in Hz, or 0 if it cannot say.
+    ///
+    /// Only so that a position can be expressed in seconds after the deck is
+    /// gone: [`Stopped`] keeps the answer because [`finish`](Deck::finish)
+    /// consumes the deck that knew it, and a finished capture that reports its
+    /// frames and 0.000 seconds contradicts itself in the same status line.
+    ///
+    /// Defaults to 0, for the same reason [`is_running`](Deck::is_running)
+    /// defaults to true: a test deck with no device behind it has no rate to
+    /// give, and a position from one is reported in frames alone.
+    fn rate(&self) -> u32 {
+        0
+    }
+
     /// Whether the deck is still able to record.
     ///
     /// Asked on the transport's tick while there is a capture open, because a
@@ -406,6 +420,7 @@ pub struct Paused<D: Deck> {
 pub struct Stopped<D: Deck> {
     report: D::Report,
     frames: u64,
+    rate: u32,
     clock: Clock,
 }
 
@@ -481,9 +496,11 @@ impl<D: Deck> Recording<D> {
     /// there is no phase to hand back - this is the one transition that cannot
     /// be refused into its origin.
     pub fn stop(self, state: CaptureState) -> Result<Stopped<D>, D::Error> {
+        let rate = self.deck.rate();
         let report = self.deck.finish(state)?;
         Ok(Stopped {
             frames: D::frames(&report),
+            rate,
             report,
             clock: self.clock,
         })
@@ -527,9 +544,11 @@ impl<D: Deck> Paused<D> {
     ///
     /// If the deck could not finalize. See [`Recording::stop`].
     pub fn stop(self, state: CaptureState) -> Result<Stopped<D>, D::Error> {
+        let rate = self.deck.rate();
         let report = self.deck.finish(state)?;
         Ok(Stopped {
             frames: D::frames(&report),
+            rate,
             report,
             clock: self.clock.resume(),
         })
@@ -569,6 +588,11 @@ impl<D: Deck> Stopped<D> {
     /// Frames committed, as of the moment the deck was finalized.
     pub const fn position(&self) -> u64 {
         self.frames
+    }
+
+    /// The rate those frames were committed at, or 0 if the deck had none.
+    pub const fn rate(&self) -> u32 {
+        self.rate
     }
 
     /// How long the finished capture ran and was paused for.
