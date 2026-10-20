@@ -739,7 +739,12 @@ fn the_tags_come_from_the_release_and_the_track() {
     assert_eq!(tags.discogs_id, "1234567");
     assert_eq!(tags.track_number, Some(1));
     assert_eq!(tags.disc_number, Some(1));
-    assert_eq!(tags.extra, [("VINYL_POSITION".to_owned(), "A1".to_owned())]);
+    // Position, and WP-31's date - which every export carries, because
+    // `captures.started_at` is the transfer date and no rig was supplied here.
+    // The rest of the chain is empty and so writes nothing.
+    let keys: Vec<&str> = tags.extra.iter().map(|(key, _)| key.as_str()).collect();
+    assert_eq!(keys, ["VINYL_POSITION", "TRANSFER_DATE"]);
+    assert_eq!(tags.extra[0].1, "A1");
 }
 
 #[test]
@@ -1472,4 +1477,160 @@ fn a_defect_is_repaired_on_the_way_out_wherever_it_sits() {
         sent[START as usize * frame_bytes..END as usize * frame_bytes],
         "the file is the damaged audio, so nothing was repaired at all"
     );
+}
+
+/// The eleven keys WP-31 writes, restated here rather than imported.
+///
+/// A test that asks the code what it is called cannot catch the code renaming
+/// it, and a tag name is the one thing in an export that cannot be taken back:
+/// a catalog that has ingested `TRANSFER_CARTRIDGE` will not find
+/// `VCW_CARTRIDGE` the next release. This list is the contract.
+const TRANSFER_KEYS: [&str; 11] = [
+    "TRANSFER_ITEM",
+    "TRANSFER_CONDITION",
+    "TRANSFER_TURNTABLE",
+    "TRANSFER_TONEARM",
+    "TRANSFER_CARTRIDGE",
+    "TRANSFER_STYLUS",
+    "TRANSFER_PHONO_STAGE",
+    "TRANSFER_INTERFACE",
+    "TRANSFER_MODIFICATION",
+    "TRANSFER_OPERATOR",
+    "TRANSFER_DATE",
+];
+
+/// Whichever of [`TRANSFER_KEYS`] a written file actually carries.
+///
+/// Three readers, because a freeform key is a different animal in each format
+/// and lofty's common `Tag` cannot hold one at all - `ItemKey` has no `Unknown`
+/// variant, so a comment, a `TXXX` frame and a `----` atom have to be asked for
+/// in their own vocabulary. Which is the point of the test: one name, written
+/// three ways, read back three ways.
+fn transfer_tags(path: &Path, container: Container) -> Vec<(String, String)> {
+    use lofty::config::ParseOptions;
+    use lofty::file::AudioFile;
+
+    let mut file = std::fs::File::open(path).expect("open the written file");
+    let mut found = Vec::new();
+    match container {
+        Container::Flac(_) => {
+            let flac = lofty::flac::FlacFile::read_from(&mut file, ParseOptions::new())
+                .expect("read the FLAC back");
+            let tag = flac.vorbis_comments().expect("a Vorbis comment block");
+            for key in TRANSFER_KEYS {
+                if let Some(value) = tag.get(key) {
+                    found.push((key.to_owned(), value.to_owned()));
+                }
+            }
+        }
+        Container::Wav => {
+            let wav = lofty::iff::wav::WavFile::read_from(&mut file, ParseOptions::new())
+                .expect("read the WAV back");
+            let tag = wav.id3v2().expect("an ID3 chunk");
+            for key in TRANSFER_KEYS {
+                if let Some(value) = tag.get_user_text(key) {
+                    found.push((key.to_owned(), value.to_owned()));
+                }
+            }
+        }
+        Container::Alac => {
+            use lofty::mp4::{AtomData, AtomIdent};
+
+            let mp4 = lofty::mp4::Mp4File::read_from(&mut file, ParseOptions::new())
+                .expect("read the m4a back");
+            let tag = mp4.ilst().expect("an ilst box");
+            for key in TRANSFER_KEYS {
+                let ident = AtomIdent::Freeform {
+                    mean: "com.apple.iTunes".into(),
+                    name: key.into(),
+                };
+                if let Some(AtomData::UTF8(value)) =
+                    tag.get(&ident).and_then(|atom| atom.data().next())
+                {
+                    found.push((key.to_owned(), value.clone()));
+                }
+            }
+        }
+        other => panic!("{other:?} is not one of the three backends"),
+    }
+    found
+}
+
+#[test]
+fn the_transfer_chain_comes_out_of_all_three_tag_backends() {
+    // WP-31: the rig from settings, the copy from the release, the session from
+    // the capture, written under one set of names into a Vorbis comment, an ID3
+    // `TXXX` frame and an MP4 freeform atom. Every field is filled except the
+    // modification, which is the second half of the claim: an empty field writes
+    // no key, because a catalog reading `TRANSFER_MODIFICATION=` has been told
+    // something false where one finding no such key has been told nothing.
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, _, _) = recorded(dir.path(), StorageFormat::Int16, 2, 90_000);
+    described(&mut project);
+
+    let mut record = release::ensure(&mut project).expect("release");
+    record.item = "SH-LP-0412".to_owned();
+    record.condition = "VG+, one light scuff on side B".to_owned();
+    release::store(&mut project, &record).expect("store");
+
+    // The session's two: an operator who is not the one in settings, and a date
+    // that is not the capture's, which is the imported-project case.
+    let capture = vcw_project::session::all(project.conn()).expect("captures")[0].id;
+    vcw_project::session::set_transfer(
+        &mut project,
+        capture,
+        Some(Some("A. Librarian".to_owned())),
+        Some(Some("1979-04-07".to_owned())),
+    )
+    .expect("transfer");
+
+    titled(&mut project, &[(2_048, 61_237, "Metropolis")]);
+
+    let rig = splitter::Rig {
+        turntable: "Michell GyroDec".to_owned(),
+        tonearm: "SME IV".to_owned(),
+        cartridge: "Ortofon 2M Blue".to_owned(),
+        stylus: "Nude Elliptical, 120 hours".to_owned(),
+        phono_stage: "Graham Slee Era Gold".to_owned(),
+        interface: "Focusrite Scarlett 2i2".to_owned(),
+        operator: "S. Hunter".to_owned(),
+        // Left empty on purpose, and the only one.
+        modification: String::new(),
+    };
+
+    let expected: Vec<(String, String)> = [
+        ("TRANSFER_ITEM", "SH-LP-0412"),
+        ("TRANSFER_CONDITION", "VG+, one light scuff on side B"),
+        ("TRANSFER_TURNTABLE", "Michell GyroDec"),
+        ("TRANSFER_TONEARM", "SME IV"),
+        ("TRANSFER_CARTRIDGE", "Ortofon 2M Blue"),
+        ("TRANSFER_STYLUS", "Nude Elliptical, 120 hours"),
+        ("TRANSFER_PHONO_STAGE", "Graham Slee Era Gold"),
+        ("TRANSFER_INTERFACE", "Focusrite Scarlett 2i2"),
+        // The capture's operator wins over the rig's, which is what the
+        // override is for; the capture's date wins over `started_at`.
+        ("TRANSFER_OPERATOR", "A. Librarian"),
+        ("TRANSFER_DATE", "1979-04-07"),
+    ]
+    .into_iter()
+    .map(|(key, value)| (key.to_owned(), value.to_owned()))
+    .collect();
+
+    for container in [
+        Container::Flac(Compression::default()),
+        Container::Wav,
+        Container::Alac,
+    ] {
+        let out = dir.path().join(format!("out-{}", container.extension()));
+        let mut request = Request::new(&out, container);
+        request.rig = rig.clone();
+        let plan = splitter::plan(project.conn(), &request).expect("plan");
+        splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+
+        assert_eq!(
+            transfer_tags(&plan.items[0].path, container),
+            expected,
+            "{container:?} did not carry the chain under the same names"
+        );
+    }
 }

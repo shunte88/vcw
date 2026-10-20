@@ -66,6 +66,11 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
     catalog: "",
     barcode: "",
   });
+  // The two facts about the copy on the shelf (WP-31). Free text, so unlike
+  // the switch and the picker below they are held while they are being typed
+  // and written on blur or on Enter - never on a timer, because a refetch
+  // landing mid-word eats keystrokes over `vcw serve`.
+  const [copy, setCopy] = useState({ item: "", condition: "" });
   const [provider, setProvider] = useState("");
   const [candidates, setCandidates] = useState<readonly Candidate[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
@@ -89,8 +94,19 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
   const isMono = project.release?.isMono ?? false;
   const playbackEq = project.release?.playbackEq ?? "";
 
-  const stateRelease = (edit: ReleaseEdit) => {
-    void run(() => api.editRelease(edit)).then(store.reload);
+  // Every field is sent on every edit, so a caller that cares about one of
+  // them says only that one and the rest go as `null`, which is the command's
+  // word for "leave it alone".
+  const stateRelease = (edit: Partial<ReleaseEdit>) => {
+    void run(() =>
+      api.editRelease({
+        isMono: null,
+        playbackEq: null,
+        item: null,
+        condition: null,
+        ...edit,
+      }),
+    ).then(store.reload);
   };
 
   // Seeded from the release row the first time the panel is opened, which is
@@ -104,6 +120,10 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
       album: project.release.album,
       catalog: project.release.catalog,
       barcode: project.release.barcode ?? "",
+    });
+    setCopy({
+      item: project.release.item,
+      condition: project.release.condition,
     });
   }
 
@@ -276,10 +296,10 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
       </form>
 
       {/*
-        The two the providers will not answer. Written straight through rather
-        than held and saved: a switch and a sixteen-answer picker are discrete
-        choices, so there is no half-typed state to protect and no debounce to
-        get wrong.
+        The four the providers will not answer. The switch and the picker are
+        written straight through: a discrete choice has no half-typed state to
+        protect and no debounce to get wrong. The item and the condition are
+        free text, so they are held and committed on blur.
       */}
       <fieldset className="pressing stacked">
         <legend>{text("metadata.pressing")}</legend>
@@ -320,6 +340,42 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
               ))}
             </select>
           </span>
+        </label>
+        <label className="seed-field">
+          {text("metadata.item")}
+          <input
+            value={copy.item}
+            title={text("metadata.item.title")}
+            onChange={(event) => setCopy({ ...copy, item: event.target.value })}
+            onBlur={() => {
+              // The comparison is what stops a blur that changed nothing from
+              // costing a write and a reload.
+              if (copy.item !== (project.release?.item ?? "")) {
+                stateRelease({ item: copy.item });
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+          />
+        </label>
+        <label className="seed-field">
+          {text("metadata.condition")}
+          <input
+            value={copy.condition}
+            title={text("metadata.condition.title")}
+            onChange={(event) =>
+              setCopy({ ...copy, condition: event.target.value })
+            }
+            onBlur={() => {
+              if (copy.condition !== (project.release?.condition ?? "")) {
+                stateRelease({ condition: copy.condition });
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+          />
         </label>
       </fieldset>
 

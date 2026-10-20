@@ -8744,3 +8744,53 @@ of an hour.
 `VCW_SOAK_MAXLOAD=0` against an idle box printed the skip and stopped before
 the guard, and `VCW_SOAK_MAXLOAD=999` carried straight past it. A guard that
 has only ever been seen not firing is not a guard yet.
+
+### The transfer log, built
+
+WP-31 is in. The eleven fields of the design note land as four new columns in
+schema v7 - `releases.item`, `releases.condition`, `captures.transferred_on`,
+`captures.operator` - an eight-field `Transfer` settings group, and eleven
+`TRANSFER_*` tags on every exported file.
+
+The split between the three homes is the part worth writing down. The rig is
+a setting because it is the same deck on Tuesday as it was on Monday: a
+person fills it in once and never thinks about it again. The copy is on the
+release because `item` and `condition` are facts about the object on the
+shelf, and two copies of one pressing share a catalog number and are two
+different items. The session is on the capture because that is where
+`started_at` already lives, and the date nobody types is the date that is
+already there. `transferred_on` exists only for the import case, where the
+capture row honestly records when the file arrived and not when the stylus
+went down; `operator` on the capture is an override for the side somebody
+else cut.
+
+The override is a text box that is **empty when it agrees with Settings**,
+not a copy of the default. An override that starts life pre-filled is one
+nobody notices is wrong, and a pre-filled box also writes the default back
+into every row that gets tabbed through.
+
+None of the eleven tags needed a new container story. `Tags::extra` already
+routes one freeform key into a Vorbis comment, an ID3v2 `TXXX` frame and an
+MP4 freeform atom, and `freeform()` already drops an empty value, which is
+exactly the wanted behavior: no key says nothing, an empty key says something
+false. The new test reads a filled chain back out of FLAC, WAV and ALAC and
+asserts the same ten pairs under the same names, with the one deliberately
+empty field absent from all three.
+
+`vcw export` writes no rig tags, by choice: `vcw-cli` does not depend on
+`vcw-shell` and so cannot read the window's settings file. The copy and the
+session still tag themselves, because those come out of the project. `vcw
+serve` goes through the shell and gets the whole chain.
+
+Two smaller things fell out of it. `vcw-types` grew a nine-line `date::iso`
+(Hinnant's civil-from-days, Euclidean division so a pre-1970 timestamp lands
+on the right day) rather than a date crate, because formatting a unix second
+as `YYYY-MM-DD` is the only calendar arithmetic VCW does. And `editRelease`
+now fills the fields a caller did not mention with `null` in one place
+instead of at every call site, which is what stopped the two new text boxes
+from needing to resend mono and the characteristic.
+
+Both ends were proven by mutation: renaming `TRANSFER_STYLUS` reddened the
+export test, dropping the blur guard reddened the capture panel's "empty when
+nobody has said", and writing on every keystroke reddened "typing is not
+stating". All three were reverted.

@@ -256,7 +256,11 @@ impl Backend for Served {
                 args.get("device")?,
             )),
             "playback" => done(vcw_shell::audition::playback(shell, args.get("verb")?)),
-            "export_plan" => done(vcw_shell::exporter::export_plan(shell, args.get("export")?)),
+            "export_plan" => done(vcw_shell::exporter::export_plan(
+                shell,
+                host,
+                args.get("export")?,
+            )),
             "export_run" => done(vcw_shell::exporter::export_run(
                 shell,
                 host,

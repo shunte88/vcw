@@ -223,6 +223,8 @@ mod tests {
                  DROP TABLE IF EXISTS sides;
                  DROP TABLE IF EXISTS release_artwork;
                  DROP TABLE IF EXISTS releases;
+                 ALTER TABLE captures DROP COLUMN transferred_on;
+                 ALTER TABLE captures DROP COLUMN operator;
                  ALTER TABLE captures DROP COLUMN capture_eq;
                  DELETE FROM schema_migrations WHERE version >= 2;
                  PRAGMA user_version = 1;",

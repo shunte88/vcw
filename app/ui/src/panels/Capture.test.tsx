@@ -76,7 +76,7 @@ function settings(audio: Record<string, unknown> = {}): Settings {
   } as unknown as Settings;
 }
 
-function capture(eq: string): Row {
+function capture(eq: string, operator: string | null = null): Row {
   return {
     id: 7,
     rate: 96000,
@@ -87,6 +87,8 @@ function capture(eq: string): Row {
     state: "finished",
     osVerified: true,
     captureEq: eq,
+    operator,
+    transferredOn: null,
   } as unknown as Row;
 }
 
@@ -282,6 +284,57 @@ describe("the chain a capture was taken through", () => {
     expect(vi.mocked(api.setProvenance)).toHaveBeenCalledWith({
       captureId: 7,
       eq: "flat",
+      operator: null,
+      transferredOn: null,
+    });
+  });
+
+  // WP-31's override. Settings carries the operator a session is normally
+  // run by; this box is for the side somebody else cut, and it is empty when
+  // it agrees - an override that starts life pre-filled is one nobody notices
+  // is wrong, and it would also write the default back into every row that
+  // was only tabbed through.
+  it("asks who made the transfer, empty when nobody has said", async () => {
+    const container = await render([], settings(), "/data2/rips/side-a.vcw", [
+      capture("riaa"),
+    ]);
+    const box = container.querySelector<HTMLInputElement>("table.rows input");
+    expect(box, "the capture row has an operator box").toBeTruthy();
+    expect(box?.value).toBe("");
+    await act(async () => {
+      box?.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    expect(
+      vi.mocked(api.setProvenance),
+      "leaving an untouched box states nothing",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("states the operator against the capture, keeping its chain", async () => {
+    const container = await render([], settings(), "/data2/rips/side-a.vcw", [
+      capture("riaa", "A. Librarian"),
+    ]);
+    const box = container.querySelector<HTMLInputElement>("table.rows input");
+    expect(box?.value, "what the capture already states is in the box").toBe(
+      "A. Librarian",
+    );
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(box, "B. Archivist");
+      box?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      box?.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    // The chain rides along unchanged: the command states both, so sending
+    // the row's own `riaa` is what stops an operator edit clearing it.
+    expect(vi.mocked(api.setProvenance)).toHaveBeenCalledWith({
+      captureId: 7,
+      eq: "riaa",
+      operator: "B. Archivist",
+      transferredOn: null,
     });
   });
 });

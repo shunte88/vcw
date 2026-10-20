@@ -16,7 +16,7 @@ no rewriting, and everything else is what Audacity has nowhere to put. See
 |---|---|
 | extension | `.vcw` |
 | `application_id` | `0x56435700` (ASCII `VCW\0`) - Audacity's is `0x41554459`, `AUDY`, for *both* AUP3 and AUP4 |
-| `user_version` | 6 - the schema version, a plain ascending integer |
+| `user_version` | 7 - the schema version, a plain ascending integer |
 | format version | 1 - the *meaning* of the schema, in `meta` |
 | page size | 65536 bytes, set at creation |
 | journal mode | WAL, `synchronous=FULL` (D3) |
@@ -122,6 +122,8 @@ One row per capture session (§13, §15). A session is unfinished exactly when f
 | `frames` | `INTEGER NOT NULL DEFAULT 0` | Frames committed per channel. Updated as blocks land, so it survives a crash. |
 | `state` | `TEXT NOT NULL DEFAULT 'recording'` | 'recording', 'finalised' or 'interrupted'. validate() rejects anything else. |
 | `capture_eq` | `TEXT NOT NULL DEFAULT 'unknown'` | Equalization the signal already carried when it reached the sound card (§51): 'flat' for a preamp that applied no curve, 'riaa' for one that applied RIAA, 'unknown' when nobody said. Playback equalization needs it and it cannot be recovered from the audio, so it is recorded from the first capture, years before the curves ship. |
+| `operator` | `TEXT` | Who made the transfer, overriding the operator named in Settings. NULL is the ordinary case and means "whoever Settings says": a per-capture value is for the session somebody else ran, and an override that starts life pre-filled is an override nobody notices is wrong. |
+| `transferred_on` | `TEXT` | The transfer date as ISO 8601, date only, where started_at is not it. NULL is the ordinary case, because started_at is Unix seconds at stream start and that is the transfer date more accurately than a person retyping it. The exception is the reason this column exists: a capture with capture_mode 'imported' is dated by the import, and an Audacity project carried over from 2019 should not export as 2026. |
 
 ### `capture_blocks`
 
@@ -196,6 +198,8 @@ The release being captured (§29, §32). One per project: §29's topology is Pro
 | `updated_at` | `INTEGER NOT NULL` | Unix seconds of the last change to this row. |
 | `is_mono` | `INTEGER NOT NULL DEFAULT 0` | Whether this pressing is mono, as the operator stated it at setup. Export sums the captured channels to one; capture and the project stay stereo, because the two channels of a stereo cartridge in a mono groove are not identical and discarding one on the way in cannot be undone. |
 | `playback_eq` | `TEXT` | The characteristic this release was cut with (§51), as a curve id from the catalog `vcw eq list` prints: 'riaa', 'columbia_lp', 'decca_ffrr_78' and so on. NULL means nobody has said, and playback falls back to the application default. Not what the capture arrived with - that is captures.capture_eq, which is the input to this decision rather than the decision. |
+| `item` | `TEXT NOT NULL DEFAULT ''` | The physical item identifier: a shelf mark, an accession number, or whatever the holder calls this copy. Not the catalog number, which identifies the pressing; this identifies the one object that was played. |
+| `condition` | `TEXT NOT NULL DEFAULT ''` | The known condition of that copy, in the holder's own words. Free text because the grading vocabularies disagree and a project should not pick one. |
 
 ### `release_artwork`
 

@@ -106,6 +106,17 @@ pub struct Record {
     /// decision rather than the decision: a flat capture of an RIAA pressing has the
     /// curve applied, an RIAA capture of the same pressing needs nothing done.
     pub playback_eq: Option<String>,
+    /// The physical item identifier for the copy that was transferred (WP-31).
+    ///
+    /// A shelf mark, an accession number, or whatever the holder calls this object.
+    /// Not `catalog`, which identifies the pressing: two copies of one pressing share
+    /// a catalog number and are two different items.
+    pub item: String,
+    /// The known condition of that copy, in the holder's own words (WP-31).
+    ///
+    /// Free text because the grading vocabularies disagree and a project should not
+    /// pick one.
+    pub condition: String,
     /// Unix seconds of the last change.
     pub updated_at: i64,
 }
@@ -190,12 +201,22 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
         "0"
     };
     let eq = playback_eq_expr(conn);
+    let item = if has_column(conn, "item") {
+        "item"
+    } else {
+        "''"
+    };
+    let condition = if has_column(conn, "condition") {
+        "condition"
+    } else {
+        "''"
+    };
     let record = conn
         .query_row(
             &format!(
                 "SELECT album, album_artist, year, genres, label, catalog, country, barcode,
                         composer, comments, discs, numbering, musicbrainz_id, discogs_id,
-                        confirmed, updated_at, {mono}, {eq}
+                        confirmed, updated_at, {mono}, {eq}, {item}, {condition}
                    FROM releases WHERE release_id = ?1"
             ),
             params![RELEASE_ID],
@@ -224,6 +245,8 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
                     updated_at: r.get(15)?,
                     is_mono: r.get::<_, i64>(16)? != 0,
                     playback_eq: r.get(17)?,
+                    item: r.get(18)?,
+                    condition: r.get(19)?,
                 })
             },
         )
@@ -277,9 +300,9 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
         "INSERT INTO releases (release_id, album, album_artist, year, genres, label, catalog,
                                country, barcode, composer, comments, discs, numbering,
                                musicbrainz_id, discogs_id, confirmed, updated_at,
-                               is_mono, playback_eq)
+                               is_mono, playback_eq, item, condition)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                 ?18, ?19)
+                 ?18, ?19, ?20, ?21)
          ON CONFLICT (release_id) DO UPDATE SET
              album = excluded.album, album_artist = excluded.album_artist,
              year = excluded.year, genres = excluded.genres, label = excluded.label,
@@ -289,7 +312,8 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
              numbering = excluded.numbering, musicbrainz_id = excluded.musicbrainz_id,
              discogs_id = excluded.discogs_id, confirmed = excluded.confirmed,
              updated_at = excluded.updated_at, is_mono = excluded.is_mono,
-             playback_eq = excluded.playback_eq",
+             playback_eq = excluded.playback_eq, item = excluded.item,
+             condition = excluded.condition",
         params![
             RELEASE_ID,
             record.album,
@@ -310,6 +334,8 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
             crate::now(),
             i64::from(record.is_mono),
             record.playback_eq.as_deref(),
+            record.item,
+            record.condition,
         ],
     )?;
     Ok(())
@@ -625,6 +651,8 @@ mod tests {
             // rather than passing on the default it would have had anyway.
             is_mono: true,
             playback_eq: Some("columbia_lp".into()),
+            item: "SH-LP-0412".into(),
+            condition: "VG+, one light scuff on side B".into(),
             updated_at: 0,
         };
         store(&mut p, &written).expect("store");
@@ -637,6 +665,8 @@ mod tests {
         assert!(read.confirmed);
         assert!(read.is_mono);
         assert_eq!(read.playback_eq.as_deref(), Some("columbia_lp"));
+        assert_eq!(read.item, written.item);
+        assert_eq!(read.condition, written.condition);
         assert!(read.updated_at > 0, "updated_at is set by the write");
         assert_eq!(read.sides().len(), 4, "two discs are four sides");
         assert!(!read.is_empty());

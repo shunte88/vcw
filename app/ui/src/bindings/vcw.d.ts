@@ -549,7 +549,20 @@ captureId: number,
 /**
  * `flat`, `riaa` or `unknown`.
  */
-eq: string, };
+eq: string,
+/**
+ * Who made this transfer, overriding the operator in settings (WP-31).
+ *
+ * Absent leaves it alone, `""` takes the override off, and anything else
+ * sets it. The outer absence is what lets this command and the one below
+ * be two independent edits rather than one that has to resend the other.
+ */
+operator: string | null,
+/**
+ * The transfer date as ISO 8601, date only, where `startedAt` is not it
+ * (WP-31). Absent leaves it alone and `""` takes it off.
+ */
+transferredOn: string | null, };
 
 export type Walk = {
 /**
@@ -608,7 +621,15 @@ isMono: boolean | null,
 /**
  * The characteristic the record was cut with. `""` clears it.
  */
-playbackEq: string | null, };
+playbackEq: string | null,
+/**
+ * The physical item identifier for this copy (WP-31). `null` leaves it alone.
+ */
+item: string | null,
+/**
+ * The known condition of this copy (WP-31). `null` leaves it alone.
+ */
+condition: string | null, };
 
 export type SideEdit = {
 /**
@@ -1021,7 +1042,17 @@ finishedAt: number | null,
 /**
  * Overruns, underruns, dropped frames and stream errors.
  */
-diagnostics: Diagnostics, };
+diagnostics: Diagnostics,
+/**
+ * Who made this transfer, where it was not whoever the settings name (WP-31).
+ * `null` is the ordinary case and reads as the settings' operator.
+ */
+operator: string | null,
+/**
+ * The transfer date as ISO 8601, date only, where `startedAt` is not it
+ * (WP-31). `null` is the ordinary case and reads as `startedAt`.
+ */
+transferredOn: string | null, };
 
 export type Side = {
 /**
@@ -1468,7 +1499,15 @@ isMono: boolean,
  * provider supplies and no analysis recovers, which is why they are here
  * rather than left to the metadata lookup.
  */
-playbackEq: string | null, };
+playbackEq: string | null,
+/**
+ * The physical item identifier for the copy that was transferred (WP-31).
+ */
+item: string,
+/**
+ * The known condition of that copy, in the holder's own words (WP-31).
+ */
+condition: string, };
 
 export type Candidate = {
 /**
@@ -1764,12 +1803,14 @@ page: string, };
 // ----------------------------------------------------------------------
 // Settings (§39)
 //
-// Five groups, named as §39 names them. Every default is either `null`
+// Six groups, named as §39 names them. Every default is either `null`
 // - let the engine negotiate and report what it got - or a constant read
 // out of the crate that owns the behavior, which is why none of them
 // appears in this declaration. `Credential` is the one type here that
 // carries nothing: whether a token is configured and how long it is,
-// never the value.
+// never the value. `Transfer` is the one group nothing reads but export:
+// it is the rig a recording was made on, not a setting that changes what
+// VCW does.
 // ----------------------------------------------------------------------
 
 export type Settings = {
@@ -1804,7 +1845,11 @@ metadata: MetadataSettings,
 /**
  * Format, codec options, output path, naming template.
  */
-export: ExportSettings, };
+export: ExportSettings,
+/**
+ * The rig: what the audio came out of, written onto every exported file.
+ */
+transfer: TransferSettings, };
 
 export type AudioSettings = {
 /**
@@ -2005,6 +2050,57 @@ headroom: string,
  * whatever this says. Empty for the project's own choice.
  */
 numbering: string, };
+
+export type TransferSettings = {
+/**
+ * The deck.
+ */
+turntable: string,
+/**
+ * The arm, where it is not the deck's own.
+ */
+tonearm: string,
+/**
+ * The cartridge body.
+ *
+ * Separate from `stylus` because a stylus is replaced on a schedule the
+ * body outlives, and the hours on it are the single most common reason two
+ * transfers of one record on one rig do not match.
+ */
+cartridge: string,
+/**
+ * The stylus profile, and its hours where the operator tracks them.
+ */
+stylus: string,
+/**
+ * The preamp that applied, or did not apply, a curve.
+ *
+ * Its *name*, where [`Audio::eq`] is its *effect*. Both are wanted and
+ * neither implies the other: a named preamp does not say whether it applied
+ * a curve, and `riaa` does not say which box applied it.
+ */
+phonoStage: string,
+/**
+ * The converter, as a person names the box.
+ *
+ * What the operator calls the hardware, where `captures.device_name` is
+ * what the operating system called it. "Scarlett 2i2" and "Focusrite
+ * Scarlett 2i2 4th Gen" are the same box described by two parties, and an
+ * archivist cites the second while a diagnostician reads the first.
+ */
+interface: string,
+/**
+ * Who makes the transfers, unless a capture says otherwise.
+ */
+operator: string,
+/**
+ * Any physical signal path modification: a rewired arm, a bypassed stage.
+ *
+ * Free text by necessity. There is no vocabulary for "the phono stage is
+ * bypassed and the cartridge runs straight into a head amp", and inventing
+ * one would produce a field nobody fills in correctly.
+ */
+modification: string, };
 
 export type Credential = {
 /**

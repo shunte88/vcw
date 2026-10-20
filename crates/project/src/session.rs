@@ -77,6 +77,22 @@ pub struct Record {
     pub frames: u64,
     /// The four counters.
     pub diagnostics: Diagnostics,
+    /// Who made this transfer, where it was not whoever the settings name (WP-31).
+    ///
+    /// `None` is the ordinary case and means "the operator in settings". A value
+    /// here is for the session somebody else ran, and it is not pre-filled: an
+    /// override that starts life agreeing with the default is one nobody notices
+    /// is wrong.
+    pub operator: Option<String>,
+    /// The transfer date as ISO 8601, date only, where [`Record::started_at`] is
+    /// not it (WP-31).
+    ///
+    /// `None` is the ordinary case, because `started_at` is the moment the stream
+    /// opened and that is the transfer date more accurately than a person retyping
+    /// it. The exception is the reason the column exists: an imported capture is
+    /// dated by the import, and an Audacity project carried over from 2019 should
+    /// not export as this year.
+    pub transferred_on: Option<String>,
 }
 
 impl Record {
@@ -323,6 +339,40 @@ pub fn set_capture_eq(
     Ok(changed)
 }
 
+/// Names who made a transfer, and when, overriding what settings and the clock say.
+///
+/// Both are `Option<Option<String>>` on purpose: the outer is "was this asked
+/// about", the inner is the answer, and `Some(None)` is how a person takes an
+/// override back off. Writing only the fields that were named is what lets the
+/// capture panel's two boxes be two independent edits rather than one that has to
+/// resend the other.
+///
+/// # Errors
+///
+/// If the update fails.
+pub fn set_transfer(
+    project: &mut Project,
+    capture_id: i64,
+    operator: Option<Option<String>>,
+    transferred_on: Option<Option<String>>,
+) -> Result<usize> {
+    let conn = project.conn_mut();
+    let mut changed = 0;
+    if let Some(who) = operator {
+        changed = conn.execute(
+            "UPDATE captures SET operator = ?2 WHERE capture_id = ?1",
+            params![capture_id, who],
+        )?;
+    }
+    if let Some(when) = transferred_on {
+        changed = conn.execute(
+            "UPDATE captures SET transferred_on = ?2 WHERE capture_id = ?1",
+            params![capture_id, when],
+        )?;
+    }
+    Ok(changed)
+}
+
 /// Sessions that never finished: what recovery looks for on the next launch (§15).
 ///
 /// Keyed on `finished_at IS NULL` rather than on the state column, because the
@@ -363,13 +413,19 @@ fn select(conn: &Connection) -> String {
     } else {
         "NULL"
     };
+    // v7's two, asked the same way and for the same reason as `capture_eq`.
+    let (operator, on) = if has_column(conn, "operator") {
+        ("c.operator", "c.transferred_on")
+    } else {
+        ("NULL", "NULL")
+    };
     format!(
         "SELECT c.capture_id, c.sample_rate, c.channels, c.storage_format,
         c.capture_mode, c.host_api, c.device_id, c.device_name, c.os_verified,
         c.os_report, c.state, c.started_at, c.finished_at, c.frames,
         COALESCE(d.overruns, 0), COALESCE(d.underruns, 0),
         COALESCE(d.dropped_frames, 0), COALESCE(d.stream_errors, 0),
-        {eq}
+        {eq}, {operator}, {on}
    FROM captures c LEFT JOIN capture_diagnostics d ON d.capture_id = c.capture_id"
     )
 }
@@ -381,7 +437,12 @@ fn select(conn: &Connection) -> String {
 /// and whose columns say another is exactly the case where the two questions give
 /// different answers, and only one of them keeps the query running.
 fn has_capture_eq(conn: &Connection) -> bool {
-    conn.prepare("SELECT capture_eq FROM captures LIMIT 0")
+    has_column(conn, "capture_eq")
+}
+
+/// Whether the `captures` table carries this column, for the reason above.
+fn has_column(conn: &Connection, column: &str) -> bool {
+    conn.prepare(&format!("SELECT {column} FROM captures LIMIT 0"))
         .is_ok()
 }
 
@@ -441,6 +502,8 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
             dropped_frames: widen(r.get(16)?),
             stream_errors: widen(r.get(17)?),
         },
+        operator: r.get(19)?,
+        transferred_on: r.get(20)?,
     })
 }
 

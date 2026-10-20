@@ -240,6 +240,12 @@ pub fn edit_release(shell: &Shell, edit: ReleaseEdit) -> Result<(), Error> {
     if let Some(id) = curve {
         record.playback_eq = (!id.is_empty()).then(|| id.to_owned());
     }
+    if let Some(item) = edit.item {
+        record.item = item;
+    }
+    if let Some(condition) = edit.condition {
+        record.condition = condition;
+    }
     release::store(&mut project, &record)?;
     project.close()?;
     Ok(())
@@ -311,6 +317,17 @@ pub fn set_provenance(shell: &Shell, stated: CaptureProvenance) -> Result<(), Er
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     let changed = session::set_capture_eq(&mut project, Some(stated.capture_id), eq)?;
+    // WP-31's two, on the same row and in the same open. An empty string is how
+    // a person takes an override back off; the column then says nothing and the
+    // export falls back to the settings' operator and to `started_at`.
+    session::set_transfer(
+        &mut project,
+        stated.capture_id,
+        stated.operator.map(|who| (!who.is_empty()).then_some(who)),
+        stated
+            .transferred_on
+            .map(|when| (!when.is_empty()).then_some(when)),
+    )?;
     project.close()?;
     if changed == 0 {
         return Err(Error::Invalid {
@@ -449,6 +466,8 @@ mod tests {
             ReleaseEdit {
                 is_mono: None,
                 playback_eq: Some("riia".to_owned()),
+                item: None,
+                condition: None,
             },
         )
         .expect_err("a curve nobody ships");
@@ -467,6 +486,8 @@ mod tests {
             ReleaseEdit {
                 is_mono: Some(true),
                 playback_eq: Some("columbia_lp".to_owned()),
+                item: None,
+                condition: None,
             },
         )
         .expect("both");
@@ -477,6 +498,8 @@ mod tests {
             ReleaseEdit {
                 is_mono: None,
                 playback_eq: Some(String::new()),
+                item: None,
+                condition: None,
             },
         )
         .expect("clearing the curve");

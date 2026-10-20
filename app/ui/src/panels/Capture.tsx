@@ -89,6 +89,10 @@ export function Capture({
 }): React.JSX.Element {
   const text = useText();
   const { engine, project } = store;
+  // What is being typed into an operator box, by capture id. The row is the
+  // truth once it is written; this exists only so a half-typed name survives
+  // a reload landing mid-word.
+  const [operators, setOperators] = useState<Record<number, string>>({});
   const [device, setDevice] = useState<string | null>(null);
   const [rate, setRate] = useState<number | null>(null);
   const [format, setFormat] = useState<string | null>(null);
@@ -274,6 +278,7 @@ export function Capture({
               <th className="n">{text("capture.column.length")}</th>
               <th>{text("capture.column.state")}</th>
               <th>{text("capture.column.eq")}</th>
+              <th>{text("capture.column.operator")}</th>
             </tr>
           </thead>
           <tbody>
@@ -304,6 +309,8 @@ export function Capture({
                             api.setProvenance({
                               captureId: row.id,
                               eq: event.target.value,
+                              operator: null,
+                              transferredOn: null,
                             }),
                           )
                           // Nothing publishes an event for this, so the row is
@@ -320,6 +327,38 @@ export function Capture({
                       ))}
                     </select>
                   </span>
+                </td>
+                {/* WP-31: who made this transfer, where that is not the
+                    operator in Settings. Empty rather than pre-filled with the
+                    settings answer - an override that starts life filled in is
+                    one nobody notices is wrong. */}
+                <td>
+                  <input
+                    value={operators[row.id] ?? row.operator ?? ""}
+                    title={text("capture.operator.title")}
+                    onChange={(event) =>
+                      setOperators({
+                        ...operators,
+                        [row.id]: event.target.value,
+                      })
+                    }
+                    onBlur={(event) => {
+                      if (event.target.value === (row.operator ?? "")) return;
+                      void store
+                        .run(() =>
+                          api.setProvenance({
+                            captureId: row.id,
+                            eq: row.captureEq,
+                            operator: event.target.value,
+                            transferredOn: null,
+                          }),
+                        )
+                        .then(store.reload);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
                 </td>
               </tr>
             ))}

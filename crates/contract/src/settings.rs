@@ -111,6 +111,8 @@ pub struct Settings {
     pub metadata: Metadata,
     /// Format, codec options, output path, naming template.
     pub export: Export,
+    /// The rig: what the audio came out of, written onto every exported file.
+    pub transfer: Transfer,
 }
 
 /// §39's audio group.
@@ -288,6 +290,59 @@ pub struct Export {
     /// so a release that was numbered on the label stays numbered on the label
     /// whatever this says. Empty for the project's own choice.
     pub numbering: String,
+}
+
+/// §39's transfer group: the physical chain a transfer was made on (WP-31).
+///
+/// Eight strings, all empty by default, and nothing in VCW reads them except
+/// export. They are here rather than on a capture because a rig does not change
+/// between sides and nobody should retype a cartridge eleven times - the test the
+/// design applies throughout is that a fact about the rig belongs to the rig, a
+/// fact about the copy to the release, and a fact about the session to the
+/// capture. The other three fields live in those two places.
+///
+/// Empty strings rather than `Option<String>` for the reason `releases` keeps
+/// them: a caller never has to tell "not set" from "set to nothing", and the
+/// tag writer already drops an empty value, so an unfilled field writes no key
+/// at all. A catalog reading `TRANSFER_STYLUS=` has been told something false;
+/// a catalog finding no such key has been told nothing, which is the truth.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(rename = "TransferSettings")]
+pub struct Transfer {
+    /// The deck.
+    pub turntable: String,
+    /// The arm, where it is not the deck's own.
+    pub tonearm: String,
+    /// The cartridge body.
+    ///
+    /// Separate from `stylus` because a stylus is replaced on a schedule the
+    /// body outlives, and the hours on it are the single most common reason two
+    /// transfers of one record on one rig do not match.
+    pub cartridge: String,
+    /// The stylus profile, and its hours where the operator tracks them.
+    pub stylus: String,
+    /// The preamp that applied, or did not apply, a curve.
+    ///
+    /// Its *name*, where [`Audio::eq`] is its *effect*. Both are wanted and
+    /// neither implies the other: a named preamp does not say whether it applied
+    /// a curve, and `riaa` does not say which box applied it.
+    pub phono_stage: String,
+    /// The converter, as a person names the box.
+    ///
+    /// What the operator calls the hardware, where `captures.device_name` is
+    /// what the operating system called it. "Scarlett 2i2" and "Focusrite
+    /// Scarlett 2i2 4th Gen" are the same box described by two parties, and an
+    /// archivist cites the second while a diagnostician reads the first.
+    pub interface: String,
+    /// Who makes the transfers, unless a capture says otherwise.
+    pub operator: String,
+    /// Any physical signal path modification: a rewired arm, a bypassed stage.
+    ///
+    /// Free text by necessity. There is no vocabulary for "the phono stage is
+    /// bypassed and the cartridge runs straight into a head amp", and inventing
+    /// one would produce a field nobody fills in correctly.
+    pub modification: String,
 }
 
 /// Whether a credential is configured, and nothing about what it is.

@@ -76,7 +76,7 @@ pub const APPLICATION_ID: u32 = 0x5643_5700;
 /// exactly `playback_eq = 'riaa'`, which is why v5 can carry it across rather than
 /// asking again; and a project with no `defects` rows is one nobody has run a
 /// detector over, which is what every project before v6 is.
-pub const SCHEMA_VERSION: u32 = 6;
+pub const SCHEMA_VERSION: u32 = 7;
 
 /// The project-format version: the *meaning* of the schema, as opposed to its shape.
 ///
@@ -678,6 +678,39 @@ CREATE TABLE defects (
 -- exporting it. The same shape as track_boundaries_timeline, for the same reason.
 CREATE INDEX defects_timeline
     ON defects (capture_id, start_frame);
+"#;
+
+/// Schema v7: the archivist's transfer log (§23/§24, WP-31).
+///
+/// Four columns that say what the audio came out of. VCW already records what the
+/// *software* did - the curve, the chain, the host API - and none of that names the
+/// deck, the cartridge or the copy. An archival transfer is only citable if the
+/// chain that made it is on the record.
+///
+/// The rig itself is not here: a turntable does not change between sides, so the
+/// eight rig fields live in Settings (§39) and are read at export. What lands in the
+/// project is the part that is about *this* copy and *this* session, which is the
+/// test the design note applies throughout - a fact about the rig belongs to the rig,
+/// a fact about the copy to the release, a fact about the session to the capture.
+pub const SCHEMA_V7: &str = r#"
+-- The physical item identifier: a shelf mark, an accession number, or whatever the
+-- holder calls this copy. Not the catalog number, which identifies the pressing;
+-- this identifies the one object that was played.
+ALTER TABLE releases ADD COLUMN item TEXT NOT NULL DEFAULT '';
+-- The known condition of that copy, in the holder's own words. Free text because
+-- the grading vocabularies disagree and a project should not pick one.
+ALTER TABLE releases ADD COLUMN condition TEXT NOT NULL DEFAULT '';
+-- Who made the transfer, overriding the operator named in Settings. NULL is the
+-- ordinary case and means "whoever Settings says": a per-capture value is for the
+-- session somebody else ran, and an override that starts life pre-filled is an
+-- override nobody notices is wrong.
+ALTER TABLE captures ADD COLUMN operator TEXT;
+-- The transfer date as ISO 8601, date only, where started_at is not it. NULL is the
+-- ordinary case, because started_at is Unix seconds at stream start and that is the
+-- transfer date more accurately than a person retyping it. The exception is the
+-- reason this column exists: a capture with capture_mode 'imported' is dated by the
+-- import, and an Audacity project carried over from 2019 should not export as 2026.
+ALTER TABLE captures ADD COLUMN transferred_on TEXT;
 "#;
 
 /// Tables the current schema must contain. Checked on open, so a truncated or

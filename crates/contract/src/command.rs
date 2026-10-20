@@ -708,6 +708,9 @@ impl Export {
             overwrite: self.overwrite,
             narrowing,
             numbering,
+            // Not a field of this command: WP-31's rig is a setting, and the
+            // shell fills it in from §39 on the way past.
+            rig: vcw_export::splitter::Rig::default(),
         })
     }
 }
@@ -905,6 +908,10 @@ pub struct ReleaseEdit {
     pub is_mono: Option<bool>,
     /// The characteristic the record was cut with. `""` clears it.
     pub playback_eq: Option<String>,
+    /// The physical item identifier for this copy (WP-31). `null` leaves it alone.
+    pub item: Option<String>,
+    /// The known condition of this copy (WP-31). `null` leaves it alone.
+    pub condition: Option<String>,
 }
 
 /// Give one side its own characteristic (§51).
@@ -939,6 +946,17 @@ pub struct CaptureProvenance {
     pub capture_id: i64,
     /// `flat`, `riaa` or `unknown`.
     pub eq: String,
+    /// Who made this transfer, overriding the operator in settings (WP-31).
+    ///
+    /// Absent leaves it alone, `""` takes the override off, and anything else
+    /// sets it. The outer absence is what lets this command and the one below
+    /// be two independent edits rather than one that has to resend the other.
+    #[serde(default)]
+    pub operator: Option<String>,
+    /// The transfer date as ISO 8601, date only, where `startedAt` is not it
+    /// (WP-31). Absent leaves it alone and `""` takes it off.
+    #[serde(default)]
+    pub transferred_on: Option<String>,
 }
 
 /// Make a track out of a stretch a person chose (§31).

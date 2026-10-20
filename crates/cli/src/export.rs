@@ -113,6 +113,11 @@ pub(crate) fn run(args: &Args) -> Result<()> {
                 anyhow::anyhow!("{given:?} is not a numbering scheme - {}", names.join(", "))
             })?),
         },
+        // WP-31's transfer chain is a window setting and this crate does not
+        // read the window's settings file, so a CLI export makes no claim about
+        // the rig. The copy and the session still tag themselves: those live in
+        // the project, which is the file this verb was given.
+        rig: splitter::Rig::default(),
     };
 
     // Read-only, because §33 says an export reads immutable blocks and edit

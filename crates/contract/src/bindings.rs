@@ -253,12 +253,14 @@ pub fn typescript() -> String {
     section(
         &mut out,
         "Settings (\u{a7}39)",
-        "Five groups, named as \u{a7}39 names them. Every default is either `null`\n\
+        "Six groups, named as \u{a7}39 names them. Every default is either `null`\n\
          - let the engine negotiate and report what it got - or a constant read\n\
          out of the crate that owns the behavior, which is why none of them\n\
          appears in this declaration. `Credential` is the one type here that\n\
          carries nothing: whether a token is configured and how long it is,\n\
-         never the value.",
+         never the value. `Transfer` is the one group nothing reads but export:\n\
+         it is the rig a recording was made on, not a setting that changes what\n\
+         VCW does.",
         &[
             decl::<crate::settings::Settings>(),
             decl::<crate::settings::Audio>(),
@@ -266,6 +268,7 @@ pub fn typescript() -> String {
             decl::<crate::settings::Detection>(),
             decl::<crate::settings::Metadata>(),
             decl::<crate::settings::Export>(),
+            decl::<crate::settings::Transfer>(),
             decl::<crate::settings::Credential>(),
         ],
     );

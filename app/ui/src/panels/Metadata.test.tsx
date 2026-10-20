@@ -81,6 +81,8 @@ function release(extra: Partial<Release> = {}): Release {
     confirmed: false,
     isMono: false,
     playbackEq: null,
+    item: "",
+    condition: "",
     ...extra,
   } as unknown as Release;
 }
@@ -93,6 +95,32 @@ async function render(held: Release | null): Promise<HTMLElement> {
     root.render(<Metadata store={store(held)} />);
   });
   return container;
+}
+
+/**
+ * Types into a controlled box the way a keystroke does.
+ *
+ * React holds the last value it rendered and a direct assignment updates that
+ * record on the way past, so the event arrives and React decides nothing
+ * changed. Going through the prototype's setter leaves the record alone.
+ */
+function type(node: HTMLInputElement, word: string): void {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+    node,
+    word,
+  );
+  node.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/** The item and condition boxes, in the order the fieldset asks for them. */
+function copy(container: HTMLElement): HTMLInputElement[] {
+  const boxes = Array.from(
+    container.querySelectorAll<HTMLInputElement>(
+      ".pressing input:not([type=checkbox])",
+    ),
+  );
+  expect(boxes.length, "the panel asks for the item and the condition").toBe(2);
+  return boxes;
 }
 
 /** The panel's curve picker, which is the only select outside the query form. */
@@ -120,6 +148,8 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: true,
       playbackEq: null,
+      item: null,
+      condition: null,
     });
   });
 
@@ -133,6 +163,8 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: null,
       playbackEq: "columbia_lp",
+      item: null,
+      condition: null,
     });
   });
 
@@ -148,6 +180,8 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: null,
       playbackEq: "",
+      item: null,
+      condition: null,
     });
   });
 
@@ -165,7 +199,45 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: true,
       playbackEq: null,
+      item: null,
+      condition: null,
     });
+  });
+
+  // WP-31. These two are free text, so unlike the switch and the picker they
+  // cannot be written on every keystroke: a reload landing mid-word over
+  // `vcw serve` would eat the rest of it. They are held and committed when the
+  // field is left, and a field that was only looked at commits nothing - a
+  // blur that always wrote would make tabbing through the panel a save storm.
+  it("holds the copy's facts until the field is left", async () => {
+    const container = await render(release());
+    const [item] = copy(container);
+    await act(async () => {
+      type(item as HTMLInputElement, "SH-LP-0412");
+    });
+    expect(
+      vi.mocked(api.editRelease),
+      "typing is not stating",
+    ).not.toHaveBeenCalled();
+    await act(async () => {
+      item?.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
+      isMono: null,
+      playbackEq: null,
+      item: "SH-LP-0412",
+      condition: null,
+    });
+  });
+
+  it("states nothing for a field that was only looked at", async () => {
+    const container = await render(release({ condition: "VG+" }));
+    const [, condition] = copy(container);
+    expect(condition?.value, "the stored answer is in the box").toBe("VG+");
+    await act(async () => {
+      condition?.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    expect(vi.mocked(api.editRelease)).not.toHaveBeenCalled();
   });
 });
 

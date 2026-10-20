@@ -42,6 +42,7 @@
 //! here; a type earns its place once a requirement or a decision pins it down.
 
 pub mod capture;
+pub mod date;
 pub mod defect;
 pub mod format;
 pub mod observation;

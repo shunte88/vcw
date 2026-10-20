@@ -567,6 +567,9 @@ text = "Format"
 ["capture.column.length"]
 text = "Length"
 
+["capture.column.operator"]
+text = "Operator"
+
 ["capture.column.state"]
 text = "State"
 
@@ -638,6 +641,9 @@ text = "Open a project before arming a device."
 
 ["capture.not.armed"]
 text = "not armed"
+
+["capture.operator.title"]
+text = "Who made this transfer, where that is not the operator in Settings. Empty uses the settings one."
 
 ["capture.os.confirmed"]
 text = "os-confirmed"
@@ -808,6 +814,12 @@ text = "Tracks"
 ["metadata.column.year"]
 text = "Year"
 
+["metadata.condition"]
+text = "Condition"
+
+["metadata.condition.title"]
+text = "The condition of this copy, in your own words. The grading vocabularies disagree, so VCW does not pick one."
+
 ["metadata.eq"]
 text = "Cut with"
 
@@ -855,6 +867,12 @@ text = "{count} to choose from, and not enough is known to prefer one. An artist
 
 ["metadata.identifying"]
 text = "Identifying."
+
+["metadata.item"]
+text = "Item"
+
+["metadata.item.title"]
+text = "What this physical copy is called on the shelf: a shelf mark or an accession number. Not the catalog number, which identifies the pressing, so two copies of one pressing are two items."
 
 ["metadata.kb"]
 text = "{n} KB"
@@ -1688,6 +1706,9 @@ text = "Library"
 ["settings.section.metadata"]
 text = "Metadata"
 
+["settings.section.transfer"]
+text = "Transfer"
+
 ["settings.shortest"]
 text = "Shortest track (seconds)"
 
@@ -1718,6 +1739,56 @@ text = "set, {n} characters"
 
 ["settings.token.unset"]
 text = "not set in this process"
+
+["settings.transfer.cartridge"]
+text = "Cartridge"
+
+["settings.transfer.hint"]
+text = """
+The chain a transfer was made on, written into every exported file as \
+`TRANSFER_*` tags. Nothing here changes what VCW does to the audio: it is \
+what a catalog needs in order to cite the recording, because two transfers of \
+one pressing on two cartridges are two different documents. Fill it in once \
+and it rides along with every side. A field left empty writes no tag, which \
+says nothing rather than something false."""
+
+["settings.transfer.interface"]
+text = "Interface"
+
+["settings.transfer.modification"]
+text = "Modification"
+
+["settings.transfer.modification.hint"]
+text = """
+Any change to the physical signal path worth stating: a rewired arm, a \
+bypassed stage, a cartridge running straight into a head amp."""
+
+["settings.transfer.operator"]
+text = "Operator"
+
+["settings.transfer.operator.hint"]
+text = """
+Who makes the transfers. A single capture can name somebody else, on the \
+capture panel, for the session another person ran."""
+
+["settings.transfer.phono"]
+text = "Phono stage"
+
+["settings.transfer.stylus"]
+text = "Stylus"
+
+["settings.transfer.stylus.hint"]
+text = """
+The profile, and the hours on it where you track them. Separate from the \
+cartridge because a stylus is replaced on a schedule the body outlives, and \
+the hours are the commonest reason two transfers of one record on one rig do \
+not match."""
+
+["settings.transfer.tonearm"]
+text = "Tonearm"
+
+["settings.transfer.turntable"]
+text = "Turntable"
 
 ["settings.unsaved"]
 text = "Unsaved"

@@ -260,9 +260,20 @@ fn a_column_added_by_a_migration_joins_the_table_that_has_it() {
         .iter()
         .find(|o| o.kind == "TABLE" && o.name == "captures")
         .expect("the captures table is documented");
-    assert_eq!(
-        captures.columns.last().map(|c| c.name.as_str()),
-        Some("capture_eq"),
+    // Named by position and not by name, so a later migration that adds another
+    // column to `captures` does not have to edit this line to keep the same claim.
+    let state = captures
+        .columns
+        .iter()
+        .position(|c| c.name == "state")
+        .expect("the last column the CREATE TABLE declares");
+    let added = captures
+        .columns
+        .iter()
+        .position(|c| c.name == "capture_eq")
+        .expect("the column migration 3 adds");
+    assert!(
+        added > state,
         "SQLite appends an added column, so the document has to as well"
     );
     assert_eq!(

@@ -199,6 +199,12 @@ pub struct Capture {
     pub finished_at: Option<i64>,
     /// Overruns, underruns, dropped frames and stream errors.
     pub diagnostics: Diagnostics,
+    /// Who made this transfer, where it was not whoever the settings name (WP-31).
+    /// `null` is the ordinary case and reads as the settings' operator.
+    pub operator: Option<String>,
+    /// The transfer date as ISO 8601, date only, where `startedAt` is not it
+    /// (WP-31). `null` is the ordinary case and reads as `startedAt`.
+    pub transferred_on: Option<String>,
 }
 
 /// A side of a record.
@@ -327,6 +333,10 @@ pub struct Release {
     /// provider supplies and no analysis recovers, which is why they are here
     /// rather than left to the metadata lookup.
     pub playback_eq: Option<String>,
+    /// The physical item identifier for the copy that was transferred (WP-31).
+    pub item: String,
+    /// The known condition of that copy, in the holder's own words (WP-31).
+    pub condition: String,
 }
 
 /// One candidate release from a provider (§28).
@@ -526,6 +536,8 @@ impl From<&vcw_project::release::Record> for Release {
             confirmed: record.confirmed,
             is_mono: record.is_mono,
             playback_eq: record.playback_eq.clone(),
+            item: record.item.clone(),
+            condition: record.condition.clone(),
         }
     }
 }
@@ -708,6 +720,8 @@ impl From<&vcw_project::session::Record> for Capture {
             started_at: record.started_at,
             finished_at: record.finished_at,
             diagnostics: record.diagnostics.into(),
+            operator: record.operator.clone(),
+            transferred_on: record.transferred_on.clone(),
         }
     }
 }

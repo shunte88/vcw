@@ -111,6 +111,7 @@ const SECTIONS = [
   "Detection",
   "Metadata",
   "Export",
+  "Transfer",
   "Credentials",
 ] as const;
 
@@ -134,6 +135,7 @@ const NAMES: Record<Section, string> = {
   Detection: key("settings.section.detection"),
   Metadata: key("settings.section.metadata"),
   Export: key("settings.section.export"),
+  Transfer: key("settings.section.transfer"),
   Credentials: key("settings.section.credentials"),
 };
 
@@ -325,6 +327,8 @@ export function Settings({
     setDraft({ ...draft, metadata: { ...draft.metadata, ...patch } });
   const exporting = (patch: Partial<Values["export"]>) =>
     setDraft({ ...draft, export: { ...draft.export, ...patch } });
+  const transfer = (patch: Partial<Values["transfer"]>) =>
+    setDraft({ ...draft, transfer: { ...draft.transfer, ...patch } });
 
   // Which of the two encoder knobs the chosen default format has, if either.
   const effort = effortOf(draft.export.format);
@@ -965,6 +969,75 @@ export function Settings({
           </label>
           <Hint className="hint near" text={text("settings.narrow.width.hint")} />
           <Hint className="hint near" text={text("settings.dither.hint")} />
+        </fieldset>
+        )}
+
+        {section === "Transfer" && (
+        <fieldset className="stacked">
+          <legend>{text("settings.section.transfer")}</legend>
+          <Hint text={text("settings.transfer.hint")} />
+
+          <label>
+            {text("settings.transfer.turntable")}
+            <input
+              value={draft.transfer.turntable}
+              onChange={(event) => transfer({ turntable: event.target.value })}
+            />
+          </label>
+          <label>
+            {text("settings.transfer.tonearm")}
+            <input
+              value={draft.transfer.tonearm}
+              onChange={(event) => transfer({ tonearm: event.target.value })}
+            />
+          </label>
+          <label>
+            {text("settings.transfer.cartridge")}
+            <input
+              value={draft.transfer.cartridge}
+              onChange={(event) => transfer({ cartridge: event.target.value })}
+            />
+          </label>
+          <label>
+            {text("settings.transfer.stylus")}
+            <input
+              value={draft.transfer.stylus}
+              onChange={(event) => transfer({ stylus: event.target.value })}
+            />
+          </label>
+          <Hint text={text("settings.transfer.stylus.hint")} />
+          <label>
+            {text("settings.transfer.phono")}
+            <input
+              value={draft.transfer.phonoStage}
+              onChange={(event) => transfer({ phonoStage: event.target.value })}
+            />
+          </label>
+          <label>
+            {text("settings.transfer.interface")}
+            <input
+              value={draft.transfer.interface}
+              onChange={(event) => transfer({ interface: event.target.value })}
+            />
+          </label>
+          <label>
+            {text("settings.transfer.operator")}
+            <input
+              value={draft.transfer.operator}
+              onChange={(event) => transfer({ operator: event.target.value })}
+            />
+          </label>
+          <Hint text={text("settings.transfer.operator.hint")} />
+          <label>
+            {text("settings.transfer.modification")}
+            <input
+              value={draft.transfer.modification}
+              onChange={(event) =>
+                transfer({ modification: event.target.value })
+              }
+            />
+          </label>
+          <Hint text={text("settings.transfer.modification.hint")} />
         </fieldset>
         )}
 

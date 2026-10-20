@@ -116,6 +116,37 @@ impl Artwork {
     }
 }
 
+/// The physical chain a transfer was made on (WP-31, §39).
+///
+/// Eight strings a person fills in once in settings, carried into the export
+/// because an archival transfer is only citable if the chain that made it is on
+/// the record: two transfers of one pressing on two cartridges are two different
+/// documents. Nothing here changes a sample. An empty field writes no tag, which
+/// says nothing rather than something false.
+///
+/// Not read out of settings here, because this crate does not know what settings
+/// are - the same reason [`Request::template`] and [`Request::narrowing`] arrive
+/// the same way.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Rig {
+    /// The deck.
+    pub turntable: String,
+    /// The arm, where it is not the deck's own.
+    pub tonearm: String,
+    /// The cartridge body.
+    pub cartridge: String,
+    /// The stylus profile, and its hours where the operator tracks them.
+    pub stylus: String,
+    /// The preamp that applied, or did not apply, a curve.
+    pub phono_stage: String,
+    /// The converter, as a person names the box.
+    pub interface: String,
+    /// Who makes the transfers, unless a capture names somebody else.
+    pub operator: String,
+    /// Any change to the physical signal path: a rewired arm, a bypassed stage.
+    pub modification: String,
+}
+
 /// What an export was asked for.
 #[derive(Debug, Clone)]
 pub struct Request {
@@ -146,6 +177,9 @@ pub struct Request {
     /// the record: exporting a project once with `sequence` should not change
     /// what that project is numbered the next time it is opened.
     pub numbering: Option<Numbering>,
+    /// The rig the transfer was made on (WP-31), or all-empty for an export that
+    /// makes no claim about it.
+    pub rig: Rig,
 }
 
 impl Request {
@@ -161,6 +195,7 @@ impl Request {
             overwrite: false,
             narrowing: Narrowing::default(),
             numbering: None,
+            rig: Rig::default(),
         }
     }
 
@@ -320,8 +355,10 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
     let mut narrowed_to = None;
     // side_id -> (the capture behind it, the curve that side states)
     let mut captures: HashMap<i64, (Option<i64>, Option<String>)> = HashMap::new();
-    // capture_id -> what the signal chain had already applied (§51)
-    let mut provenance: HashMap<i64, vcw_types::CaptureEq> = HashMap::new();
+    // capture_id -> the capture row: §51's provenance, and WP-31's operator,
+    // transfer date and start time. One cache rather than four, because they
+    // come out of one SELECT and an export usually walks one capture.
+    let mut provenance: HashMap<i64, Option<vcw_project::session::Record>> = HashMap::new();
     // capture_id -> WP-30's defect list, resolved into a stage. Cached because an
     // export usually walks one capture and the list can run to thousands of rows.
     let mut damage: HashMap<i64, Option<Repairs>> = HashMap::new();
@@ -413,13 +450,15 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         // §51, in the order the spec states: a track overrides its side, a side
         // overrides the release. Not `vcw_eq::in_force`, which resolves silence
         // to RIAA - `Filter::wanted` has to be able to tell the two apart.
-        let capture_eq = match provenance.entry(capture_id) {
-            std::collections::hash_map::Entry::Occupied(seen) => *seen.get(),
-            std::collections::hash_map::Entry::Vacant(slot) => *slot.insert(
-                vcw_project::session::load(conn, capture_id)?
-                    .map_or(vcw_types::CaptureEq::Unknown, |row| row.info.eq),
-            ),
+        let session = match provenance.entry(capture_id) {
+            std::collections::hash_map::Entry::Occupied(seen) => seen.get().clone(),
+            std::collections::hash_map::Entry::Vacant(slot) => slot
+                .insert(vcw_project::session::load(conn, capture_id)?)
+                .clone(),
         };
+        let capture_eq = session
+            .as_ref()
+            .map_or(vcw_types::CaptureEq::Unknown, |row| row.info.eq);
         let stated = record
             .playback_eq
             .as_deref()
@@ -445,7 +484,15 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         // correcting are otherwise indistinguishable. Written only where somebody
         // stated a curve or VCW applied one; a project that has said nothing gets
         // no claim put in its tags on its behalf.
-        let mut tags = tags(&release, &record, side, &numbers, request, cover.as_ref());
+        let mut tags = tags(
+            &release,
+            &record,
+            side,
+            &numbers,
+            request,
+            cover.as_ref(),
+            session.as_ref(),
+        );
         if let Some(id) = filter.as_ref().map(Filter::curve).or(stated) {
             let named = catalog.get(id).map_or_else(
                 || id.to_owned(),
@@ -945,6 +992,7 @@ fn tags(
     numbers: &Numbers,
     request: &Request,
     cover: Option<&Cover>,
+    session: Option<&vcw_project::session::Record>,
 ) -> Tags {
     Tags {
         title: record.title.clone(),
@@ -971,13 +1019,69 @@ fn tags(
         musicbrainz_recording_id: record.musicbrainz_id.clone().unwrap_or_default(),
         // The position on the record, which no tag standard names and which is
         // the one piece of provenance a vinyl rip has and a CD rip does not.
-        extra: vec![("VINYL_POSITION".to_owned(), numbers.alpha.clone())],
+        // The transfer chain (WP-31) joins it: same mechanism, same reason, and
+        // the same test of a good key - a word a person can read in a tag editor.
+        extra: std::iter::once(("VINYL_POSITION".to_owned(), numbers.alpha.clone()))
+            .chain(transfer(release, &request.rig, session))
+            .collect(),
         cover: if request.artwork.embeds() {
             cover.cloned()
         } else {
             None
         },
     }
+}
+
+/// The transfer chain as tag pairs (WP-31).
+///
+/// Three homes, one vocabulary. The rig comes from settings because a turntable
+/// does not change between sides; the copy comes from the release because it is
+/// this object on this shelf; the session comes from the capture because it is
+/// this sitting. `TRANSFER_` and not `VCW_`, because `VCW_*` is what VCW did to
+/// the audio and this is a fact about the record - naming it `VCW_` would suggest
+/// VCW knows what cartridge was fitted. It does not. A person typed it.
+///
+/// Empty values are dropped here rather than left to [`Tags::extra`]'s writer, so
+/// the pairs this returns are exactly the keys that will be written: a catalog
+/// reading `TRANSFER_STYLUS=` has been told something false, where one finding no
+/// such key has been told nothing, which is the truth.
+fn transfer(
+    release: &release::Record,
+    rig: &Rig,
+    session: Option<&vcw_project::session::Record>,
+) -> Vec<(String, String)> {
+    // The operator a capture names wins over the one settings do: the override
+    // exists for the session somebody else ran, and it is only set when it
+    // disagrees. The date is the other way round - `started_at` is the moment the
+    // stream opened and is the transfer date more accurately than a person
+    // retyping it, so the column is the exception and not the rule. An imported
+    // capture is the exception: it is dated by the import, and a project carried
+    // over from 2019 should not export as this year.
+    let operator = session
+        .and_then(|row| row.operator.clone())
+        .unwrap_or_else(|| rig.operator.clone());
+    let date = session.map_or_else(String::new, |row| {
+        row.transferred_on
+            .clone()
+            .unwrap_or_else(|| vcw_types::date::iso(row.started_at))
+    });
+    [
+        ("TRANSFER_ITEM", release.item.as_str()),
+        ("TRANSFER_CONDITION", release.condition.as_str()),
+        ("TRANSFER_TURNTABLE", rig.turntable.as_str()),
+        ("TRANSFER_TONEARM", rig.tonearm.as_str()),
+        ("TRANSFER_CARTRIDGE", rig.cartridge.as_str()),
+        ("TRANSFER_STYLUS", rig.stylus.as_str()),
+        ("TRANSFER_PHONO_STAGE", rig.phono_stage.as_str()),
+        ("TRANSFER_INTERFACE", rig.interface.as_str()),
+        ("TRANSFER_MODIFICATION", rig.modification.as_str()),
+        ("TRANSFER_OPERATOR", operator.as_str()),
+        ("TRANSFER_DATE", date.as_str()),
+    ]
+    .into_iter()
+    .filter(|(_, value)| !value.is_empty())
+    .map(|(key, value)| (key.to_owned(), value.to_owned()))
+    .collect()
 }
 
 /// Sums a capture's channels into one, at `1/channels` gain.

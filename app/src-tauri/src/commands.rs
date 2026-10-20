@@ -289,8 +289,12 @@ pub(crate) fn playback(shell: State<'_, Shell>, verb: Playback) -> Result<(), Er
 }
 
 #[tauri::command]
-pub(crate) fn export_plan(shell: State<'_, Shell>, export: Export) -> Result<ExportPlan, Error> {
-    vcw_shell::exporter::export_plan(&shell, export)
+pub(crate) fn export_plan(
+    shell: State<'_, Shell>,
+    app: AppHandle,
+    export: Export,
+) -> Result<ExportPlan, Error> {
+    vcw_shell::exporter::export_plan(&shell, &hosted(&app), export)
 }
 
 #[tauri::command]

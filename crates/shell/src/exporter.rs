@@ -60,6 +60,27 @@ use vcw_project::Project;
 use crate::host::Hosted;
 use crate::state::{Error, Shell};
 
+/// The rig from §39's settings, as the splitter wants it (WP-31).
+///
+/// Read here rather than carried on the `Export` command, because it is not
+/// something a person asks for per export: it is the deck they own, and an
+/// export command with eight more fields on it would be eight more things a
+/// caller could get wrong. The dry run reads it too, so what the plan says a
+/// file will be tagged with is what the write puts in it.
+fn rig(host: &Hosted) -> Result<splitter::Rig, Error> {
+    let transfer = crate::config::settings(host)?.transfer;
+    Ok(splitter::Rig {
+        turntable: transfer.turntable,
+        tonearm: transfer.tonearm,
+        cartridge: transfer.cartridge,
+        stylus: transfer.stylus,
+        phono_stage: transfer.phono_stage,
+        interface: transfer.interface,
+        operator: transfer.operator,
+        modification: transfer.modification,
+    })
+}
+
 /// Resolves the plan and returns it, writing nothing. §33's dry run.
 ///
 /// # Errors
@@ -68,9 +89,10 @@ use crate::state::{Error, Shell};
 /// or an artwork policy that is not one of the accepted words, and
 /// [`Error::Export`] for a plan that cannot be resolved - two tracks naming the
 /// same file, a side with no tracks, a directory that cannot be created.
-pub fn export_plan(shell: &Shell, export: Export) -> Result<ExportPlan, Error> {
+pub fn export_plan(shell: &Shell, host: &Hosted, export: Export) -> Result<ExportPlan, Error> {
     let path = shell.project_path()?;
-    let request = export.request()?;
+    let mut request = export.request()?;
+    request.rig = rig(host)?;
     let project = Project::open_read_only(&path)?;
     let plan = splitter::plan(project.conn(), &request)?;
     project.close()?;
@@ -88,7 +110,8 @@ pub fn export_plan(shell: &Shell, export: Export) -> Result<ExportPlan, Error> {
 /// running, failures arrive as `export-failed`.
 pub fn export_run(shell: &Shell, host: &Hosted, export: Export) -> Result<(), Error> {
     let path = shell.project_path()?;
-    let request = export.request()?;
+    let mut request = export.request()?;
+    request.rig = rig(host)?;
 
     // Planned here rather than on the thread, so that a bad template is a
     // refused command with a field name on it instead of an event a second
