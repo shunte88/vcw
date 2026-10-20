@@ -87,6 +87,12 @@ loud if it cannot.
   open. This matters most over `vcw serve`, where refreshing the page is an
   ordinary thing to do and the deck is in another room.
 
+* **A take that caught nothing no longer appears in the list.** Pressing
+  Needle Drop and walking away, or starting a take and stopping it before the
+  stylus was down, filed a finished side with no audio under it - one for
+  every change of mind, sitting in the captures list beside the real ones.
+  Disarming always cleaned up after itself; stopping now does the same.
+
 * **The clock agrees with the capture it is over.** The elapsed time only ever
   caught up while a recording was running, so every moment either side of one
   showed the wrong number: a freshly armed deck wearing the last take's four

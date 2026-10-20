@@ -324,26 +324,43 @@ impl Recorder {
     pub fn abandon(mut self) -> Result<(), Error> {
         let outcome = self.halt(CaptureState::Finalised)?;
         if outcome.frames == 0 {
-            let project = Project::open(&self.path)?;
-            // Foreign keys first. `Session::begin` creates the diagnostics row
-            // alongside the capture, so the capture cannot go until it has -
-            // the same ordering recovery already uses for blocks. No
-            // `capture_blocks` rows can exist here, because frames is zero and
-            // a block is what makes frames; deleting them anyway would be
-            // wrong, since their sampleblocks would be left orphaned.
-            let conn = project.conn();
-            conn.execute(
-                "DELETE FROM capture_diagnostics WHERE capture_id = ?1",
-                [self.capture_id],
-            )
-            .map_err(vcw_project::Error::from)?;
-            conn.execute(
-                "DELETE FROM captures WHERE capture_id = ?1",
-                [self.capture_id],
-            )
-            .map_err(vcw_project::Error::from)?;
-            project.close()?;
+            self.discard()?;
         }
+        Ok(())
+    }
+
+    /// Deletes this capture's row, for a capture that holds no audio.
+    ///
+    /// Shared by [`abandon`](Self::abandon) and [`finish`](Deck::finish),
+    /// because an operator who presses Needle Drop and walks away has left
+    /// exactly the same thing behind as one who disarms: a row with no frames
+    /// under it. The first of those goes through `Recording`, so it used to
+    /// be filed as a finished side, and a project could collect one per
+    /// change of mind.
+    ///
+    /// # Errors
+    ///
+    /// If the project cannot be reopened to tidy up.
+    fn discard(&self) -> Result<(), Error> {
+        let project = Project::open(&self.path)?;
+        // Foreign keys first. `Session::begin` creates the diagnostics row
+        // alongside the capture, so the capture cannot go until it has - the
+        // same ordering recovery already uses for blocks. No `capture_blocks`
+        // rows can exist here, because frames is zero and a block is what
+        // makes frames; deleting them anyway would be wrong, since their
+        // sampleblocks would be left orphaned.
+        let conn = project.conn();
+        conn.execute(
+            "DELETE FROM capture_diagnostics WHERE capture_id = ?1",
+            [self.capture_id],
+        )
+        .map_err(vcw_project::Error::from)?;
+        conn.execute(
+            "DELETE FROM captures WHERE capture_id = ?1",
+            [self.capture_id],
+        )
+        .map_err(vcw_project::Error::from)?;
+        project.close()?;
         Ok(())
     }
 
@@ -449,16 +466,25 @@ impl Deck for Recorder {
         let verified = self.source.verification().confirms();
         let outcome = self.halt(state)?;
 
-        // The verification only exists once the stream has run, and by then the
-        // writer owned the connection, so this is a second open rather than a
-        // held one. §9's confirmation, recorded when it is actually known.
-        let project = Project::open(&self.path)?;
-        Session::with_id(self.capture_id).record_verification(
-            project.conn(),
-            verified,
-            Some(verification.as_str()),
-        )?;
-        project.close()?;
+        if outcome.frames == 0 {
+            // Nothing was committed, so there is nothing to verify and nothing
+            // to keep. The report still goes out with the row's id in it: a
+            // consumer counting sides needs the `capture-finished` it was
+            // promised, and `frames: 0` is what says the side is not there.
+            self.discard()?;
+        } else {
+            // The verification only exists once the stream has run, and by then
+            // the writer owned the connection, so this is a second open rather
+            // than a held one. §9's confirmation, recorded when it is actually
+            // known.
+            let project = Project::open(&self.path)?;
+            Session::with_id(self.capture_id).record_verification(
+                project.conn(),
+                verified,
+                Some(verification.as_str()),
+            )?;
+            project.close()?;
+        }
 
         Ok(Recorded {
             capture_id: self.capture_id,

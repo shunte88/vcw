@@ -482,6 +482,57 @@ fn arming_and_changing_your_mind_does_not_litter_the_project() {
     );
 }
 
+/// A take that caught nothing is not a take.
+#[test]
+fn a_capture_that_recorded_nothing_leaves_nothing_behind() {
+    let _alone = alone();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("walked-away.vcw");
+    let engine = Engine::start().expect("start");
+    let events = engine.events();
+    let mut seen = Vec::new();
+
+    // Needle Drop: arm, start the capture, hold it paused until the stylus
+    // lands. Somebody who then changes their mind stops it instead, and that
+    // used to file a finished side with no audio under it - one per change of
+    // mind, in the list beside the real ones.
+    engine
+        .send(Command::Arm(Box::new(Setup::simulated(&path))))
+        .expect("arm");
+    wait_for(&events, Phase::Armed, &mut seen);
+    engine.send(Command::Record).expect("record");
+    wait_for(&events, Phase::Recording, &mut seen);
+    engine.send(Command::Pause).expect("pause");
+    wait_for(&events, Phase::Paused, &mut seen);
+    engine.send(Command::Stop).expect("stop");
+    wait_for(&events, Phase::Stopped, &mut seen);
+    engine.shutdown().expect("shutdown");
+    // `capture-finished` is published immediately after the phase change the
+    // wait above returns on, so it is in the tail rather than in `seen`.
+    seen.extend(events.collect_until_closed());
+
+    // The event still goes out, with the count that says why the row is gone.
+    let finished = seen
+        .iter()
+        .find_map(|e| match e {
+            Event::Finished { frames, .. } => Some(*frames),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no capture-finished: {seen:?}"));
+    assert_eq!(finished, 0, "the simulated source committed a block");
+
+    let project = Project::open(&path).expect("reopen");
+    assert!(
+        session::all(project.conn()).expect("all").is_empty(),
+        "a capture that recorded nothing was filed as a finished side"
+    );
+    assert!(
+        recovery::survey(project.conn()).expect("survey").is_empty(),
+        "an empty capture left something that looks unfinished"
+    );
+}
+
 /// Dropping the engine mid-capture must finish the side, not lose it.
 #[test]
 fn a_shutdown_while_recording_finalizes_rather_than_abandons() {
