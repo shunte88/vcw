@@ -65,10 +65,42 @@ const EDGES: Record<string, string> = {
 /** How far a nudge key moves a boundary, in seconds. */
 const NUDGE = 0.05;
 
-/** The side letters a release of this many discs has: two faces per disc. */
+/**
+ * The side letters to offer a release of this many discs: its own faces, and
+ * one disc more.
+ *
+ * One disc more, because the count is not something a person declares before
+ * recording - `side::ensure` raises it to cover whatever side is made - and
+ * picking a letter the release does not have yet is the only way to say there
+ * is another disc. A single-disc project offers A to D; choosing C makes it a
+ * double album and the list grows to F. Without the spare pair the window can
+ * name nothing past B, which is where a 2LP that has not been identified got
+ * stuck. Capped at thirteen discs, which is `MAX_SIDES`.
+ */
 function faces(discs: number): string[] {
-  const count = Math.min(Math.max(discs, 1), 13) * 2;
+  const count = Math.min(Math.max(discs, 1) + 1, 13) * 2;
   return Array.from({ length: count }, (_, i) => String.fromCharCode(65 + i));
+}
+
+/**
+ * The letter the picker points at when nobody has said otherwise.
+ *
+ * The side the capture on screen belongs to, where it belongs to one, because
+ * looking at side D's waveform with the picker on A puts the per-side curve
+ * below it on the wrong side. Where it belongs to none - which is every
+ * freshly recorded take, since nothing in the capture path attaches a side -
+ * it is the first face nothing has been recorded onto, so a record transferred
+ * in order needs no clicks at all and one transferred in the order the sleeve
+ * hands them over needs one.
+ */
+function suggest(side: Side | null, sides: readonly Side[], letters: string[]): string {
+  if (side !== null) {
+    return side.letter;
+  }
+  const recorded = new Set(
+    sides.filter((row) => row.captureId !== null).map((row) => row.letter),
+  );
+  return letters.find((letter) => !recorded.has(letter)) ?? letters[0] ?? "A";
 }
 
 /** The track editor. */
@@ -95,10 +127,18 @@ export function Tracks({
   const [editing, setEditing] = useState<number | null>(null);
   // Which face the capture on screen holds. A statement, not a guess: nothing
   // in the capture path records it, so until a person says otherwise the
-  // detector attaches what it promotes to side A. A side B only rip named
-  // that way gets side B's titles from the release; left on A it gets side
-  // A's, which is the wrong words over real audio and nothing flags it.
-  const [face, setFace] = useState("A");
+  // detector attaches what it promotes to the letter below. A side B only rip
+  // named that way gets side B's titles from the release; left on A it gets
+  // side A's, which is the wrong words over real audio and nothing flags it.
+  //
+  // The suggestion is what the picker shows until somebody picks; the override
+  // is dropped the moment the suggestion moves, which is what happens when the
+  // promote lands and the capture on screen acquires a side of its own.
+  const letters = faces(project.release?.discs ?? 1);
+  const suggestion = suggest(side, project.sides, letters);
+  const [picked, setPicked] = useState<string | null>(null);
+  const face = picked ?? suggestion;
+  useEffect(() => setPicked(null), [suggestion]);
   const curves = useCurves();
   // The side the letter picker is pointing at, which is not always the `side`
   // prop: that one is the side the capture on screen belongs to, and it is
@@ -290,10 +330,10 @@ export function Tracks({
           {text("tracks.side")}
           <select
             value={face}
-            onChange={(event) => setFace(event.target.value)}
+            onChange={(event) => setPicked(event.target.value)}
             title={text("tracks.side.title")}
           >
-            {faces(project.release?.discs ?? 1).map((letter) => (
+            {letters.map((letter) => (
               <option key={letter} value={letter}>
                 {letter}
               </option>

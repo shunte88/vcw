@@ -353,7 +353,9 @@ CREATE TABLE releases (
     -- shop. Exported as a comment tag.
     comments       TEXT    NOT NULL DEFAULT '',
     -- How many discs the release has. The sides follow from it (§29), and it is
-    -- stored because a project may hold fewer sides than the release has.
+    -- stored because a project may hold fewer sides than the release has. It is
+    -- raised to cover any side that is created, so it is never lower than the
+    -- sides on disk; identification and the operator are what set it higher.
     discs          INTEGER NOT NULL DEFAULT 1,
     -- 'alpha' (A1, B2), 'numeric' (01 within the side) or 'sequence' (01..0n
     -- across the disc). Numbering's three spellings; alpha is VRipr's and the

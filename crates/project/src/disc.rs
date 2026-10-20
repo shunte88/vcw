@@ -339,15 +339,19 @@ mod tests {
     }
 
     #[test]
-    fn a_side_past_the_claimed_disc_count_still_counts() {
-        // The claim was a single album; a third side says otherwise.
+    fn a_side_past_the_claimed_disc_count_raises_the_claim() {
+        // The claim was a single album; a third side says otherwise, and
+        // `side::ensure` writes that down rather than leaving the release
+        // disagreeing with its own sides. `missing` took the larger of the
+        // two before this and still does, which now only matters for a count
+        // somebody has lowered by hand.
         let dir = tempfile::tempdir().expect("tempdir");
         let mut p = project(&dir);
         let capture = a_capture(&mut p);
         for letter in ['A', 'B', 'C'] {
             side::attach(&mut p, side_of(letter), capture).expect("attach");
         }
-        assert_eq!(expected(p.conn()).expect("expected"), 1);
+        assert_eq!(expected(p.conn()).expect("expected"), 2);
         assert_eq!(recorded(p.conn()).expect("recorded"), 2);
         assert_eq!(
             letters(&missing(p.conn()).expect("missing")),

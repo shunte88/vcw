@@ -60,6 +60,7 @@ function boundary(id: number): Boundary {
 function store(
   discs: number | null,
   boundaries: readonly Boundary[] = [],
+  sides: readonly Side[] = [],
 ): Store {
   return {
     engine: { detection: null, playhead: 0 },
@@ -68,7 +69,7 @@ function store(
       captures: [{ id: 1 }],
       tracks: [],
       boundaries,
-      sides: [],
+      sides,
       release: discs === null ? null : { discs },
     },
     run: async (what: () => Promise<unknown>) => {
@@ -85,16 +86,18 @@ async function render(
     selection = null,
     onSelect = () => {},
     boundaries = [],
+    sides = [],
   }: {
     side?: Side | null;
     selection?: Region | null;
     onSelect?: (selection: Region | null) => void;
     boundaries?: readonly Boundary[];
+    sides?: readonly Side[];
   } = {},
 ): Promise<HTMLElement> {
   return mount(
       <Tracks
-        store={store(discs, boundaries)}
+        store={store(discs, boundaries, sides)}
         chosen={{ track: null, boundary: null }}
         onChoose={() => {}}
         side={side}
@@ -147,11 +150,42 @@ describe("the track editor", () => {
     expect(vi.mocked(api.detectTracks)).toHaveBeenCalledWith({ side: "B", promote: true });
   });
 
-  it("offers two faces a disc, and no more than the release has", async () => {
+  it("offers one disc more than the release has, which is how a set is named", async () => {
+    // The spare pair is the whole of the multi-disc workflow in the window: a
+    // double album that nobody has identified reads as one disc, and without
+    // the extra letters there is no way to tell it otherwise.
     const single = [...picker(await render(1)).options].map((o) => o.value);
-    expect(single).toEqual(["A", "B"]);
+    expect(single).toEqual(["A", "B", "C", "D"]);
     const double = [...picker(await render(2)).options].map((o) => o.value);
-    expect(double).toEqual(["A", "B", "C", "D"]);
+    expect(double).toEqual(["A", "B", "C", "D", "E", "F"]);
+  });
+
+  it("points at the side the capture on screen belongs to", async () => {
+    const face = { id: 4, letter: "D" } as unknown as Side;
+    expect(picker(await render(2, { side: face })).value).toBe("D");
+  });
+
+  it("points at the first face nothing has been recorded onto", async () => {
+    // The capture on screen has no side, which is every take the moment it
+    // ends. Sides A and B are already down, so the next one is C - and C is
+    // offered although the release still says one disc.
+    const recorded = [
+      { id: 1, letter: "A", captureId: 7 },
+      { id: 2, letter: "B", captureId: 8 },
+    ] as unknown as Side[];
+    expect(picker(await render(1, { sides: recorded })).value).toBe("C");
+  });
+
+  it("lets the operator overrule the suggestion", async () => {
+    const recorded = [{ id: 1, letter: "A", captureId: 7 }] as unknown as Side[];
+    const container = await render(1, { sides: recorded });
+    const select = picker(container);
+    expect(select.value, "suggested").toBe("B");
+    await act(async () => {
+      select.value = "D";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(picker(container).value, "overruled").toBe("D");
   });
 });
 

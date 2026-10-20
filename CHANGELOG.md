@@ -14,6 +14,28 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## Unreleased
+
+### Added
+
+* **A double album no longer has to be identified before you can say it is
+  one.** The side picker in the track editor offers one disc more than the
+  release claims, so a project that reads as a single LP still offers C and D,
+  and choosing C is what makes it a double album. The disc count follows the
+  sides that exist instead of being declared before the first one is recorded,
+  which is why nothing asks at setup how many faces you intend to transfer.
+  Side F on a project that thought it was a double album works the same way.
+
+### Fixed
+
+* **The side picker follows the recording on screen.** It opened on A whatever
+  you were looking at, so the equalization control beside it was editing side
+  A's curve while side D's waveform was in front of you. It now points at the
+  side the capture on screen belongs to, and at the first face nothing has
+  been recorded onto when that capture is a take which has only just ended. A
+  record transferred in sleeve order needs no clicks; one transferred in the
+  order an automatically coupled gatefold hands the faces over needs one.
+
 ## 0.3.9-alpha
 
 2026-10-20

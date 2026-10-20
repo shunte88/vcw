@@ -106,7 +106,36 @@ impl Record {
     }
 }
 
+/// Raises the release's disc count to cover `side`, and never lowers it.
+///
+/// The release row is assumed to exist, which is true at both call sites: one
+/// has just called [`release::ensure`] and the other is moving a side that
+/// could not have been created without it.
+fn cover(conn: &Connection, side: Side) -> Result<()> {
+    conn.execute(
+        "UPDATE releases SET discs = ?2 WHERE release_id = ?1 AND discs < ?2",
+        params![release::RELEASE_ID, side.disc()],
+    )?;
+    Ok(())
+}
+
 /// Reads a side, creating it - and the release it belongs to - if it is absent.
+///
+/// # How many discs the release has
+///
+/// Creating side C makes it a double album, and this is where that is written
+/// down. The disc count is a fact about the sides rather than a thing a person
+/// declares before recording one: §29 derives the disc from the side index and
+/// nothing in the engine ever consults `discs` to decide whether a side is
+/// allowed, so a count lower than the sides on disk is simply wrong, and the
+/// only place that can notice is the moment a side is made. The raise happens
+/// here rather than in the callers - [`attach`], `vcw tracks attach` and the
+/// promote in `vcw-core`'s adopt - because all of them route through it.
+/// [`relabel`] is the one door that does not, and makes the same call.
+///
+/// It only ever raises. A release identified as a triple album keeps its three
+/// discs when one side is recorded, because the count describes the record and
+/// not how much of it has been transferred yet.
 ///
 /// # Errors
 ///
@@ -117,6 +146,7 @@ pub fn ensure(project: &mut Project, side: Side) -> Result<Record> {
     }
     release::ensure(project)?;
     let conn = project.conn_mut();
+    cover(conn, side)?;
     conn.execute(
         "INSERT INTO sides (release_id, side_index, capture_id, title, created_at)
          VALUES (?1, ?2, NULL, NULL, ?3)",
@@ -282,7 +312,9 @@ pub fn relabel(project: &mut Project, from: Side, to: Side) -> Result<Record> {
     if load(project.conn(), to)?.is_some() {
         return Err(Error::SideOccupied { side: to.letter() });
     }
-    project.conn_mut().execute(
+    let conn = project.conn_mut();
+    cover(conn, to)?;
+    conn.execute(
         "UPDATE sides SET side_index = ?2 WHERE side_id = ?1",
         params![record.id, i64::from(to.index())],
     )?;
@@ -533,6 +565,39 @@ mod tests {
         assert_eq!(
             relabel(&mut p, Side::A, Side::A).expect("relabel").letter(),
             'A'
+        );
+    }
+
+    #[test]
+    fn a_side_past_the_first_disc_makes_the_release_a_set() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut p = project(&dir);
+        ensure(&mut p, Side::A).expect("A");
+        assert_eq!(
+            release::load(p.conn()).expect("load").expect("row").discs,
+            1,
+            "a side of the first disc says nothing new"
+        );
+
+        ensure(&mut p, side('D')).expect("D");
+        assert_eq!(
+            release::load(p.conn()).expect("load").expect("row").discs,
+            2,
+            "side D is the second face of disc 2"
+        );
+
+        ensure(&mut p, side('B')).expect("B");
+        assert_eq!(
+            release::load(p.conn()).expect("load").expect("row").discs,
+            2,
+            "and a later side of an earlier disc does not take it back"
+        );
+
+        relabel(&mut p, side('D'), side('F')).expect("relabel");
+        assert_eq!(
+            release::load(p.conn()).expect("load").expect("row").discs,
+            3,
+            "the other door that makes a side exist raises it too"
         );
     }
 
