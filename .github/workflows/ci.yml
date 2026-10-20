@@ -429,7 +429,7 @@ jobs:
             echo "Gatekeeper will refuse it until it is signed." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # The CLI travels inside the package: every workflow in USER-GUIDE.md is a
+      # The CLI travels inside the package: every workflow in the user guide is a
       # `vcw ...` line, and `vcw bundle` is what a person is asked to send when
       # something breaks. The bundler will not start without the sidecar the
       # config names, so a failure here is loud.

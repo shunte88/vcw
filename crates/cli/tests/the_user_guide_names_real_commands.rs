@@ -34,7 +34,7 @@
 //!
 //! A user guide is a set of claims about what happens when somebody types
 //! something, and nothing in a Markdown file stops a flag from being renamed
-//! underneath it. The first draft of `docs/USER-GUIDE.md` documented
+//! underneath it. The first draft of the guide documented
 //! `vcw export --out`, `vcw tracks --split 3 --at N` and `vcw metadata release
 //! <id>`, and the real CLI has `--into`, a `split` subcommand taking two
 //! positionals, and `fetch`. All three read perfectly well and all three were
@@ -64,7 +64,7 @@ fn guide() -> String {
         .parent()
         .and_then(|crates| crates.parent())
         .expect("the crate is two levels below the repository root")
-        .join("docs/USER-GUIDE.md");
+        .join("docs/VCW-User-Guide/VCW-User-Guide.md");
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
@@ -180,7 +180,7 @@ fn documented() -> Vec<(String, Vec<String>)> {
         lines.push((line.trim().to_owned(), rest[..end].to_vec()));
     }
     assert!(
-        lines.len() > 20,
+        lines.len() >= 15,
         "only {} command lines found in the guide",
         lines.len(),
     );
@@ -248,13 +248,15 @@ fn every_command_line_in_the_user_guide_is_one_the_cli_accepts() {
         assert!(
             !(page.wants_subcommand && !truncated),
             "the guide documents `{line}`, and `vcw {}` needs one of {:?}. \
-             Fix the guide, not this test.",
+             The guide is authored by hand and is not ours to edit, so either \
+             the CLI lost a verb it should still have, or the guide needs a \
+             correction sent to its author.",
             path.join(" "),
             page.commands,
         );
         checked += 1;
     }
-    assert!(checked > 20, "only {checked} lines checked");
+    assert!(checked >= 15, "only {checked} lines checked");
 }
 
 #[test]
@@ -290,7 +292,12 @@ fn every_document_links_to_something_that_is_there() {
         .to_owned();
 
     let mut checked = 0usize;
-    for name in ["USER-GUIDE.md", "PROJECT-API.md", "SCHEMA.md"] {
+    for name in [
+        "VCW-User-Guide/VCW-User-Guide.md",
+        "TRANSLATING.md",
+        "PROJECT-API.md",
+        "SCHEMA.md",
+    ] {
         let path = root.join("docs").join(name);
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {name}: {e}"));
         for (at, _) in text.match_indices("](") {

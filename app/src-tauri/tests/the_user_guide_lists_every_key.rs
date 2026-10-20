@@ -4,7 +4,7 @@
  *  VCW - The Vinyl Capture Workstation
  *  (c) 2026 Stue Hunter
  *
- *  The keyboard table in the user guide is the keymap, or the build fails (§43, §44).
+ *  Every shortcut the user guide prints is one the window binds (§43, §44).
  *
  * MIT License
  *
@@ -30,15 +30,14 @@
  *
  */
 
-//! The keyboard table in the user guide is the keymap, or the build fails
-//! (§43, §44).
+//! Every shortcut the user guide prints is one the window binds (§43, §44).
 //!
-//! `docs/USER-GUIDE.md` claims that its keyboard table is generated from the
-//! application's own binding table "rather than transcribed, so it cannot drift
-//! from what the window actually does". That claim is worth exactly as much as
-//! the check behind it, so here is the check: parse `app/ui/src/keymap.ts`,
-//! parse the guide's tables, and require the two to agree on every chord, every
-//! label, every scope and every §43 suggestion.
+//! `docs/VCW-User-Guide/VCW-User-Guide.md` prints an "everyday shortcuts"
+//! table. It is authored by hand, in three formats kept in step outside this
+//! repository, so nothing here may rewrite it - but a key printed in it that
+//! the window ignores is still a defect, and this is the check that finds one:
+//! parse `app/ui/src/keymap.ts`, parse that table, and require every chord in
+//! the table to be a chord the keymap binds.
 //!
 //! It is a Rust test reading a TypeScript file, which looks like the wrong
 //! language for the job. The UI's own test runner cannot do it: vite's
@@ -200,91 +199,95 @@ fn bindings() -> BTreeSet<Row> {
     rows
 }
 
-/// Every row of every keyboard table in the user guide.
+/// Every key the guide's shortcut table names, as the keymap would spell it.
 ///
-/// The scope comes from the `###` heading above the table, so a table filed
-/// under the wrong heading is a failure and not something the reader has to
-/// notice.
-fn guide() -> BTreeSet<Row> {
-    let text = read("docs/USER-GUIDE.md");
-    let keyboard = text
-        .split_once("## The keyboard")
-        .expect("the guide has a keyboard section")
+/// The guide writes what is printed on the key cap and the keymap writes what
+/// the DOM calls it, so `Ctrl+Left` here and `Ctrl+ArrowLeft` there are the
+/// same chord. Folding the case and expanding the four arrows is the whole
+/// bridge between them; anything else that differs is a real disagreement.
+fn named_in_the_guide() -> BTreeSet<String> {
+    let text = read("docs/VCW-User-Guide/VCW-User-Guide.md");
+    let table = text
+        .split_once("### Everyday shortcuts")
+        .expect("the guide has an everyday shortcuts table")
         .1;
 
-    let mut rows = BTreeSet::new();
-    let mut scope = String::new();
-    for line in keyboard.lines() {
-        if let Some(heading) = line.strip_prefix("### ") {
-            scope = heading.trim().to_lowercase();
-            continue;
-        }
-        if line.starts_with("## ") {
-            break; // the next top-level section; the tables are over.
+    let mut keys = BTreeSet::new();
+    for line in table.lines() {
+        if line.starts_with("## ") || line.starts_with("### ") {
+            break; // the next heading; the table is over.
         }
         if !line.starts_with("| ") || line.starts_with("| --- ") || line.starts_with("| Key ") {
             continue;
         }
-        let cells: Vec<&str> = line.trim().trim_matches('|').split('|').collect();
-        assert_eq!(cells.len(), 4, "a keyboard row needs four cells: {line}");
-        let cell = |at: usize| cells[at].trim().to_owned();
-        assert!(
-            !scope.is_empty(),
-            "a keyboard table with no heading: {line}"
-        );
-        let suggested = match cells[3].trim() {
-            "yes" => true,
-            "-" => false,
-            other => panic!("the §43 column says `{other}`; it says `yes` or `-`"),
-        };
-        let row = Row {
-            scope: scope.clone(),
-            keys: cell(0),
-            label: cell(1),
-            workflow: cell(2).trim_matches('`').to_owned(),
-            suggested,
-        };
-        assert!(rows.insert(row), "the guide lists the same row twice");
+        let cell = line
+            .trim()
+            .trim_matches('|')
+            .split('|')
+            .next()
+            .expect("a first cell");
+        // The cell is one or more backticked chords and some connecting
+        // English: "`r` / `s`", "`a` in Capture", "`?` or `F1`". Every odd
+        // piece of a split on the backtick is a chord.
+        for chord in cell.split('`').skip(1).step_by(2) {
+            keys.insert(normalize(chord));
+        }
     }
-    rows
+    assert!(keys.len() >= 10, "only {} shortcuts parsed", keys.len());
+    keys
+}
+
+/// One spelling for a chord, whichever of the two files it came from.
+fn normalize(chord: &str) -> String {
+    let lower = chord.trim().to_lowercase();
+    if lower.contains("arrow") {
+        return lower;
+    }
+    for arrow in ["left", "right", "up", "down"] {
+        if let Some(modifiers) = lower.strip_suffix(arrow) {
+            return format!("{modifiers}arrow{arrow}");
+        }
+    }
+    lower
 }
 
 #[test]
-fn the_user_guide_lists_every_key_the_window_binds() {
-    let bound = bindings();
-    let listed = guide();
+fn every_shortcut_the_guide_names_is_one_the_window_binds() {
+    // The guide is authored by hand and kept in three formats outside this
+    // repository, so this check cannot regenerate anything - it can only say
+    // that a chord printed in it is a chord the window answers to. That is the
+    // failure that matters to a reader: a shortcut table is read while the
+    // application is open, and a key that does nothing is worse than a key
+    // that is missing from the table.
+    //
+    // Deliberately one-directional. The old guide's table was generated from
+    // `BINDINGS` and this test required the two to match exactly; the guide
+    // that replaced it offers "everyday" shortcuts and says the in-app map
+    // (`?`) is the reference for the full set, so a binding absent from the
+    // table is an editorial choice rather than drift.
+    let bound: BTreeSet<String> = bindings()
+        .iter()
+        .flat_map(|row| {
+            row.keys
+                .split('`')
+                .skip(1)
+                .step_by(2)
+                .map(normalize)
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
-    let missing: Vec<&Row> = bound.difference(&listed).collect();
-    let extra: Vec<&Row> = listed.difference(&bound).collect();
-
+    let named = named_in_the_guide();
+    let unbound: Vec<&String> = named.difference(&bound).collect();
     assert!(
-        missing.is_empty() && extra.is_empty(),
-        "the user guide's keyboard table has drifted from app/ui/src/keymap.ts.\n\
-         Regenerate the table in docs/USER-GUIDE.md.\n\
-         bound but not listed: {missing:#?}\n\
-         listed but not bound: {extra:#?}",
+        unbound.is_empty(),
+        "the guide's shortcut table names keys app/ui/src/keymap.ts does not bind: {unbound:?}\n\
+         bound: {bound:?}",
     );
 }
 
 #[test]
-fn the_guide_files_every_scope_under_its_own_heading() {
-    // A drift check that compared only chords would pass with every table under
-    // one heading, and the scope is the part a person needs: `s` stops, but `t`
-    // only detects tracks when the tracks panel has the keyboard.
-    let scopes: BTreeSet<String> = bindings().into_iter().map(|row| row.scope).collect();
-    let text = read("docs/USER-GUIDE.md");
-    for scope in &scopes {
-        let heading = format!("### {}{}", scope[..1].to_uppercase(), &scope[1..]);
-        assert!(
-            text.contains(&heading),
-            "the guide has no `{heading}` table, and the keymap binds keys in that scope",
-        );
-    }
-    assert!(scopes.len() >= 5, "only {} scopes parsed", scopes.len());
-}
-
-#[test]
-fn the_guide_says_which_keys_section_43_suggested() {
+fn the_keymap_says_which_keys_section_43_suggested() {
     // §43 offers a set of defaults rather than requiring them, and the map
     // departs from it. The column recording that is only useful if it is not
     // uniform, which is a property of the data and worth asserting: a table of

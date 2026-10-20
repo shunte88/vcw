@@ -10,7 +10,7 @@
 #  MIT License - see the header in any Rust source file for the full text.
 #
 # A package that installs the window but not the command line makes most of
-# USER-GUIDE.md unusable: recording a side, importing an Audacity project,
+# the user guide unusable: recording a side, importing an Audacity project,
 # detecting tracks and exporting are all documented as `vcw ...` lines, and
 # `vcw bundle` is the document a person is asked to send when something breaks.
 # So the CLI ships inside the package, as a Tauri `externalBin`, which wants the

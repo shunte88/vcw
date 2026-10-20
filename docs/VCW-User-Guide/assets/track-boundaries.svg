@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="310" viewBox="0 0 1200 310"><rect width="1200" height="310" fill="#f5f7f7"/><style>text{font-family:DejaVu Sans,sans-serif;fill:#142a30}.title{font-size:25px;font-weight:bold}.body{font-size:21px}.small{font-size:18px}</style><defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#257879"/></marker></defs><text x="45" y="45" class="title">One shared boundary changes two neighboring tracks</text>
+<rect x="70" y="95" width="440" height="95" fill="#cce1df"/><rect x="510" y="95" width="570" height="95" fill="#e9dfc8"/>
+<text x="220" y="150" class="body">Track A1</text><text x="730" y="150" class="body">Track A2</text>
+<path d="M510 70V213" stroke="#142a30" stroke-width="5"/><path d="M440 225H590" stroke="#257879" stroke-width="3" marker-end="url(#a)"/>
+<text x="70" y="260" class="small">Move this edge: A1 ends later and A2 begins later.</text><text x="70" y="288" class="small">The audio stays in place. Only the track definitions change.</text></svg>

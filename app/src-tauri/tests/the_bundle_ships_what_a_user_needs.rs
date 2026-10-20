@@ -164,7 +164,7 @@ fn every_file_the_bundle_names_is_where_it_says() {
 
 #[test]
 fn the_package_carries_the_command_line_as_well_as_the_window() {
-    // A package that installs only the window makes most of USER-GUIDE.md
+    // A package that installs only the window makes most of the user guide
     // unusable: every workflow in it is a `vcw ...` line, and `vcw bundle` is
     // what a person is asked for when something breaks.
     let config = config();

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="310" viewBox="0 0 1200 310"><rect width="1200" height="310" fill="#f5f7f7"/><style>text{font-family:DejaVu Sans,sans-serif;fill:#142a30}.title{font-size:25px;font-weight:bold}.body{font-size:21px}.small{font-size:18px}</style><defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#257879"/></marker></defs><text x="45" y="45" class="title">From groove to project to listening copy</text>
+<rect x="45" y="75" width="320" height="80" rx="10" fill="#dfebeb"/><text x="65" y="108" class="body">Turntable and suitable</text><text x="65" y="137" class="body">phono stage</text>
+<rect x="440" y="75" width="310" height="80" rx="10" fill="#dfebeb"/><text x="462" y="108" class="body">Audio interface</text><text x="462" y="137" class="small">Delivers digital samples</text>
+<path d="M370 115H427" stroke="#257879" stroke-width="4" marker-end="url(#a)"/>
+<path d="M755 115H815V215H750" fill="none" stroke="#257879" stroke-width="4" marker-end="url(#a)"/>
+<rect x="440" y="175" width="310" height="80" rx="10" fill="#142a30"/><text x="462" y="208" class="body" style="fill:white">VCW project</text><text x="462" y="237" class="small" style="fill:white">Original capture retained</text>
+<path d="M435 215H380" stroke="#257879" stroke-width="4" marker-end="url(#a)"/>
+<rect x="45" y="175" width="320" height="80" rx="10" fill="#e9e1cc"/><text x="65" y="208" class="body">Tagged track files</text><text x="65" y="237" class="small">Export follows your choices</text>
+<text x="875" y="110" class="small">Check gain,</text><text x="875" y="140" class="small">format, and</text><text x="875" y="170" class="small">input EQ</text></svg>

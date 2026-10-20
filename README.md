@@ -16,7 +16,7 @@ Not every record was cut to RIAA. Before the late 1950s the curve varies by labe
 
 VCW separates the tracks. It cannot settle the argument about which pressing sounds better.
 
-**Alpha release · [User guide](docs/USER-GUIDE.md) · [Development status](docs/STATUS.md) · [Releases](https://github.com/shunte88/vcw/releases) · [Report a problem](https://github.com/shunte88/vcw/issues)**
+**Alpha release · [User guide](docs/VCW-User-Guide/VCW-User-Guide.md) · [Development status](docs/STATUS.md) · [Releases](https://github.com/shunte88/vcw/releases) · [Report a problem](https://github.com/shunte88/vcw/issues)**
 
 ## What VCW does
 
@@ -29,7 +29,7 @@ VCW separates the tracks. It cannot settle the argument about which pressing sou
 - **Exports a tagged collection.** Write supported WAV, AIFF, FLAC, ALAC, MP3, or Ogg Vorbis files, with artist, album, track information, genres, artwork, and custom naming. Preview the export paths before writing.
 - **Recovers interrupted recordings.** Audio is committed throughout capture; recovery reports what was saved and can finalize the recoverable recording.
 - **Imports existing work.** Bring supported Audacity `.aup3` and `.aup4` projects into the same review and export workflow.
-- **Speaks your language, if somebody wrote it.** US English in the box, and one TOML file per language for everything else. Choose it in Settings > Appearance; the command line reads the same choice. See [Translating VCW](docs/USER-GUIDE.md#translating-vcw).
+- **Speaks your language, if somebody wrote it.** US English in the box, and one TOML file per language for everything else. Choose it in Settings > Appearance; the command line reads the same choice. See [Translating VCW](docs/TRANSLATING.md).
 
 ## Bit-perfect input and output
 
@@ -87,7 +87,7 @@ The desktop workflow follows the complete recording:
 4. **Identify and review.** Look up the release, check its track list and artwork, then audition and adjust the suggested boundaries. Confirm the metadata you want to keep.
 5. **Plan and export.** Choose the destination, format, and naming template. Review the planned filenames, then export the tagged tracks.
 
-The [user guide](docs/USER-GUIDE.md) covers the controls, keyboard shortcuts, metadata setup, and export options. The meters show the live input; the desktop waveform becomes available after capture stops.
+The [user guide](docs/VCW-User-Guide/VCW-User-Guide.md) covers the controls, keyboard shortcuts, metadata setup, and export options. The meters show the live input; the desktop waveform becomes available after capture stops.
 
 Capture, local editing, and export do not require online lookup. Online metadata and identification need internet access and the relevant credentials:
 
@@ -118,7 +118,7 @@ vcw export album.vcw --into ./exports --format wav
 
 Use `vcw --help` and each command's `--help` for options. Supported commands offer `--json` for integration. `vcw doctor` checks the environment; `vcw devices` and `vcw formats` inspect recording devices and configurations; `vcw eq list` and `vcw eq show` print the sixteen historic playback equalization curves with the published source each one's numbers came from, and `vcw release <project> set --playback-eq <id>` records which one a record was cut with - per side with `vcw tracks <project> side-eq`, per track with `vcw tracks <project> set <n> --playback-eq`. The curve is applied on playback, render and export, never to the stored capture, and `vcw eq provenance <project> <flat|riaa|unknown>` states what your own preamp had already done.
 
-For custom tools and interfaces, start with the [Rust API](docs/PROJECT-API.md), [project schema](docs/SCHEMA.md), and [command/event contract](crates/contract/). The [user guide](docs/USER-GUIDE.md) contains fuller CLI examples.
+For custom tools and interfaces, start with the [Rust API](docs/PROJECT-API.md), [project schema](docs/SCHEMA.md), and [command/event contract](crates/contract/). The [user guide](docs/VCW-User-Guide/VCW-User-Guide.md) contains fuller CLI examples.
 
 ## Recovery and project care
 
@@ -131,7 +131,7 @@ vcw recover album.vcw
 vcw recover album.vcw --apply
 ```
 
-Close a project before copying it for backup. SQLite creates temporary `-wal` and `-shm` files while the project is open; they may contain recording data that has not yet been folded into the main file. Read the [recovery and backup guidance](docs/USER-GUIDE.md#when-something-goes-wrong-mid-capture) before handling an interrupted recording.
+Close a project before copying it for backup. SQLite creates temporary `-wal` and `-shm` files while the project is open; they may contain recording data that has not yet been folded into the main file. Read the [recovery and backup guidance](docs/VCW-User-Guide/VCW-User-Guide.md#13-protect-the-project) before handling an interrupted recording.
 
 Allow plenty of storage: stereo 24-bit/96 kHz PCM alone uses about 346 MB per ten minutes, before project overhead. Higher rates, wider stored formats, and multi-disc recordings need more.
 
@@ -141,7 +141,7 @@ To report a problem, open an [issue](https://github.com/shunte88/vcw/issues) wit
 vcw bundle album.vcw --out bundle.json
 ```
 
-The bundle excludes recorded audio, credentials, and track and album titles. Review it before attaching it. See the [troubleshooting guide](docs/USER-GUIDE.md#when-you-need-to-report-a-problem) for logging and integrity checks.
+The bundle excludes recorded audio, credentials, and track and album titles. Review it before attaching it. See the [troubleshooting guide](docs/VCW-User-Guide/VCW-User-Guide.md#16-solve-the-common-problems) for logging and integrity checks.
 
 ## Build from source
 

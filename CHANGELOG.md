@@ -64,6 +64,13 @@ loud if it cannot.
 * **The project list leads with the artist**, then the album, then the catalog
   number.
 
+* **A new user guide**, written for the person with a record in their hand
+  rather than the person reading the source. It ships as Word, PDF and
+  Markdown together with its diagrams and screenshots in
+  `docs/VCW-User-Guide/`, and it replaces `docs/USER-GUIDE.md`, which is gone.
+  The one part of the old guide the new one does not cover - writing a message
+  catalog - moved to `docs/TRANSLATING.md`.
+
 ### Fixed
 
 * **Pressing Stop between sides no longer ends the session.** The manual the
