@@ -40,7 +40,6 @@
 import { useEffect, useRef, useState } from "react";
 
 import * as api from "./api";
-import { canArm } from "./arm";
 import type { Meter } from "./bindings/vcw";
 import type { Store } from "./store";
 
@@ -123,9 +122,7 @@ export function useNeedleDrop(
     }
     setWaiting(true);
     void (async () => {
-      if (canArm(phase)) {
-        await arm();
-      }
+      await arm();
       if (phase !== "paused") {
         await run(() => api.transport("record"));
         await run(() => api.transport("pause"));

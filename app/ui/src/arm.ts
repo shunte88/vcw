@@ -100,7 +100,12 @@ export function useArm(
   // needle-drop trigger has to send `record` after the device is open and not
   // beside it. A caller with nothing to sequence ignores the result.
   const arm = async () => {
-    if (store.project.path === null) {
+    // Both halves of the question in one place, because the fourth caller had
+    // neither. The panel's button disables itself on `canArm`, the toolbar's
+    // hides itself on it and the needle drop asks before it arms - and the
+    // `a` chord, which is the same action and the one §44 promises, asked
+    // nothing and sent an arm into a running capture for the engine to refuse.
+    if (store.project.path === null || !canArm(store.engine.phase)) {
       return;
     }
     // Clear the finished capture out of the way first. The engine takes its

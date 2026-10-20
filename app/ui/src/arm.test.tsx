@@ -103,6 +103,17 @@ describe("arming", () => {
     expect(api.arm).toHaveBeenCalledTimes(1);
   });
 
+  it("sends nothing from a phase the button would have refused", async () => {
+    // The button disables itself and the toolbar's twin hides, so this is the
+    // keyboard's claim: `a` is the same action and it was the one caller that
+    // asked the engine instead of asking `canArm`.
+    for (const phase of ["armed", "recording", "paused"]) {
+      await press(phase);
+      expect(api.arm, phase).not.toHaveBeenCalled();
+      expect(api.transport, phase).not.toHaveBeenCalled();
+    }
+  });
+
   it("does neither without a project to record into", async () => {
     await press("stopped", null);
     expect(api.transport).not.toHaveBeenCalled();

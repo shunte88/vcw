@@ -14,6 +14,17 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## Unreleased
+
+### Fixed
+
+* **The `a` key no longer reaches for the sound card in the middle of a
+  take.** Arming is one action with four ways in - the Capture panel's
+  button, the toolbar's Set Levels, the needle-drop trigger and the key - and
+  the key was the one that never asked whether the transport could be armed
+  from where it was. Pressing it while recording put a refusal in the status
+  bar instead of doing nothing at all.
+
 ## 0.3.8-alpha
 
 2026-10-20
