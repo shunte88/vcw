@@ -140,6 +140,9 @@ itself is unchanged."""
 text = """
 Plan: {files} file(s) in {container}, {covers} cover(s), {frames} frame(s)"""
 
+["export.replaygain"]
+text = "Write ReplayGain tags (the audio is measured, not changed)"
+
 ["export.run"]
 text = "Export ({chord})"
 

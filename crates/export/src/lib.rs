@@ -42,6 +42,7 @@
 pub mod encoder;
 pub mod error;
 pub mod lossy;
+pub mod loudness;
 // Private: an ISO box tree is an implementation detail of `Container::Alac`,
 // not something a caller should be able to assemble its own version of.
 mod mp4;

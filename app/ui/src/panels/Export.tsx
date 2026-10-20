@@ -60,6 +60,11 @@ export function Export({
   const [compression, setCompression] = useState("5");
   const [artwork, setArtwork] = useState("embed");
   const [overwrite, setOverwrite] = useState(false);
+  // On, which is what the backend does with a null. The tick is here and not
+  // in Settings because it is the one export decision a person may want to
+  // make twice about the same archive: a measured copy for a player, an
+  // unmeasured one for somebody else's mastering chain.
+  const [replayGain, setReplayGain] = useState(true);
   const [sides, setSides] = useState<readonly string[]>([]);
   const [plan, setPlan] = useState<ExportPlan | null>(null);
 
@@ -103,6 +108,7 @@ export function Export({
     // the archive, and a person who wanted this export numbered differently
     // from the last one is a person who wanted a different archive.
     numbering: settings?.export.numbering ?? null,
+    replayGain,
   });
 
   // Canceling returns null and a canceled picker must not clear the field: a
@@ -304,6 +310,14 @@ export function Export({
             onChange={(event) => setOverwrite(event.target.checked)}
           />
           {text("export.overwrite")}
+        </label>
+        <label className="tick">
+          <input
+            type="checkbox"
+            checked={replayGain}
+            onChange={(event) => setReplayGain(event.target.checked)}
+          />
+          {text("export.replaygain")}
         </label>
       </div>
 

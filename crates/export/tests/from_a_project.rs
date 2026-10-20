@@ -48,6 +48,8 @@
 //! buffer actually reaches it is a question about this pipeline and nothing
 //! smaller can ask it.
 
+use lofty::file::TaggedFileExt;
+use lofty::prelude::ItemKey;
 use std::path::Path;
 
 use vcw_export::encoder::{Compression, Container};
@@ -1631,6 +1633,81 @@ fn the_transfer_chain_comes_out_of_all_three_tag_backends() {
             transfer_tags(&plan.items[0].path, container),
             expected,
             "{container:?} did not carry the chain under the same names"
+        );
+    }
+}
+
+/// §33's loudness tags, end to end, and the claim that goes with them.
+///
+/// Two exports of the same side, one measured and one not. The audio has to be
+/// byte for byte the same - that is the whole of "VCW measures and does not
+/// apply", and it is the one property a ReplayGain feature could plausibly
+/// break. The difference between the two files is four tags and nothing else.
+#[test]
+fn a_measured_export_writes_the_same_audio_and_four_more_tags() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut project, _, _) = recorded(dir.path(), StorageFormat::Int16, 2, 120_000);
+    described(&mut project);
+    titled(
+        &mut project,
+        &[
+            (0, 60_000, "Europe Endless"),
+            (60_000, 120_000, "Hall of Mirrors"),
+        ],
+    );
+
+    let mut measured = Request::new(dir.path().join("measured"), Container::Wav);
+    assert!(measured.replay_gain, "§33 says the default is on");
+    measured.artwork = Artwork::None;
+    let mut plain = measured.clone();
+    plain.into = dir.path().join("plain");
+    plain.replay_gain = false;
+
+    let with = splitter::plan(project.conn(), &measured).expect("plan");
+    splitter::run(project.conn(), &with, &mut quiet).expect("run");
+    let without = splitter::plan(project.conn(), &plain).expect("plan");
+    splitter::run(project.conn(), &without, &mut quiet).expect("run");
+
+    let mut album = None;
+    for (one, other) in with.items.iter().zip(&without.items) {
+        assert_eq!(
+            data_chunk(&one.path),
+            data_chunk(&other.path),
+            "measuring moved a sample, which is the one thing it must not do"
+        );
+
+        let file = lofty::read_from_path(&one.path).expect("read back");
+        let tag = file.primary_tag().expect("a tag");
+        let gain = tag
+            .get_string(ItemKey::ReplayGainTrackGain)
+            .expect("a measured file has a track gain");
+        assert!(gain.ends_with(" dB"), "{gain:?}");
+        let peak: f64 = tag
+            .get_string(ItemKey::ReplayGainTrackPeak)
+            .expect("and a peak")
+            .parse()
+            .expect("a bare linear amplitude");
+        // Above 1.0 is an ordinary answer and not a bug: this fixture is
+        // full-scale noise, and a true peak is the interpolated waveform
+        // between the samples, which overshoots them. Telling a player that is
+        // the reason the peak is written down at all.
+        assert!(peak > 0.0, "{peak}");
+
+        // Every file on the side carries the *same* album gain, which is what
+        // makes it an album gain: a player switching tracks must not re-level.
+        let side = tag
+            .get_string(ItemKey::ReplayGainAlbumGain)
+            .expect("and an album gain")
+            .to_owned();
+        assert_eq!(*album.get_or_insert(side.clone()), side);
+
+        let unmeasured = lofty::read_from_path(&other.path).expect("read back");
+        assert!(
+            unmeasured
+                .primary_tag()
+                .and_then(|tag| tag.get_string(ItemKey::ReplayGainTrackGain))
+                .is_none(),
+            "the switch did not turn it off"
         );
     }
 }

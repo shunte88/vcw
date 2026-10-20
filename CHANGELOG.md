@@ -16,6 +16,19 @@ loud if it cannot.
 
 ## Unreleased
 
+### Added
+
+* **Exported files carry their loudness.** Every track is measured as it is
+  written and tagged with ReplayGain: how far it sits from the reference
+  level, how close it came to clipping, and the same two numbers for the side
+  as a whole. A player that understands the tags levels a shelf of transfers
+  made on different days at different settings, and one that does not plays
+  the files exactly as before. **The audio is not touched.** VCW writes the
+  measurement down and never applies it, which is the only version of this
+  feature that can coexist with a bit-perfect export - see
+  `docs/adr/0008-normalization-is-measurement.md`. On by default; the Export
+  panel has a tick and the command line has `--no-replaygain`.
+
 ### Fixed
 
 * **The `a` key no longer reaches for the sound card in the middle of a

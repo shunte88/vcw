@@ -15,6 +15,7 @@ vcw-i18n = { workspace = true }
 vcw-types = { workspace = true }
 vcw-process = { workspace = true }
 vcw-project = { workspace = true }
+ebur128 = { workspace = true }
 flac-codec = { workspace = true }
 mp3lame-encoder = { workspace = true, optional = true }
 vorbis_rs = { workspace = true, optional = true }

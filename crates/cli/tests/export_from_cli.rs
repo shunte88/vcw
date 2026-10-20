@@ -573,6 +573,38 @@ fn narrowing_leaves_an_integer_capture_alone() {
     assert!(report["narrowed_to"].is_null(), "{printed}");
 }
 
+/// §33's loudness tags are on unless the operator says otherwise.
+///
+/// The numbers themselves are measured in `vcw-export` and tested there. What
+/// the command line owns is the switch, and the fact that a person who never
+/// heard of it gets the tags: a default that silently flipped to off because a
+/// bool defaults to false is exactly the bug this asserts against.
+#[test]
+fn loudness_is_measured_unless_the_switch_says_not_to() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let project = side(dir.path(), "s16", 1.0);
+    let common = [
+        "export",
+        &project.display().to_string(),
+        "--into",
+        &dir.path().join("out").display().to_string(),
+        "--dry-run",
+        "--json",
+    ]
+    .map(ToOwned::to_owned);
+
+    let args: Vec<&str> = common.iter().map(String::as_str).collect();
+    let printed = vcw(&args);
+    let report: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(report["replay_gain"], true, "{printed}");
+
+    let mut off = args.clone();
+    off.push("--no-replaygain");
+    let printed = vcw(&off);
+    let report: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(report["replay_gain"], false, "{printed}");
+}
+
 /// A width VCW does not have is refused by name, before anything is opened.
 #[test]
 fn a_narrowing_nobody_offers_is_refused_by_name() {

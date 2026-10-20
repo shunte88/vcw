@@ -248,9 +248,9 @@ fn every_command_line_in_the_user_guide_is_one_the_cli_accepts() {
         assert!(
             !(page.wants_subcommand && !truncated),
             "the guide documents `{line}`, and `vcw {}` needs one of {:?}. \
-             The guide is authored by hand and is not ours to edit, so either \
-             the CLI lost a verb it should still have, or the guide needs a \
-             correction sent to its author.",
+             Either the CLI lost a verb it should still have, or the guide \
+             needs a correction, and `docs/agents/user-guide-voice.md` is \
+             how one gets written.",
             path.join(" "),
             page.commands,
         );
@@ -281,11 +281,11 @@ fn the_guide_documents_every_verb_a_person_needs() {
 
 #[test]
 fn the_guide_names_the_version_it_was_prepared_against() {
-    // The guide is hand-authored and is not ours to edit, with one exception:
-    // its opening paragraph names the version it describes, and that is a fact
-    // about the release rather than a piece of writing. Nothing else would
-    // notice it going stale - prose does not fail to compile - so a bump used
-    // to ship a guide two versions behind. `tools/guide-version.py` restamps
+    // The guide is hand-authored, and one sentence in it is nobody's to write
+    // by hand: its opening paragraph names the version it describes, and that
+    // is a fact about the release rather than a piece of writing. Nothing else
+    // would notice it going stale - prose does not fail to compile - so a bump
+    // used to ship a guide two versions behind. `tools/guide-version.py` restamps
     // the sentence in all three formats, and this is what says it was run.
     let version = env!("CARGO_PKG_VERSION");
     let line = guide()

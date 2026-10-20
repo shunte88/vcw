@@ -388,6 +388,38 @@ describe("the format and its quality", () => {
     );
   });
 
+  it("sends the loudness switch, on by default and off when it is cleared", async () => {
+    // The tick has no other effect in the window: nothing on screen changes
+    // when it is cleared, so a tick wired to nothing would look exactly like a
+    // tick wired to the request. What it decides is four tags in the file.
+    const container = await render({});
+    await addressed(container);
+    const plan = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Plan",
+    );
+
+    await act(async () => {
+      plan?.click();
+    });
+    expect(planned).toHaveBeenCalledWith(
+      expect.objectContaining({ replayGain: true }),
+    );
+
+    const tick = [...container.querySelectorAll("label.tick")].find((label) =>
+      label.textContent?.includes("ReplayGain"),
+    );
+    const box = tick?.querySelector("input") as HTMLInputElement;
+    await act(async () => {
+      box.click();
+    });
+    await act(async () => {
+      plan?.click();
+    });
+    expect(planned).toHaveBeenCalledWith(
+      expect.objectContaining({ replayGain: false }),
+    );
+  });
+
   it("drops a resolved plan when the format or the quality changes", async () => {
     // The defect this is here for: a plan lists the exact paths that will be
     // written, extension and all. Leaving a plan of `.flac` paths on screen

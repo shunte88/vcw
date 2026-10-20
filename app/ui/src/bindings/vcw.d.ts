@@ -812,7 +812,16 @@ headroom: string | null,
 /**
  * `alpha`, `numeric` or `sequence`, or `null` for the project's own.
  */
-numbering: string | null, };
+numbering: string | null,
+/**
+ * Whether to measure loudness and write ReplayGain tags, or `null` for the
+ * default, which is on.
+ *
+ * `Option<bool>` and not a bare `bool` because a missing field has to mean
+ * *the default* here and `serde`'s default for a bool is `false`: a caller
+ * that had never heard of the setting would silently turn it off.
+ */
+replayGain: boolean | null, };
 
 export type NewProject = {
 /**

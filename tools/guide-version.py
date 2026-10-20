@@ -9,10 +9,11 @@
 #
 #  MIT License - see the header in any Rust source file for the full text.
 #
-# The guide in `docs/VCW-User-Guide` is hand-authored and is not ours to edit,
-# with one exception: the "About this edition" sentence names the version the
-# guide was prepared against, and that sentence is a fact about the release
-# rather than a piece of writing. A version bump that leaves it alone ships a
+# The guide in `docs/VCW-User-Guide` is hand-authored, and editing it goes
+# through `docs/agents/user-guide-voice.md`. One sentence is nobody's to write
+# by hand: the "About this edition" sentence names the version the guide was
+# prepared against, and that is a fact about the release rather than a piece of
+# writing. A version bump that leaves it alone ships a
 # guide claiming to describe a version that is now two behind, and nothing
 # fails, because no test can tell good prose from stale prose.
 #

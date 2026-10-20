@@ -232,6 +232,8 @@ An export should be the pleasingly uneventful part. The plan is how you keep it 
 
 *S04  Export*
 
+**ReplayGain tags.** Export measures each track and each side and writes the numbers into the tags, so a player that reads them plays a shelf of records at one volume. The audio is measured, not changed. Clear **Write ReplayGain tags** if your player ignores them.
+
 ## 10 Choose a format on purpose
 
 “Lossless” describes an encoding choice. It does not mean every preceding operation preserved the original samples.
@@ -265,7 +267,7 @@ VCW aims to preserve the samples delivered by the recording device. That is a pr
 
 **In the project.** Editing boundaries and metadata does not rewrite the captured samples. Deleting a track definition does not delete the audio that occupied that span. This is why fixing a split is much cheaper than recording a side again.
 
-**At output.** An unprocessed, compatible lossless export can preserve the selected sample sequence. EQ, mono folding, float narrowing, and lossy encoding change it. A corrected FLAC may be lossless relative to the processed signal while differing from the stored capture.
+**At output.** An unprocessed, compatible lossless export can preserve the selected sample sequence. EQ, mono folding, float narrowing, and lossy encoding change it. ReplayGain does not: it writes a measurement into the tags and leaves the samples alone. A corrected FLAC may be lossless relative to the processed signal while differing from the stored capture.
 
 **Playback rates.** VCW uses the capture's native rate instead of quietly resampling for an incompatible playback device. If playback is refused, investigate the output device and supported rate. Silence is not always a missing recording.
 
@@ -411,6 +413,12 @@ vcw export "album.vcw" --into "./exports" --format flac --dry-run
 vcw export "album.vcw" --into "./exports" --format flac
 ```
 
+```text
+vcw export "album.vcw" --into "./exports" --format flac --no-replaygain
+```
+
+Every export measures loudness and writes ReplayGain tags into the files. `--no-replaygain` is how you decline.
+
 **Automation note.** Supported commands offer `--json`. Treat failures as failures, keep logs, and review plans before batch writes. Neither a dry run nor a successful encoder validates your pressing identification.
 
 ## 15 Drive a headless capture machine
@@ -528,6 +536,8 @@ Other supported tokens include `{artist}`, `{year}`, `{genre}`, `{composer}`, `{
 **Provenance.** Information about where a capture came from and what the recording chain already did to it.
 
 **Release.** The particular issued album or collection represented by the project, including its discs and sides.
+
+**ReplayGain.** A loudness measurement written into a file's tags, a gain and a peak for the track and the same pair for the album, so a player can even out the volume between records. It describes the audio; it does not change it.
 
 **Sample rate and sample format.** How many sample frames are captured per second, and how each sample value is represented. Neither tells you whether the record was clean.
 

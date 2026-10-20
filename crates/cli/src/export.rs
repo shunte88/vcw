@@ -77,6 +77,8 @@ pub(crate) struct Args {
     pub(crate) headroom: String,
     /// How track numbers are spelled, or `None` for the project's own.
     pub(crate) numbering: Option<String>,
+    /// Whether to measure loudness and write ReplayGain tags.
+    pub(crate) replay_gain: bool,
     /// Whether files already there may be replaced.
     pub(crate) overwrite: bool,
     /// Resolve and print the plan, and write nothing.
@@ -118,6 +120,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
         // the rig. The copy and the session still tag themselves: those live in
         // the project, which is the file this verb was given.
         rig: splitter::Rig::default(),
+        replay_gain: args.replay_gain,
     };
 
     // Read-only, because §33 says an export reads immutable blocks and edit
@@ -230,6 +233,17 @@ fn print_plan(plan: &Plan, request: &Request) {
             }
         );
     }
+    // Third line of the same kind, and the one that needs saying the other way
+    // round: the samples are *not* touched. A person reading `loudness` on a
+    // dry run should not have to go and check whether VCW applied a gain.
+    println!(
+        "  loudness   {}",
+        if plan.replay_gain {
+            "measured, written as ReplayGain tags (the samples are unchanged)"
+        } else {
+            "not measured, no ReplayGain tags"
+        }
+    );
     println!(
         "  artwork    {}",
         match (&plan.cover, request.artwork) {
@@ -304,6 +318,10 @@ fn plan_json(plan: &Plan, report: Option<&Report>) -> serde_json::Value {
         "narrowed_to": plan.narrowed_to.map(|_| plan.narrowing.to.name()),
         "dither": plan.narrowed_to.map(|_| plan.narrowing.dither.name()),
         "headroom_db": plan.narrowed_to.map(|_| plan.narrowing.headroom_db),
+        // Whether the files will carry loudness tags. The numbers themselves
+        // are not here: they are measured off the audio as it is written, so a
+        // dry run has not got them and will not pretend to.
+        "replay_gain": plan.replay_gain,
         "frames": plan.frames(),
         "covers": plan.covers.iter().map(|path| path.display().to_string()).collect::<Vec<_>>(),
         "items": plan.items.iter().map(|item| serde_json::json!({

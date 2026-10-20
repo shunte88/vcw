@@ -81,6 +81,7 @@ use vcw_types::{Span, StorageFormat};
 
 use crate::encoder::{Container, Dither, Narrowing, Spec, Writer, narrowed};
 use crate::error::{Error, Result};
+use crate::loudness::{self, Meter, ReplayGain};
 use crate::naming::{self, Values};
 use crate::tagging::{self, Cover, Tags};
 
@@ -180,6 +181,12 @@ pub struct Request {
     /// The rig the transfer was made on (WP-31), or all-empty for an export that
     /// makes no claim about it.
     pub rig: Rig,
+    /// Whether to measure the loudness of what is written and tag it (§33).
+    ///
+    /// On by default, because a tag a player ignores costs nothing and a
+    /// library exported without one plays unevenly. It is a measurement and
+    /// never a gain: see [`crate::loudness`].
+    pub replay_gain: bool,
 }
 
 impl Request {
@@ -196,6 +203,7 @@ impl Request {
             narrowing: Narrowing::default(),
             numbering: None,
             rig: Rig::default(),
+            replay_gain: true,
         }
     }
 
@@ -274,6 +282,8 @@ pub struct Plan {
     /// line predicting a narrowing that will not happen is worse than no line -
     /// so this is set only when a file really will be rounded.
     pub narrowed_to: Option<StorageFormat>,
+    /// Whether [`run`] measures each file and writes ReplayGain tags.
+    pub replay_gain: bool,
 }
 
 impl Plan {
@@ -560,6 +570,7 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         cover,
         narrowing: request.narrowing,
         narrowed_to,
+        replay_gain: request.replay_gain,
     })
 }
 
@@ -576,16 +587,29 @@ pub fn run(conn: &Connection, plan: &Plan, on: &mut dyn FnMut(Progress<'_>)) -> 
     let mut report = Report::default();
     let of = plan.items.len();
 
+    // Every file is cut before any is tagged, which is what an album gain
+    // costs: it is the gated loudness of the side played end to end, so the
+    // last track's blocks are part of the first track's tag. Nothing else
+    // needed two passes, and with `replay_gain` off the second one does
+    // nothing but tag.
+    //
+    // The meters are held until then, which is the other half of the cost. One
+    // is about 650 KB at 96 kHz stereo - a fixed 400 ms window and a capped
+    // block history, not something that grows with the track - so a twenty
+    // track side holds around 13 MB while it writes. Flat in the length of the
+    // side, which is the property that matters.
+    let mut meters = Vec::with_capacity(of);
     for (index, item) in plan.items.iter().enumerate() {
         if let Some(directory) = item.path.parent() {
             std::fs::create_dir_all(directory)?;
         }
-        cut(
+        meters.push(cut(
             conn,
             item,
             plan.container,
             plan.fold_to_mono,
             plan.narrowing,
+            plan.replay_gain,
             &mut |frames| {
                 on(Progress {
                     item,
@@ -595,11 +619,25 @@ pub fn run(conn: &Connection, plan: &Plan, on: &mut dyn FnMut(Progress<'_>)) -> 
                     total: report.frames + frames,
                 });
             },
-        )?;
+        )?);
         report.frames += item.frames();
         report.files += 1;
+    }
 
-        tagging::write(&item.path, plan.container, &item.tags)?;
+    // Held per item rather than compacted, because a meter is `None` for any
+    // item the meter would not take and an export may mix rates across discs:
+    // compacting would hand one track's loudness to another track's tags.
+    let album = loudness::album(meters.iter().flatten());
+    for (item, meter) in plan.items.iter().zip(&meters) {
+        // Cloned because the gains are not known at plan time and `Plan` is
+        // borrowed. One clone per track, dropped as soon as it is written.
+        let mut tags = item.tags.clone();
+        // Both halves or neither: a track gain without an album gain makes a
+        // player switch modes mid-side.
+        if let (Some(track), Some(album)) = (meter.as_ref().and_then(Meter::gain), album) {
+            tags.replay_gain = Some(ReplayGain { track, album });
+        }
+        tagging::write(&item.path, plan.container, &tags)?;
 
         // Counted after the tagger and from the filesystem, not from what the
         // writer said it wrote. Tags are not free and an embedded cover is not
@@ -684,15 +722,19 @@ pub fn repairs_for(
     Ok(Repairs::new(spans, layout.channels, layout.rate.hz()))
 }
 
-/// Cuts one track out of a capture and returns the file's size.
+/// Cuts one track out of a capture, and measures it if asked to.
+///
+/// The meter comes back rather than a gain, because an album gain is one gate
+/// over every track's blocks and cannot be taken a track at a time.
 fn cut(
     conn: &Connection,
     item: &Item,
     container: Container,
     fold_to_mono: bool,
     narrowing: Narrowing,
+    measure: bool,
     on: &mut dyn FnMut(u64),
-) -> Result<u64> {
+) -> Result<Option<Meter>> {
     // WP-30 §4: a repair stage cannot interpolate a defect sitting on the first
     // frame of the track, because inside the track there is nothing before it. So
     // the read is widened by what the chain says it needs to see and the margin is
@@ -725,6 +767,11 @@ fn cut(
     let narrowing = (spec.format != stored.format).then_some(narrowing);
 
     let mut writer = Writer::create(&item.path, container, spec)?;
+    // From `spec` and not from `layout`: what gets measured is what the file
+    // holds, after the fold and after the narrowing.
+    let mut meter = measure
+        .then(|| Meter::new(spec.channels, spec.rate, spec.format))
+        .flatten();
     let mut buffer =
         vec![0u8; ((CHUNK_BYTES / frame_bytes).max(1) + 2 * context as usize) * frame_bytes];
     let mut folded = Vec::new();
@@ -779,12 +826,16 @@ fn cut(
             narrow(spec.format, narrowing, chunk, &mut rounded, &mut noise);
             chunk = &rounded;
         }
+        if let Some(meter) = &mut meter {
+            meter.add(chunk);
+        }
         writer.write(chunk)?;
         at += mid;
         frames += mid;
         on(frames);
     }
-    writer.finish()
+    writer.finish()?;
+    Ok(meter)
 }
 
 /// Rounds `Float32` samples to integers at the width the request asked for.
@@ -1017,6 +1068,10 @@ fn tags(
         discogs_id: release.discogs_id.clone().unwrap_or_default(),
         musicbrainz_release_id: release.musicbrainz_id.clone().unwrap_or_default(),
         musicbrainz_recording_id: record.musicbrainz_id.clone().unwrap_or_default(),
+        // Filled in by `run`, not here: a track gain is measured off the bytes
+        // that reach the file, and an album gain cannot be known until every
+        // track on the side has been through the meter.
+        replay_gain: None,
         // The position on the record, which no tag standard names and which is
         // the one piece of provenance a vinyl rip has and a CD rip does not.
         // The transfer chain (WP-31) joins it: same mechanism, same reason, and

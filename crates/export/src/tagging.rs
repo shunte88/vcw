@@ -82,6 +82,7 @@ use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
 use crate::encoder::Container;
 use crate::error::{Error, Result};
+use crate::loudness::ReplayGain;
 
 /// A cover image to embed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,7 +101,10 @@ pub struct Cover {
 ///
 /// Empty means *do not write the tag*, which is not the same as writing an empty
 /// one: a player showing a blank artist is worse than a player showing none.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// `PartialEq` and not `Eq`, because a measured loudness is a float - the same
+/// reason [`crate::splitter::Plan`] gives for its own.
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Tags {
     /// Track title.
     pub title: String,
@@ -140,6 +144,11 @@ pub struct Tags {
     pub musicbrainz_release_id: String,
     /// MusicBrainz recording id, which is per track.
     pub musicbrainz_recording_id: String,
+    /// What the file measured, or `None` for an export that did not measure.
+    ///
+    /// Four text tags and nothing else: the samples are untouched, and a player
+    /// that honors these turns its own volume down. See [`crate::loudness`].
+    pub replay_gain: Option<ReplayGain>,
     /// Anything else a caller wants written, as `(key, value)`.
     pub extra: Vec<(String, String)>,
     /// The front cover, where the release has one.
@@ -229,6 +238,19 @@ fn mapped(tags: &Tags, tag_type: TagType) -> Tag {
     ] {
         if !value.is_empty() {
             tag.insert_text(key, value.clone());
+        }
+    }
+    // Four keys lofty already maps into every container VCW writes: Vorbis
+    // comments, ID3v2 `TXXX` frames and MP4 `----:com.apple.iTunes` atoms. No
+    // per-container work, and the spellings are the ones players look for.
+    if let Some(gain) = &tags.replay_gain {
+        for (key, value) in [
+            (ItemKey::ReplayGainTrackGain, gain.track.gain_text()),
+            (ItemKey::ReplayGainTrackPeak, gain.track.peak_text()),
+            (ItemKey::ReplayGainAlbumGain, gain.album.gain_text()),
+            (ItemKey::ReplayGainAlbumPeak, gain.album.peak_text()),
+        ] {
+            tag.insert_text(key, value);
         }
     }
     tag.insert_text(ItemKey::EncoderSoftware, encoder());
@@ -385,6 +407,7 @@ fn picture(cover: &Cover) -> lofty::picture::Picture {
 mod tests {
     use super::*;
     use crate::encoder::{Compression, Spec, Writer};
+    use crate::loudness::Gain;
     use std::path::PathBuf;
 
     use lofty::file::TaggedFileExt;
@@ -424,6 +447,16 @@ mod tests {
             discogs_id: "1234567".to_owned(),
             musicbrainz_release_id: "0d1b1b1f-0000-4000-8000-000000000001".to_owned(),
             musicbrainz_recording_id: "0d1b1b1f-0000-4000-8000-000000000002".to_owned(),
+            replay_gain: Some(ReplayGain {
+                track: Gain {
+                    gain_db: -3.22,
+                    peak: 0.999_969,
+                },
+                album: Gain {
+                    gain_db: -4.5,
+                    peak: 1.0,
+                },
+            }),
             extra: vec![("STYLUS".to_owned(), "Ortofon 2M Blue".to_owned())],
             cover: Some(Cover {
                 mime: "image/png".to_owned(),
@@ -488,6 +521,7 @@ mod tests {
         ] {
             assert!(tag.get(key).is_none(), "{key:?} was written from nothing");
         }
+        assert!(tag.get(ItemKey::ReplayGainTrackGain).is_none());
         // Except the encoder, which is true of any file we produce.
         assert!(tag.get(ItemKey::EncoderSoftware).is_some());
         assert!(freeform(&Tags::default()).is_empty());
@@ -530,6 +564,28 @@ mod tests {
         assert_eq!(tag.pictures().len(), 1);
         assert_eq!(tag.pictures()[0].pic_type(), PictureType::CoverFront);
         assert_eq!(tag.pictures()[0].data(), PNG);
+    }
+
+    /// Four tags, spelled the way a player expects to read them.
+    ///
+    /// Written against every tag standard VCW uses rather than just the one,
+    /// because the point of leaning on lofty's `ItemKey` is that one insert
+    /// reaches a Vorbis comment, an ID3v2 `TXXX` frame and an iTunes freeform
+    /// atom. A gain written as `-3.22` without its unit, or a peak written in
+    /// decibels, is a tag a player either ignores or acts on wrongly.
+    #[test]
+    fn a_measured_file_carries_all_four_replaygain_tags() {
+        for tag_type in [TagType::VorbisComments, TagType::Id3v2, TagType::Mp4Ilst] {
+            let tag = mapped(&fixture(), tag_type);
+            for (key, want) in [
+                (ItemKey::ReplayGainTrackGain, "-3.22 dB"),
+                (ItemKey::ReplayGainTrackPeak, "0.999969"),
+                (ItemKey::ReplayGainAlbumGain, "-4.50 dB"),
+                (ItemKey::ReplayGainAlbumPeak, "1.000000"),
+            ] {
+                assert_eq!(tag.get_string(key), Some(want), "{tag_type:?} {key:?}");
+            }
+        }
     }
 
     #[test]

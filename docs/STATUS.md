@@ -8957,3 +8957,94 @@ eight assets answer a range request from an anonymous client, the published
 gives `vcw 0.3.8` with `usr/lib/VCW/ui` in it.
 
 **Gate:** green, 18 legs, 1,378 Rust tests, 23 ignored, and 280 frontend.
+
+## 2026-10-20, normalization: the measurement, not the gain
+
+The first thing on the 0.4 list, and the shape of it was decided before any of
+it was written. §33's "optional normalization" has two readings that are not
+variations on each other - change the samples, or write the measurement down -
+and only one of them can exist in a tool whose export path is byte-compared
+against the blocks that went in. `docs/adr/0008-normalization-is-measurement.md`
+is the record; what follows is what building it taught.
+
+**Four tags, one insert each.** lofty 0.25's `ItemKey::ReplayGain*` already maps
+to a Vorbis comment, an ID3v2 `TXXX` frame and an iTunes `----` atom, so the
+whole of the container work was four lines in `mapped`. No per-format branch,
+and `ffprobe` - which did not write them - reads them back out of FLAC, WAV,
+AIFF, MP3 and Ogg. Not out of ALAC: in MP4 they are a freeform atom and ffmpeg
+cannot see one, which is the same limit the catalog number already hits and is
+ffmpeg's rather than ours.
+
+**An album gain is one gate, not an average, and that is what cost the
+restructure.** EBU R 128 discards blocks below a relative threshold, so a quiet
+track contributes fewer surviving blocks than a loud one and the mean of the
+track gains is simply a different number. `ebur128`'s
+`loudness_global_multiple` gates across a set of meters, which is exactly the
+right primitive - but it needs every meter, so `splitter::run` had to become
+cut-all-then-tag-all. The two-pass shape is the only structural change in this
+work, and the comment at the top of the loop says why it is there.
+
+The test that proves it is the one worth keeping: a 20 s sine at -23 dBFS and
+another at -43 dBFS give an album gain within 0.1 dB of the **loud** track's
+own, with the mean 10 dB away. A property an average cannot accidentally pass.
+
+**The meter sits where the writer does.** It is built from the `Spec` the
+writer was opened with and fed the same `chunk`, so what is described is what
+the file holds - after the repair stage, after §51's curve, after a fold to
+mono, after a narrowing and its dither. Reading those bytes back as `f32` is
+not the conversion D4 forbids and `decode_sample` now says so: nothing is
+written back, and the bytes had already gone to the file.
+
+**-23 dBFS is the one number that checks everything at once.** EBU Tech 3341
+case 1: a 1 kHz sine at -23 dBFS measures -23.0 LUFS, so against ReplayGain
+2.0's -18 LUFS reference it asks for +5.00 dB. Meter, reference and sign, in
+one assertion. The 1.0 reference's 89 dB SPL figure lands about 5 dB away,
+which is the size of the bug that number rules out.
+
+**A true peak above 1.0 is an ordinary answer.** The first end-to-end run
+asserted `peak <= 1.0` and failed at 1.248: the fixture is full-scale noise and
+a true peak is the interpolated waveform *between* the samples. Telling a
+player that is the reason the peak is written down at all, so the assertion was
+wrong and not the code.
+
+**A bool defaults to false and the setting defaults to on**, which is why the
+contract field is `Option<bool>`. A caller that had never heard of `replayGain`
+would otherwise have turned it off by omission. The CLI spells the off switch
+`--no-replaygain`, the Export panel has a tick, and the dry run prints a
+`loudness` line saying the samples are unchanged - the one line of the three
+that has to say what did *not* happen.
+
+**The meter costs 145x real time**, measured rather than guessed: a two-side
+project of 3123 s at 192 kHz stereo exports in 95.18 s measured against 73.59 s
+not, and in WAV 45.79 s against 24.18 s. The delta is +21.6 s either way,
+because the work is per sample and owes nothing to the encoder - +29% of a FLAC
+export and +90% of a WAV one, most of it true peak oversampling. A twenty
+minute side at 96 kHz costs about four seconds. Seven simultaneous meters added
+8.4 MB of RSS, which is the ~650 KB each the splitter's comment claims.
+
+## 2026-10-20, the user guide becomes editable
+
+The author granted edit rights to `docs/VCW-User-Guide/`, which had been
+read-only since it arrived. The caveat is the whole point: an edit that can be
+identified as an edit is a bad edit whatever it says. So the voice was measured
+off the 0.3.8 text rather than imitated by ear, and written down in
+`docs/agents/user-guide-voice.md` - median sentence 14 words, zero contractions
+in 5,500 words, zero instances of `simply`, `just`, `easy` or `powerful`, one
+deadpan joke per chapter that lands in the final sentence and is aimed at the
+situation rather than the reader, and a limit named in the same breath as every
+feature. `AGENTS.md` and `tools/guide-version.py` now point at it, and the
+edition line is still nobody's to write by hand.
+
+ReplayGain is the first use of it: a note in Chapter 9, a clause in Chapter 11's
+"At output", a gate-checked `--no-replaygain` line in Chapter 14, and a glossary
+entry. The `.docx` is the golden record, so each change went into
+`word/document.xml` member by member the way the version stamper does, the same
+sentences went into the `.md`, and the `.pdf` came back out of LibreOffice.
+Every one of the 305 Word paragraphs appears verbatim in the Markdown, which is
+the check that says the two have not drifted.
+
+**Chapter 9 was exactly full.** Its last line ended 0.2 pt above the bottom
+margin, so any addition at all pushes the S04 figure onto the next page and the
+guide from 20 pages to 21. Prose length could not have saved it. Two things are
+the author's to decide: whether to carry the extra page, and that S04 now shows
+an Export panel with no ReplayGain tick in it.

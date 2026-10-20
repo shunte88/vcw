@@ -344,6 +344,11 @@ impl StorageFormat {
     /// Only summaries and display use this. The capture and export paths never
     /// touch it: §9 stores and returns the bytes the converter produced, and a
     /// round trip through `f32` is exactly the conversion D4 forbids.
+    ///
+    /// Reading a sample in order to *describe* it is not that round trip, and
+    /// the export's loudness meter does exactly that: it is handed the bytes
+    /// after the writer has them, nothing it computes is written back, and the
+    /// result is four text tags. See `vcw_export::loudness`.
     pub fn decode_sample(self, bytes: &[u8], index: usize) -> Option<f32> {
         let width = self.bytes_per_sample();
         let at = index.checked_mul(width)?;

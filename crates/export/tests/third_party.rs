@@ -58,6 +58,7 @@ use vcw_export::encoder::{Compression, Container, Spec, Writer};
 // behind a feature.
 #[cfg(any(feature = "mp3", feature = "ogg"))]
 use vcw_export::encoder::Quality;
+use vcw_export::loudness::{Gain, ReplayGain};
 use vcw_export::tagging::{self, Cover, Tags};
 use vcw_types::StorageFormat;
 
@@ -620,6 +621,16 @@ fn tags() -> Tags {
         discogs_id: "3778213".to_owned(),
         musicbrainz_release_id: "11111111-2222-3333-4444-555555555555".to_owned(),
         musicbrainz_recording_id: "66666666-7777-8888-9999-aaaaaaaaaaaa".to_owned(),
+        replay_gain: Some(ReplayGain {
+            track: Gain {
+                gain_db: -3.22,
+                peak: 0.999_969,
+            },
+            album: Gain {
+                gain_db: -4.5,
+                peak: 1.0,
+            },
+        }),
         extra: vec![("STYLUS".to_owned(), "Ortofon 2M Blue".to_owned())],
         cover: Some(Cover {
             mime: "image/png".to_owned(),
@@ -713,6 +724,12 @@ fn metaflac_reads_the_tags_we_wrote() {
         "COUNTRY=France",
         "STYLUS=Ortofon 2M Blue",
         "MUSICBRAINZ_ALBUMID=11111111-2222-3333-4444-555555555555",
+        // ReplayGain, in the spelling every player that honors it looks for:
+        // a gain carries its unit and a peak is a bare linear amplitude.
+        "REPLAYGAIN_TRACK_GAIN=-3.22 dB",
+        "REPLAYGAIN_TRACK_PEAK=0.999969",
+        "REPLAYGAIN_ALBUM_GAIN=-4.50 dB",
+        "REPLAYGAIN_ALBUM_PEAK=1.000000",
     ] {
         assert!(
             said.lines().any(|line| line == expected),
@@ -824,6 +841,12 @@ fn ffprobe_reads_the_tags_we_wrote() {
         let mut expected = vec!["l'enfant sauvage", "terra incognita", "gojira", "2012"];
         if container != Container::Alac {
             expected.push("gab 001");
+            // ReplayGain, read by a tool that did not write it. Not for ALAC
+            // for the same reason the catalog number is not: in MP4 it is a
+            // `----` freeform atom and ffmpeg cannot see one.
+            expected.push("replaygain_track_gain");
+            expected.push("-3.22 db");
+            expected.push("0.999969");
         }
         for expected in expected {
             assert!(

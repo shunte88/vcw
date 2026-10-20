@@ -548,6 +548,14 @@ pub struct Export {
     /// `alpha`, `numeric` or `sequence`, or `null` for the project's own.
     #[serde(default)]
     pub numbering: Option<String>,
+    /// Whether to measure loudness and write ReplayGain tags, or `null` for the
+    /// default, which is on.
+    ///
+    /// `Option<bool>` and not a bare `bool` because a missing field has to mean
+    /// *the default* here and `serde`'s default for a bool is `false`: a caller
+    /// that had never heard of the setting would silently turn it off.
+    #[serde(default)]
+    pub replay_gain: Option<bool>,
 }
 
 impl Export {
@@ -711,6 +719,7 @@ impl Export {
             // Not a field of this command: WP-31's rig is a setting, and the
             // shell fills it in from §39 on the way past.
             rig: vcw_export::splitter::Rig::default(),
+            replay_gain: self.replay_gain.unwrap_or(true),
         })
     }
 }

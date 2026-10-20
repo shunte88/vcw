@@ -716,6 +716,9 @@ enum Command {
         /// sequence. Omit for the project's own.
         #[arg(long)]
         numbering: Option<String>,
+        /// Do not measure loudness or write ReplayGain tags.
+        #[arg(long)]
+        no_replaygain: bool,
         /// Replace files that are already there.
         #[arg(long)]
         overwrite: bool,
@@ -1590,6 +1593,7 @@ fn run() -> anyhow::Result<()> {
             dither,
             headroom,
             numbering,
+            no_replaygain,
             overwrite,
             dry_run,
             json,
@@ -1606,6 +1610,7 @@ fn run() -> anyhow::Result<()> {
             dither,
             headroom,
             numbering,
+            replay_gain: !no_replaygain,
             overwrite,
             dry_run,
             json,

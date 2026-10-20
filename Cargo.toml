@@ -66,6 +66,14 @@ anyhow = "1"
 base64 = "0.23"
 clap = { version = "4", features = ["derive"] }
 crc32fast = "1"
+# Loudness, behind `vcw export`'s ReplayGain tags (§33). A gated LUFS meter is
+# EBU R 128's algorithm written out - K-weighting, 400 ms blocks, a relative
+# gate - and getting it slightly wrong produces a number that looks plausible
+# and is not comparable with anyone else's. MIT, four small dependencies, and
+# it has the album mode: `loudness_global_multiple` gates across a set of
+# meters, which is what an album gain is and what averaging track gains is not.
+# VCW measures and never applies: the samples written are the samples captured.
+ebur128 = "0.1"
 # The FLAC encoder behind `vcw export --format flac` (D5). Pure Rust and
 # MIT OR Apache-2.0, so no C library to relink and nothing new for the license
 # allowlist; WAV is our own writer because a RIFF header is thirty lines and

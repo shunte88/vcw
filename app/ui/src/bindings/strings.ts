@@ -151,6 +151,7 @@ export const SOURCE: Readonly<Record<string, string>> = {
   "export.quality.compact": "Compact",
   "export.quality.high": "High",
   "export.quality.transparent": "Transparent",
+  "export.replaygain": "Write ReplayGain tags (the audio is measured, not changed)",
   "export.run": "Export ({chord})",
   "export.sides": "Sides",
   "export.sides.hint": "Nothing ticked exports every side that has tracks.",
