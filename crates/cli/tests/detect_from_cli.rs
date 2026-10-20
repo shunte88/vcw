@@ -100,10 +100,26 @@ fn detect(path: &Path, extra: &[&str]) -> Value {
 /// §35's event, out of the binary, while the capture was still running.
 #[test]
 fn a_marker_reaches_the_command_line_while_the_side_is_recording() {
+    // The live detector settles for 1.2 s before it will call anything, so a
+    // 2.5 s side left it 1.3 s to publish a marker: ample on this machine, and
+    // not ample on an emulated aarch64 runner, where it published none and
+    // turned a tag round red on a tree with nothing wrong in it. The claim
+    // here is that a marker reaches the command line, not that 2.5 s is long
+    // enough for one - so the side gets longer until it does. A fast machine
+    // still pays for one 2.5 s take; a slow one pays in seconds rather than in
+    // a red leg, and a detector that never publishes still fails below.
     let dir = tempfile::tempdir().expect("tempdir");
-    let project = dir.path().join("live.vcw");
-    // Past the 1.2 s settling lag, so a marker has had its chance to be safe.
-    let events = record(&project, 2.5);
+    let mut events = Vec::new();
+    for attempt in 1..=3 {
+        let project = dir.path().join(format!("live-{attempt}.vcw"));
+        events = record(&project, 2.5 * f64::from(attempt));
+        if events
+            .iter()
+            .any(|event| event["event"] == "track-detected")
+        {
+            break;
+        }
+    }
 
     let markers: Vec<&Value> = events
         .iter()
