@@ -14,9 +14,22 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
-## Unreleased
+## 0.4.0-alpha
+
+2026-10-20
 
 ### Added
+
+* **Exported files carry their loudness.** Every track is measured as it is
+  written and tagged with ReplayGain: how far it sits from the reference
+  level, how close it came to clipping, and the same two numbers for the side
+  as a whole. A player that understands the tags levels a shelf of transfers
+  made on different days at different settings, and one that does not plays
+  the files exactly as before. **The audio is not touched.** VCW writes the
+  measurement down and never applies it, which is the only version of this
+  feature that can coexist with a bit-perfect export - see
+  `docs/adr/0008-normalization-is-measurement.md`. On by default; the Export
+  panel has a tick and the command line has `--no-replaygain`.
 
 * **A double album no longer has to be identified before you can say it is
   one.** The side picker in the track editor offers one disc more than the
@@ -35,25 +48,6 @@ loud if it cannot.
   been recorded onto when that capture is a take which has only just ended. A
   record transferred in sleeve order needs no clicks; one transferred in the
   order an automatically coupled gatefold hands the faces over needs one.
-
-## 0.3.9-alpha
-
-2026-10-20
-
-### Added
-
-* **Exported files carry their loudness.** Every track is measured as it is
-  written and tagged with ReplayGain: how far it sits from the reference
-  level, how close it came to clipping, and the same two numbers for the side
-  as a whole. A player that understands the tags levels a shelf of transfers
-  made on different days at different settings, and one that does not plays
-  the files exactly as before. **The audio is not touched.** VCW writes the
-  measurement down and never applies it, which is the only version of this
-  feature that can coexist with a bit-perfect export - see
-  `docs/adr/0008-normalization-is-measurement.md`. On by default; the Export
-  panel has a tick and the command line has `--no-replaygain`.
-
-### Fixed
 
 * **The `a` key no longer reaches for the sound card in the middle of a
   take.** Arming is one action with four ways in - the Capture panel's

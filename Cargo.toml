@@ -16,7 +16,7 @@ members = ["crates/*"]
 exclude = ["app", "spikes"]
 
 [workspace.package]
-version = "0.3.9"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.90"
 description = "VCW - The Vinyl Capture Workstation"
@@ -40,23 +40,23 @@ description = "VCW the de facto tool for vinyl capture across platforms: a compl
 [workspace.dependencies]
 # Internal. Versioned as well as pathed so the crates stay publishable if that ever
 # becomes useful, and so a stale path cannot resolve to the wrong thing.
-vcw-alac = { path = "crates/alac", version = "0.3.9" }
-vcw-audio = { path = "crates/audio", version = "0.3.9" }
-vcw-contract = { path = "crates/contract", version = "0.3.9" }
-vcw-core = { path = "crates/core", version = "0.3.9" }
-vcw-eq = { path = "crates/eq", version = "0.3.9" }
-vcw-export = { path = "crates/export", version = "0.3.9" }
-vcw-fingerprint = { path = "crates/fingerprint", version = "0.3.9" }
-vcw-identify = { path = "crates/identify", version = "0.3.9" }
-vcw-i18n = { path = "crates/i18n", version = "0.3.9" }
-vcw-import = { path = "crates/import", version = "0.3.9" }
-vcw-metadata = { path = "crates/metadata", version = "0.3.9" }
-vcw-process = { path = "crates/process", version = "0.3.9" }
-vcw-project = { path = "crates/project", version = "0.3.9" }
-vcw-serve = { path = "crates/serve", version = "0.3.9" }
-vcw-shell = { path = "crates/shell", version = "0.3.9" }
-vcw-signal = { path = "crates/signal", version = "0.3.9" }
-vcw-types = { path = "crates/types", version = "0.3.9" }
+vcw-alac = { path = "crates/alac", version = "0.4.0" }
+vcw-audio = { path = "crates/audio", version = "0.4.0" }
+vcw-contract = { path = "crates/contract", version = "0.4.0" }
+vcw-core = { path = "crates/core", version = "0.4.0" }
+vcw-eq = { path = "crates/eq", version = "0.4.0" }
+vcw-export = { path = "crates/export", version = "0.4.0" }
+vcw-fingerprint = { path = "crates/fingerprint", version = "0.4.0" }
+vcw-identify = { path = "crates/identify", version = "0.4.0" }
+vcw-i18n = { path = "crates/i18n", version = "0.4.0" }
+vcw-import = { path = "crates/import", version = "0.4.0" }
+vcw-metadata = { path = "crates/metadata", version = "0.4.0" }
+vcw-process = { path = "crates/process", version = "0.4.0" }
+vcw-project = { path = "crates/project", version = "0.4.0" }
+vcw-serve = { path = "crates/serve", version = "0.4.0" }
+vcw-shell = { path = "crates/shell", version = "0.4.0" }
+vcw-signal = { path = "crates/signal", version = "0.4.0" }
+vcw-types = { path = "crates/types", version = "0.4.0" }
 
 # External. Single source of version truth for the whole tree; a bump happens here
 # and nowhere else.

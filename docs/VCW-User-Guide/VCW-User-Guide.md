@@ -10,7 +10,7 @@ Start with a short test recording. Once you have heard it, checked its levels, a
 
 **The promise to remember.** Your capture is the source. Track boundaries, names, and playback choices sit alongside it. An export is a new set of files made from those decisions.
 
-**About this edition.** Prepared October 20, 2026, against VCW version 0.3.9. VCW is currently alpha software. Installer availability and hardware validation depend on the build and platform. Start with the release notes for your installed version.
+**About this edition.** Prepared October 20, 2026, against VCW version 0.4.0. VCW is currently alpha software. Installer availability and hardware validation depend on the build and platform. Start with the release notes for your installed version.
 
 **Inside this package.** An editable Word guide, this Markdown source, original explanatory graphics in SVG and PNG, and clearly labeled screenshot placeholders. The screenshot brief explains exactly what to capture and where it belongs.
 
