@@ -69,6 +69,7 @@ pub mod audit;
 pub mod doc;
 pub mod error;
 pub mod fixture;
+pub mod flac;
 pub mod land;
 pub mod model;
 pub mod read;

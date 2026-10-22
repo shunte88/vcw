@@ -288,7 +288,8 @@ fn parse_fmt(path: &Path, bytes: &[u8]) -> Result<Format> {
 /// `meta` key holding which container the audio was imported from.
 pub const FORMAT_KEY: &str = "import.format";
 
-/// What landing a WAV produced.
+/// What landing a WAV produced, and - because the two land the same thing -
+/// what landing a FLAC produced. See [`mod@crate::flac`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Landed {
     /// The project written.
@@ -311,7 +312,9 @@ pub struct Landed {
     pub commits: u64,
     /// The batch size that was in force.
     pub batch_blocks: usize,
-    /// Bytes of audio the `data` chunk declared.
+    /// Bytes of audio the source declared: the `data` chunk's length for a
+    /// WAV, `STREAMINFO`'s sample count for a FLAC, and zero when a FLAC
+    /// does not say.
     pub declared_bytes: u64,
     /// Bytes of audio there turned out to be, whole frames only.
     ///

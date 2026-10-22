@@ -31,12 +31,13 @@
  */
 //! The `vcw import` verb: read someone else's file, write a VCW one (§12).
 //!
-//! Two kinds of source, told apart by their first sixteen bytes rather than by
-//! their extension. An **Audacity project** is a document plus a block store,
-//! and lands through [`mod@vcw_import::land`]. A **WAV file** is one run of
-//! frames, and lands through [`vcw_import::wav`]. They share a destination
-//! rule, a side flag, a batch size and a dry run, which is why they share a
-//! verb.
+//! Three kinds of source, told apart by their first sixteen bytes rather than
+//! by their extension. An **Audacity project** is a document plus a block
+//! store, and lands through [`mod@vcw_import::land`]. A **WAV file** is one run
+//! of frames, and lands through [`vcw_import::wav`]. A **FLAC file** is that
+//! run compressed, and lands through [`vcw_import::flac`]. All three share a
+//! destination rule, a side flag, a batch size and a dry run, which is why they
+//! share a verb.
 //!
 //! Two modes, and the default is to do the work. That is the opposite of
 //! `vcw recover`, deliberately: recovery rewrites a project that already
@@ -53,6 +54,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use vcw_import::land::Options;
+use vcw_import::wav::Landed as LandedFile;
 use vcw_import::{Landed, Timeline, audit, model, read, sniff};
 use vcw_types::vinyl::Side;
 
@@ -99,13 +101,14 @@ pub(crate) fn run(args: &Args) -> Result<()> {
     // bytes.
     match kind(&args.source) {
         Kind::Wave => return wave(args, &destination, side),
+        Kind::Flac => return flac(args, &destination, side),
         // Refused here rather than left to the sniffer, which would open it as
         // a database and report "file is not a database" - true, and no help at
-        // all to someone who handed it a FLAC.
+        // all to someone who handed it an MP3.
         Kind::Other => bail!(
-            "{} is neither an Audacity project nor a WAV file. Import reads \
-             .aup3 and .aup4 projects, and WAV files holding 16, 24 or 32-bit \
-             integer PCM.",
+            "{} is not an Audacity project, a WAV file or a FLAC file. Import \
+             reads .aup3 and .aup4 projects, and WAV and FLAC files holding 16, \
+             24 or 32-bit integer PCM.",
             args.source.display()
         ),
         Kind::Sqlite => {}
@@ -257,6 +260,10 @@ fn survey(args: &Args, destination: &Path, options: &Options) -> Result<()> {
 enum Kind {
     /// A RIFF/WAVE container.
     Wave,
+    /// A native FLAC stream. Not FLAC in an Ogg container, which starts
+    /// `OggS` and would be refused as something else: nothing in this corpus
+    /// uses one and the decoder behind this path does not read one.
+    Flac,
     /// A SQLite database, which is what every Audacity project is. Whether it
     /// is an *Audacity* one is `sniff`'s question, not this one's, and its
     /// refusal names what it found instead.
@@ -276,6 +283,8 @@ fn kind(path: &Path) -> Kind {
     }
     if &head[0..4] == b"RIFF" && &head[8..12] == b"WAVE" {
         Kind::Wave
+    } else if &head[0..4] == b"fLaC" {
+        Kind::Flac
     } else if &head == b"SQLite format 3\0" {
         Kind::Sqlite
     } else {
@@ -337,13 +346,86 @@ fn wave(args: &Args, destination: &Path, side: Side) -> Result<()> {
 
     let landed = vcw_import::wav::land(&args.source, destination, side, config)
         .with_context(|| format!("importing {}", args.source.display()))?;
+    report(args, &landed, "wav", "the data chunk")
+}
+
+/// Imports a FLAC file, or reports what importing one would land.
+fn flac(args: &Args, destination: &Path, side: Side) -> Result<()> {
+    let config = vcw_project::persistence::Config {
+        batch_blocks: args.batch_blocks,
+        ..Options::default().config
+    };
+
+    if args.dry_run {
+        let layout = vcw_import::flac::layout(&args.source)?;
+        if args.json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "source": args.source.display().to_string(),
+                    "destination": destination.display().to_string(),
+                    "dry_run": true,
+                    "format": "flac",
+                    "rate": layout.rate.hz(),
+                    "channels": layout.channels,
+                    "storage_format": format!("{:?}", layout.format),
+                    "declared_bytes": layout.bytes(),
+                    "frames": layout.frames(),
+                    "seconds": layout.seconds(),
+                    "side": side.letter().to_string(),
+                })
+            );
+            return Ok(());
+        }
+        println!("{}", args.source.display());
+        println!("  format      flac");
+        println!(
+            "  audio       {} Hz, {} ch, {:?}",
+            layout.rate.hz(),
+            layout.channels,
+            layout.format
+        );
+        // A stream that declares no length is a legal stream, and saying so is
+        // better than printing a confident nought: the figure is the one thing
+        // a dry run of a FLAC cannot promise, because finding it for certain
+        // means decoding the whole file, which is the work the dry run exists
+        // to avoid.
+        match layout.declared_frames {
+            Some(_) => println!(
+                "  stream      {} frame(s), {:.3} s, {} byte(s) decoded",
+                layout.frames(),
+                layout.seconds(),
+                layout.bytes()
+            ),
+            None => println!("  stream      no declared length; it will be decoded to find out"),
+        }
+        println!(
+            "  would write {} as side {}",
+            destination.display(),
+            side.letter()
+        );
+        return Ok(());
+    }
+
+    let landed = vcw_import::flac::land(&args.source, destination, side, config)
+        .with_context(|| format!("importing {}", args.source.display()))?;
+    report(args, &landed, "flac", "STREAMINFO")
+}
+
+/// Prints what landing a WAV or a FLAC produced.
+///
+/// One printer for both, because [`vcw_import::flac`] lands the same capture
+/// through the same writer and reports it with the same type. `declared` names
+/// whatever in the source made the length claim, so the one sentence that has
+/// to mention it can.
+fn report(args: &Args, landed: &LandedFile, format: &str, declared: &str) -> Result<()> {
     if args.json {
         println!(
             "{}",
             serde_json::json!({
                 "project": landed.path.display().to_string(),
                 "source": args.source.display().to_string(),
-                "format": "wav",
+                "format": format,
                 "capture_id": landed.capture_id,
                 "side": landed.side.letter().to_string(),
                 "rate": landed.rate.hz(),
@@ -383,16 +465,17 @@ fn wave(args: &Args, destination: &Path, side: Side) -> Result<()> {
         landed.side.letter(),
         landed.capture_id
     );
-    // Said out loud when it happens, and only then. A file whose header
+    // Said out loud when it happens, and only then. A source whose header
     // overstates its audio is a file something went wrong with once already.
-    if landed.read_bytes != landed.declared_bytes {
+    // A declared nought is a FLAC that made no claim, which is not a mismatch.
+    if landed.declared_bytes != 0 && landed.read_bytes != landed.declared_bytes {
         println!(
-            "  !           the data chunk declared {} byte(s) and held {}; the \
-             difference was not there to import",
-            landed.declared_bytes, landed.read_bytes
+            "  !           {} declared {} byte(s) and held {}; the difference \
+             was not there to import",
+            declared, landed.declared_bytes, landed.read_bytes
         );
     }
-    println!("  source      {} (wav)", args.source.display());
+    println!("  source      {} ({format})", args.source.display());
     Ok(())
 }
 

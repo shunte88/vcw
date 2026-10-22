@@ -393,6 +393,21 @@ pub enum Error {
         reason: String,
     },
 
+    /// The file is a FLAC stream, but not one that can be landed verbatim.
+    ///
+    /// The sibling of [`Error::NotWave`], and for the same reason: a stream
+    /// this refuses is a stream to convert on purpose, with a tool that says
+    /// what it did. FLAC's own range is 1 to 32 bits, which is wider than a
+    /// capture's three widths, so the width is the refusal this one usually
+    /// carries.
+    #[error("{path} cannot be imported as FLAC: {reason}")]
+    NotFlac {
+        /// The file in question.
+        path: PathBuf,
+        /// What is wrong with it.
+        reason: String,
+    },
+
     /// Reading the source file failed.
     #[error("reading {path}: {source}")]
     Io {

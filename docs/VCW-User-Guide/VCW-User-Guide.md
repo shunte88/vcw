@@ -279,7 +279,7 @@ VCW aims to preserve the samples delivered by the recording device. That is a pr
 
 ## 12 Bring existing recordings with you
 
-VCW can continue the review and export work on supported Audacity projects and integer PCM WAV files. Import creates a new `.vcw` project. Keep the original until you have checked the result.
+VCW can continue the review and export work on supported Audacity projects and on integer PCM WAV and FLAC files. Import creates a new `.vcw` project. Keep the original until you have checked the result.
 
 ### Import an Audacity project
 
@@ -299,7 +299,7 @@ Suitable region labels become locked track boundaries. Tags become release metad
 
 Most Audacity imports use Float32. For an exact float-preserving audio copy, use WAV. For FLAC, AIFF, or ALAC, review narrowing, dither, and headroom in Chapter 10. An imported project has no reliable statement about the original preamp; set provenance only if you know the chain.
 
-### Import a WAV file
+### Import a WAV or FLAC file
 
 ```text
 vcw import "side-a.wav" --dry-run
@@ -309,9 +309,15 @@ vcw import "side-a.wav" --dry-run
 vcw import "side-a.wav" --output "side-a.vcw" --side A
 ```
 
+```text
+vcw import "side-b.flac" --output "side-b.vcw" --side B
+```
+
 The current WAV importer accepts 16, 24, and 32-bit integer PCM and copies the samples without conversion. Floating-point WAV, 8-bit PCM, and compressed WAV are refused. Float support in WAV export does not imply float support in WAV import.
 
-A WAV import brings audio without track labels or metadata. Detect and review the tracks, then identify the release. A truncated WAV can import the audio actually present while reporting the shortfall.
+A FLAC file is read the same way and copied without conversion. FLAC allows any width from 1 to 32 bits, so a stream that is not 16, 24, or 32-bit is refused rather than widened. The importer recognizes a source by its contents, not by its name.
+
+A WAV or FLAC import brings audio without track labels or metadata. Detect and review the tracks, then identify the release. A truncated WAV can import the audio actually present while reporting the shortfall.
 
 **Remember.** Open the finished project in VCW, audition it, and compare track counts and lengths before retiring your old workflow.
 

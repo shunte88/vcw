@@ -12,6 +12,9 @@ authors.workspace = true
 vcw-types = { workspace = true }
 vcw-project = { workspace = true }
 vcw-metadata = { workspace = true }
+# The decoder behind `flac` imports. Already a workspace dependency for
+# export, so the FLAC path costs this crate a line and no new crate.
+flac-codec = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

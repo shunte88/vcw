@@ -14,6 +14,24 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
+## Unreleased
+
+### Added
+
+* **`vcw import` reads FLAC files.** A FLAC side lands as a capture exactly as
+  a WAV one does: decoded, re-blocked through the capture writer, attached to
+  the side you name, and then indistinguishable from a recording for playback,
+  detection, export and tagging. Nothing is converted. Sixteen, twenty-four and
+  thirty-two bit streams land sample for sample, and a width a capture cannot
+  store - FLAC itself allows anything from 1 to 32 bits - is refused by width
+  rather than quietly widened, because an import that converted would be a
+  lossy operation that looked lossless. The source is chosen by its first four
+  bytes and not by its name, so a renamed rip still imports and a `.flac` that
+  is really something else still gets a sentence saying what it is.
+  `--dry-run` reports the rate, the width and the length the stream claims, in
+  about a second, without decoding it; a stream that claims no length says so
+  instead of printing nought.
+
 ## 0.4.0-alpha
 
 2026-10-20

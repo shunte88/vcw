@@ -593,19 +593,19 @@ enum Command {
         json: bool,
     },
 
-    /// Import an Audacity project or a WAV file as a `.vcw` (§12).
+    /// Import an Audacity project, a WAV file or a FLAC file as a `.vcw` (§12).
     ///
     /// Writes a new project and never touches the source, which is opened
     /// read-only. The audio is re-blocked through the capture writer, so what
     /// lands is a capture like any other: playback, export, detection and
     /// tagging all work on it unchanged.
     ///
-    /// An `.aup3` or `.aup4` brings its labels and tags with it. A WAV brings
-    /// its audio and nothing else, unconverted: 16, 24 and 32-bit integer PCM
-    /// at whatever rate and channel count it declares, and a refusal for
-    /// anything that would have to be converted to land.
+    /// An `.aup3` or `.aup4` brings its labels and tags with it. A WAV or a
+    /// FLAC brings its audio and nothing else, unconverted: 16, 24 and 32-bit
+    /// integer samples at whatever rate and channel count it declares, and a
+    /// refusal for anything that would have to be converted to land.
     Import {
-        /// The Audacity project or WAV file to read.
+        /// The Audacity project, WAV file or FLAC file to read.
         source: std::path::PathBuf,
         /// Where to write the project. Defaults to the source with a .vcw
         /// extension. Refused if it already exists.
