@@ -99,7 +99,7 @@ Recorded so that a year from now the distance is visible rather than remembered.
 
 | | Condition | State |
 |---|---|---|
-| **C1** | Compatibility policy | **Not written.** The machinery it describes is built: two version numbers, forward-only transactional migrations, `vcw migrate`, and v1/v2/v4 projects on disk as fixtures |
+| **C1** | Compatibility policy | **Written**, same day: [docs/COMPATIBILITY.md](../COMPATIBILITY.md), with `crates/project/tests/compatibility.rs` holding the code to it - every schema version from 1 to the current one built out of a prefix of `MIGRATIONS`, opened read-only unchanged, upgraded, and checked for drift against a new file; a version above this build's refused for reading as well as writing; no migration touching captured audio; and the two numbers the document prints read back out of it. All four proven able to fail |
 | **C2** | Tier 1 soaks | **One of three.** x86_64 is the reference run, 90 min at 24/192, rtf 1.00001, worst commit 17.0 ms against a 250 ms budget, 6.2 GB verified byte for byte. Pi 5 and Windows unrun |
 | **C3** | macOS honesty | **README only.** Tier 2 is stated there and nowhere the user of a `.dmg` will meet it |
 | **C4** | Known failures | **One open**, undiagnosed, now instrumented to print both streams so the next occurrence says why |

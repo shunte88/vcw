@@ -122,12 +122,15 @@ fn the_parser_finds_every_table_the_database_has() {
         parsed, in_db,
         "the parser and the database disagree about which tables exist"
     );
-    for &required in REQUIRED_TABLES {
-        assert!(
-            parsed.contains(required),
-            "{required} is required but not documented"
-        );
-    }
+    // Both directions. A table the schema creates and `REQUIRED_TABLES` omits is
+    // a table `validate` quietly stops checking for, which is the half of the
+    // drift a one-way check cannot see.
+    let required: BTreeSet<String> = REQUIRED_TABLES.iter().map(|&t| t.to_owned()).collect();
+    assert_eq!(
+        required, parsed,
+        "vcw_project::schema::REQUIRED_TABLES is out of step with the schema; \
+         add or remove the table there as well"
+    );
 }
 
 #[test]

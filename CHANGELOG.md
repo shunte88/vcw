@@ -18,6 +18,16 @@ loud if it cannot.
 
 ### Added
 
+* **The backward compatibility policy is written.**
+  [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) says what a `.vcw` file is
+  promised: what the two version numbers each mean, which schema versions stay
+  readable and what dropping one would take, that an upgrade never rewrites
+  captured audio and only ever goes one way, and what the document does not
+  promise. §16 asks for it before the first stable release and ADR-0009 makes it
+  the first of the five conditions for dropping `-alpha`. It describes machinery
+  that was already there, and a test now holds that machinery to the document
+  rather than to a second copy of it.
+
 * **`vcw import` reads FLAC files.** A FLAC side lands as a capture exactly as
   a WAV one does: decoded, re-blocked through the capture writer, attached to
   the side you name, and then indistinguishable from a recording for playback,

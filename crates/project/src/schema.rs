@@ -75,7 +75,14 @@ pub const APPLICATION_ID: u32 = 0x5643_5700;
 /// release has no stated intent, and `0` is what that is; v4's `riaa_eq = 1` means
 /// exactly `playback_eq = 'riaa'`, which is why v5 can carry it across rather than
 /// asking again; and a project with no `defects` rows is one nobody has run a
-/// detector over, which is what every project before v6 is.
+/// detector over, which is what every project before v6 is. v7 adds the archivist
+/// transfer log's four columns - `releases.item`, `releases.condition`,
+/// `captures.operator` and `captures.transferred_on` - and an unrecorded operator
+/// or pressing condition is null, which is what not having been asked is.
+///
+/// That every one of them is an addition rather than a reinterpretation is the
+/// §16 promise `docs/COMPATIBILITY.md` makes out loud, and
+/// `tests/compatibility.rs` holds this build to it.
 pub const SCHEMA_VERSION: u32 = 7;
 
 /// The project-format version: the *meaning* of the schema, as opposed to its shape.
@@ -717,6 +724,10 @@ ALTER TABLE captures ADD COLUMN transferred_on TEXT;
 
 /// Tables the current schema must contain. Checked on open, so a truncated or
 /// partially-migrated file is refused rather than half-read.
+///
+/// Written out by hand, because the check runs before anything has parsed the DDL.
+/// `tests/schema_doc.rs` holds it to the set the migrations really create, so a
+/// migration that adds a table cannot leave it unchecked here.
 pub const REQUIRED_TABLES: &[&str] = &[
     "capture_blocks",
     "capture_diagnostics",

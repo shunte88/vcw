@@ -73,6 +73,7 @@ VCW / VRipr.
 - **Requirements:** [REQUIREMENTS.md](../REQUIREMENTS.md)
 - **Delivery plan:** [PROJECT_PLAN.md](../PROJECT_PLAN.md)
 - **Project format:** [docs/SCHEMA.md](SCHEMA.md) (generated from the schema)
+- **Compatibility:** [docs/COMPATIBILITY.md](COMPATIBILITY.md) (§16: what a `.vcw` is promised)
 - **Spike findings:** [docs/spikes/](spikes/)
 
 ## Status

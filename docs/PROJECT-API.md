@@ -161,7 +161,9 @@ Pre-1.0, so the Rust surface can change with a release note. Two things are held
 steadier than the code:
 
 * **The file format.** `format_version` in `meta` is 1. A reader should check it,
-  and `SCHEMA.md` documents what changes would raise it.
+  and [COMPATIBILITY.md](COMPATIBILITY.md) is §16's policy: what the two version
+  numbers promise, which schema versions stay readable, and what an upgrade will
+  never do to a file.
 * **`Finding::code`** values, which exist to be matched on by tests and by a UI.
 
 Anything else may move. Pin a version if that matters, and run the example
