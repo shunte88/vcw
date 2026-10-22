@@ -1184,7 +1184,7 @@ text = "{panel} ({chord})"
 text = "Tracks"
 
 ["app.update"]
-text = "Update to {latest}"
+text = "Update Available"
 
 ["app.update.title"]
 text = "{latest} has been published and this is {current}. Opens the release page in your own browser - VCW does not replace itself, because the copy on disk belongs to whatever installed it."

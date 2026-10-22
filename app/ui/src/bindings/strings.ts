@@ -70,7 +70,7 @@ export const SOURCE: Readonly<Record<string, string>> = {
   "app.tab.title": "{panel} ({chord})",
   "app.tab.tracks": "Tracks",
   "app.untitled": "untitled",
-  "app.update": "Update to {latest}",
+  "app.update": "Update Available",
   "app.update.title": "{latest} has been published and this is {current}. Opens the release page in your own browser - VCW does not replace itself, because the copy on disk belongs to whatever installed it.",
   "capture.arm": "Arm ({chord})",
   "capture.column.device": "Device",

@@ -137,11 +137,21 @@ pub fn summarize(path: &Path) -> view::Project {
         has_artwork: false,
         preview: Vec::new(),
         problem: None,
+        schema_version: None,
     };
 
     match contents(path) {
         Ok(filled) => filled(&mut row),
-        Err(why) => row.problem = Some(why.to_string()),
+        // The reason is kept whatever it is - a browser wants the sentence for
+        // a tooltip even where it does not print it on the row - but an older
+        // schema also reports its version, because that case is not a damaged
+        // file and reads better as a number than as a paragraph.
+        Err(why) => {
+            if let vcw_project::Error::SchemaNeedsUpgrade { found, .. } = &why {
+                row.schema_version = Some(*found);
+            }
+            row.problem = Some(why.to_string());
+        }
     }
     row
 }
@@ -425,6 +435,13 @@ mod tests {
             !problem.contains("no such table"),
             "and not leak SQLite at a person, got {problem:?}"
         );
+        // The version, as a number, because the window draws this one as a
+        // badge beside the name and keeps the sentence for the tooltip.
+        assert_eq!(
+            row.schema_version,
+            Some(1),
+            "and report how old it is, not only that it is old"
+        );
         assert_eq!(row.sides, 0);
         assert_eq!(row.tracks, 0);
         assert_eq!(row.name, "older", "it is still listed, and still named");
@@ -449,6 +466,10 @@ mod tests {
         assert_eq!(listed.len(), 1);
         let row = &listed[0];
         assert_eq!(row.problem, None, "a project we just wrote should open");
+        assert_eq!(
+            row.schema_version, None,
+            "and wear no version badge, because its schema is this build's"
+        );
         assert_eq!(row.album, "Trans-Europe Express");
         assert_eq!(row.album_artist, "Kraftwerk");
         assert_eq!(row.catalog, "1C 064-82 306");

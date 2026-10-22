@@ -32,6 +32,20 @@ loud if it cannot.
   about a second, without decoding it; a stream that claims no length says so
   instead of printing nought.
 
+### Changed
+
+* **A project from an older build wears its version instead of a paragraph.**
+  The library listed one with a full-width sentence under the row explaining
+  that it was written by an older VCW and could be upgraded with
+  `vcw migrate`. It now carries a small `v1` badge beside its name, and the
+  sentence is the badge's tooltip: the file opens, and opening it is what
+  upgrades it, so how old it is was the only part worth the width. A file
+  something is actually wrong with still gets the sentence.
+* **The update notice reads Update Available.** It named the published version
+  in the button, which put a number nobody has to act on in the titlebar. The
+  version you would be moving to, and the one you are on, are in the tooltip
+  where they were already.
+
 ## 0.4.0-alpha
 
 2026-10-20

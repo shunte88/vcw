@@ -1193,6 +1193,29 @@ code {
   background: none;
 }
 
+/*
+ * The schema version of a project older than this build, beside its name.
+ *
+ * A number in a rounded rectangle in the accent, which is the shape every
+ * other badge in this window uses, because the fact is "v1" and the fact is
+ * the whole of it. It replaced a full-width sentence under the row: the
+ * sentence is still there, as the badge's tooltip, for the person who wants
+ * to know what a v1 is. `baseline` and not `middle`, so the digits sit on the
+ * album title's own line rather than floating above it.
+ */
+.rows tbody td .schema {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: 0.6rem;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+  vertical-align: baseline;
+  cursor: help;
+}
+
 /* A rejected boundary is dimmed, not hidden: see the argument in Tracks.tsx. */
 .rows tbody tr.rejected {
   color: var(--dim);

@@ -1409,7 +1409,20 @@ preview: Array<number>,
 /**
  * Why the file could not be read, where it could not.
  */
-problem: string | null, };
+problem: string | null,
+/**
+ * The schema version in the file, when it is older than this build's and
+ * opening the project would upgrade it (§16).
+ *
+ * `None` for a project this build reads as it stands, and for one it
+ * cannot read at all - a file from a *newer* build has a version too, and
+ * it is not this, because the answer there is to upgrade VCW rather than
+ * the project and a number in a badge would not say so. So a browser can
+ * treat this as "old, and here is how old", and leave
+ * [`problem`](Self::problem) to the rows where something is actually
+ * wrong.
+ */
+schemaVersion: number | null, };
 
 export type Listing = {
 /**

@@ -523,7 +523,7 @@ export function App(): React.JSX.Element {
               current: published.current,
             })}
           >
-            {text("app.update", { latest: published.latest })}
+            {text("app.update")}
           </button>
         )}
         <nav className="tabs">

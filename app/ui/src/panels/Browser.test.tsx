@@ -65,6 +65,7 @@ function row(over: Partial<Project> = {}): Project {
     hasArtwork: false,
     preview: [],
     problem: null,
+    schemaVersion: null,
     ...over,
   };
 }
@@ -417,6 +418,49 @@ describe("the project browser", () => {
     await draw("/library/two.vcw");
     expect(container.querySelectorAll("tr.problem-reason")).toHaveLength(1);
     expect(container.textContent).toContain("schema v1");
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  // An older schema is the one "problem" that is not one: the file opens, and
+  // opening it is what upgrades it. So it gets a version badge and a tooltip
+  // instead of the sentence - and the sentence must not arrive as well, which
+  // is the half a selected row would otherwise still print.
+  it("badges an older schema rather than explaining it", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const { store } = fakeStore();
+    Element.prototype.scrollIntoView = () => {};
+
+    await act(async () => {
+      root.render(
+        <Browser
+          store={store}
+          projects={[
+            row({
+              path: "/library/old.vcw",
+              problem: "written by an older VCW (schema version 1)",
+              schemaVersion: 1,
+            }),
+          ]}
+          selected="/library/old.vcw"
+          onSelect={() => {}}
+          onLibraryChanged={() => {}}
+          onOpened={() => {}}
+          settings={null}
+        />,
+      );
+    });
+
+    const badge = container.querySelector("td .schema");
+    expect(badge?.textContent).toBe("v1");
+    expect(badge?.getAttribute("title")).toContain("older VCW");
+    // Selected, and still no sentence: the badge is the whole of it.
+    expect(container.querySelectorAll("tr.problem-reason")).toHaveLength(0);
 
     await act(async () => {
       root.unmount();

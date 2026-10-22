@@ -699,7 +699,21 @@ export function Browser({
                     <Cover project={project} />
                   </td>
                   <td>{project.albumArtist}</td>
-                  <td>{project.album === "" ? project.name : project.album}</td>
+                  <td>
+                    {project.album === "" ? project.name : project.album}
+                    {/*
+                      An older schema is a version, not a paragraph. The file
+                      opens, and opening it in the window is what upgrades it,
+                      so the row says how old it is and the tooltip says the
+                      rest. The sentence below is for a file something is
+                      actually wrong with.
+                    */}
+                    {project.schemaVersion !== null && (
+                      <span className="schema" title={project.problem ?? ""}>
+                        v{project.schemaVersion}
+                      </span>
+                    )}
+                  </td>
                   <td>{project.catalog}</td>
                   {/*
                     A dash and not a zero for a project that could not be
@@ -738,7 +752,9 @@ export function Browser({
                   arrow key - so the reason still arrives without a mouse and
                   without being asked for twice.
                 */}
-                {project.problem !== null && project.path === selected && (
+                {project.problem !== null &&
+                  project.schemaVersion === null &&
+                  project.path === selected && (
                   <tr
                     className="problem-reason"
                     onClick={() => onSelect(project.path)}
