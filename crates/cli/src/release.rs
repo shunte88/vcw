@@ -118,6 +118,10 @@ pub(crate) struct Change {
     pub(crate) mono: Option<bool>,
     /// The characteristic the record was cut with, as a curve id. Empty clears it.
     pub(crate) playback_eq: Option<String>,
+    /// The physical item identifier for the copy that was transferred (WP-31).
+    pub(crate) item: Option<String>,
+    /// The known condition of that copy (WP-31).
+    pub(crate) condition: Option<String>,
 }
 
 /// What `vcw release` was asked to do, and to which project.
@@ -193,7 +197,8 @@ fn show(project: &Project, json: bool) -> Result<()> {
             "{{\"album\":{},\"artist\":{},\"year\":{},\"genres\":{},\"label\":{},\
              \"catalog\":{},\"country\":{},\"barcode\":{},\"composer\":{},\
              \"discs\":{},\"discs_recorded\":{},\"numbering\":\"{}\",\
-             \"sides\":{},\"confirmed\":{},\"mono\":{},\"playback_eq\":{},\"empty\":{}}}",
+             \"sides\":{},\"confirmed\":{},\"mono\":{},\"playback_eq\":{},\
+             \"item\":{},\"condition\":{},\"empty\":{}}}",
             quote(&record.album),
             quote(&record.album_artist),
             record
@@ -218,6 +223,8 @@ fn show(project: &Project, json: bool) -> Result<()> {
                 .playback_eq
                 .as_deref()
                 .map_or_else(|| "null".to_string(), quote),
+            quote(&record.item),
+            quote(&record.condition),
             record.is_empty()
         );
         return Ok(());
@@ -240,6 +247,11 @@ fn show(project: &Project, json: bool) -> Result<()> {
     }
     field("composer", &record.composer);
     field("comments", &record.comments);
+    // WP-31's two release-level archival fields. Printed next to `comments`
+    // because that is the free text they were being written into before they
+    // had columns of their own, and a reader looking for one will look there.
+    field("item", &record.item);
+    field("condition", &record.condition);
     if let Some(id) = &record.musicbrainz_id {
         field("musicbrainz", id);
     }
@@ -369,6 +381,12 @@ fn apply(record: &mut release::Record, change: &Change) -> Result<()> {
     }
     if let Some(curve) = &change.playback_eq {
         record.playback_eq = (!curve.is_empty()).then(|| curve.clone());
+    }
+    if let Some(item) = &change.item {
+        record.item = item.clone();
+    }
+    if let Some(condition) = &change.condition {
+        record.condition = condition.clone();
     }
     if let Some(numbering) = &change.numbering {
         record.numbering = Numbering::parse(numbering).ok_or_else(|| {

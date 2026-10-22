@@ -9048,3 +9048,83 @@ margin, so any addition at all pushes the S04 figure onto the next page and the
 guide from 20 pages to 21. Prose length could not have saved it. Two things are
 the author's to decide: whether to carry the extra page, and that S04 now shows
 an Export panel with no ReplayGain tick in it.
+
+## 2026-10-22, the Pi 4 holds 24/192 and an import stops lying about its date
+
+### The Pi 4 number was a ring size, not a card
+
+`vcw soak` was run on a Raspberry Pi 4 Model B (Bookworm, glibc 2.36, 4 cores,
+3.8 GB, a 15 GB SD card) out of the published `VCW_0.4.0_arm64.deb`, unpacked
+with `dpkg-deb -x` rather than installed, because `apt install` would have put
+259 MB of WebKit on somebody's Pi to run a command-line soak. `vcw doctor` is
+clean there, `ldd` finds nothing missing, and the glibc 2.36 against the
+`GLIBC_2.35` floor is the last of the arm64 question.
+
+Five two-minute soaks said the Pi could not do 24/192: commit p50 62.9 ms, p95
+283.9 ms, p99 608.0 ms, max 949.1 ms, 113 overruns and 216,960 dropped frames,
+with the byte audit mismatching where the drops were. 24/96 halved the losses
+and 16/44.1 was clean. Batching made it worse, not better: `--batch-blocks 4`
+pushed p99 to 1243.3 ms, and 1000 ms blocks pushed prepare alone to a p50 of
+63.8 ms, which is four times the 250 ms-block figure for the same audio.
+
+The card is not the problem. A hundred 64 KiB write-and-fsync pairs measured p50
+8.1 ms, p95 13.2 ms, max 42.3 ms, so a 62.9 ms commit is about seven fsyncs
+back to back and the p50 is comfortably inside the commit interval. The writer
+keeps up on average and loses on the tail, which is a ring question and not a
+throughput one.
+
+So the ring was the next sweep, and it settles it. **At `--ring-millis 4000` the
+Pi 4 records 24/192 with no loss at all**: 0 overruns, 0 dropped frames, 0 stream
+errors, and every one of 139,080,960 bytes matching what the source generated.
+24/96 with the same ring is the same answer with more headroom, p99 295.6 ms
+against 561.9 ms. Eight seconds of ring buys nothing and costs something: the
+same zero losses, but the worst single commit went from 1072.1 ms to 2408.0 ms,
+because a deeper backlog is a longer catch-up. Four seconds is the knee.
+
+Every one of those runs still reports FAIL, and correctly: the 250 ms commit
+budget is missed on the tail whatever the ring does. That is the honest shape of
+the result. A Pi 4 on an SD card can make a bit-perfect 24/192 transfer and
+cannot promise a bounded commit while doing it, which is a statement about
+recovery granularity rather than about audio. Two things are the author's: whether
+the ring default should scale with the frame rate instead of sitting at 1000 ms,
+and whether `vcw doctor` should say so on a machine that measures like this one.
+Untested, and the obvious next rig: the same Pi with a USB3 SSD.
+
+### An imported capture was dating itself by its import
+
+WP-31's `transfer()` already had the rule written in a comment: "An imported
+capture is the exception: it is dated by the import, and a project carried over
+from 2019 should not export as this year." The code did not implement it. With
+`transferred_on` unset, `TRANSFER_DATE` fell back to `started_at`, and
+`started_at` on an imported capture is the moment the import ran, so a 2019 rip
+brought in through `vcw import` exported `TRANSFER_DATE=2026-10-22`. A catalog
+reading that has been told something false, which is worse than a catalog that
+finds no such key, and it is the same distinction the empty-value filter three
+lines below was already making.
+
+An `Imported` capture now writes no date unless somebody states one. The test
+asserts all three halves, because suppressing the date everywhere would pass the
+imported case on its own: an imported capture writes nothing, an imported capture
+with a stated date writes the stated date, and a recorded capture still writes
+`started_at`. Reverting the one condition makes the first assertion fail with
+`Some("2026-10-22")`, which is the bug it was written for.
+
+What is still missing is the way to state it from a terminal. The window has the
+capture panel's two boxes and `vcw serve` has the route behind them; a CLI-only
+workflow has neither, so an imported project exports no operator and no date and
+there is no verb to fix that. `vcw eq provenance` is the shape it would take, and
+whether it is a verb is the author's call.
+
+### Two archival fields reach the CLI, and the guide gains the backlight
+
+`vcw release set` takes `--item` and `--condition`, and `vcw release show` prints
+them, so the two release-level WP-31 columns are no longer window-only. The
+seven rig fields stay out on purpose: they are settings, and the CLI does not
+read the window's settings.
+
+Chapter 17 of the user guide now documents `Backlight`. The paragraph's
+enumeration gained dial backlighting, and two sentences say what the control does
+and name its limit in the same breath, which is the rule. The orphan on page 19
+survives the edit: it is three different lines now rather than the same three,
+because nothing was deleted to make room. Clearing it needs about 48.6 pt
+removed from Chapter 17, which is content, and content is the author's.

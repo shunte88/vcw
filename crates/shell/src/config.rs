@@ -602,4 +602,67 @@ mod tests {
         // 2100 is not a leap year, which is the case a naive `% 4` gets wrong.
         assert_eq!(stamp_at(4_107_542_400), "2100-03-01-000000");
     }
+
+    /// A host whose only answer is a throwaway directory.
+    ///
+    /// The settings file is the whole of what the test below is about, so both
+    /// directories are the same temporary one and `emit` says what §52's
+    /// listener says: nobody is watching, and that is not an error.
+    struct Alone(PathBuf);
+
+    impl crate::Host for Alone {
+        fn emit(&self, _wire: &vcw_contract::event::Wire) -> bool {
+            true
+        }
+
+        fn config_dir(&self) -> Option<PathBuf> {
+            Some(self.0.clone())
+        }
+
+        fn cache_dir(&self) -> Option<PathBuf> {
+            Some(self.0.clone())
+        }
+    }
+
+    /// WP-31's rig survives the settings file, which is the only seam between a
+    /// filled-in **Transfer** panel and a `TRANSFER_*` tag on an exported file.
+    ///
+    /// Worth a test of its own because the group is eight strings a person
+    /// types once and reads back years later, and because the JSON keys are
+    /// camelCase: `phonoStage` is the one field spelled differently from its
+    /// own name, so a file that spells it `phono_stage` loads as empty, writes
+    /// no tag, and fails nothing. The tag end of the chain is covered by
+    /// `vcw-export`'s `from_a_project`; this is the end that reads a file.
+    #[test]
+    fn the_transfer_group_survives_the_settings_file() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let host: Hosted = std::sync::Arc::new(Alone(dir.path().to_path_buf()));
+
+        let given = Settings {
+            transfer: vcw_contract::settings::Transfer {
+                turntable: "Technics SL-1200 Mk2".to_owned(),
+                tonearm: "SME 3009".to_owned(),
+                cartridge: "Ortofon 2M Blue".to_owned(),
+                stylus: "Nude Shibata, 120 hours".to_owned(),
+                phono_stage: "Rega Fono MM Mk5".to_owned(),
+                interface: "Scarlett 2i2".to_owned(),
+                operator: "S. Hunter".to_owned(),
+                modification: "arm rewired with Cardas, stage bypassed".to_owned(),
+            },
+            ..Settings::default()
+        };
+
+        save_settings(&host, given.clone()).expect("the panel saves");
+        let read = settings(&host).expect("and loads again");
+        assert_eq!(
+            read.transfer, given.transfer,
+            "every rig field should come back as it was typed"
+        );
+
+        let text = fs::read_to_string(dir.path().join(FILE)).expect("the file is there");
+        assert!(
+            text.contains("\"phonoStage\""),
+            "the one camelCase key should be in the file as the bindings spell it: {text}"
+        );
+    }
 }

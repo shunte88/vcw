@@ -268,6 +268,24 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
     assert_eq!(release["mono"], false);
     assert_eq!(release["playback_eq"], "columbia_lp");
 
+    // WP-31's two release-level archival fields, which the window had to itself
+    // until they got flags. They are the copy on the shelf rather than the
+    // pressing, so an import cannot know them and nobody can be asked at import
+    // time; a terminal workflow needs a way to say them afterwards.
+    vcw(&[
+        "release",
+        &path,
+        "set",
+        "--item",
+        "SH-LP-0412",
+        "--condition",
+        "VG+, one light scuff",
+    ]);
+    let printed = vcw(&["release", &path, "--json", "show"]);
+    let release: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(release["item"], "SH-LP-0412");
+    assert_eq!(release["condition"], "VG+, one light scuff");
+
     // A curve nobody ships is refused at the command rather than written into the
     // project and discovered at playback.
     let refusal = refused(&["release", &path, "set", "--playback-eq", "rraa"]);

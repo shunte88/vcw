@@ -523,7 +523,7 @@ For a multi-disc release using numeric numbering, include the disc in the folder
 
 Other supported tokens include `{artist}`, `{year}`, `{genre}`, `{composer}`, `{country}`, `{country_iso}`, `{catalog}`, `{label}`, `{discogs_id}`, and `{side}`. Always inspect Plan after changing a template.
 
-**Appearance.** Settings offers interface scaling, bar or dial meters, word or icon buttons, and language selection. Bars are useful for precise setup; dials are easier to enjoy from the listening chair. The underlying measurements are the same.
+**Appearance.** Settings offers interface scaling, bar or dial meters, word or icon buttons, dial backlighting, and language selection. Bars are useful for precise setup; dials are easier to enjoy from the listening chair. The underlying measurements are the same. The **Backlight** control puts a warm or a blue bulb behind the dials, and appears only when the meters are dials. It changes nothing a meter reads.
 
 ## 18 A small glossary and a useful finish
 

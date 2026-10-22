@@ -1637,6 +1637,62 @@ fn the_transfer_chain_comes_out_of_all_three_tag_backends() {
     }
 }
 
+/// An imported capture exports no transfer date, and a recorded one does.
+///
+/// WP-31: `started_at` is the transfer date for a capture VCW made, and is the
+/// moment the *import* ran for one it adopted. A rip carried over from 2019 was
+/// stamping this year, which is a false fact in a catalog and worse than a
+/// missing one. Both halves are asserted, because suppressing the date for every
+/// capture would read the same way in the imported case alone.
+#[test]
+fn an_imported_capture_exports_no_transfer_date_unless_one_is_stated() {
+    // A tempdir each: `recorded` writes one project under a fixed name.
+    let date = |mode: &str, stated: Option<&str>| {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut project, _, _) = recorded(dir.path(), StorageFormat::Int16, 2, 90_000);
+        described(&mut project);
+        let capture = vcw_project::session::all(project.conn()).expect("captures")[0].id;
+        project
+            .conn()
+            .execute("UPDATE captures SET capture_mode = ?1", [mode])
+            .expect("restate the mode");
+        if let Some(stated) = stated {
+            vcw_project::session::set_transfer(
+                &mut project,
+                capture,
+                None,
+                Some(Some(stated.to_owned())),
+            )
+            .expect("transfer");
+        }
+        titled(&mut project, &[(2_048, 61_237, "Neon Lights")]);
+
+        let path = dir.path().join("out");
+        let request = Request::new(&path, Container::Flac(Compression::default()));
+        let plan = splitter::plan(project.conn(), &request).expect("plan");
+        splitter::run(project.conn(), &plan, &mut quiet).expect("run");
+        transfer_tags(&plan.items[0].path, Container::Flac(Compression::default()))
+            .into_iter()
+            .find(|(key, _)| key == "TRANSFER_DATE")
+            .map(|(_, value)| value)
+    };
+
+    assert_eq!(
+        date("imported", None),
+        None,
+        "an imported capture dated itself by its import"
+    );
+    assert_eq!(
+        date("imported", Some("1979-04-07")),
+        Some("1979-04-07".to_owned()),
+        "a stated date is the one thing that puts the key back"
+    );
+    assert!(
+        date("exclusive", None).is_some(),
+        "a capture VCW recorded knows its own date and must still write it"
+    );
+}
+
 /// §33's loudness tags, end to end, and the claim that goes with them.
 ///
 /// Two exports of the same side, one measured and one not. The audio has to be

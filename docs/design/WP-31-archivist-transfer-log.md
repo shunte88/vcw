@@ -1,9 +1,13 @@
 # WP-31 - the archivist transfer log
 
-**Status:** DESIGN ONLY, 2026-10-19. Nothing is built. The user raised this on
-2026-10-18 as a future task and the open questions in it are the reason it is a note
-first: the tag names it settles are written into other people's files, and a tag name
-is the one thing in an export that cannot be taken back.
+**Status:** BUILT, 2026-10-19, in commit 840d68e - the same day the note was
+written, because the open questions turned out to be smaller than they looked. The
+user raised it on 2026-10-18 as a future task and the reason it was a note first is
+the tag names: they are written into other people's files, and a tag name is the one
+thing in an export that cannot be taken back. All five steps of the plan in §8 are
+in, and the eleven keys have a three-backend test. What is not in: no CLI path sets
+a capture's operator or transfer date - the window has the two boxes and
+`vcw serve` has the route, and a CLI-only workflow has neither.
 **Date:** 2026-10-19
 **Requirements:** §23/§24 (evidence and its provenance), §29 (the vinyl data model),
 §32 (metadata), §33 (export), §39 (settings), §42 (diagnostics, and what a bundle may

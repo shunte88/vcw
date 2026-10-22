@@ -77,7 +77,7 @@ use vcw_eq::{Catalog, Filter};
 use vcw_process::{Chain, Context, Damage, Repairs};
 use vcw_project::{Connection, pcm, release, side, track};
 use vcw_types::vinyl::{Numbering, Side};
-use vcw_types::{Span, StorageFormat};
+use vcw_types::{CaptureMode, Span, StorageFormat};
 
 use crate::encoder::{Container, Dither, Narrowing, Spec, Writer, narrowed};
 use crate::error::{Error, Result};
@@ -1110,16 +1110,21 @@ fn transfer(
     // disagrees. The date is the other way round - `started_at` is the moment the
     // stream opened and is the transfer date more accurately than a person
     // retyping it, so the column is the exception and not the rule. An imported
-    // capture is the exception: it is dated by the import, and a project carried
-    // over from 2019 should not export as this year.
+    // capture is the exception to the exception: `started_at` is when the import
+    // ran, not when the stylus dropped, so a project carried over from 2019 must
+    // not export as this year. It exports no date at all until somebody states
+    // one, which is the same honesty the empty-value filter below applies.
     let operator = session
         .and_then(|row| row.operator.clone())
         .unwrap_or_else(|| rig.operator.clone());
-    let date = session.map_or_else(String::new, |row| {
-        row.transferred_on
-            .clone()
-            .unwrap_or_else(|| vcw_types::date::iso(row.started_at))
-    });
+    let date = session
+        .and_then(|row| {
+            row.transferred_on.clone().or_else(|| {
+                (row.info.capture_mode != CaptureMode::Imported)
+                    .then(|| vcw_types::date::iso(row.started_at))
+            })
+        })
+        .unwrap_or_default();
     [
         ("TRANSFER_ITEM", release.item.as_str()),
         ("TRANSFER_CONDITION", release.condition.as_str()),

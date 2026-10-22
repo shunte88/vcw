@@ -18,6 +18,14 @@ loud if it cannot.
 
 ### Added
 
+* **`vcw release set` takes `--item` and `--condition`.** The two
+  release-level fields of the archivist transfer log were reachable only from
+  the window: the catalog or accession number of the copy that was played, and
+  the condition it was in. `vcw release show` prints them and `--json` carries
+  them, so a project assembled from a terminal can carry the same chain as one
+  assembled from the window. The seven rig fields stay out, because they are
+  settings and the command line does not read the window's settings.
+
 * **The backward compatibility policy is written.**
   [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) says what a `.vcw` file is
   promised: what the two version numbers each mean, which schema versions stay
@@ -55,6 +63,16 @@ loud if it cannot.
   in the button, which put a number nobody has to act on in the titlebar. The
   version you would be moving to, and the one you are on, are in the tooltip
   where they were already.
+
+### Fixed
+
+* **An imported capture no longer dates itself by its import.** Without a
+  transfer date stated by hand, `TRANSFER_DATE` fell back to the moment the
+  capture started, which for an imported project is the moment the import ran.
+  A rip brought over from 2019 exported as this year, which is a false fact in
+  somebody's catalog and worse than a missing one. An imported capture now
+  writes no transfer date until one is stated; a capture VCW recorded itself
+  still writes the day it recorded, because there it is the right answer.
 
 ## 0.4.0-alpha
 

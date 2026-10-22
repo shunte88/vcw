@@ -1186,6 +1186,12 @@ struct ReleaseFields {
     /// The characteristic the record was cut with (§51), as `vcw eq list` names them. Empty clears it back to the usual one.
     #[arg(long)]
     playback_eq: Option<String>,
+    /// The physical item identifier for this copy: a shelf mark or an accession number (WP-31). Not the catalog number, which identifies the pressing.
+    #[arg(long)]
+    item: Option<String>,
+    /// The known condition of this copy, in your own words (WP-31).
+    #[arg(long)]
+    condition: Option<String>,
 }
 /// Stack for [`run`]. 8 MiB is what Linux and macOS hand a main thread by
 /// default, so this gives every platform the size the two we develop on already
@@ -1711,6 +1717,8 @@ fn run() -> anyhow::Result<()> {
                     confirm: fields.confirm,
                     mono: fields.mono,
                     playback_eq: checked_curve(fields.playback_eq)?,
+                    item: fields.item,
+                    condition: fields.condition,
                 })),
             },
         }),
