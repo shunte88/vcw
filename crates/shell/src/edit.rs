@@ -231,6 +231,7 @@ pub fn edit_track(shell: &Shell, edit: TrackEdit) -> Result<(), Error> {
 /// fails.
 pub fn edit_release(shell: &Shell, edit: ReleaseEdit) -> Result<(), Error> {
     let curve = checked_curve(edit.playback_eq.as_deref())?;
+    let rumble = checked_rumble(edit.rumble.as_deref())?;
     let path = shell.project_path()?;
     let mut project = Project::open(&path)?;
     let mut record = release::ensure(&mut project)?;
@@ -239,6 +240,9 @@ pub fn edit_release(shell: &Shell, edit: ReleaseEdit) -> Result<(), Error> {
     }
     if let Some(id) = curve {
         record.playback_eq = (!id.is_empty()).then(|| id.to_owned());
+    }
+    if let Some(id) = rumble {
+        record.rumble_filter = (!id.is_empty()).then(|| id.to_owned());
     }
     if let Some(item) = edit.item {
         record.item = item;
@@ -289,6 +293,28 @@ pub(crate) fn checked_curve(id: Option<&str>) -> Result<Option<&str>, Error> {
             Ok(_) => Ok(Some(named)),
             Err(refusal) => Err(Error::Invalid {
                 field: "playbackEq".to_owned(),
+                why: refusal.to_string(),
+            }),
+        },
+        other => Ok(other),
+    }
+}
+
+/// Checks a rumble filter id against the set the application ships.
+///
+/// The same reasoning as [`checked_curve`], against a different set: a rumble
+/// filter is not a curve and the catalog does not hold one, so a curve id put
+/// in this field is a typo and is refused as one.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] naming `rumble`, listing what is known.
+pub(crate) fn checked_rumble(id: Option<&str>) -> Result<Option<&str>, Error> {
+    match id {
+        Some(named) if !named.is_empty() => match vcw_eq::rumble_roots(named) {
+            Ok(_) => Ok(Some(named)),
+            Err(refusal) => Err(Error::Invalid {
+                field: "rumble".to_owned(),
                 why: refusal.to_string(),
             }),
         },
@@ -466,6 +492,7 @@ mod tests {
             ReleaseEdit {
                 is_mono: None,
                 playback_eq: Some("riia".to_owned()),
+                rumble: None,
                 item: None,
                 condition: None,
             },
@@ -478,6 +505,44 @@ mod tests {
     }
 
     #[test]
+    fn a_rumble_filter_is_checked_against_its_own_set() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let shell = opened(dir.path());
+        // A curve id is the plausible typo here, and it is still a typo: §51
+        // makes the rumble filter independent of the curve, so the two fields
+        // do not share a vocabulary.
+        let refusal = edit_release(
+            &shell,
+            ReleaseEdit {
+                is_mono: None,
+                playback_eq: None,
+                rumble: Some("columbia_lp".to_owned()),
+                item: None,
+                condition: None,
+            },
+        )
+        .expect_err("a curve is not a rumble filter");
+        assert!(
+            matches!(&refusal, Error::Invalid { field, .. } if field == "rumble"),
+            "blamed the wrong field: {refusal}"
+        );
+        edit_release(
+            &shell,
+            ReleaseEdit {
+                is_mono: None,
+                playback_eq: Some("columbia_lp".to_owned()),
+                rumble: Some(vcw_eq::IEC_RUMBLE.to_owned()),
+                item: None,
+                condition: None,
+            },
+        )
+        .expect("both, independently");
+        let record = release_of(&shell);
+        assert_eq!(record.playback_eq.as_deref(), Some("columbia_lp"));
+        assert_eq!(record.rumble_filter.as_deref(), Some(vcw_eq::IEC_RUMBLE));
+    }
+
+    #[test]
     fn stating_one_fact_leaves_the_other_alone() {
         let dir = tempfile::tempdir().expect("tempdir");
         let shell = opened(dir.path());
@@ -486,6 +551,7 @@ mod tests {
             ReleaseEdit {
                 is_mono: Some(true),
                 playback_eq: Some("columbia_lp".to_owned()),
+                rumble: None,
                 item: None,
                 condition: None,
             },
@@ -498,6 +564,7 @@ mod tests {
             ReleaseEdit {
                 is_mono: None,
                 playback_eq: Some(String::new()),
+                rumble: None,
                 item: None,
                 condition: None,
             },

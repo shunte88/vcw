@@ -71,8 +71,9 @@ opposite of what an archival tool is for.
 
 ## Why this is the same answer as the rumble filter
 
-§51's IEC rumble filter is parked for the same reason in the other direction: it is a
-change to the samples that a person has to ask for, by name, knowing what it does. The
+§51's IEC rumble filter is the same decision read from the other side. It shipped on
+2026-11-01, and it ships off: it is a change to the samples that a person asks for, by
+name, knowing what it does, and a project that says nothing about it gets nothing. The
 rule both decisions come from is that **VCW does not improve a transfer behind the
 operator's back.** A repair is asked for per defect. A curve is asked for by name, and an
 unstated curve means silence rather than a guess. Loudness is written down rather than

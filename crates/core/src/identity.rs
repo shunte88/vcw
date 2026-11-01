@@ -170,6 +170,7 @@ pub fn accept(project: &mut Project, found: &Release) -> Result<Applied> {
         // identification does not get to silently undo what a person stated.
         is_mono: existing.is_mono,
         playback_eq: existing.playback_eq,
+        rumble_filter: existing.rumble_filter,
         // Facts about the copy on the shelf (WP-31), which no provider knows
         // either. Same reason, same carry.
         item: existing.item,

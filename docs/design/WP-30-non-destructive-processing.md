@@ -97,7 +97,7 @@ span. That is the only difference, and it is why the table below looks like
 
 | | parametric | repair |
 |---|---|---|
-| examples | playback EQ (§51), gain, normalization, the parked IEC rumble filter | declick, decrackle, dropout fill |
+| examples | playback EQ (§51), gain, normalization, the IEC rumble filter | declick, decrackle, dropout fill |
 | defined by | a few parameters on a project row | a row per defect, in a table |
 | cost of applying | per sample, constant | proportional to defects, near zero between them |
 | needs analysis | no | yes, once, stored |

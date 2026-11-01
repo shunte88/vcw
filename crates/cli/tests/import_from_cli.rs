@@ -259,6 +259,7 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
     // is asked.
     assert_eq!(release["mono"], false);
     assert_eq!(release["playback_eq"], serde_json::Value::Null);
+    assert_eq!(release["rumble_filter"], serde_json::Value::Null);
 
     // And they are settable, separately: a stereo pressing cut to something other
     // than RIAA is an ordinary record, so one field must not carry the other.
@@ -266,6 +267,20 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
     let printed = vcw(&["release", &path, "--json", "show"]);
     let release: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
     assert_eq!(release["mono"], false);
+    assert_eq!(release["playback_eq"], "columbia_lp");
+
+    // §51: the rumble filter is selectable independently of the curve, so
+    // setting it must not disturb the curve already stated, and clearing it
+    // must not disturb it either.
+    vcw(&["release", &path, "set", "--rumble", "iec"]);
+    let printed = vcw(&["release", &path, "--json", "show"]);
+    let release: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(release["rumble_filter"], "iec");
+    assert_eq!(release["playback_eq"], "columbia_lp");
+    vcw(&["release", &path, "set", "--rumble", ""]);
+    let printed = vcw(&["release", &path, "--json", "show"]);
+    let release: serde_json::Value = serde_json::from_str(printed.trim()).expect(&printed);
+    assert_eq!(release["rumble_filter"], serde_json::Value::Null);
     assert_eq!(release["playback_eq"], "columbia_lp");
 
     // WP-31's two release-level archival fields, which the window had to itself
@@ -291,6 +306,13 @@ fn an_imported_project_round_trips_to_a_tagged_export() {
     let refusal = refused(&["release", &path, "set", "--playback-eq", "rraa"]);
     assert!(refusal.contains("rraa"), "got {refusal}");
     assert!(refusal.contains("columbia_lp"), "got {refusal}");
+
+    // And so is a rumble filter nobody ships, by the same reasoning. It is
+    // checked against its own set rather than the curve catalog, so a curve id
+    // is not a rumble filter.
+    let refusal = refused(&["release", &path, "set", "--rumble", "columbia_lp"]);
+    assert!(refusal.contains("columbia_lp"), "got {refusal}");
+    assert!(refusal.contains("iec"), "got {refusal}");
 
     // A track, added by the same verb a recorded capture uses. 240 frames of
     // the 256 that landed, so the export has to resolve a span and not just

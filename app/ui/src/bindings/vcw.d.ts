@@ -623,6 +623,10 @@ isMono: boolean | null,
  */
 playbackEq: string | null,
 /**
+ * The rumble filter the replay chain imposes. `""` clears it.
+ */
+rumble: string | null,
+/**
  * The physical item identifier for this copy (WP-31). `null` leaves it alone.
  */
 item: string | null,
@@ -1522,6 +1526,13 @@ isMono: boolean,
  * rather than left to the metadata lookup.
  */
 playbackEq: string | null,
+/**
+ * The rumble filter the replay chain imposes (§51), as a filter id.
+ *
+ * Independent of the curve above: a chain can have one, the other, both
+ * or neither. `None` is nothing imposed, which is the usual answer.
+ */
+rumbleFilter: string | null,
 /**
  * The physical item identifier for the copy that was transferred (WP-31).
  */

@@ -333,6 +333,11 @@ pub struct Release {
     /// provider supplies and no analysis recovers, which is why they are here
     /// rather than left to the metadata lookup.
     pub playback_eq: Option<String>,
+    /// The rumble filter the replay chain imposes (§51), as a filter id.
+    ///
+    /// Independent of the curve above: a chain can have one, the other, both
+    /// or neither. `None` is nothing imposed, which is the usual answer.
+    pub rumble_filter: Option<String>,
     /// The physical item identifier for the copy that was transferred (WP-31).
     pub item: String,
     /// The known condition of that copy, in the holder's own words (WP-31).
@@ -536,6 +541,7 @@ impl From<&vcw_project::release::Record> for Release {
             confirmed: record.confirmed,
             is_mono: record.is_mono,
             playback_eq: record.playback_eq.clone(),
+            rumble_filter: record.rumble_filter.clone(),
             item: record.item.clone(),
             condition: record.condition.clone(),
         }

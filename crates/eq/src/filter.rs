@@ -48,7 +48,7 @@
 
 use crate::Error;
 use crate::catalog::{Catalog, FLAT, RIAA};
-use crate::curve::{Curve, REFERENCE_HZ, magnitude};
+use crate::curve::{Curve, REFERENCE_HZ, magnitude, rumble_roots};
 use vcw_types::format::{CaptureEq, StorageFormat};
 
 /// The band §51 states the tolerance over.
@@ -81,6 +81,13 @@ pub struct Filter {
     /// is auditioned" can be satisfied from the filter itself rather than from
     /// a second lookup that could disagree with it.
     curve: String,
+    /// The rumble filter folded into the same cascade, where one was asked for.
+    ///
+    /// Carried for the same reason `curve` is, and separately from it because
+    /// §51 makes the two selectable independently: a filter can be a curve, a
+    /// rumble filter, or both, and a badge that could only name one of them
+    /// would be silent about the other.
+    rumble: Option<String>,
 }
 
 impl Filter {
@@ -95,6 +102,7 @@ impl Filter {
     pub fn playback(
         catalog: &Catalog,
         curve_id: &str,
+        rumble: Option<&str>,
         capture: CaptureEq,
         rate: u32,
         channels: usize,
@@ -112,9 +120,40 @@ impl Filter {
                 curve.id != RIAA
             }
         };
+        // Before `design`, so that the free pole/zero pair `fit` places is
+        // fitted to the response the audio will actually meet. Folded into the
+        // one cascade rather than cascaded after it: the sections are already a
+        // product, and two filters would be two lots of state to reset and two
+        // 1 kHz normalizations to keep in step.
+        if let Some(id) = rumble {
+            let (zero, pole) = rumble_roots(id)?;
+            zeros.push(zero);
+            poles.push(pole);
+        }
         let mut filter = Self::design(&zeros, &poles, rate, channels)?;
         filter.inverts_riaa = inverts_riaa;
         filter.curve = curve.id.clone();
+        filter.rumble = rumble.map(str::to_owned);
+        Ok(filter)
+    }
+
+    /// The rumble filter alone, with no characteristic applied.
+    ///
+    /// Separate from [`Filter::playback`] because it asks nothing of the capture's
+    /// provenance and must not: a high pass at 20 Hz removes what no cutting
+    /// characteristic put there, so it is correct over a flat transfer, an RIAA
+    /// transfer and a transfer nobody recorded anything about. §51 refuses to apply
+    /// a *curve* to audio of unknown provenance because the wrong curve cannot be
+    /// heard as wrong; that argument does not reach this filter.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::UnknownRumble`] if `id` names none, and whatever
+    /// [`Filter::design`] refuses.
+    pub fn rumble_only(id: &str, rate: u32, channels: usize) -> Result<Self, Error> {
+        let (zero, pole) = rumble_roots(id)?;
+        let mut filter = Self::design(&[zero], &[pole], rate, channels)?;
+        filter.rumble = Some(id.to_owned());
         Ok(filter)
     }
 
@@ -133,6 +172,13 @@ impl Filter {
     /// | a curve | `Unknown` | [`Error::ProvenanceUnknown`]. |
     /// | a curve | either | that curve, over an inverse RIAA where one was applied. |
     ///
+    /// `rumble` is §51's other half, and it is a second dimension rather than a
+    /// sixth row: it is folded into whichever of those outcomes the curve reaches,
+    /// and where that outcome is `None` it stands alone. Including over an
+    /// `Unknown` capture, which is the one place the two dimensions disagree -
+    /// see [`Filter::rumble_only`] for why a high pass needs no provenance when a
+    /// curve does.
+    ///
     /// **Why an unstated curve over an unknown capture does nothing rather than
     /// refusing.** `capture_eq` defaults to `unknown` and every imported project
     /// has it (§12), so refusing here would make every project that predates the
@@ -148,23 +194,32 @@ impl Filter {
     pub fn wanted(
         catalog: &Catalog,
         stated: Option<&str>,
+        rumble: Option<&str>,
         capture: CaptureEq,
         rate: u32,
         channels: usize,
     ) -> Result<Option<Self>, Error> {
         let id = stated.unwrap_or(RIAA);
-        match capture {
-            CaptureEq::Unknown if stated.is_none() => return Ok(None),
+        // Whether a *curve* is wanted, which is the question the table answers.
+        // `None` here is not "nothing to do": the rumble filter is still live.
+        let curve = match capture {
+            CaptureEq::Unknown if stated.is_none() => None,
             CaptureEq::Unknown => return Err(Error::ProvenanceUnknown),
             // The two no-ops, named rather than left to cancel numerically: a
             // RIAA record through a RIAA phono stage is already flat, and a flat
             // record through a flat chain was never touched. Designing either
             // would multiply a pole by its own zero and trust the arithmetic.
-            CaptureEq::Riaa if id == RIAA => return Ok(None),
-            CaptureEq::Flat if id == FLAT => return Ok(None),
-            CaptureEq::Riaa | CaptureEq::Flat => {}
+            CaptureEq::Riaa if id == RIAA => None,
+            CaptureEq::Flat if id == FLAT => None,
+            CaptureEq::Riaa | CaptureEq::Flat => Some(id),
+        };
+        match (curve, rumble) {
+            (None, None) => Ok(None),
+            (None, Some(id)) => Self::rumble_only(id, rate, channels).map(Some),
+            (Some(id), rumble) => {
+                Self::playback(catalog, id, rumble, capture, rate, channels).map(Some)
+            }
         }
-        Self::playback(catalog, id, capture, rate, channels).map(Some)
     }
 
     /// Design a filter for an arbitrary set of real s-plane roots, in rad/s.
@@ -200,6 +255,7 @@ impl Filter {
             rate,
             inverts_riaa: false,
             curve: String::new(),
+            rumble: None,
         })
     }
 
@@ -211,6 +267,14 @@ impl Filter {
     /// arithmetic from being two answers to the same question.
     pub fn curve(&self) -> &str {
         &self.curve
+    }
+
+    /// The id of the rumble filter in force, or `None`.
+    ///
+    /// Independent of [`Filter::curve`], because §51 says the two are: a filter
+    /// may carry either, both, or - from [`Filter::design`] - neither.
+    pub fn rumble(&self) -> Option<&str> {
+        self.rumble.as_deref()
     }
 
     /// Whether this filter undoes an RIAA phono stage on its way to another curve.
@@ -470,9 +534,35 @@ fn nelder_mead<F: Fn(f64, f64) -> f64>(cost: F, seed: (f64, f64)) -> (f64, f64) 
 /// The conformance measurement, factored out because the chooser wants to show it too.
 pub fn worst_error_db(curve: &Curve, rate: u32) -> Result<f64, Error> {
     let (zeros, poles) = curve.poles_zeros();
-    let filter = Filter::design(&zeros, &poles, rate, 1)?;
+    worst_error_for(&zeros, &poles, rate)
+}
+
+/// The same measurement for a rumble filter, which has no [`Curve`] to come from.
+///
+/// §51 states one tolerance over one band and does not exempt the amendment's
+/// filter from it, so the amendment's filter is measured the same way. It is a
+/// separate entry point only because its roots are not a characteristic's three
+/// time constants; the arithmetic underneath is identical.
+///
+/// # Errors
+///
+/// [`Error::UnknownRumble`] if `id` names none, and whatever [`Filter::design`]
+/// refuses.
+pub fn worst_rumble_error_db(id: &str, rate: u32) -> Result<f64, Error> {
+    let (zero, pole) = rumble_roots(id)?;
+    worst_error_for(&[zero], &[pole], rate)
+}
+
+/// The worst divergence between the realized filter for these roots and the exact
+/// analog response of the same roots, over §51's band at `rate`.
+fn worst_error_for(zeros: &[f64], poles: &[f64], rate: u32) -> Result<f64, Error> {
+    let filter = Filter::design(zeros, poles, rate, 1)?;
+    let reference = magnitude(REFERENCE_HZ, zeros, poles);
     Ok(probe_frequencies(rate)
         .into_iter()
-        .map(|f| (filter.response_db(f) - curve.response_db(f)).abs())
+        .map(|f| {
+            let want = 20.0 * (magnitude(f, zeros, poles) / reference).log10();
+            (filter.response_db(f) - want).abs()
+        })
         .fold(0.0, f64::max))
 }

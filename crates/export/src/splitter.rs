@@ -479,6 +479,10 @@ pub fn plan(conn: &Connection, request: &Request) -> Result<Plan> {
         let filter = Filter::wanted(
             &catalog,
             stated,
+            // §51's other clause, and release-level only: a rumble filter is a
+            // property of the deck the transfer was auditioned through, so there
+            // is no side or track to override it.
+            release.rumble_filter.as_deref(),
             capture_eq,
             layout.rate.hz(),
             layout.channels as usize,

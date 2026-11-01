@@ -51,9 +51,13 @@
 //! assert!((columbia.response_db(50.0) - 13.568).abs() < 0.01);
 //!
 //! // A flat transfer takes the curve directly.
-//! let mut filter = Filter::playback(&catalog, "columbia_lp", CaptureEq::Flat, 44_100, 2)?;
+//! let mut filter = Filter::playback(&catalog, "columbia_lp", None, CaptureEq::Flat, 44_100, 2)?;
 //! let mut audio = [0.0f32; 512];
 //! filter.process(&mut audio);
+//!
+//! // The IEC amendment's rumble filter is a switch over any curve, or over none.
+//! let mut subsonic = Filter::rumble_only(vcw_eq::IEC_RUMBLE, 44_100, 2)?;
+//! subsonic.process(&mut audio);
 //! # Ok::<(), vcw_eq::Error>(())
 //! ```
 //!
@@ -68,8 +72,11 @@ pub mod curve;
 pub mod filter;
 
 pub use catalog::{BUILTIN_TOML, Catalog, FLAT, RIAA, in_force};
-pub use curve::{Curve, DEFAULT_REPLAY_SHELF_DB, REFERENCE_HZ};
-pub use filter::{BAND_HZ, Filter, TOLERANCE_DB, worst_error_db};
+pub use curve::{
+    Curve, DEFAULT_REPLAY_SHELF_DB, IEC_RUMBLE, IEC_RUMBLE_US, REFERENCE_HZ, RUMBLE_IDS,
+    rumble_roots,
+};
+pub use filter::{BAND_HZ, Filter, TOLERANCE_DB, worst_error_db, worst_rumble_error_db};
 
 /// What can go wrong reading a catalog or designing a filter.
 #[derive(Debug, thiserror::Error)]
@@ -93,6 +100,14 @@ pub enum Error {
     MissingCitation {
         /// The offending curve.
         id: String,
+    },
+    /// No rumble filter goes by that id.
+    #[error("no rumble filter is called '{id}' (known: {known})")]
+    UnknownRumble {
+        /// What was asked for.
+        id: String,
+        /// What is on offer, comma separated.
+        known: String,
     },
     /// Two curves claim the same id.
     #[error("two curves are both called '{id}'")]

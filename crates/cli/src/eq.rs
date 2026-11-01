@@ -47,7 +47,9 @@
 //! than only by the test suite.
 
 use anyhow::{Context, Result};
-use vcw_eq::{Catalog, TOLERANCE_DB, worst_error_db};
+use vcw_eq::{
+    Catalog, IEC_RUMBLE_US, RUMBLE_IDS, TOLERANCE_DB, worst_error_db, worst_rumble_error_db,
+};
 use vcw_types::STANDARD_RATES;
 
 /// The frequencies the published tables state. Printed as a block so a VCW curve can
@@ -82,6 +84,16 @@ pub(crate) fn require(id: &str) -> Result<String> {
     Ok(id.to_owned())
 }
 
+/// The same check for a rumble filter id, which is not in the curve catalog.
+///
+/// # Errors
+///
+/// `vcw_eq::Error::UnknownRumble`, which names the set.
+pub(crate) fn require_rumble(id: &str) -> Result<String> {
+    vcw_eq::rumble_roots(id)?;
+    Ok(id.to_owned())
+}
+
 /// One line per curve: what it is, and the three numbers that define it.
 pub(crate) fn list(overrides: Option<&str>, json: bool) -> Result<()> {
     let catalog = catalog(overrides)?;
@@ -109,11 +121,29 @@ pub(crate) fn list(overrides: Option<&str>, json: bool) -> Result<()> {
             micros(curve.treble_us),
         );
     }
+    // §51's other clause. Listed here and not in the table above because it is
+    // not a characteristic: a record was never cut with it, so it has no shelf,
+    // no turnover and no treble network to print in those columns. A person
+    // looking for what `--rumble` accepts looks here, which is why it is named
+    // rather than left to the design note.
+    println!("\nrumble filters, selectable independently of the curve");
+    for id in RUMBLE_IDS {
+        let corner = 1e6 / (2.0 * std::f64::consts::PI * IEC_RUMBLE_US);
+        let worst = STANDARD_RATES.iter().try_fold(0.0f64, |worst, rate| {
+            worst_rumble_error_db(id, rate.hz()).map(|e| worst.max(e))
+        })?;
+        println!(
+            "{id:<18} {:<27} {:<11} {:>7.0} us  -3.01 dB at {corner:.2} Hz, \
+             worst {worst:.3} dB",
+            "IEC 60098 amendment", "-", IEC_RUMBLE_US,
+        );
+    }
     println!(
         "\nTime constants in microseconds; a dash means the characteristic was cut\n\
          without that network. `vcw eq show <id>` prints one in full, with the\n\
          source it came from. `vcw release <project> set --playback-eq <id>`\n\
-         states the one a record was cut with."
+         states the one a record was cut with, and `--rumble <id>` the filter the\n\
+         replay chain imposes."
     );
     Ok(())
 }

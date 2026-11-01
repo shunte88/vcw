@@ -50,6 +50,16 @@ export function label(curve: Curve): string {
   return curve.era === null ? curve.name : `${curve.name} (${curve.era})`;
 }
 
+/**
+ * The rumble filter of the IEC amendment, and the only one VCW ships.
+ *
+ * `vcw_eq::IEC_RUMBLE`, named here for the same reason [`RIAA`] is: the window
+ * offers it as a switch rather than a list, because a list of one is not a
+ * choice anybody can make. A second filter turns the switch into a picker fed
+ * from Rust the way the curves are.
+ */
+export const IEC_RUMBLE = "iec";
+
 /** What the signal already carried when it reached the card (§51). */
 export type Chain = "flat" | "riaa" | "unstated";
 

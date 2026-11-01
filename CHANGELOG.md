@@ -14,9 +14,26 @@ version is 0 the project format may change between releases; every release from
 0.1.1 onwards reads every project written by an earlier one, and says so out
 loud if it cannot.
 
-## Unreleased
+## 0.5.0-alpha
+
+2026-11-01
 
 ### Added
+
+* **The IEC rumble filter, selectable on its own.** The 20 Hz subsonic highpass
+  the IEC added to its amendment in 1976: one pole, 3 dB down at the corner,
+  applied on replay and never part of any cutting characteristic. That is why it
+  is chosen separately from the curve - `vcw release set --rumble iec`, or the
+  **Rumble filter** switch beside **Cut with** in the metadata panel - and a
+  chain can have the filter, the curve, both or neither. Nothing imposes it:
+  a project that says nothing about it gets nothing, which is the same rule the
+  curves follow. It can also be used over a capture whose signal chain is
+  unknown, where a characteristic cannot be, because a highpass claims nothing
+  about how the record was cut. `vcw eq list` prints it with the corner it
+  realizes and the worst error over every supported rate, and an export names it
+  in `VCW_PROCESSING` like any other stage. Projects gain a `rumble_filter`
+  column, schema version 8; one written by an earlier release reads as nothing
+  selected, which it was.
 
 * **`vcw release set` takes `--item` and `--condition`.** The two
   release-level fields of the archivist transfer log were reachable only from

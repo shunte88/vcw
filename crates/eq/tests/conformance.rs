@@ -41,7 +41,10 @@
 //! `-0` in a code means there is no treble network rather than 0 dB at 10 kHz. See
 //! `docs/design/WP-29-playback-equalization.md`.
 
-use vcw_eq::{Catalog, Filter, TOLERANCE_DB, worst_error_db};
+use vcw_eq::{
+    Catalog, Filter, IEC_RUMBLE, IEC_RUMBLE_US, RUMBLE_IDS, TOLERANCE_DB, worst_error_db,
+    worst_rumble_error_db,
+};
 use vcw_types::format::CaptureEq;
 
 /// Every rate §8 requires.
@@ -168,7 +171,7 @@ fn a_shelfless_curve_is_given_a_replay_limit_rather_than_a_dc_pole() {
         emi.replay_shelf_db
     );
     for rate in RATES {
-        Filter::playback(&catalog, "emi", CaptureEq::Flat, rate, 2).expect("stable design");
+        Filter::playback(&catalog, "emi", None, CaptureEq::Flat, rate, 2).expect("stable design");
     }
 }
 
@@ -195,7 +198,7 @@ fn the_audio_leaving_the_filter_matches_the_curve() {
 
 /// Steady-state amplitude of a sine at `hz` after passing through the filter.
 fn measure(catalog: &Catalog, id: &str, rate: u32, hz: f64) -> f64 {
-    let mut filter = Filter::playback(catalog, id, CaptureEq::Flat, rate, 1).expect("design");
+    let mut filter = Filter::playback(catalog, id, None, CaptureEq::Flat, rate, 1).expect("design");
     let cycles = 400.0;
     let total = ((f64::from(rate) / hz) * cycles) as usize;
     let mut audio: Vec<f32> = (0..total)
@@ -212,7 +215,7 @@ fn measure(catalog: &Catalog, id: &str, rate: u32, hz: f64) -> f64 {
 fn riaa_played_back_from_an_riaa_capture_changes_nothing() {
     let catalog = Catalog::builtin();
     let mut filter =
-        Filter::playback(&catalog, "riaa", CaptureEq::Riaa, 48_000, 2).expect("design");
+        Filter::playback(&catalog, "riaa", None, CaptureEq::Riaa, 48_000, 2).expect("design");
     assert!(!filter.inverts_riaa(), "nothing is being inverted here");
     for hz in [20.0, 1000.0, 20_000.0] {
         assert!(
@@ -229,7 +232,8 @@ fn riaa_played_back_from_an_riaa_capture_changes_nothing() {
 #[test]
 fn another_curve_over_an_riaa_capture_inverts_riaa_and_says_so() {
     let catalog = Catalog::builtin();
-    let filter = Filter::playback(&catalog, "teldec", CaptureEq::Riaa, 96_000, 2).expect("design");
+    let filter =
+        Filter::playback(&catalog, "teldec", None, CaptureEq::Riaa, 96_000, 2).expect("design");
     assert!(filter.inverts_riaa());
     // §51 wants the noise cost stated, not implied. Teldec differs from RIAA only in
     // the treble constant, so the net is a treble lift: about +2.8 dB at 10 kHz.
@@ -243,7 +247,7 @@ fn another_curve_over_an_riaa_capture_inverts_riaa_and_says_so() {
 #[test]
 fn a_capture_whose_provenance_was_never_stated_is_refused() {
     let catalog = Catalog::builtin();
-    let error = Filter::playback(&catalog, "riaa", CaptureEq::Unknown, 48_000, 2)
+    let error = Filter::playback(&catalog, "riaa", None, CaptureEq::Unknown, 48_000, 2)
         .expect_err("§51 requires the operator to state provenance");
     let message = error.to_string();
     assert!(message.contains("never recorded"), "{message}");
@@ -259,7 +263,7 @@ fn the_flat_entry_passes_audio_through_untouched() {
     let catalog = Catalog::builtin();
     assert!(catalog.require("flat").expect("flat").is_flat());
     let mut filter =
-        Filter::playback(&catalog, "flat", CaptureEq::Flat, 44_100, 2).expect("design");
+        Filter::playback(&catalog, "flat", None, CaptureEq::Flat, 44_100, 2).expect("design");
     let original: Vec<f32> = (0..512).map(|n| (n as f32 / 97.0).sin()).collect();
     let mut audio = original.clone();
     filter.process(&mut audio);
@@ -348,7 +352,7 @@ fn two_curves_with_one_id_are_refused() {
 #[test]
 fn a_decision_nobody_made_changes_nothing() {
     let catalog = Catalog::builtin();
-    let wanted = |stated, capture| Filter::wanted(&catalog, stated, capture, 48_000, 2);
+    let wanted = |stated, capture| Filter::wanted(&catalog, stated, None, capture, 48_000, 2);
 
     assert!(
         wanted(None, CaptureEq::Unknown)
@@ -402,7 +406,7 @@ fn stored_bytes_and_floats_take_the_same_curve() {
         .collect();
 
     let mut floats = samples.clone();
-    Filter::playback(&catalog, "riaa", CaptureEq::Flat, 48_000, 2)
+    Filter::playback(&catalog, "riaa", None, CaptureEq::Flat, 48_000, 2)
         .expect("design")
         .process(&mut floats);
 
@@ -413,7 +417,7 @@ fn stored_bytes_and_floats_take_the_same_curve() {
     {
         assert!(format.encode_sample(*sample, slot));
     }
-    Filter::playback(&catalog, "riaa", CaptureEq::Flat, 48_000, 2)
+    Filter::playback(&catalog, "riaa", None, CaptureEq::Flat, 48_000, 2)
         .expect("design")
         .process_stored(&mut bytes, format);
 
@@ -435,8 +439,181 @@ fn an_empty_filter_leaves_the_bytes_alone() {
     let format = vcw_types::format::StorageFormat::Int16;
     let original: Vec<u8> = (0..64u8).collect();
     let mut bytes = original.clone();
-    Filter::playback(&catalog, "flat", CaptureEq::Flat, 48_000, 2)
+    Filter::playback(&catalog, "flat", None, CaptureEq::Flat, 48_000, 2)
         .expect("design")
         .process_stored(&mut bytes, format);
     assert_eq!(bytes, original, "a flat curve rewrote the audio");
+}
+
+/// §51's other clause: the amendment's rumble filter, held to the same tolerance.
+///
+/// The number it is measured against is not read off a chart. A single real pole
+/// at `-1/t4` is down 3.01 dB where `w = 1/t4`, exactly, so 7950 us predicts
+/// -3.0103 dB at 20.019 Hz and the published "-3 dB at 20 Hz" is the rounded
+/// version of that. The test asserts the arithmetic, which is what the filter has
+/// to realize.
+#[test]
+fn the_rumble_filter_meets_the_tolerance_at_every_rate() {
+    let corner = 1e6 / (2.0 * std::f64::consts::PI * IEC_RUMBLE_US);
+    assert!(
+        (corner - 20.019).abs() < 0.001,
+        "7950 us is a corner at {corner:.4} Hz, not 20.019"
+    );
+
+    for id in RUMBLE_IDS {
+        for rate in RATES {
+            let error = worst_rumble_error_db(id, rate).expect("design");
+            assert!(
+                error < TOLERANCE_DB,
+                "the {id} rumble filter at {rate} Hz is {error:.4} dB out, \
+                 and §51 allows {TOLERANCE_DB}"
+            );
+        }
+    }
+
+    // At the corner itself, where the published figure is quoted.
+    for rate in RATES {
+        let filter = Filter::rumble_only(IEC_RUMBLE, rate, 2).expect("design");
+        let at_corner = filter.response_db(corner);
+        assert!(
+            (at_corner + 3.0103).abs() < 0.01,
+            "{rate} Hz: the corner reads {at_corner:+.4} dB, not -3.0103"
+        );
+        assert!(
+            filter.response_db(1000.0).abs() < 0.001,
+            "{rate} Hz: a rumble filter must not touch 1 kHz"
+        );
+    }
+}
+
+/// The free pole/zero pair `fit` places must not spoil a design it is not needed
+/// for.
+///
+/// Matched-z alone is already exact for one zero at the origin against one real
+/// pole, so the fit's only job here is to find the diagonal where its extra pair
+/// cancels itself. It is seeded at `(-0.5, -0.4)`, which is **1.89 dB out** at
+/// 44.1 kHz - four times §51's budget - so a fit that failed to converge would
+/// ship a filter that is audibly wrong, and nothing else in this file would
+/// notice. This is the assertion that it converges rather than the assumption.
+#[test]
+fn the_fit_converges_on_a_design_that_needs_no_fitting() {
+    for rate in RATES {
+        let error = worst_rumble_error_db(IEC_RUMBLE, rate).expect("design");
+        assert!(
+            error < 0.001,
+            "{rate} Hz: the fit left {error:.5} dB on a design matched-z gets exactly \
+             right, so it did not reach the cancelling diagonal"
+        );
+    }
+}
+
+/// The two halves of §51 compose, and the rumble filter is the independent one.
+///
+/// Folding its roots in before `fit` rather than cascading a second filter after
+/// one has to produce the curve's response *plus* the high pass, with nothing
+/// else moved: the same 1 kHz reference, the same curve id reported, and exactly
+/// the amendment's attenuation at 20 Hz on top of whatever the curve does there.
+#[test]
+fn the_rumble_filter_is_independent_of_the_curve() {
+    let catalog = Catalog::builtin();
+    let alone = Filter::rumble_only(IEC_RUMBLE, 44_100, 2).expect("design");
+
+    for id in ["riaa", "columbia_lp", "emi", "flat"] {
+        let bare = Filter::playback(&catalog, id, None, CaptureEq::Flat, 44_100, 2).expect("bare");
+        let both = Filter::playback(&catalog, id, Some(IEC_RUMBLE), CaptureEq::Flat, 44_100, 2)
+            .expect("with rumble");
+
+        assert_eq!(
+            both.curve(),
+            id,
+            "the curve lost its name to the rumble filter"
+        );
+        assert_eq!(both.rumble(), Some(IEC_RUMBLE));
+        assert_eq!(bare.rumble(), None);
+
+        for hz in [20.0, 50.0, 100.0, 1_000.0, 10_000.0] {
+            let added = both.response_db(hz) - bare.response_db(hz);
+            assert!(
+                (added - alone.response_db(hz)).abs() < 0.01,
+                "{id} at {hz} Hz: the rumble filter added {added:+.4} dB over the curve \
+                 but {:+.4} dB on its own",
+                alone.response_db(hz)
+            );
+        }
+    }
+}
+
+/// A high pass needs no provenance, where a curve does.
+///
+/// §51 refuses to apply a *characteristic* to a capture nobody recorded anything
+/// about, because the wrong characteristic cannot be heard as wrong. That argument
+/// does not reach a 20 Hz high pass: no cutting characteristic put anything there,
+/// so removing it is correct over a flat transfer, an RIAA transfer and an
+/// unrecorded one alike. The asymmetry is deliberate and this is where it is
+/// stated.
+#[test]
+fn rumble_alone_is_allowed_where_a_curve_is_refused() {
+    let catalog = Catalog::builtin();
+    let wanted =
+        |stated, rumble, capture| Filter::wanted(&catalog, stated, rumble, capture, 48_000, 2);
+
+    let unknown = wanted(None, Some(IEC_RUMBLE), CaptureEq::Unknown)
+        .expect("a high pass asks nothing of the provenance")
+        .expect("and it is not a no-op");
+    assert_eq!(unknown.rumble(), Some(IEC_RUMBLE));
+    assert_eq!(
+        unknown.curve(),
+        "",
+        "no curve was stated, so none may be claimed"
+    );
+
+    // The curve is still refused over the same capture, rumble or no rumble.
+    for rumble in [None, Some(IEC_RUMBLE)] {
+        let refusal = wanted(Some("riaa"), rumble, CaptureEq::Unknown)
+            .expect_err("a stated curve over an unknown capture is refused");
+        assert!(refusal.to_string().contains("never recorded"), "{refusal}");
+    }
+
+    // The two no-ops stop being no-ops once a rumble filter is asked for.
+    for (stated, capture) in [(None, CaptureEq::Riaa), (Some("flat"), CaptureEq::Flat)] {
+        assert!(
+            wanted(stated, None, capture).expect("a no-op").is_none(),
+            "{stated:?} over {capture:?} was a no-op before the amendment arrived"
+        );
+        let only = wanted(stated, Some(IEC_RUMBLE), capture)
+            .expect("the rumble filter is still wanted")
+            .expect("so the chain is not empty");
+        assert_eq!(only.rumble(), Some(IEC_RUMBLE));
+    }
+}
+
+/// An unknown rumble filter is refused, and the refusal names what is on offer
+/// from the same list the offer comes from.
+#[test]
+fn an_unknown_rumble_filter_is_refused_by_name() {
+    let error = Filter::rumble_only("subsonic", 48_000, 2).expect_err("no such filter");
+    let message = error.to_string();
+    assert!(message.contains("subsonic"), "{message}");
+    for id in RUMBLE_IDS {
+        assert!(
+            message.contains(id),
+            "the refusal offers {RUMBLE_IDS:?} but did not name {id}: {message}"
+        );
+    }
+    // And through every entry point, because a refusal that only guards one is a
+    // refusal the other two call sites walk past.
+    let catalog = Catalog::builtin();
+    assert!(
+        Filter::playback(
+            &catalog,
+            "riaa",
+            Some("subsonic"),
+            CaptureEq::Flat,
+            48_000,
+            2
+        )
+        .is_err()
+    );
+    assert!(Filter::wanted(&catalog, None, Some("subsonic"), CaptureEq::Flat, 48_000, 2).is_err());
+    assert!(worst_rumble_error_db("subsonic", 48_000).is_err());
 }

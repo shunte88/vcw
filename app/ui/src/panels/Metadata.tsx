@@ -49,7 +49,7 @@ import type {
   Identified,
   ReleaseEdit,
 } from "../bindings/vcw";
-import { label, useCurves } from "../curves";
+import { IEC_RUMBLE, label, useCurves } from "../curves";
 import { type Translate, count, t, useText } from "../i18n";
 import { useKeys } from "../keys";
 import { step } from "../select";
@@ -93,6 +93,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
   // is created by the write, not by reading it.
   const isMono = project.release?.isMono ?? false;
   const playbackEq = project.release?.playbackEq ?? "";
+  const rumble = project.release?.rumbleFilter ?? "";
 
   // Every field is sent on every edit, so a caller that cares about one of
   // them says only that one and the rest go as `null`, which is the command's
@@ -102,6 +103,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
       api.editRelease({
         isMono: null,
         playbackEq: null,
+        rumble: null,
         item: null,
         condition: null,
         ...edit,
@@ -308,7 +310,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
           <Switch
             checked={!isMono}
             onChange={(stereo) =>
-              stateRelease({ isMono: !stereo, playbackEq: null })
+              stateRelease({ isMono: !stereo })
             }
             off={text("metadata.mono")}
             on={text("metadata.stereo")}
@@ -323,7 +325,7 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
               value={playbackEq}
               title={text("metadata.eq.title")}
               onChange={(event) =>
-                stateRelease({ isMono: null, playbackEq: event.target.value })
+                stateRelease({ playbackEq: event.target.value })
               }
             >
               {/*
@@ -341,6 +343,22 @@ export function Metadata({ store }: { store: Store }): React.JSX.Element {
             </select>
           </span>
         </label>
+        {/*
+          §51 makes this independent of the curve above: a chain can impose the
+          filter over any characteristic, or over none. One filter ships, so a
+          switch rather than a picker - and the empty string is what clears it,
+          the same word the curve uses.
+        */}
+        <div className="seed-switch">
+          <span>{text("metadata.rumble")}</span>
+          <Switch
+            checked={rumble !== ""}
+            onChange={(on) => stateRelease({ rumble: on ? IEC_RUMBLE : "" })}
+            off={text("metadata.rumble.off")}
+            on={text("metadata.rumble.on")}
+            title={text("metadata.rumble.title")}
+          />
+        </div>
         <label className="seed-field">
           {text("metadata.item")}
           <input

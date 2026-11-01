@@ -948,6 +948,18 @@ text = "Every provider that is turned on"
 ["metadata.relaid"]
 text = "The release is cut over {sides}, so {count} track(s) moved to the side they are actually on. The audio did not move: every boundary is the same frame of the same capture."
 
+["metadata.rumble"]
+text = "Rumble filter"
+
+["metadata.rumble.off"]
+text = "None"
+
+["metadata.rumble.on"]
+text = "IEC"
+
+["metadata.rumble.title"]
+text = "The subsonic filter of the IEC amendment: 20 Hz, one pole, 3 dB down at the corner. It is a property of the replay chain rather than the record, so it is chosen separately from the characteristic above."
+
 ["metadata.searching"]
 text = "Searching..."
 

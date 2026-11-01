@@ -81,6 +81,7 @@ function release(extra: Partial<Release> = {}): Release {
     confirmed: false,
     isMono: false,
     playbackEq: null,
+    rumbleFilter: null,
     item: "",
     condition: "",
     ...extra,
@@ -142,6 +143,7 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: true,
       playbackEq: null,
+      rumble: null,
       item: null,
       condition: null,
     });
@@ -157,6 +159,7 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: null,
       playbackEq: "columbia_lp",
+      rumble: null,
       item: null,
       condition: null,
     });
@@ -174,6 +177,45 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: null,
       playbackEq: "",
+      rumble: null,
+      item: null,
+      condition: null,
+    });
+  });
+
+  // §51's independence, from the window's end: the switch sends the filter id
+  // and nothing else, so the curve already stated survives being touched.
+  it("imposes the rumble filter without touching the characteristic", async () => {
+    const container = await render(release({ playbackEq: "columbia_lp" }));
+    const boxes = container.querySelectorAll<HTMLInputElement>(
+      ".pressing input[type=checkbox]",
+    );
+    expect(boxes.length, "channels and the rumble filter").toBe(2);
+    await act(async () => {
+      boxes[1]?.click();
+    });
+    expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
+      isMono: null,
+      playbackEq: null,
+      rumble: "iec",
+      item: null,
+      condition: null,
+    });
+  });
+
+  it("clears the rumble filter with the word that clears a curve", async () => {
+    const container = await render(release({ rumbleFilter: "iec" }));
+    const boxes = container.querySelectorAll<HTMLInputElement>(
+      ".pressing input[type=checkbox]",
+    );
+    expect(boxes[1]?.checked, "a stated filter reads as on").toBe(true);
+    await act(async () => {
+      boxes[1]?.click();
+    });
+    expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
+      isMono: null,
+      playbackEq: null,
+      rumble: "",
       item: null,
       condition: null,
     });
@@ -193,6 +235,7 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: true,
       playbackEq: null,
+      rumble: null,
       item: null,
       condition: null,
     });
@@ -219,6 +262,7 @@ describe("the two facts a provider cannot supply", () => {
     expect(vi.mocked(api.editRelease)).toHaveBeenCalledWith({
       isMono: null,
       playbackEq: null,
+      rumble: null,
       item: "SH-LP-0412",
       condition: null,
     });

@@ -16,7 +16,7 @@ no rewriting, and everything else is what Audacity has nowhere to put. See
 |---|---|
 | extension | `.vcw` |
 | `application_id` | `0x56435700` (ASCII `VCW\0`) - Audacity's is `0x41554459`, `AUDY`, for *both* AUP3 and AUP4 |
-| `user_version` | 7 - the schema version, a plain ascending integer |
+| `user_version` | 8 - the schema version, a plain ascending integer |
 | format version | 1 - the *meaning* of the schema, in `meta` |
 | page size | 65536 bytes, set at creation |
 | journal mode | WAL, `synchronous=FULL` (D3) |
@@ -200,6 +200,7 @@ The release being captured (§29, §32). One per project: §29's topology is Pro
 | `playback_eq` | `TEXT` | The characteristic this release was cut with (§51), as a curve id from the catalog `vcw eq list` prints: 'riaa', 'columbia_lp', 'decca_ffrr_78' and so on. NULL means nobody has said, and playback falls back to the application default. Not what the capture arrived with - that is captures.capture_eq, which is the input to this decision rather than the decision. |
 | `item` | `TEXT NOT NULL DEFAULT ''` | The physical item identifier: a shelf mark, an accession number, or whatever the holder calls this copy. Not the catalog number, which identifies the pressing; this identifies the one object that was played. |
 | `condition` | `TEXT NOT NULL DEFAULT ''` | The known condition of that copy, in the holder's own words. Free text because the grading vocabularies disagree and a project should not pick one. |
+| `rumble_filter` | `TEXT` | The rumble filter in force (§51), as a filter id: 'iec' is the one the IEC amendment defines, and `vcw eq list` prints the set. NULL means none, which is both the default and what every project written before this column says. Not a boolean, because v4's is_mono/riaa_eq pair is the standing lesson that a switch for one named thing becomes a name for one of several things, and the migration out of that shape costs more than the TEXT column it should have been. |
 
 ### `release_artwork`
 

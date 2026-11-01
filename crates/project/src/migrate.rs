@@ -44,7 +44,9 @@
 use rusqlite::Connection;
 
 use crate::error::{Error, Result};
-use crate::schema::{SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7};
+use crate::schema::{
+    SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8,
+};
 
 /// One step from schema version `version - 1` to `version`.
 #[derive(Debug, Clone, Copy)]
@@ -96,6 +98,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 7,
         description: "the transfer log: the copy on releases, the session on captures",
         sql: SCHEMA_V7,
+    },
+    Migration {
+        version: 8,
+        description: "the rumble filter: releases.rumble_filter",
+        sql: SCHEMA_V8,
     },
 ];
 

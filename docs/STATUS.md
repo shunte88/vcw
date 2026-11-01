@@ -9218,3 +9218,74 @@ rig, whose 24/192 ring findings were taken from an `arm64` deb built while the
 floor was 2.35; reproducing them now means building from source on that machine
 or moving it to Trixie. Building from source has no floor but the toolchain's,
 and the README says so where it says what the packages need.
+
+## 2026-11-01, the rumble filter comes off the shelf
+
+§51's last unbuilt sentence: *the IEC amendment's rumble filter shall be
+selectable independently of the curve.* It was parked on 2026-10-12 with the
+argument that a rumble filter is not part of any cutting characteristic and so
+belongs with the repair stages rather than with the curves. That argument was
+right about what it is and wrong about where it goes. Independence is the
+requirement, not a reason to defer: the filter is a parametric stage like the
+curve, it is re-derivable from one row, and sitting it beside the curve while
+keeping it selectable on its own is the whole of what §51 asked for.
+
+### The arithmetic first, because the fit has a trap in it
+
+T0 = 7950 us is one pole and no zero. The pole is at -1/7950 us =
+-125.786 rad/s, which is **20.0195 Hz**, and the filter is 3.013 dB down there
+and 6.995 dB down at 10 Hz. Those three numbers were computed before any code
+was written, and the matched-z design reproduces them to five decimal places at
+every rate VCW supports, so nothing needs fitting.
+
+That mattered. The curve designer's free pole/zero pair has an exact-zero
+valley along `ez == ep` - a pole and a zero on top of each other cancel - but
+its seed sits at `(-0.5, -0.4)` and the optimizer has to walk to the diagonal
+to find it. Left to itself from that seed it stops **1.89 dB** out at 44.1 kHz,
+four times §51's +/-0.5 dB budget. So convergence is asserted rather than
+assumed: `the_fit_converges_on_a_design_that_needs_no_fitting` requires the
+realized response within 0.001 dB of the analytic one, and with the iteration
+count cut to zero it reports *the fit left 1.80923 dB ... did not reach the
+cancelling diagonal*.
+
+### Independent means independent in five places
+
+The filter id is its own column, `releases.rumble_filter` in **schema v8**, and
+`TEXT` rather than a boolean for the reason v4 wrote down the hard way: a
+switch for one named thing becomes a name for one of several things, and the
+migration out of that shape costs more than the column should have. It is its
+own flag, `vcw release set --rumble <id>`, checked against its own set so that
+a curve id in that field is the typo it is. It is its own switch in the
+metadata panel. `Filter::wanted` resolves the four combinations rather than
+three, so **a rumble filter with no curve is allowed where a curve alone would
+be refused** - a capture whose chain is `unknown` cannot be given a
+characteristic, but a highpass over it claims nothing about 1954 and is fine.
+And `Chain` names it as its own stage, `rumble-filter`, which is how it reaches
+the exported `VCW_PROCESSING` tag.
+
+No new export tag. `VCW_PLAYBACK_EQ` and `VCW_PLAYBACK_EQ_APPLIED` are two tags
+because a curve can be stated and not applied; a rumble filter cannot be, so
+the stage list is the whole record of it.
+
+### What the parking leaves behind
+
+The replay bass shelf stays mandatory. The IEC highpass does cancel a shelfless
+curve's DC pole exactly, both of them sitting at z = 1, but it is selected and
+not imposed, so most chains will not have it and a filter nobody chose cannot
+bound anything. Choosing it over a shelfless curve is now belt and braces,
+which is the right way round.
+
+### Both ends, again
+
+Three mutations, each caught by the test that should catch it: 7950 us cut to
+795 reports *a corner at 200.1949 Hz, not 20.019*; the fit stopped at zero
+iterations reports the 1.80923 dB above; `Filter::playback` ignoring its new
+argument reports *added +0.0000 dB over the curve but -3.0128 dB on its own*.
+On the CLI, the apply made to drop the field gives `left: Null, right: "iec"`,
+and the validation made to pass anything through lets a curve id reach the
+column. In the window, the clear path made to write the id back fails on
+`rumble: "" / "iec"`.
+
+One gotcha worth writing down: restoring a mutated file with `cp -a` brings the
+backup's older mtime with it, and cargo then reuses the mutated artifact and
+reports a pass. The revert has to `touch` what it restores.

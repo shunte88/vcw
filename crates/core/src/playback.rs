@@ -410,6 +410,10 @@ fn chain_for(conn: &Connection, capture_id: i64, layout: &Layout) -> Result<Chai
     let chain = Filter::wanted(
         &Catalog::builtin(),
         stated,
+        // Release level only, and not resolved through sides: see the ponytail
+        // note above, and `releases.rumble_filter` for why there is nothing
+        // below the release to resolve.
+        release.as_ref().and_then(|r| r.rumble_filter.as_deref()),
         capture.info.eq,
         layout.rate.hz(),
         layout.channels as usize,

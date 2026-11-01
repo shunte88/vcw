@@ -74,11 +74,14 @@ catalog entry.
 
 The IEC amendment is a fourth constant, **T0 = 7950 us (20.02 Hz)**, a first-order
 highpass added to IEC 98 in September 1976, applied on replay only and never adopted by
-the RIAA. **Parked, 2026-10-12.** It is a rumble filter and not part of any cutting
-characteristic, so it belongs with noise reduction, click and pop removal and the rest
-of the post-processing recipes rather than here. It is noted because parking it has a
-consequence this work had to absorb: it was the only thing bounding the bass of a
-shelfless curve. See section 5.
+the RIAA. **Parked 2026-10-12, shipped 2026-11-01.** It is a rumble filter and not part
+of any cutting characteristic, which is exactly why §51 asks for it to be selectable on
+its own: `releases.rumble_filter` is its own column beside `playback_eq`, `--rumble` its
+own flag, and the window its own switch. A chain can impose it over any characteristic,
+over a capture nobody has stated a characteristic for, or over nothing at all. What the
+parking cost is permanent, though, and section 5 is where to read it: the amendment was
+the only thing bounding the bass of a shelfless curve, and the replay shelf that took
+that job keeps it whether the filter is selected or not.
 
 ## 2. Three traps in the published numbers
 
@@ -282,10 +285,12 @@ side had to be a shelving type." That is exactly what the code letters encode - 
 shelf, `X` +12 dB, `C` +14, `A` +16, `B` +18, `R` +20 - and they describe the *player*,
 not the record. A real machine always limited the boost somewhere.
 
-The IEC highpass would have cancelled that DC pole exactly, both sitting at z = 1. With
-the rumble filter parked there is nothing to cancel it, so **the catalog carries the
-replay shelf itself**: `replay_shelf_db`, default +20 dB, applied to any curve with no
-shelf of its own.
+The IEC highpass cancels that DC pole exactly, both sitting at z = 1. It cannot be
+relied on to, because it is selected rather than imposed and most chains will not have
+it, so **the catalog carries the replay shelf itself**: `replay_shelf_db`, default
++20 dB, applied to any curve with no shelf of its own. Selecting the filter over a
+shelfless curve is then belt and braces, which is the right way round: the shelf holds
+with no filter, and the filter holds with no shelf.
 
 It is stated as the shelf-to-turnover ratio `20*log10(t1/t2)`, because that is exactly
 what the letters mean - RIAA is `500R` and 3180/318 is 10, which is +20.00 dB. The

@@ -52,6 +52,48 @@ pub const REFERENCE_HZ: f64 = 1000.0;
 /// shelfless curve cannot simply be realized as written.
 pub const DEFAULT_REPLAY_SHELF_DB: f64 = 20.0;
 
+/// Every rumble filter id, in the order a chooser should offer them.
+///
+/// One, because there is one standardized replay high pass and §51 names it. A
+/// list rather than a bare constant so that [`rumble_roots`]'s refusal names what
+/// is on offer from the same place the offer comes from, and gains a second entry
+/// the day the catalog does.
+pub const RUMBLE_IDS: &[&str] = &[IEC_RUMBLE];
+
+/// The id of the rumble filter IEC 60098's amendment defines.
+pub const IEC_RUMBLE: &str = "iec";
+
+/// The amendment's rumble time constant, microseconds.
+///
+/// IEC 60098's 1976 amendment added a fourth time constant to the *replay*
+/// characteristic: a single-pole high pass at 7950 us, which is 20.019 Hz and
+/// -3.01 dB at 20 Hz. No record was ever cut with it, which is exactly why §51
+/// makes it selectable independently of the curve - a deck either imposes it or
+/// does not, and that choice belongs to the replay chain rather than to the
+/// pressing. Sources disagree about whether it should be imposed at all, which is
+/// a second reason it is a switch and not part of a characteristic.
+pub const IEC_RUMBLE_US: f64 = 7950.0;
+
+/// The s-plane roots of a rumble filter, in rad/s, as `(zero, pole)`.
+///
+/// One of each, both real, like every other root in this crate. The zero sits at
+/// the origin, which is what makes it a high pass and which needs no special case
+/// anywhere: this crate's `magnitude` is `sqrt(w^2 + r^2)`, so `r = 0` is just `w`,
+/// and matched-z maps `s = 0` onto `z = 1` exactly.
+///
+/// # Errors
+///
+/// [`crate::Error::UnknownRumble`], naming [`RUMBLE_IDS`].
+pub fn rumble_roots(id: &str) -> Result<(f64, f64), crate::Error> {
+    if id == IEC_RUMBLE {
+        return Ok((0.0, -1.0 / (IEC_RUMBLE_US * US)));
+    }
+    Err(crate::Error::UnknownRumble {
+        id: id.to_owned(),
+        known: RUMBLE_IDS.join(", "),
+    })
+}
+
 /// One playback equalization characteristic, as the catalog file states it.
 ///
 /// Fields are optional because the networks are: a curve with no treble rolloff omits

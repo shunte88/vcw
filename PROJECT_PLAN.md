@@ -854,10 +854,12 @@ every import is `unknown` and Audacity records nothing about the preamp - so
 `vcw eq provenance` and the capture panel's **Chain** column exist now. A side played
 through a curve is reported as not bit-perfect, which §9 requires. The window can still
 only set the curve at setup, which is the same gap that leaves `is_mono` unchangeable
-afterwards. **The IEC rumble filter is parked by decision, 2026-10-12**: it is used
-independently of any cutting characteristic, so it belongs with noise reduction and
-click removal rather than here. Parking it is what made the replay bass shelf mandatory
-for shelfless curves, which the note explains. The window can set the release's and
+afterwards. **The IEC rumble filter was parked by decision on 2026-10-12 and shipped
+on 2026-11-01**: being used independently of any cutting characteristic is what §51 asks
+for, so it is selected on its own - `releases.rumble_filter`, `--rumble`, a switch in the
+window - and it is off until somebody says otherwise. Parking it is what made the replay
+bass shelf mandatory for shelfless curves, and the shelf stays: a filter nobody selected
+cannot bound anything, which the note explains. The window can set the release's and
 each side's curve after setup since 2026-10-16, which closes that gap and the `is_mono`
 one with it.
 
@@ -957,7 +959,8 @@ Teldec, and others besides. Played back through a RIAA stage they are audibly wr
 the bass and the treble, and the listener who owns those records is exactly the
 listener who will notice. Each curve is three numbers - a bass turnover, a treble
 rolloff, and in RIAA's case a bass shelf, with the IEC amendment's rumble filter as a
-separate option - so the implementation is a small parameterised filter and a table.
+separate option, which is what it shipped as - so the implementation is a small
+parameterised filter and a table.
 **The table has to be sourced from a citable reference and the filter's response
 measured against it, not transcribed from memory**: the per-label numbers are widely
 repeated and widely wrong, and a curve that is close is worse than no curve because

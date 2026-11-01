@@ -118,6 +118,8 @@ pub(crate) struct Change {
     pub(crate) mono: Option<bool>,
     /// The characteristic the record was cut with, as a curve id. Empty clears it.
     pub(crate) playback_eq: Option<String>,
+    /// The rumble filter the replay chain imposes, as a filter id. Empty clears it.
+    pub(crate) rumble: Option<String>,
     /// The physical item identifier for the copy that was transferred (WP-31).
     pub(crate) item: Option<String>,
     /// The known condition of that copy (WP-31).
@@ -198,7 +200,7 @@ fn show(project: &Project, json: bool) -> Result<()> {
              \"catalog\":{},\"country\":{},\"barcode\":{},\"composer\":{},\
              \"discs\":{},\"discs_recorded\":{},\"numbering\":\"{}\",\
              \"sides\":{},\"confirmed\":{},\"mono\":{},\"playback_eq\":{},\
-             \"item\":{},\"condition\":{},\"empty\":{}}}",
+             \"rumble_filter\":{},\"item\":{},\"condition\":{},\"empty\":{}}}",
             quote(&record.album),
             quote(&record.album_artist),
             record
@@ -221,6 +223,10 @@ fn show(project: &Project, json: bool) -> Result<()> {
             record.is_mono,
             record
                 .playback_eq
+                .as_deref()
+                .map_or_else(|| "null".to_string(), quote),
+            record
+                .rumble_filter
                 .as_deref()
                 .map_or_else(|| "null".to_string(), quote),
             quote(&record.item),
@@ -276,6 +282,13 @@ fn show(project: &Project, json: bool) -> Result<()> {
             Some(curve) => curve.clone(),
             None => format!("{} (nothing stated)", vcw_eq::RIAA),
         },
+    );
+    // Unlike the curve, silence here is not a default standing in for a choice:
+    // nothing imposes a rumble filter unless somebody says so, so "none" is the
+    // fact rather than a stand-in for one.
+    field(
+        "rumble filter",
+        record.rumble_filter.as_deref().unwrap_or("none"),
     );
     field("confirmed", if record.confirmed { "yes" } else { "no" });
     if !missing.is_empty() {
@@ -381,6 +394,9 @@ fn apply(record: &mut release::Record, change: &Change) -> Result<()> {
     }
     if let Some(curve) = &change.playback_eq {
         record.playback_eq = (!curve.is_empty()).then(|| curve.clone());
+    }
+    if let Some(rumble) = &change.rumble {
+        record.rumble_filter = (!rumble.is_empty()).then(|| rumble.clone());
     }
     if let Some(item) = &change.item {
         record.item = item.clone();

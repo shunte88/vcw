@@ -1186,6 +1186,9 @@ struct ReleaseFields {
     /// The characteristic the record was cut with (§51), as `vcw eq list` names them. Empty clears it back to the usual one.
     #[arg(long)]
     playback_eq: Option<String>,
+    /// The rumble filter the replay chain imposes (§51), as `vcw eq list` names them. Empty clears it, which is the default.
+    #[arg(long)]
+    rumble: Option<String>,
     /// The physical item identifier for this copy: a shelf mark or an accession number (WP-31). Not the catalog number, which identifies the pressing.
     #[arg(long)]
     item: Option<String>,
@@ -1717,6 +1720,7 @@ fn run() -> anyhow::Result<()> {
                     confirm: fields.confirm,
                     mono: fields.mono,
                     playback_eq: checked_curve(fields.playback_eq)?,
+                    rumble: checked_rumble(fields.rumble)?,
                     item: fields.item,
                     condition: fields.condition,
                 })),
@@ -1854,6 +1858,14 @@ fn run() -> anyhow::Result<()> {
 fn checked_curve(named: Option<String>) -> anyhow::Result<Option<String>> {
     match named {
         Some(id) if !id.is_empty() => eq::require(&id).map(Some),
+        other => Ok(other),
+    }
+}
+
+/// The same, for a rumble filter id, which the curve catalog does not hold.
+fn checked_rumble(named: Option<String>) -> anyhow::Result<Option<String>> {
+    match named {
+        Some(id) if !id.is_empty() => eq::require_rumble(&id).map(Some),
         other => Ok(other),
     }
 }

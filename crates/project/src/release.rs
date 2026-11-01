@@ -106,6 +106,16 @@ pub struct Record {
     /// decision rather than the decision: a flat capture of an RIAA pressing has the
     /// curve applied, an RIAA capture of the same pressing needs nothing done.
     pub playback_eq: Option<String>,
+    /// The rumble filter in force (§51), as a filter id from `vcw_eq::RUMBLE_IDS`.
+    ///
+    /// `None` means none, which is the default: the IEC amendment's high pass is a
+    /// property of the replay chain rather than of the pressing, so nothing about a
+    /// record implies it and nobody is asked twice.
+    ///
+    /// Here and not on sides or tracks, where `playback_eq` is all three, for the
+    /// same reason: a characteristic can differ between two faces cut from masters
+    /// of different ages, and the deck a transfer was auditioned through cannot.
+    pub rumble_filter: Option<String>,
     /// The physical item identifier for the copy that was transferred (WP-31).
     ///
     /// A shelf mark, an accession number, or whatever the holder calls this object.
@@ -211,12 +221,20 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
     } else {
         "''"
     };
+    // Every project written before v8 names no rumble filter, which is exactly
+    // what NULL means here, so an older file needs no special case beyond not
+    // naming a column it has not got.
+    let rumble = if has_column(conn, "rumble_filter") {
+        "rumble_filter"
+    } else {
+        "NULL"
+    };
     let record = conn
         .query_row(
             &format!(
                 "SELECT album, album_artist, year, genres, label, catalog, country, barcode,
                         composer, comments, discs, numbering, musicbrainz_id, discogs_id,
-                        confirmed, updated_at, {mono}, {eq}, {item}, {condition}
+                        confirmed, updated_at, {mono}, {eq}, {item}, {condition}, {rumble}
                    FROM releases WHERE release_id = ?1"
             ),
             params![RELEASE_ID],
@@ -247,6 +265,7 @@ pub fn load(conn: &Connection) -> Result<Option<Record>> {
                     playback_eq: r.get(17)?,
                     item: r.get(18)?,
                     condition: r.get(19)?,
+                    rumble_filter: r.get(20)?,
                 })
             },
         )
@@ -300,9 +319,9 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
         "INSERT INTO releases (release_id, album, album_artist, year, genres, label, catalog,
                                country, barcode, composer, comments, discs, numbering,
                                musicbrainz_id, discogs_id, confirmed, updated_at,
-                               is_mono, playback_eq, item, condition)
+                               is_mono, playback_eq, item, condition, rumble_filter)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                 ?18, ?19, ?20, ?21)
+                 ?18, ?19, ?20, ?21, ?22)
          ON CONFLICT (release_id) DO UPDATE SET
              album = excluded.album, album_artist = excluded.album_artist,
              year = excluded.year, genres = excluded.genres, label = excluded.label,
@@ -313,7 +332,7 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
              discogs_id = excluded.discogs_id, confirmed = excluded.confirmed,
              updated_at = excluded.updated_at, is_mono = excluded.is_mono,
              playback_eq = excluded.playback_eq, item = excluded.item,
-             condition = excluded.condition",
+             condition = excluded.condition, rumble_filter = excluded.rumble_filter",
         params![
             RELEASE_ID,
             record.album,
@@ -336,6 +355,7 @@ pub fn store(project: &mut Project, record: &Record) -> Result<()> {
             record.playback_eq.as_deref(),
             record.item,
             record.condition,
+            record.rumble_filter.as_deref(),
         ],
     )?;
     Ok(())
@@ -651,6 +671,7 @@ mod tests {
             // rather than passing on the default it would have had anyway.
             is_mono: true,
             playback_eq: Some("columbia_lp".into()),
+            rumble_filter: Some("iec".into()),
             item: "SH-LP-0412".into(),
             condition: "VG+, one light scuff on side B".into(),
             updated_at: 0,
@@ -665,6 +686,7 @@ mod tests {
         assert!(read.confirmed);
         assert!(read.is_mono);
         assert_eq!(read.playback_eq.as_deref(), Some("columbia_lp"));
+        assert_eq!(read.rumble_filter.as_deref(), Some("iec"));
         assert_eq!(read.item, written.item);
         assert_eq!(read.condition, written.condition);
         assert!(read.updated_at > 0, "updated_at is set by the write");

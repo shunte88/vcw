@@ -76,6 +76,14 @@ use vcw_types::StorageFormat;
 /// is what keeps the two from drifting apart.
 pub const EQ_STAGE: &str = "playback-eq";
 
+/// The name [`Chain::stages`] gives §51's other clause.
+///
+/// A stage of its own and not a detail hung off [`EQ_STAGE`], because §51 makes
+/// the two selectable independently: a chain can carry the rumble filter over no
+/// curve at all, and a listing that could only name it alongside one would be
+/// silent about exactly that case.
+pub const RUMBLE_STAGE: &str = "rumble-filter";
+
 /// The audio either side of the buffer being processed.
 ///
 /// Borrowed from the caller's own read rather than buffered here: both call sites
@@ -177,6 +185,9 @@ impl Chain {
         if let Some(curve) = self.curve() {
             stages.push((EQ_STAGE, curve.to_owned()));
         }
+        if let Some(rumble) = self.rumble() {
+            stages.push((RUMBLE_STAGE, rumble.to_owned()));
+        }
         stages
     }
 
@@ -186,7 +197,23 @@ impl Chain {
     /// tags claim and what the audio went through cannot disagree.
     #[must_use]
     pub fn curve(&self) -> Option<&str> {
-        self.eq.as_ref().map(Filter::curve)
+        // Not `map(Filter::curve)`: a filter built for the rumble filter alone
+        // has no curve, and `Filter::curve` says so with an empty string. Passed
+        // straight out, that becomes `Some("")` - a claim that a curve was
+        // applied, named with nothing - and both callers would print it.
+        self.eq
+            .as_ref()
+            .map(Filter::curve)
+            .filter(|id| !id.is_empty())
+    }
+
+    /// The §51 rumble filter in force, or `None`.
+    ///
+    /// Independent of [`Chain::curve`], for the reason [`RUMBLE_STAGE`] is a
+    /// stage of its own.
+    #[must_use]
+    pub fn rumble(&self) -> Option<&str> {
+        self.eq.as_ref().and_then(Filter::rumble)
     }
 
     /// Clears every stage's memory, for a seek or the start of a new file.
@@ -255,12 +282,12 @@ impl From<Option<Filter>> for Chain {
 #[cfg(test)]
 mod tests {
     use super::{Chain, Context, Damage, Repairs};
-    use vcw_eq::{Catalog, Filter, RIAA};
+    use vcw_eq::{Catalog, Filter, IEC_RUMBLE, RIAA};
     use vcw_types::{CaptureEq, Repair, StorageFormat};
 
     /// A filter, and bytes with enough edge in them to ring one.
     fn fixture() -> (Filter, Vec<u8>) {
-        let filter = Filter::playback(&Catalog::builtin(), RIAA, CaptureEq::Flat, 44_100, 2)
+        let filter = Filter::playback(&Catalog::builtin(), RIAA, None, CaptureEq::Flat, 44_100, 2)
             .expect("riaa over a flat capture is the ordinary case");
         // A step, interleaved across two channels: a recursive filter that is
         // not reset carries the tail of one pass into the next, which is the
@@ -370,6 +397,51 @@ mod tests {
         assert!(
             Chain::default().with_repairs(vetoed).stages().is_empty(),
             "a list of vetoes was reported as processing"
+        );
+    }
+
+    /// A chain carrying the rumble filter and no curve names one stage, not two.
+    ///
+    /// §51 makes the two selectable independently, so the rumble filter alone is
+    /// an ordinary chain - and `Filter::curve` spells "no curve" as an empty
+    /// string, which passed straight out of `Chain::curve` would have put
+    /// `playback-eq: ` in an export tag and an empty curve name in §9's
+    /// bit-perfect refutation. Both callers read `stages()`, so the one place to
+    /// hold is here.
+    #[test]
+    fn a_rumble_filter_with_no_curve_is_one_stage_and_names_itself() {
+        let filter = Filter::rumble_only(IEC_RUMBLE, 44_100, 2).expect("the amendment's filter");
+        let chain = Chain::from(Some(filter));
+
+        assert!(!chain.is_empty(), "the audio is being changed");
+        assert_eq!(
+            chain.curve(),
+            None,
+            "no curve was stated, so none may be named"
+        );
+        assert_eq!(chain.rumble(), Some(IEC_RUMBLE));
+        assert_eq!(
+            chain.stages(),
+            vec![(crate::RUMBLE_STAGE, IEC_RUMBLE.to_owned())],
+            "a rumble-only chain must not claim a curve it does not have"
+        );
+
+        // Both halves together, in the order they are listed.
+        let both = Filter::playback(
+            &Catalog::builtin(),
+            RIAA,
+            Some(IEC_RUMBLE),
+            CaptureEq::Flat,
+            44_100,
+            2,
+        )
+        .expect("riaa with the amendment's filter over it");
+        assert_eq!(
+            Chain::from(Some(both)).stages(),
+            vec![
+                (crate::EQ_STAGE, RIAA.to_owned()),
+                (crate::RUMBLE_STAGE, IEC_RUMBLE.to_owned()),
+            ]
         );
     }
 }

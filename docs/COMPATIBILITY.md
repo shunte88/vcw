@@ -18,7 +18,7 @@ rather than to a second copy of it.
 
 |                  | Where it lives                      | Now | What it is about                            |
 |------------------|-------------------------------------|-----|---------------------------------------------|
-| `schema_version` | SQLite's `user_version`             | 7   | the shape: which tables and columns exist   |
+| `schema_version` | SQLite's `user_version`             | 8   | the shape: which tables and columns exist   |
 | `format_version` | the `format_version` row in `meta`  | 1   | the meaning: what the values in them are    |
 
 They move independently, which is the whole of §16's point in asking for both.
@@ -59,7 +59,7 @@ interpret.
 
 Every version from 1 to this build's own, and that does not shrink within a major
 line. Support for schema version 1 - a capture-only project from before there was
-a vinyl data model - is as current as support for 7.
+a vinyl data model - is as current as support for 8.
 
 Dropping one would need a major version, a release note naming the version, and
 the last build of the previous line still being available as the route through:

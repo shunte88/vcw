@@ -917,6 +917,8 @@ pub struct ReleaseEdit {
     pub is_mono: Option<bool>,
     /// The characteristic the record was cut with. `""` clears it.
     pub playback_eq: Option<String>,
+    /// The rumble filter the replay chain imposes. `""` clears it.
+    pub rumble: Option<String>,
     /// The physical item identifier for this copy (WP-31). `null` leaves it alone.
     pub item: Option<String>,
     /// The known condition of this copy (WP-31). `null` leaves it alone.

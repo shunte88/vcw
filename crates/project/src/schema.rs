@@ -78,12 +78,14 @@ pub const APPLICATION_ID: u32 = 0x5643_5700;
 /// detector over, which is what every project before v6 is. v7 adds the archivist
 /// transfer log's four columns - `releases.item`, `releases.condition`,
 /// `captures.operator` and `captures.transferred_on` - and an unrecorded operator
-/// or pressing condition is null, which is what not having been asked is.
+/// or pressing condition is null, which is what not having been asked is. v8 adds
+/// `releases.rumble_filter`, §51's other clause, and a project that never named one
+/// never had it applied.
 ///
 /// That every one of them is an addition rather than a reinterpretation is the
 /// §16 promise `docs/COMPATIBILITY.md` makes out loud, and
 /// `tests/compatibility.rs` holds this build to it.
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
 
 /// The project-format version: the *meaning* of the schema, as opposed to its shape.
 ///
@@ -720,6 +722,26 @@ ALTER TABLE captures ADD COLUMN operator TEXT;
 -- reason this column exists: a capture with capture_mode 'imported' is dated by the
 -- import, and an Audacity project carried over from 2019 should not export as 2026.
 ALTER TABLE captures ADD COLUMN transferred_on TEXT;
+"#;
+
+/// Schema v8: §51's rumble filter, selectable independently of the curve (WP-29).
+///
+/// The last clause of §51 and the only one left unbuilt: the IEC amendment added a
+/// 7950 us high pass to the *replay* characteristic, and a deck either imposes it or
+/// does not. One column, on `releases` alone, where `playback_eq` needed three.
+/// That is not an oversight - it is the whole difference between the two. A
+/// characteristic is a property of the pressing, so a compilation can carry tracks
+/// cut years apart and §51 asks for the override per track. A rumble filter is a
+/// property of the replay chain the operator is auditioning through, which does not
+/// change between one track and the next of the same transfer.
+pub const SCHEMA_V8: &str = r#"
+-- The rumble filter in force (§51), as a filter id: 'iec' is the one the IEC
+-- amendment defines, and `vcw eq list` prints the set. NULL means none, which is
+-- both the default and what every project written before this column says. Not a
+-- boolean, because v4's is_mono/riaa_eq pair is the standing lesson that a switch
+-- for one named thing becomes a name for one of several things, and the migration
+-- out of that shape costs more than the TEXT column it should have been.
+ALTER TABLE releases ADD COLUMN rumble_filter TEXT;
 "#;
 
 /// Tables the current schema must contain. Checked on open, so a truncated or
