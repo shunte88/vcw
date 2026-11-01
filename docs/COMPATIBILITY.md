@@ -91,6 +91,36 @@ A copy is the whole of the mechanism. VCW does not make one for you, because a s
 is well over a gigabyte and the box most likely to be short of the room is the
 headless one this verb exists for.
 
+## What the packages run on
+
+The one promise here that is not about the `.vcw` file. It belongs with the others
+because it has the same shape: a number somebody can read before they download,
+rather than a loader error after.
+
+| Package | Needs | Which is |
+|---|---|---|
+| `.deb`, `.AppImage` (x86-64, arm64) | **glibc 2.39 or newer** | Ubuntu 24.04 LTS or newer, Debian 13 or newer, Raspberry Pi OS Trixie or newer |
+| `.msi` (x86-64) | Windows 10 1809 or newer | what WebView2 itself requires |
+| `.dmg`, `.app` (Apple silicon) | macOS 11 or newer | `minimumSystemVersion` in the bundle |
+
+**The Linux floor is a decision and not an accident.** It is the glibc of the box
+that links the binary, so it is chosen by pinning the bundle runner: the matrix in
+[`ci.yml`](../.github/workflows/ci.yml) names `ubuntu-24.04`, and
+[`tools/glibc-floor.py`](../tools/glibc-floor.py) holds the built `.deb` to the
+same number and fails the build if anything in it drifted above it. The `.deb`
+declares `libc6 (>= 2.39)`, so apt refuses rather than installing something that
+cannot start. An AppImage can declare nothing, so on an older machine it fails at
+first run.
+
+**It was 2.35 up to and including 0.4.0-alpha, and that stopped on 2026-11-01.**
+Two weak version records from Rust's std - `pidfd_spawnp` and `pidfd_getpid`, both
+of which the code already copes with being absent - were patched out after linking
+to bring the floor down to Debian 12 and Ubuntu 22.04. The occasion for it was one
+Raspberry Pi 4 still on Bookworm. A build bent to fit one old install is a build
+nobody can read the requirement off, and the requirement is published here
+instead. **On an older distribution, build from source**, which has no floor but
+the toolchain's: the README's source-build section is the whole of it.
+
 ## What this document does not promise
 
 * **The Rust API.** Pre-1.0 it can change with a release note; see

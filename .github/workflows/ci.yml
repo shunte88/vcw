@@ -369,7 +369,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: linux-x86_64, os: ubuntu-latest, bundles: 'deb,appimage' }
+          # Both Linux runners are pinned, and the pin is the glibc floor.
+          # The floor is set by the box that links the binary and by nothing
+          # else, so choosing the runner is choosing which machines can run
+          # what it builds: 24.04 ships glibc 2.39, which covers the current
+          # Ubuntu LTS, Debian 13 and Raspberry Pi OS Trixie. `ubuntu-latest`
+          # is not a choice, it is whatever GitHub last migrated the label to,
+          # and on 2026-10-19 it began moving to Ubuntu 26 - whose glibc 2.43
+          # would put the floor above the current LTS. Raising these labels
+          # raises the stated requirement in docs/COMPATIBILITY.md, the
+          # `libc6` line in tauri.conf.json and FLOOR in tools/glibc-floor.py,
+          # which is what the bundle check holds the deb to.
+          - { name: linux-x86_64, os: ubuntu-24.04, bundles: 'deb,appimage' }
           - { name: linux-aarch64, os: ubuntu-24.04-arm, bundles: 'deb,appimage' }
           - { name: windows-x86_64, os: windows-latest, bundles: 'msi' }
           - { name: macos-aarch64, os: macos-latest, bundles: 'app,dmg' }
@@ -437,40 +448,17 @@ jobs:
         shell: bash
         run: bash tools/stage-cli.sh
 
+      # One step on every platform. Linux used to build in two halves with a
+      # post-link patch between them, lowering the version records glibc 2.39
+      # had put in the binary so that it would start on Bookworm and 22.04.
+      # That is gone: the requirement is stated rather than engineered around,
+      # because a build bent to fit an old install is a build nobody can read
+      # the requirement off. docs/COMPATIBILITY.md says what it needs now.
       - name: Build the bundles
-        if: runner.os != 'Linux'
         run: cargo tauri build --bundles ${{ matrix.bundles }} --verbose
         working-directory: app/src-tauri
         env:
           # The updater's signing key, which tauri uses only if it is set.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      # Linux builds in two halves with the floor lowered between them. It has
-      # to go there: the runner is 24.04, so everything it links needs
-      # GLIBC_2.39 and refuses to start on Bookworm or 22.04, and repacking a
-      # finished .deb or .AppImage afterwards would invalidate the updater
-      # .sig files tauri writes at bundle time. tools/glibc-floor.py says what
-      # is dropped and what it refuses to drop.
-      - name: Compile the app (Linux)
-        if: runner.os == 'Linux'
-        run: cargo tauri build --no-bundle --verbose
-        working-directory: app/src-tauri
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      - name: Lower the glibc floor (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          python3 tools/glibc-floor.py --fix \
-            app/target/release/vcw-app app/src-tauri/binaries/vcw-*
-
-      - name: Bundle (Linux)
-        if: runner.os == 'Linux'
-        run: cargo tauri bundle --bundles ${{ matrix.bundles }} --verbose
-        working-directory: app/src-tauri
-        env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
@@ -520,10 +508,11 @@ jobs:
           ls -la dist
           [ -n "$(ls -A dist)" ] || { echo "::error::nothing was bundled"; exit 1; }
 
-      # And read the floor back off the thing a person actually downloads,
-      # control file included. A post-link patch nobody checks is a fix that
-      # stops working the day std gains another 2.39 symbol.
-      - name: Hold the deb to the glibc floor (Linux)
+      # Read the floor off the thing a person actually downloads, control file
+      # included. This is what makes the stated requirement a fact rather than
+      # a sentence: a dependency that drags in a newer symbol turns this red,
+      # and raising the floor afterwards is then a decision somebody took.
+      - name: Hold the deb to the stated glibc floor (Linux)
         if: runner.os == 'Linux'
         run: python3 tools/glibc-floor.py dist/*.deb
 

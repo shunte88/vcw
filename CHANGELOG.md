@@ -52,6 +52,19 @@ loud if it cannot.
 
 ### Changed
 
+* **The Linux packages state a glibc requirement instead of being bent to fit
+  an old one.** They need **glibc 2.39 or newer**: Ubuntu 24.04 LTS or newer,
+  Debian 13 or newer, Raspberry Pi OS Trixie or newer. Up to and including
+  0.4.0-alpha the floor was 2.35, reached by patching two weak version records
+  out of the binary after linking so that it would start on Debian 12 and
+  Ubuntu 22.04. The occasion for that was one Raspberry Pi 4 still on
+  Bookworm, and a build bent to fit one old install is a build nobody can read
+  the requirement off. The requirement is published instead - in the README,
+  in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md#what-the-packages-run-on),
+  and in the `.deb`'s own `Depends`, so apt refuses rather than the loader -
+  and the build is checked against what was published. **On an older
+  distribution, build from source**, which has no floor but the toolchain's.
+
 * **A project from an older build wears its version instead of a paragraph.**
   The library listed one with a full-width sentence under the row explaining
   that it was written by an older VCW and could be upgraded with

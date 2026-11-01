@@ -8484,7 +8484,7 @@ The refusal does not come from the symbols at all: it comes from the
 to the loader before `main` runs. So the real floor of the code is glibc 2.35,
 and the runner being Ubuntu 24.04 was costing us everything from 2.35 to 2.39 -
 Debian 12, Ubuntu 22.04 and every Raspberry Pi OS Bookworm image, which is a
-large part of the audience the appliance work is aimed at.
+large part of the audience the small-host work is aimed at.
 
 **The deb was not even trying to say so.** Its `Depends` read
 `libasound2, libwebkit2gtk-4.1-0, libgtk-3-0`, with no `libc6` at all, so apt
@@ -9128,3 +9128,93 @@ and name its limit in the same breath, which is the rule. The orphan on page 19
 survives the edit: it is three different lines now rather than the same three,
 because nothing was deleted to make room. Clearing it needs about 48.6 pt
 removed from Chapter 17, which is content, and content is the author's.
+
+## 2026-11-01, the glibc floor becomes a requirement instead of a patch
+
+### A green commit went red twice with nobody touching it
+
+`69fa79c` built green on 2026-10-22 and red on the two weekly crons after it,
+2026-10-25 and 2026-11-01, on a tree nobody had edited. One leg of seventeen:
+`package (linux-x86_64)`, at the step that lowered the glibc floor. The run
+annotation was the whole diagnosis - *the ubuntu-latest label will migrate to
+Ubuntu 26 beginning October 19, 2026* - and the pinned `ubuntu-24.04-arm` leg
+beside it stayed green throughout, which is the tell that it was the box and not
+the code.
+
+Ubuntu 26 ships glibc 2.43, which promoted a batch of single-precision maths
+symbols to a new version: `log10f sqrtf sinhf coshf acosf asinf atan2f atanhf
+acoshf remainderf lgammaf tgammaf j0f j1f jnf y0f y1f ynf` and the whole
+`fromfp` family. `log10f` is called once by libmp3lame, in `vbrquantize.c:320`,
+so the linker bound it strong and the patcher refused exactly as it was built
+to:
+
+```text
+REFUSED: app/target/release/vcw-app: GLIBC_2.43 is needed by log10f, which is
+strong and undefined, not weak and undefined. Dropping it would break the
+binary at the first call.
+```
+
+`nm -u` over `app/target/release/deps/*.rlib` named the one culprit in a line,
+which is worth writing down because the first guess was our own code:
+`crates/signal/src/meter.rs` really did compute `(20.0 * magnitude.log10())` on
+an `f32`. Widening it to `f64` was tried and reverted. It fixed nothing
+observable, because the binary still needed `log10f` from a vendored C
+dependency, and a change that fixes nothing is worse than no change when the
+next person reads it as the fix.
+
+### The patch is gone, and the requirement is published
+
+Two ways out, and they are not the same kind of decision. Pinning the x86_64
+runner to `ubuntu-24.04` restores the state that worked. Keeping the patcher
+after that would have kept the floor at 2.35 and kept bending the build.
+
+The floor is set by the box that links the binary and by nothing else, so the
+patch was the only thing that had ever made 2.35 true: two weak version records
+from Rust's std, `pidfd_spawnp` and `pidfd_getpid`, cleared out after linking so
+the loader would start the binary on Debian 12 and Ubuntu 22.04. The occasion
+for building that was a single Raspberry Pi 4 still on Bookworm on 2026-10-18.
+**A build bent to fit one old install is a build nobody can read the requirement
+off**, so the bending stops and the requirement is stated: glibc **2.39 or
+newer**, which is the current Ubuntu LTS, Debian 13 and Raspberry Pi OS Trixie.
+
+It is stated in three places and they are held together rather than merely
+written three times. `FLOOR` in `tools/glibc-floor.py`, the `libc6 (>= 2.39)`
+line `tauri.conf.json` puts in the deb's `Depends` so that apt refuses instead
+of the loader, and a *What the packages run on* section in
+`docs/COMPATIBILITY.md` where a person reads it before downloading. The
+selftest fails if any of the three disagrees, which is new: before this the
+number lived in the tool alone and nothing noticed when the document did not
+exist.
+
+What came out with the patcher: `Elf.drop`, `Elf.write`,
+`Elf.dangling_versions`, `fix_elf`, the C fixture the selftest compiled to feed
+it, and the two-halves Linux build in `ci.yml` - the split between
+`--no-bundle` and `bundle` existed only to make room for the patch, so Linux
+now bundles in the same single step as Windows and macOS.
+
+What stayed, and is now the whole point: the reader, and the step that holds
+the built `.deb` to the floor with its control file included.
+
+### Both ends of the new check
+
+`--selftest` proves three things on any box, which matters because this one runs
+glibc 2.43 and cannot hold anything it builds to a 2.39 floor. That the ELF
+reader agrees with `readelf -V` on `/usr/bin/ls`, 33 needs. That the floor
+comparison fires: moved under everything it reports all 27 of that file's
+versioned needs, moved to the highest of them it reports none. And that the
+three published statements agree.
+
+The last two were made to fail on purpose before being believed. A `Depends` of
+`2.35` against a `FLOOR` of 2.39 gives `REFUSED: the floor is GLIBC_2.39 here
+but tauri.conf.json Depends says 2.35`; a `COMPATIBILITY.md` with no such
+sentence in it gives `REFUSED: docs/COMPATIBILITY.md does not state the glibc
+floor at all, so nothing holds it to GLIBC_2.39`.
+
+### What it costs, said plainly
+
+Debian 12, Ubuntu 22.04 and every Raspberry Pi OS Bookworm image can no longer
+install the published Linux packages. That includes this project's own Pi 4 test
+rig, whose 24/192 ring findings were taken from an `arm64` deb built while the
+floor was 2.35; reproducing them now means building from source on that machine
+or moving it to Trixie. Building from source has no floor but the toolchain's,
+and the README says so where it says what the packages need.

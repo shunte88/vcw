@@ -5,49 +5,52 @@
 #  VCW - The Vinyl Capture Workstation
 #  (c) 2026 Stue Hunter
 #
-#  Hold the Linux artifacts to a stated glibc floor, and lower them to it.
+#  Hold the Linux artifacts to the stated glibc floor.
 #
 #  MIT License - see the header in any Rust source file for the full text.
 #
-# Why this exists. The Linux bundles are built on ubuntu-latest, which is 24.04
-# and ships glibc 2.39, and a binary built there refuses to start anywhere
-# older:
+# Why this exists. A Linux binary carries a `.gnu.version_r` record for every
+# glibc symbol version it was linked against, and the loader refuses to start
+# it on an older glibc before `main` runs:
 #
 #     ./usr/bin/vcw: /lib/aarch64-linux-gnu/libc.so.6: version `GLIBC_2.39'
 #     not found
 #
-# Found on a Raspberry Pi 4 running Bookworm on 2026-10-18, which is glibc 2.36.
-# What actually cost us everything from 2.35 to 2.39 was two symbols, both from
-# Rust's std, both weak and undefined: `pidfd_spawnp` and `pidfd_getpid`. The
-# code already copes with them being absent. The refusal does not come from the
-# symbols at all; it comes from the `.gnu.version_r` record, where a version
-# need with no VER_FLG_WEAK is fatal to the loader before `main` runs.
+# That is a requirement, not a defect, and the floor is set by the box that
+# links the binary and by nothing else. So the floor is a decision: it is
+# stated once, below, it is stated again in docs/COMPATIBILITY.md where a
+# person reads it and in the `libc6` line tauri.conf.json puts in the deb's
+# Depends, and this tool holds the built artifacts to it.
 #
-# So: drop the record, and clear the version index on the symbols that pointed
-# at it. `patchelf --clear-symbol-version` is not enough on patchelf 0.14.3,
-# which is what Bookworm has - it clears the symbol references and leaves the
-# record, which is the thing the loader reads.
-#
-# The floor is stated once, below, as a number. A post-link patch that nobody
-# checks is a fix that stops working silently the day a new glibc 2.39 symbol
-# appears, so the same tool reads artifacts back and fails if anything is over
-# the floor, and `--selftest` is the part of that a box with a newer glibc can
-# still prove.
+# It used to do more than hold them. Found on a Raspberry Pi 4 running
+# Bookworm on 2026-10-18, the 2.39 records cost us every machine older than
+# the runner over two weak symbols from Rust's std - `pidfd_spawnp` and
+# `pidfd_getpid` - which the code already copes with being absent, so the
+# records were patched out after linking and the floor came down to 2.35.
+# **That is gone, by decision on 2026-11-01.** A build bent to fit one old
+# install is a build nobody can read the requirement off, and the install it
+# was bent for was a stale one. The requirement is published instead, and what
+# this tool does now is make sure the artifacts and the package metadata agree
+# with what was published.
 #
 # Standard library only, same rule as verify-release.py: this runs in CI and on
 # whatever box is holding a release at the time.
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-# The floor, and the only place it is written down. 2.35 covers Ubuntu 22.04,
-# Debian 12 and Raspberry Pi OS Bookworm, and it is what the code actually
-# needs rather than what the runner happened to build against.
-FLOOR = (2, 35)
+# The floor, and the only place in the code it is written down. 2.39 is what
+# the pinned ubuntu-24.04 bundle runner links against, and it covers the
+# current Ubuntu LTS, Debian 13 and Raspberry Pi OS Trixie. Changing it is
+# changing a published requirement: docs/COMPATIBILITY.md and the `libc6` line
+# in app/src-tauri/tauri.conf.json say the same number to a person and to apt,
+# and `--selftest` fails if the three disagree.
+FLOOR = (2, 39)
 
 SHT_DYNSYM = 11
 SHT_GNU_VERDEF = 0x6FFFFFFD
@@ -210,57 +213,6 @@ class Elf:
                 vd += step
         return known
 
-    def dangling_versions(self):
-        """Symbols left pointing at a version index that is not there.
-
-        Unlinking a vernaux without clearing the symbols that referenced it
-        leaves exactly this, and it is invisible to a version listing: the
-        loader sizes its version table from the highest index it finds while
-        walking, so a stale index reads past the end of it.
-        """
-        known = self.version_indexes()
-        bad = []
-        for s in self.sections:
-            if s["type"] != SHT_GNU_VERSYM:
-                continue
-            dyn = self.sections[s["link"]]
-            strtab = self.sections[dyn["link"]]["offset"]
-            for i in range(s["size"] // 2):
-                ndx = u16(self.b, s["offset"] + 2 * i) & 0x7FFF
-                if ndx not in known:
-                    so = dyn["offset"] + i * SYM_SIZE
-                    bad.append("%s -> %d" % (self.cstr(strtab + u32(self.b, so)), ndx))
-        return bad
-
-    def drop(self, need):
-        """Unlink one vernaux and unbind the symbols that pointed at it.
-
-        Offsets inside the chain move as soon as anything is dropped, so the
-        caller re-reads the file between drops rather than holding a list.
-        """
-        for sym in self.symbols_at(need.other):
-            self.b[sym["versym"]:sym["versym"] + 2] = \
-                VER_NDX_GLOBAL.to_bytes(2, "little")
-        cnt = u16(self.b, need.vn + 2)
-        if cnt <= 1:
-            raise Refusal(
-                "%s: %s is the only version needed from %s, and dropping the "
-                "whole record needs DT_VERNEEDNUM adjusting too"
-                % (self.path, need.name, need.file))
-        step = u32(self.b, need.aux + 12)
-        if need.prev is None:
-            if not step:
-                raise Refusal("%s: inconsistent vernaux chain" % self.path)
-            self.b[need.vn + 8:need.vn + 12] = \
-                (need.aux + step - need.vn).to_bytes(4, "little")
-        else:
-            onward = (need.aux + step - need.prev) if step else 0
-            self.b[need.prev + 12:need.prev + 16] = onward.to_bytes(4, "little")
-        self.b[need.vn + 2:need.vn + 4] = (cnt - 1).to_bytes(2, "little")
-
-    def write(self):
-        self.path.write_bytes(bytes(self.b))
-
 
 def over_floor(path):
     """[(need, symbols)] for every glibc version this file needs over the floor."""
@@ -282,50 +234,6 @@ def check_elf(path):
         print("ok   %s: nothing over %s" % (path, floor_version()))
         return []
     return describe(path, offenders)
-
-
-def fix_elf(path):
-    """Drop every over-floor need, or refuse and write nothing."""
-    offenders = over_floor(path)
-    if not offenders:
-        print("ok   %s: nothing over %s" % (path, floor_version()))
-        return
-    # The precondition dropping a version record rests on, checked for all of
-    # them before a byte is written: the program only runs without the symbol
-    # if it was already prepared to. A strong reference dropped this way gives
-    # a binary that starts and then dies at the first call.
-    for need, syms in offenders:
-        for s in syms:
-            if not (s["weak"] and s["undefined"]):
-                raise Refusal(
-                    "%s: %s is needed by %s, which is %s and %s, not weak and "
-                    "undefined. Dropping it would break the binary at the "
-                    "first call." % (path, need.name, s["name"],
-                                     "weak" if s["weak"] else "strong",
-                                     "undefined" if s["undefined"] else "defined"))
-    elf = Elf(path)
-    dropped = []
-    # One at a time, re-reading between them, because every offset in the
-    # vernaux chain moves as soon as anything is unlinked. The progress check
-    # is not decoration: a drop that quietly fails to unlink turns this into a
-    # hang, which is the one failure a gate cannot report.
-    while True:
-        todo = [n for n in elf.needs() if n.over_floor()]
-        if not todo:
-            break
-        going = todo[0]
-        elf.drop(going)
-        if len([n for n in elf.needs() if n.over_floor()]) >= len(todo):
-            raise Refusal("%s: dropping %s did not remove it"
-                          % (path, going.name))
-        dropped.append(going.name)
-    stale = elf.dangling_versions()
-    if stale:
-        raise Refusal("%s: %s left pointing at a version that is gone: %s"
-                      % (path, "a symbol is" if len(stale) == 1 else
-                         "symbols are", ", ".join(stale)))
-    elf.write()
-    print("fix  %s: dropped %s" % (path, ", ".join(dropped)))
 
 
 def elves_under(root):
@@ -392,12 +300,14 @@ def check(targets):
 
 # --- the selftest ------------------------------------------------------------
 #
-# A dev box running glibc 2.43 cannot hold a locally built binary to a 2.35
-# floor: everything it builds is over it by construction, so a leg that tried
-# would only ever report the box. What it can prove is the tool: that the
-# reader agrees with an independent oracle, that the fix refuses a strong
-# reference without touching the file, and that it drops a weak one and the
-# binary still runs. The release pipeline proves the rest, against a real deb.
+# A box whose own glibc is over the floor cannot hold a locally built binary
+# to it: everything it links is over it by construction, so a leg that tried
+# would only ever report the box. What any box can prove is the tool, and
+# since the floor stopped being patched in and became a published number,
+# that is three things: that the ELF reader agrees with an independent oracle,
+# that the floor comparison actually fires, and that the three places the
+# requirement is written down say the same number. The release pipeline proves
+# the rest, against a real deb.
 
 def need_tool(name):
     path = shutil.which(name)
@@ -426,24 +336,22 @@ def readelf_needs(path):
     return pairs
 
 
-def compile_fixture(tmp, name, weak):
-    src = Path(tmp) / (name + ".c")
-    # pidfd_getpid is one of the two real symbols, and it is versioned
-    # GLIBC_2.39 on any glibc new enough to have it - which is any box that
-    # needs this tool. The weak form is the shape Rust's std produces.
-    src.write_text(
-        ("extern int pidfd_getpid(int) __attribute__((weak));\n"
-         "int main(void) { if (pidfd_getpid) pidfd_getpid(0); return 0; }\n")
-        if weak else
-        ("extern int pidfd_getpid(int);\n"
-         "int main(void) { return pidfd_getpid(0); }\n"))
-    out = Path(tmp) / name
-    subprocess.run([need_tool("cc"), "-o", str(out), str(src)], check=True)
-    if not any(n.name == "GLIBC_2.39" for n in Elf(out).needs()):
-        raise Refusal(
-            "the %s fixture did not come out needing GLIBC_2.39, so the "
-            "selftest has nothing to prove against" % name)
-    return out
+def stated_floors():
+    """The floor as each of the places that publish it states it."""
+    root = Path(__file__).resolve().parent.parent
+    found = {}
+
+    conf = (root / "app/src-tauri/tauri.conf.json").read_text()
+    m = re.search(r"libc6 \(>= (\d+)\.(\d+)\)", conf)
+    if m:
+        found["tauri.conf.json Depends"] = (int(m.group(1)), int(m.group(2)))
+
+    doc = (root / "docs/COMPATIBILITY.md").read_text()
+    m = re.search(r"glibc (\d+)\.(\d+) or newer", doc)
+    if m:
+        found["docs/COMPATIBILITY.md"] = (int(m.group(1)), int(m.group(2)))
+
+    return found
 
 
 def selftest():
@@ -456,29 +364,56 @@ def selftest():
     print("ok   the reader agrees with readelf -V on %s (%d needs)"
           % (oracle, len(mine)))
 
-    with tempfile.TemporaryDirectory() as tmp:
-        strong = compile_fixture(tmp, "strong", weak=False)
-        before = strong.read_bytes()
-        try:
-            fix_elf(strong)
-        except Refusal as e:
-            print("ok   --fix refused a strong reference: %s" % e)
-        else:
-            raise Refusal("--fix dropped a version a strong symbol needs")
-        if strong.read_bytes() != before:
-            raise Refusal("--fix wrote to the file it refused")
-        print("ok   the file it refused is byte for byte unchanged")
+    # The comparison, proved at both ends on a file that is certainly there.
+    # No compiler and no particular glibc: the floor is moved around a known
+    # set of needs instead, which is the one way to prove this on a box at or
+    # under the floor as well as on one over it.
+    # Only the glibc ones: `ls` also needs libselinux and libcap, whose
+    # version names parse to nothing and are not the floor's business.
+    versioned = [n for n in Elf(oracle).needs() if parse_version(n.name)]
+    if not versioned:
+        raise Refusal("%s needs no versioned glibc symbols, so the floor "
+                      "comparison has nothing to fire on" % oracle)
+    highest = max(parse_version(n.name) for n in versioned)
+    global FLOOR
+    kept = FLOOR
+    try:
+        FLOOR = (0, 0)
+        if len(over_floor(oracle)) != len(versioned):
+            raise Refusal("under a zero floor the reader reported %d of the %d "
+                          "versioned needs %s has"
+                          % (len(over_floor(oracle)), len(versioned), oracle))
+        print("ok   a floor under everything reports all %d of %s's versioned needs"
+              % (len(versioned), oracle))
+        FLOOR = highest
+        if over_floor(oracle):
+            raise Refusal("at %s's own highest need (%d.%d) the reader still "
+                          "reports something over the floor"
+                          % (oracle, highest[0], highest[1]))
+        print("ok   a floor at the highest of them (%d.%d) reports none"
+              % (highest[0], highest[1]))
+    finally:
+        FLOOR = kept
 
-        weak = compile_fixture(tmp, "weak", weak=True)
-        if not over_floor(weak):
-            raise Refusal("the weak fixture reads as under the floor")
-        fix_elf(weak)
-        if over_floor(weak):
-            raise Refusal("GLIBC_2.39 survived --fix")
-        if any(n.name == "GLIBC_2.39" for n in Elf(weak).needs()):
-            raise Refusal("the GLIBC_2.39 record survived --fix")
-        subprocess.run([str(weak)], check=True)
-        print("ok   --fix dropped a weak reference and the binary still runs")
+    # And the number itself. The floor is a published requirement now rather
+    # than something patched in, so the failure to guard against is the three
+    # statements of it drifting apart: apt would install onto a machine the
+    # binary cannot start on, and the document would tell a person the wrong
+    # thing, and nothing would be red.
+    stated = stated_floors()
+    for where in ("tauri.conf.json Depends", "docs/COMPATIBILITY.md"):
+        if where not in stated:
+            raise Refusal("%s does not state the glibc floor at all, so "
+                          "nothing holds it to %s" % (where, floor_version()))
+    wrong = {k: v for k, v in stated.items() if v != FLOOR}
+    if wrong:
+        raise Refusal("the floor is %s here but %s" % (
+            floor_version(),
+            "; ".join("%s says %d.%d" % (k, v[0], v[1])
+                      for k, v in sorted(wrong.items()))))
+    print("ok   %s and %s both state %s"
+          % ("tauri.conf.json", "docs/COMPATIBILITY.md", floor_version()))
+
     print("selftest OK (floor %s)" % floor_version())
     return 0
 
@@ -487,10 +422,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("targets", nargs="*", metavar="PATH",
                     help="an ELF file, a .deb, or a directory of either")
-    ap.add_argument("--fix", action="store_true",
-                    help="lower the targets to the floor instead of reading them")
     ap.add_argument("--selftest", action="store_true",
-                    help="prove the tool, on a box whose own glibc is too new")
+                    help="prove the tool and the floor, on any box")
     args = ap.parse_args(argv)
     try:
         if args.selftest:
@@ -499,10 +432,6 @@ def main(argv=None):
             return selftest()
         if not args.targets:
             ap.error("nothing to read")
-        if args.fix:
-            for t in args.targets:
-                fix_elf(Path(t))
-            return 0
         return check(args.targets)
     except Refusal as e:
         print("REFUSED: %s" % e, file=sys.stderr)

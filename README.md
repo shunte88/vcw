@@ -79,6 +79,8 @@ VCW refuses unsupported combinations instead of silently reducing bit depth or r
 
 Check [Releases](https://github.com/shunte88/vcw/releases) for published alpha installers and their release notes. If a package is not available for your target, use the source-build instructions below. The desktop application is **VCW**; the command-line tool is **`vcw`**.
 
+The packages need **glibc 2.39 or newer on Linux** (Ubuntu 24.04 LTS or newer, Debian 13 or newer, Raspberry Pi OS Trixie or newer), Windows 10 1809 or newer, or macOS 11 or newer. On an older distribution, build from source: that has no floor but the toolchain's. [COMPATIBILITY.md](docs/COMPATIBILITY.md#what-the-packages-run-on) states the requirement and what holds the build to it.
+
 The desktop workflow follows the complete recording:
 
 1. **Connect and configure.** Connect your turntable through the appropriate phono stage and recording interface. Select the input device, rate, and sample format. State whether the incoming signal already has RIAA equalization.
@@ -122,7 +124,7 @@ For custom tools and interfaces, start with the [Rust API](docs/PROJECT-API.md),
 
 ### Small hosts, and what is measured below a Raspberry Pi 5
 
-**A Pi 5 is the reference small host. A Pi 4 is usable and restricted, and the restrictions are measured rather than estimated.** On a Pi 4 Model B with the system on an SD card, running the CLI from the published `arm64` package:
+**A Pi 5 is the reference small host. A Pi 4 is usable and restricted, and the restrictions are measured rather than estimated.** On a Pi 4 Model B with the system on an SD card, running the CLI from an `arm64` build (the rig is on Bookworm, which is below the current glibc floor, so reproducing these figures today means building from source or moving the machine to Trixie):
 
 * **16-bit 44.1 kHz records losslessly at the defaults.** Two minutes of it verified byte for byte with no overruns and no dropped frames.
 * **Higher rates need a deeper ring.** At the 1000 ms default a 24-bit 192 kHz capture dropped 216,960 frames in two minutes. The same capture with `--ring-millis 4000` dropped nothing and verified byte for byte, all 139,080,960 of them. Four seconds is the useful size: eight buys no further safety and makes the worst single commit twice as long, because a deeper backlog takes longer to clear.
