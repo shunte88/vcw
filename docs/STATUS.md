@@ -9289,3 +9289,54 @@ column. In the window, the clear path made to write the id back fails on
 One gotcha worth writing down: restoring a mutated file with `cp -a` brings the
 backup's older mtime with it, and cargo then reuses the mutated artifact and
 reports a pass. The revert has to `touch` what it restores.
+
+### And the version goes to 0.5.0-alpha
+
+Not for the size of the diff. Two things in this release are each more than a
+patch on their own: a **new project schema version**, which is a file an older
+build has to refuse, and a **raised platform floor**, which is an install that
+used to work and stops. Schema v8 and glibc 2.39 are both in it, so 0.4.1 would
+have understated it twice.
+
+The bump is in the four files it always is - the root `Cargo.toml`, which
+carries eighteen occurrences and not one, `app/Cargo.toml`, `tauri.conf.json`
+and `app/ui/package.json` - and the build ran before the commit rather than
+after it, so the three generated things went in current: `assets/version.svg`,
+`Cargo.lock` and `app/Cargo.lock`. `tools/guide-version.py` restamped the
+guide's edition line in the `.md` and the `.docx` and rebuilt the `.pdf`, which
+is the only way those three stay in step. The release job's own awk, run
+against the renamed `## 0.5.0-alpha` heading before anything was committed,
+prints the 90 lines it would publish.
+
+### And it ships
+
+One round of each. `main` went green on all twelve legs, the tag round on all
+seventeen with the four `package` legs and the release job among them, and the
+draft carried the right `tag_name` and `prerelease=true` already, so publishing
+was one `-F draft=false`. `v0.5.0-alpha` went public at 21:04:34Z on
+2026-11-01 with the usual eight assets.
+
+The checks afterwards are the ones that read the bytes a stranger downloads
+rather than what the repository claims. All eight assets answer 206 to an
+anonymous range request. The amd64 deb checksums clean against the published
+`SHA256SUMS`, and the binary unpacked out of it reports `vcw 0.5.0` with
+`usr/lib/VCW/ui` beside it.
+
+The new one belongs to the glibc decision, and it is the first time that floor
+has been read off a published artifact instead of a local build.
+`tools/glibc-floor.py` takes the `.deb` itself and walks every ELF in it
+alongside the control file, so one call covers the whole claim: `usr/bin/vcw`
+and `usr/bin/vcw-app` both top out at exactly `GLIBC_2.39`, and `Depends`
+declares `libc6 (>= 2.39)`. Stating the requirement instead of patching around
+it is only worth anything if the package actually says it, and now something
+has checked that it does.
+
+Two pieces of weather, neither a fault. The Windows test leg took 9m15s
+against the other three platforms' 3m34s, 3m53s and 4m22s, six minutes of it
+in `cargo test --workspace` alone; every live Engine test is a real-time
+capture taken in turn, so that leg is long by construction and its step list
+is what distinguishes slow from hung. And the weekly cron that ran this
+morning failed on `package (linux-x86_64)` at a step called "Lower the glibc
+floor (Linux)" - against `69fa79c`, before `28fb6c0` deleted that step. The
+workflow holds the deb to the floor now rather than bending the binary to
+reach one, so the failure was already fixed before it was read.
