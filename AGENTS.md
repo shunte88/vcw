@@ -7,6 +7,11 @@
 Issues live as markdown files under `.scratch/<feature>/` in this repo. See
 `docs/agents/issue-tracker.md`.
 
+### Triage labels
+
+The five default role strings, written on an issue file's `Status:` line. See
+`docs/agents/triage-labels.md`.
+
 ### Domain docs
 
 Single-context: `GLOSSARY.md` at the repo root and `docs/adr/`. See
