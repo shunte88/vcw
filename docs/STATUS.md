@@ -9340,3 +9340,43 @@ morning failed on `package (linux-x86_64)` at a step called "Lower the glibc
 floor (Linux)" - against `69fa79c`, before `28fb6c0` deleted that step. The
 workflow holds the deb to the floor now rather than bending the binary to
 reach one, so the failure was already fixed before it was read.
+
+## 2026-11-22, a red CI with no code behind it
+
+`5c8531e` was a docs-only push and was reported as having nothing for CI to
+test. It went red anyway, on `cargo deny`, and sat red for two days before it
+was read. The tree had not changed; the advisory database had.
+RUSTSEC-2026-0459 says SQLite before 3.54.0 can return uninitialized
+page-cache memory when a database is opened together with a `-wal` whose page
+size differs from its own. VCW opens `.aup3` files, which are SQLite databases
+somebody else wrote, so this is an exposure and not a technicality, and it
+was fixed rather than ignored in `deny.toml`.
+
+`f29d23e` takes rusqlite from 0.40 to 0.41.1 in both workspaces, which brings
+libsqlite3-sys 0.39.1 and SQLite 3.54.1. The MSRV it declares is 1.89, under
+our 1.90. One test read `column_names()` as a slice and 0.41 returns an
+iterator. Stable 1.100 also reports `vcw-identify`'s dependency on
+`vcw-fingerprint` as unused, which it is, so it went in the same commit. The
+gate passed on media2026 with 1402 Rust tests and 290 frontend, and CI went
+green on all twelve legs of run 45008608694.
+
+The released `v0.5.0-alpha` still bundles the affected SQLite. The exposure
+needs a crafted `.aup3` and `-wal` pair opened on purpose, so the fix rides to
+the next release rather than forcing a patch release.
+
+### The gate on myth2017 had rotted
+
+The first gate run was on myth2017 and failed on almost every leg, none of it
+the code. Stable there was 1.99.1 against CI's 1.100.0. `target/` held an
+mp3lame-sys autotools tree configured under `~/.cargo-vcw`, a cargo home that
+box no longer has, so every Rust leg died in a build script. And
+`app/ui/node_modules` was missing `std-env` and then loaded React with a null
+dispatcher, 107 frontend failures that a clean `rm -rf node_modules` and
+frozen install took to 290 passing. myth2017 is the soak box; a tree that
+sits there between soaks drifts, and the gate is the first thing to say so.
+The work moved to media2026, where the gate ran clean once its own stable was
+updated to 1.100.0.
+
+The process change: every push is now watched to the end of its CI run, and
+a red leg is fixed without being asked. A push that changes no code can
+still fail, because `cargo deny` reads live data.
