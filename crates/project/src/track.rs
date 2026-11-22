@@ -1335,8 +1335,7 @@ mod tests {
             .prepare("SELECT * FROM tracks")
             .expect("prepare")
             .column_names()
-            .iter()
-            .map(|s| (*s).to_owned())
+            .map(str::to_owned)
             .collect();
         assert!(!columns.iter().any(|c| c.contains("frame")), "{columns:?}");
     }

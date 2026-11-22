@@ -111,7 +111,7 @@ chromaprint-next = "0.1"
 # 0.18.2 or newer is a hard floor, not a preference: 0.16 mis-reported ALSA formats
 # and could not select a device by PCM id. See docs/spikes/S1-cpal-capture.md.
 cpal = "0.18.2"
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 # The bounded lock-free SPSC ring behind the capture callback (§10). Proven in S1
 # and S2 at 24/192 for 90 minutes; wait-free on both ends, which is the property
 # the audio thread needs and a mutex cannot give it.
